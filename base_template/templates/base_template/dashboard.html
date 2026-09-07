@@ -1,0 +1,159 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Dashboard · Attendance
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Dashboard
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }} · {{ active_company.get_status_display }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'employee_list' %}">
+                View employees
+            </a>
+        </div>
+    </div>
+    {# One inverted hero per screen — the headcount is the number that matters. #}
+    <div class="grid grid--4">
+        <div class="card metric metric--hero">
+            <span class="metric__label">
+                Employees
+            </span>
+            <strong>
+                {{ total_employees }}
+            </strong>
+            <span class="metric__note">
+                {{ active_count }} active
+            </span>
+        </div>
+        <div class="card metric">
+            <span class="metric__label">
+                On probation
+            </span>
+            <strong>
+                {{ probation_count }}
+            </strong>
+            <span class="metric__note">
+                Confirm before payroll
+            </span>
+        </div>
+        <div class="card metric">
+            <span class="metric__label">
+                Branches
+            </span>
+            <strong>
+                {{ branch_count }}
+            </strong>
+            <span class="metric__note">
+                {{ department_count }} departments
+            </span>
+        </div>
+        <div class="card metric">
+            <span class="metric__label">
+                Left
+            </span>
+            <strong>
+                {{ resigned_count }}
+            </strong>
+            <span class="metric__note">
+                History retained
+            </span>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Recently added
+            </h2>
+            <span class="spacer">
+            </span>
+            <a class="btn btn--ghost btn--sm" href="{% url 'employee_list' %}">
+                All employees
+            </a>
+        </div>
+        {% if recent %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Name
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th>
+                                Joined
+                            </th>
+                            <th>
+                                Login
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in recent %}
+                            <tr>
+                                <td>
+                                    {{ e.full_name }}
+                                </td>
+                                <td>
+                                    {% if e.employment_status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% elif e.employment_status == 'probation' %}
+                                        <span class="badge badge--warning">
+                                            Probation
+                                        </span>
+                                    {% elif e.employment_status == 'resigned' or e.employment_status == 'terminated' %}
+                                        <span class="badge badge--danger">
+                                            {{ e.get_employment_status_display }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            {{ e.get_employment_status_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ e.joining_date|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if e.user %}
+                                        <span class="badge badge--info">
+                                            Yes
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            No
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="9" cy="8" r="3.2"/>
+                        <path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
+                    </svg>
+                </div>
+                <div class="empty__title">
+                    No employees yet
+                </div>
+                <div class="empty__text">
+                    Add your first employee to get started.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

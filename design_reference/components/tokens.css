@@ -1,0 +1,74 @@
+/* Nordwell panel — colour tokens
+   Neutral family: hue ~78deg, saturation 15-25% (anchored on the table-header #e7e9e1).
+   Tint is strongest on sunken surfaces that sit against white cards. */
+
+:root {
+  /* brand */
+  --om-lime: #c9f73a;
+  --om-lime-strong: #bcea2b;
+  --om-lime-soft: #f1fbd6;
+  --om-lime-line: #dcecab;
+  --om-lime-ink: #46610b;
+  --om-lime-ink-2: #3f5c07;
+
+  /* ink / dark surfaces */
+  --om-ink: #0e100f;
+  --om-ink-2: #171a16;
+  --om-ink-3: #1b1f1a;
+  --om-ink-line: #22261f;
+  --om-ink-line-2: #2b3128;
+  --om-ink-line-3: #2f352c;
+  --om-on-ink: #f6f7f4;
+  --om-on-ink-soft: #c3c8bd;
+  --om-on-ink-mute: #8b9285;
+  --om-on-ink-faint: #6f766d;
+
+  /* paper + tinted neutrals */
+  --om-paper: #f0f2ea;
+  --om-surface: #ffffff;
+  --om-sunk-1: #f5f7ee;
+  --om-sunk-2: #f0f3e8;
+  --om-sunk-3: #eef1e5;
+  --om-sunk-4: #e9ecdf;
+  --om-band: #e7e9e1;
+  --om-band-line: #d8dcca;
+
+  --om-line: #dde1d2;
+  --om-line-soft: #e2e6d8;
+  --om-line-hair: #edf0e5;
+  --om-line-dash: #d9ddcb;
+
+  /* text — muted tones carry a green cast */
+  --om-text: #15180f;
+  --om-text-strong: #4d5445;
+  --om-text-body: #6b7263;
+  --om-text-soft: #767d68;
+  --om-muted: #8b917c;
+  --om-muted-2: #979e88;
+  --om-muted-3: #a3a993;
+
+  /* status */
+  --om-red: #b5392f;
+  --om-red-ink: #8a2f27;
+  --om-red-soft: #fdeceb;
+  --om-red-soft-2: #fbdedc;
+  --om-red-dot: #d4544a;
+  --om-amber: #8a5a00;
+  --om-amber-ink: #7a5300;
+  --om-amber-soft: #fbf0da;
+  --om-amber-dot: #e0a300;
+  --om-blue: #22539f;
+  --om-blue-soft: #e9eefb;
+  --om-blue-line: #dae3f6;
+  --om-green: #10704a;
+  --om-green-soft: #e5f2ea;
+  --om-green-line: #d3e7db;
+
+  /* type */
+  --om-font: "IBM Plex Sans", system-ui, sans-serif;
+  --om-display: "Space Grotesk", sans-serif;
+  --om-mono: "IBM Plex Mono", monospace;
+
+  --om-shadow-menu: 0 20px 46px -18px rgba(14, 16, 15, .26), 0 3px 10px -6px rgba(14, 16, 15, .10);
+  --om-shadow-pop: 0 24px 60px -18px rgba(14, 16, 15, .28), 0 4px 12px -6px rgba(14, 16, 15, .12);
+}

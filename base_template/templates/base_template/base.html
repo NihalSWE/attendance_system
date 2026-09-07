@@ -1,0 +1,65 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>
+            {% block title %}
+                Attendance
+            {% endblock %}
+        </title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+        {# Token layer first — everything else reads from it. #}
+        <link rel="stylesheet" href="{% static 'base_template/css/tokens.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/base.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/components.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/shell.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/vendor-controls.css' %}">
+        {% block extra_css %}
+        {% endblock %}
+    </head>
+    <body>
+        <div class="shell">
+            {% if platform_surface %}
+                {% include "base_template/includes/sidebars/platform.html" %}
+            {% else %}
+                {% include "base_template/includes/sidebar.html" %}
+            {% endif %}
+            <div class="main">
+                {% include "base_template/includes/topbar.html" %}
+                <main class="page">
+                    {% if messages %}
+                        {% for message in messages %}
+                            <div class="alert alert--{{ message.tags|default:'info' }}">
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+                    {% endif %}
+                    {% block page %}
+                    {% endblock %}
+                </main>
+                {% if platform_surface %}
+                    <footer class="site-footer">
+                        <span>
+                            Attendance · Platform management
+                        </span>
+                        <span>
+                            Company data stays company-scoped
+                        </span>
+                    </footer>
+                {% endif %}
+            </div>
+        </div>
+        <script defer src="https://code.jquery.com/jquery-3.7.1.min.js">
+        </script>
+        <script defer src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js">
+        </script>
+        <script defer src="{% static 'base_template/js/forms.js' %}">
+        </script>
+        {% block extra_js %}
+        {% endblock %}
+    </body>
+</html>

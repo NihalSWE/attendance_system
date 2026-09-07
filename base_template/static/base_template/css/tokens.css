@@ -1,0 +1,112 @@
+/* ============================================================================
+Warm Paper / Ink — token layer
+Source of truth: WARM_PAPER_INK_SPEC.md §1. Transcribed verbatim.
+Nothing anywhere else in the panel may hard-code a colour. If a value is
+needed that is not here, add it here and recalculate its contrast first
+(spec §2). Neutrals keep red >= green >= blue, never by more than ~8 points.
+========================================================================= */
+:root {
+    /* ---------- Chrome: the sidebar and topbar ---------- */
+    --chrome:            #faf7f2;
+    /* sidebar background — warm paper           */
+    --chrome-text:       #20201d;
+    /* sidebar item text                          */
+    --chrome-dim:        #767066;
+    /* sidebar section labels (MAIN, EXPORT)     */
+    --chrome-line:       #eae5db;
+    /* border between sidebar and body           */
+    --topbar:            #fffefc;
+    /* topbar background — a shade lighter       */
+    --topbar-text:       #1a1a18;
+    --search:            #f6f3ee;
+    /* search field inside the topbar            */
+    /* ---------- Surfaces ---------- */
+    --page:              #fffefc;
+    /* page background behind the cards          */
+    --surface:           #ffffff;
+    /* cards, tables, inputs                     */
+    --surface-sunken:    #faf8f4;
+    /* wells, disabled fields, empty states      */
+    --border:            #ebe6dd;
+    /* every hairline                            */
+    --field:             #ded8cc;
+    /* input borders — darker than --border      */
+    /* ---------- Text ---------- */
+    --text:              #17171a;
+    /* body copy and headings                    */
+    --muted:             #6f6b63;
+    /* labels, captions, secondary text          */
+    --faint:             #a39d92;
+    /* placeholders and disabled text only       */
+    /* ---------- Accent: ink ---------- */
+    --accent:            #111113;
+    /* primary buttons, active nav, focus ring   */
+    --accent-hover:      #2c2c30;
+    --accent-soft:       #f0ede7;
+    /* quiet chips and highlights                */
+    --accent-ink:        #2c2c30;
+    /* text on --accent-soft                     */
+    --on-accent:         #ffffff;
+    /* text on --accent                          */
+    --ring:              rgba(17, 17, 19, .14);
+    /* ---------- Status: the only real colour ---------- */
+    --success:           #2f6b34;
+    --success-soft: #e9f3e9;
+    --success-ink: #2f6b34;
+    --warning:           #9a6a12;
+    --warning-soft: #f8f0dd;
+    --warning-ink: #7d5510;
+    --danger:            #c0392b;
+    --danger-soft:  #fbeae7;
+    --danger-ink:  #a32a1e;
+    --info:              #2f5d7c;
+    --info-soft:    #e8f0f6;
+    --info-ink:    #24485f;
+    /* ---------- Tables ---------- */
+    --thead:             #f5f1ea;
+    /* header band — warm, not white             */
+    --thead-text:        #615c53;
+    --zebra:             #fdfcfa;
+    /* even rows — barely there                  */
+    --row-hover:         #f8f6f2;
+    /* ---------- Elevation ---------- */
+    --shadow-sm:         0 1px 2px rgba(23, 23, 26, .05);
+    --shadow:            0 1px 3px rgba(23, 23, 26, .06);
+    --shadow-lg:         0 6px 20px rgba(17, 17, 19, .10);
+    --shadow-ink:        0 6px 20px rgba(17, 17, 19, .18);
+    /* the hero card    */
+    /* ---------- Radius ---------- */
+    --r-sm: 6px;
+    --r: 8px;
+    --r-lg: 11px;
+    --r-pill: 999px;
+    /* ---------- Spacing (4px base) ---------- */
+    --s1: 4px;
+    --s2: 8px;
+    --s3: 12px;
+    --s4: 16px;
+    --s5: 20px;
+    --s6: 24px;
+    --s8: 32px;
+}
+/* ----------------------------------------------------------------------------
+Derived values. Not new colours — every one is composed from the tokens
+above so the palette still lives in exactly one place.
+------------------------------------------------------------------------- */
+:root {
+    --ring-width:        3px;
+    --ring-danger:       rgba(192, 57, 43, .12);
+    /* --danger at 12%           */
+    --sidebar-w:         232px;
+    --topbar-h:          56px;
+    --row-h:             38px;
+    /* spec §4: standard density */
+    --tr:                .15s ease;
+    /* shared transition         */
+    /* Secondary text on the inverted hero card. Both measured against --accent
+    #111113 with the same formula that reproduces the spec's §2 table:
+    --on-accent-dim   5.80:1  AA    (this is the spec's own hero label value)
+    --on-accent-soft  9.35:1  AAA   (introduced here, so recalculated) */
+    --on-accent-dim:     #8e8e96;
+    --on-accent-soft:    #b6b6bd;
+}

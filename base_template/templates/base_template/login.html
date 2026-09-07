@@ -1,0 +1,64 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>
+            Sign in · Attendance
+        </title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="{% static 'base_template/css/tokens.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/base.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/components.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/shell.css' %}">
+    </head>
+    <body>
+        <div class="auth">
+            <div class="auth__card">
+                <div class="auth__brand">
+                    <span class="sidebar__mark">
+                        A
+                    </span>
+                    <span>
+                        Attendance
+                    </span>
+                </div>
+                <div class="card">
+                    <div class="card__head">
+                        <h2>
+                            Sign in
+                        </h2>
+                    </div>
+                    <div class="card__body">
+                        {% if form.errors %}
+                            <div class="alert alert--danger" style="margin-bottom:var(--s4)">
+                                Email or password is incorrect.
+                            </div>
+                        {% endif %}
+                        <form method="post" class="stack">
+                            {% csrf_token %}
+                            <div class="field">
+                                <label class="field__label" for="id_username">
+                                    Email
+                                </label>
+                                <input class="input" type="email" name="username" id="id_username" autocomplete="username" autofocus required>
+                            </div>
+                            <div class="field">
+                                <label class="field__label" for="id_password">
+                                    Password
+                                </label>
+                                <input class="input" type="password" name="password" id="id_password" autocomplete="current-password" required>
+                            </div>
+                            <button class="btn btn--primary btn--block" type="submit">
+                                Sign in
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </body>
+</html>

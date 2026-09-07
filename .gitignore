@@ -1,0 +1,214 @@
+# =============================================================================
+# Attendance System — .gitignore
+#
+# ANCHORING RULE, and the reason most of this file works:
+#   A leading "/" anchors a pattern to the REPOSITORY ROOT only.
+#     /static/   ignores  ./static/            (collected/served output)
+#                but NOT  ./base_template/static/  (source assets — tracked)
+#     /media/    ignores  ./media/             (user uploads on this machine)
+#                but NOT  ./someapp/media/     (shipped app assets — tracked)
+#   A pattern with no leading "/" matches at EVERY level, which is what you
+#   want for __pycache__ and editor files, and what you must avoid for static.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Secrets and local configuration — never commit these
+# -----------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+local_settings.py
+settings_local.py
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+credentials.json
+
+# -----------------------------------------------------------------------------
+# Django — project-level collected/uploaded content (root-anchored)
+# -----------------------------------------------------------------------------
+# STATIC_ROOT: output of `collectstatic`. Generated, never edited by hand.
+/static/
+/staticfiles/
+/static_root/
+/static_cdn/
+
+# MEDIA_ROOT: files uploaded by users on THIS machine. Not shared state.
+/media/
+/media_root/
+/media_cdn/
+/uploads/
+
+# NOTE: app-level assets are deliberately NOT ignored, e.g.
+#   base_template/static/base_template/css/tokens.css   <- tracked
+#   <app>/media/...                                     <- tracked
+
+# -----------------------------------------------------------------------------
+# Django — local database and logs (debugging stays on the machine that made it)
+# -----------------------------------------------------------------------------
+db.sqlite3
+db.sqlite3-journal
+*.sqlite3
+*.db
+
+/logs/
+log/
+*.log
+*.log.*
+django-debug.log
+django_error.log
+
+# NOTE: migrations ARE tracked on purpose. They are the schema's history and
+# every developer and deployment must apply the identical sequence.
+# Do NOT add */migrations/ here.
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pyo
+*.pyd
+
+# Packaging / build artifacts
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+sdist/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# -----------------------------------------------------------------------------
+# Virtual environments
+# -----------------------------------------------------------------------------
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+virtualenv/
+pyvenv.cfg
+
+# -----------------------------------------------------------------------------
+# Testing, coverage and type/lint caches
+# -----------------------------------------------------------------------------
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+nosetests.xml
+*.cover
+.pytest_cache/
+.tox/
+.nox/
+.hypothesis/
+.cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.ruff_cache/
+.pytype/
+.pyre/
+
+# Local test/QA output captured while debugging
+/platform-test-output.txt
+/platform-full-test-output.txt
+/test-output.txt
+/.qa/
+/.playwright-mcp/
+/screenshots/
+/test-results/
+/playwright-report/
+
+# -----------------------------------------------------------------------------
+# Celery / Redis background workers
+# -----------------------------------------------------------------------------
+celerybeat-schedule
+celerybeat-schedule.*
+celerybeat.pid
+*.pid
+
+# -----------------------------------------------------------------------------
+# Node — used by docs/scripts/build_schema.cjs
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.npm/
+
+# -----------------------------------------------------------------------------
+# Editors and IDEs
+# -----------------------------------------------------------------------------
+.vscode/
+!.vscode/settings.json.example
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+.spyderproject
+.spyproject
+.ropeproject
+
+# -----------------------------------------------------------------------------
+# Operating system
+# -----------------------------------------------------------------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# -----------------------------------------------------------------------------
+# Archives, backups and scratch files
+# -----------------------------------------------------------------------------
+*.rar
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+*.tar.bz2
+*.gz
+*.bz2
+*.xz
+*.iso
+*.dmg
+*.bak
+*.orig
+*.rej
+*.tmp
+*.temp
+~$*
+
+# -----------------------------------------------------------------------------
+# Jupyter
+# -----------------------------------------------------------------------------
+.ipynb_checkpoints
+*.ipynb_checkpoints/

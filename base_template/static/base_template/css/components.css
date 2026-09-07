@@ -1,0 +1,533 @@
+/* ============================================================================
+Warm Paper / Ink — foundation components.
+FORM (shape, density, interaction) follows design_reference/ ("Nordwell").
+COLOUR and TYPE follow WARM_PAPER_INK_SPEC.md. Where the two differ:
+- Field labels: spec type wins (10px/700/uppercase), not the reference's
+12.5px sentence case.
+- Radii: the reference's softer corners, expressed through the spec's own
+radius scale. --r-lg is 11px, which is exactly the reference's input
+radius, so nothing is invented.
+- Input fill: the reference tints inputs; the spec puts them on --surface
+with the darker --field border. Colour rule wins -> white on --field.
+- Focus ring: the reference glows lime; there is no lime here. Ink ring.
+- Checked controls: the reference fills lime; filled with --accent instead.
+========================================================================= */
+/* ---------------------------------------------------------------------------
+Buttons — spec §4. One primary per view.
+------------------------------------------------------------------------ */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    border: 1px solid transparent;
+    border-radius: var(--r-lg);
+    padding: 9px 16px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--tr), border-color var(--tr), color var(--tr);
+}
+.btn svg {
+    width: 15px;
+    height: 15px;
+    stroke-width: 2;
+    flex: none;
+}
+.btn--primary       {
+    background: var(--accent);
+    color: var(--on-accent);
+}
+.btn--primary:hover {
+    background: var(--accent-hover);
+}
+.btn--ghost         {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text);
+}
+.btn--ghost:hover   {
+    background: var(--surface-sunken);
+}
+.btn--quiet         {
+    background: transparent;
+    color: var(--muted);
+}
+.btn--quiet:hover   {
+    background: var(--surface-sunken);
+    color: var(--text);
+}
+.btn--danger        {
+    background: var(--danger);
+    color: var(--on-accent);
+}
+.btn--danger:hover  {
+    background: var(--danger-ink);
+}
+/* Destructive but secondary — used in modal footers beside a ghost cancel. */
+.btn--danger-soft       {
+    background: var(--danger-soft);
+    color: var(--danger-ink);
+}
+.btn--danger-soft:hover {
+    background: var(--danger);
+    color: var(--on-accent);
+}
+.btn--sm {
+    padding: 7px 12px;
+    font-size: 12px;
+}
+.btn--lg {
+    padding: 11px 20px;
+    font-size: 14px;
+}
+.btn--block {
+    width: 100%;
+}
+.btn:disabled,
+.btn.is-disabled {
+    opacity: .5;
+    cursor: not-allowed;
+}
+.btn-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+    transition: background var(--tr), color var(--tr), border-color var(--tr);
+}
+.btn-icon:hover {
+    background: var(--surface-sunken);
+    color: var(--text);
+}
+.btn-icon svg   {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+}
+/* ---------------------------------------------------------------------------
+Fields — spec §4 inputs, reference field/label/help composition.
+------------------------------------------------------------------------ */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    min-width: 0;
+}
+.field__label {
+    display: flex;
+    align-items: center;
+    gap: var(--s1);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.field__req {
+    color: var(--danger);
+}
+.field__opt {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    color: var(--accent-ink);
+    background: var(--accent-soft);
+    padding: 2px 6px;
+    border-radius: var(--r-sm);
+    text-transform: uppercase;
+}
+.field__help  {
+    font-size: 11.5px;
+    color: var(--muted);
+}
+.field__error {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--danger-ink);
+}
+.input,
+.textarea,
+select.input {
+    width: 100%;
+    border: 1px solid var(--field);
+    border-radius: var(--r-lg);
+    padding: 9px 11px;
+    font: inherit;
+    font-size: 13px;
+    background: var(--surface);
+    color: var(--text);
+    outline: 0;
+    transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
+}
+.input::placeholder,
+.textarea::placeholder {
+    color: var(--faint);
+}
+.input:hover:not(:disabled):not([readonly]),
+.textarea:hover:not(:disabled):not([readonly]) {
+    border-color: var(--muted);
+}
+.input:focus,
+.textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.input:disabled,
+.textarea:disabled {
+    background: var(--surface-sunken);
+    color: var(--faint);
+    border-color: var(--border);
+    cursor: not-allowed;
+}
+.input[readonly],
+.textarea[readonly] {
+    background: var(--surface-sunken);
+    color: var(--muted);
+}
+.input[readonly]:focus,
+.textarea[readonly]:focus {
+    border-color: var(--field);
+    box-shadow: none;
+}
+.input.is-invalid,
+.textarea.is-invalid {
+    border-color: var(--danger);
+}
+.input.is-invalid:focus,
+.textarea.is-invalid:focus {
+    box-shadow: 0 0 0 var(--ring-width) var(--ring-danger);
+}
+.textarea {
+    min-height: 104px;
+    resize: vertical;
+    line-height: 1.5;
+}
+/* Number inputs carry no spinner arrows — spec §4. */
+input[type=number] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+/* Input group: an icon or affix sharing the field's border. */
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    background: var(--surface);
+    border: 1px solid var(--field);
+    border-radius: var(--r-lg);
+    padding: 0 11px;
+    transition: border-color var(--tr), box-shadow var(--tr);
+}
+.input-group:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.input-group .input {
+    border: 0;
+    border-radius: 0;
+    padding: 9px 0;
+    background: transparent;
+}
+.input-group .input:focus {
+    box-shadow: none;
+}
+.input-group svg {
+    width: 15px;
+    height: 15px;
+    stroke-width: 2;
+    color: var(--muted);
+    flex: none;
+}
+.input-group__affix {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+}
+/* ---------------------------------------------------------------------------
+Cards — spec §4. The border does the work; the shadow only lifts.
+------------------------------------------------------------------------ */
+.card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+.card__head {
+    padding: var(--s3) var(--s4);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+}
+.card__head h2 {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+}
+.card__body {
+    padding: var(--s4);
+}
+.card__foot {
+    padding: var(--s3) var(--s4);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+}
+/* Metric card. One per screen may be inverted — spec §4. */
+.metric {
+    padding: var(--s4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s1);
+}
+.metric__label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.metric strong {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.035em;
+}
+.metric__note  {
+    font-size: 11.5px;
+    color: var(--muted);
+}
+.metric--hero {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-color: transparent;
+    box-shadow: var(--shadow-ink);
+}
+.metric--hero .metric__label {
+    color: var(--on-accent-dim);
+}
+.metric--hero .metric__note  {
+    color: var(--on-accent-soft);
+}
+/* ---------------------------------------------------------------------------
+Badges — spec §4. All the colour in the palette lives here.
+------------------------------------------------------------------------ */
+.badge {
+    display: inline-block;
+    border-radius: var(--r-sm);
+    padding: 3px 9px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    /* Body leading would make a badge taller than the 38px row it sits in.
+    vertical-align keeps it off the baseline, which otherwise reserves
+    descender space under it and pushes the row taller again. */
+    line-height: 1.2;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.badge--success {
+    background: var(--success-soft);
+    color: var(--success-ink);
+}
+.badge--warning {
+    background: var(--warning-soft);
+    color: var(--warning-ink);
+}
+.badge--danger  {
+    background: var(--danger-soft);
+    color: var(--danger-ink);
+}
+.badge--info    {
+    background: var(--info-soft);
+    color: var(--info-ink);
+}
+.badge--neutral {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+}
+/* ---------------------------------------------------------------------------
+Table — spec §4. Row height lands near 38px: standard density.
+------------------------------------------------------------------------ */
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+.table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.table thead th {
+    background: var(--thead);
+    color: var(--thead-text);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    text-align: left;
+    padding: 11px 14px;
+    white-space: nowrap;
+}
+.table--sticky thead th {
+    position: sticky;
+    top: var(--topbar-h);
+    z-index: 10;
+}
+.table tbody td {
+    padding: 11px 14px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    /* The body's 1.55 leading pushes rows to ~44px; the spec fixes standard
+    density near 38px (--row-h), so cells tighten to 1.2. */
+    line-height: 1.2;
+    vertical-align: middle;
+}
+.table tbody tr:nth-child(even) {
+    background: var(--zebra);
+}
+.table tbody tr:hover           {
+    background: var(--row-hover);
+}
+.table .numeric,
+.table th.numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+/* Sortable header — the indicator is ink, never a second colour. */
+.table th.is-sortable {
+    cursor: pointer;
+    user-select: none;
+}
+.table th.is-sortable:hover {
+    color: var(--text);
+}
+.table th.is-sortable::after {
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-left: 6px;
+    vertical-align: middle;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 4px solid currentColor;
+    opacity: .25;
+}
+.table th.is-asc::after  {
+    border-top: 0;
+    border-bottom: 4px solid currentColor;
+    opacity: .9;
+}
+.table th.is-desc::after {
+    opacity: .9;
+}
+/* ---------------------------------------------------------------------------
+Pagination — spec §4. Required on every table, with a real count.
+------------------------------------------------------------------------ */
+.pagination {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: var(--s3) var(--s4);
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+    flex-wrap: wrap;
+}
+.pagination__info {
+    font-variant-numeric: tabular-nums;
+}
+.pagination__pages {
+    display: flex;
+    align-items: center;
+    gap: var(--s1);
+    margin-left: auto;
+}
+.pagination__page {
+    min-width: 30px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 5px 10px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background var(--tr), border-color var(--tr);
+}
+.pagination__page:hover:not(:disabled):not(.is-on) {
+    background: var(--surface-sunken);
+}
+.pagination__page.is-on {
+    background: var(--accent);
+    border-color: transparent;
+    color: var(--on-accent);
+    font-weight: 700;
+}
+.pagination__page:disabled {
+    opacity: .4;
+    cursor: not-allowed;
+}
+.pagination__dots {
+    padding: 0 var(--s1);
+    color: var(--faint);
+}
+.pagination__size {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+}
+.pagination__size select {
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+@media (max-width: 680px) {
+    .pagination {
+        gap: var(--s3);
+    }
+    .pagination__pages {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+/* Project-wide numeric controls: native validation without spin buttons. */
+input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+select.input, select.dt-input {
+    appearance: none;
+    padding-right: 32px;
+    background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+    background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+}

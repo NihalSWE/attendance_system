@@ -1,0 +1,209 @@
+{% extends "tenants/platform/base.html" %}
+{% block title %}
+    {{ company.name }} · Platform
+{% endblock %}
+{% block page %}
+    <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="{% url 'platform:company_list' %}">
+            Companies
+        </a>
+        <span>
+            /
+        </span>
+        <span>
+            {{ company.name }}
+        </span>
+    </nav>
+    <header class="company-header">
+        <div class="company-identity">
+            <span class="company-mark" aria-hidden="true">
+                {{ company.name|first }}
+            </span>
+            <div>
+                <h1 class="page__title">
+                    {{ company.name }}
+                </h1>
+                <p class="page__sub">
+                    Company
+                    <span class="amount">
+                        {{ company.code }}
+                    </span>
+                </p>
+            </div>
+        </div>
+        <span class="badge {% if company.status == 'active' %}badge--success{% elif company.status == 'trial' %}badge--warning{% else %}badge--neutral{% endif %}">
+            {{ company.get_status_display }}
+        </span>
+        <a class="btn btn--ghost" href="{% url 'platform:company_status' company.public_id %}">
+            Change status
+        </a>
+    </header>
+    <div class="company-overview">
+        <section class="card">
+            <div class="card__head">
+                <h2>
+                    Company details
+                </h2>
+                <span class="spacer">
+                </span>
+                <a class="text-link" href="{% url 'platform:company_edit' company.public_id %}">
+                    Edit details
+                </a>
+            </div>
+            <dl class="company-facts">
+                <div>
+                    <dt>
+                        Legal name
+                    </dt>
+                    <dd>
+                        {{ company.legal_name|default:company.name }}
+                    </dd>
+                </div>
+                <div>
+                    <dt>
+                        Email
+                    </dt>
+                    <dd>
+                        {{ company.email|default:"Not provided" }}
+                    </dd>
+                </div>
+                <div>
+                    <dt>
+                        Phone
+                    </dt>
+                    <dd>
+                        {% if company.phone %}
+                            +{{ company.phone }}
+                        {% else %}
+                            Not provided
+                        {% endif %}
+                    </dd>
+                </div>
+                <div>
+                    <dt>
+                        Location defaults
+                    </dt>
+                    <dd>
+                        {{ company.country_code }} · {{ company.currency }} · {{ company.timezone }}
+                    </dd>
+                </div>
+                <div class="company-facts__wide">
+                    <dt>
+                        Address
+                    </dt>
+                    <dd>
+                        {{ company.address|default:"Not provided" }}
+                    </dd>
+                </div>
+            </dl>
+        </section>
+        <section class="card administrator-card">
+            <div class="card__head">
+                <h2>
+                    Company administrator
+                </h2>
+            </div>
+            <div class="card-body stack">
+                {% if administrator %}
+                    <div>
+                        <strong>
+                            {{ administrator.user.get_full_name|default:"Master account" }}
+                        </strong>
+                        <p class="t-muted">
+                            {{ administrator.user.email }}
+                        </p>
+                    </div>
+                    <div>
+                        <span class="badge badge--neutral">
+                            {{ administrator.get_status_display }}
+                        </span>
+                    </div>
+                    <p class="t-muted">
+                        The master login for this company's workspace.
+                    </p>
+                    <a class="btn btn--primary" href="{% url 'platform:membership_edit' company.public_id administrator.pk %}">
+                        Edit administrator
+                    </a>
+                {% else %}
+                    <strong>
+                        No administrator yet
+                    </strong>
+                    <p class="t-muted">
+                        Create this company's master login to give it access to the workspace.
+                    </p>
+                    <a class="btn btn--primary" href="{% url 'platform:administrator_create' company.public_id %}">
+                        Create administrator
+                    </a>
+                {% endif %}
+            </div>
+        </section>
+        <section class="card company-features">
+            <div class="card__head">
+                <h2>
+                    Feature access
+                </h2>
+                <span class="spacer">
+                </span>
+                <a class="text-link" href="{% url 'platform:company_feature' company.public_id %}">
+                    Change access
+                </a>
+            </div>
+            <div class="feature-grid">
+                {% for row in features %}
+                    <div class="feature-item">
+                        <strong>
+                            {{ row.feature.name }}
+                        </strong>
+                        <span class="badge {% if row.enabled %}badge--success{% else %}badge--neutral{% endif %}">
+                            {% if row.enabled %}
+                                Enabled
+                            {% else %}
+                                Not enabled
+                            {% endif %}
+                        </span>
+                    </div>
+                {% empty %}
+                    <p class="card-note">
+                        No features configured.
+                    </p>
+                {% endfor %}
+            </div>
+            <p class="card-note">
+                Module access for this company. Attendance, leave and payroll screens will arrive in their respective phases.
+            </p>
+        </section>
+        <section class="card company-activity">
+            <div class="card__head">
+                <h2>
+                    Recent activity
+                </h2>
+                <span class="spacer">
+                </span>
+                <span class="t-muted">
+                    Latest 10 events
+                </span>
+            </div>
+            <ol class="activity-list">
+                {% for event in events %}
+                    <li>
+                        <div>
+                            <strong>
+                                {{ event.action_label }}
+                            </strong>
+                            <p class="t-muted">
+                                {{ event.actor_user.email|default:"System" }}
+                            </p>
+                        </div>
+                        <time datetime="{{ event.occurred_at|date:'c' }}">
+                            {{ event.occurred_at|date:"d M Y H:i" }} UTC
+                        </time>
+                    </li>
+                {% empty %}
+                    <li>
+                        No platform activity recorded yet.
+                    </li>
+                {% endfor %}
+            </ol>
+        </section>
+    </div>
+{% endblock %}

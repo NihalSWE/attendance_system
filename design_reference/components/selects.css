@@ -1,0 +1,156 @@
+/* Nordwell panel — select, select2 (searchable) and select2 multiselect.
+   Open/closed state is a class; nothing here is set inline. */
+
+.om-sel { position: relative; }
+
+/* ---------- trigger ---------- */
+.om-sel__control {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--om-surface); border: 1px solid var(--om-line); border-radius: 11px;
+  padding: 9px 12px;
+  font-family: inherit; font-size: 13px; color: var(--om-text-strong);
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+.om-sel__control:hover { background: var(--om-sunk-2); }
+.om-sel__control--open { background: var(--om-lime-soft); border-color: var(--om-lime-line); }
+.om-sel__label { color: var(--om-muted); }
+.om-sel__value { font-weight: 500; color: var(--om-text); white-space: nowrap; }
+.om-sel__caret {
+  display: inline-block; flex: 0 0 auto; width: 14px; height: 14px;
+  background: currentColor; color: var(--om-muted);
+  -webkit-mask: url("https://api.iconify.design/solar/alt-arrow-down-linear.svg") center/contain no-repeat;
+  mask: url("https://api.iconify.design/solar/alt-arrow-down-linear.svg") center/contain no-repeat;
+  transition: transform .2s ease;
+}
+.om-sel__control--open .om-sel__caret { transform: rotate(180deg); }
+
+/* ---------- menu ---------- */
+.om-sel__menu {
+  position: absolute; top: calc(100% + 8px); right: 0; left: auto; z-index: 35;
+  background: var(--om-surface); border: 1px solid var(--om-line-soft); border-radius: 14px;
+  box-shadow: var(--om-shadow-menu);
+  padding: 6px;
+  max-width: calc(100vw - 40px);
+  opacity: 0; transform: translateY(-6px) scale(.97); pointer-events: none;
+  transition: opacity .16s ease, transform .22s cubic-bezier(.2,.9,.25,1);
+}
+.om-sel__menu--open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+.om-sel__menu--rich { padding: 0; overflow: hidden; border-radius: 16px; }
+.om-sel__menu--fit { min-width: 100%; width: max-content; max-width: min(250px, calc(100vw - 40px)); }
+.om-sel__menu--full { width: 100%; min-width: min(250px, calc(100vw - 40px)); }
+.om-sel__menu--pkg { width: min(268px, calc(100vw - 40px)); }
+.om-sel__menu--sort { width: max-content; min-width: 168px; }
+
+.om-sel__option {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: 9px;
+  font-size: 13px; color: var(--om-text-strong); cursor: pointer;
+  transition: background .12s ease;
+}
+.om-sel__option:hover { background: var(--om-sunk-2); }
+.om-sel__option--rich { border-radius: 10px; padding: 8px 9px; }
+.om-sel__option--on { background: var(--om-lime-soft); color: var(--om-lime-ink-2); font-weight: 600; }
+.om-sel__option-label { flex: 1; white-space: nowrap; }
+.om-sel__tick {
+  display: inline-block; flex: 0 0 auto; width: 14px; height: 14px;
+  background: currentColor; color: var(--om-lime-ink); opacity: 0;
+  -webkit-mask: url("https://api.iconify.design/solar/check-read-linear.svg") center/contain no-repeat;
+  mask: url("https://api.iconify.design/solar/check-read-linear.svg") center/contain no-repeat;
+  transition: opacity .12s ease;
+}
+.om-sel__option--on .om-sel__tick { opacity: 1; }
+.om-sel__tick--sm { width: 11px; height: 11px; color: var(--om-ink); }
+
+/* ---------- search row (select2) ---------- */
+.om-sel__search { padding: 10px; border-bottom: 1px solid var(--om-line-hair); }
+.om-sel__search-inner {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--om-sunk-2); border: 1px solid var(--om-line-soft); border-radius: 10px; padding: 7px 10px;
+  transition: background .15s ease, border-color .15s ease;
+}
+.om-sel__search-inner:focus-within { border-color: var(--om-lime-line); background: #fbfdf3; }
+.om-sel__search-icon {
+  display: inline-block; flex: 0 0 auto; width: 14px; height: 14px;
+  background: currentColor; color: var(--om-muted);
+  -webkit-mask: url("https://api.iconify.design/solar/magnifer-linear.svg") center/contain no-repeat;
+  mask: url("https://api.iconify.design/solar/magnifer-linear.svg") center/contain no-repeat;
+}
+.om-sel__search input {
+  border: 0; outline: 0; background: transparent;
+  font-family: inherit; font-size: 13px; color: var(--om-text); width: 100%; min-width: 0;
+}
+.om-sel__list { max-height: 232px; overflow-y: auto; padding: 6px; }
+.om-sel__list--short { max-height: 216px; }
+
+/* ---------- rich option (label + meta + tag) ---------- */
+.om-sel__option-main { flex: 1; min-width: 0; }
+.om-sel__option-title { display: block; font-size: 13px; font-weight: 500; color: var(--om-text); }
+.om-sel__option-meta { display: block; font-size: 11.5px; color: var(--om-muted); margin-top: 1px; }
+.om-sel__sim {
+  display: inline-block; flex: 0 0 auto; width: 15px; height: 15px;
+  background: currentColor; color: var(--om-muted);
+  -webkit-mask: url("https://api.iconify.design/solar/sim-card-minimalistic-linear.svg") center/contain no-repeat;
+  mask: url("https://api.iconify.design/solar/sim-card-minimalistic-linear.svg") center/contain no-repeat;
+}
+.om-sel__tag {
+  font-size: 10.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
+  padding: 3px 7px; border-radius: 7px;
+}
+.om-sel__tag--premium { background: var(--om-ink); color: var(--om-lime); }
+.om-sel__tag--smart { background: #ecfbc4; color: var(--om-lime-ink); }
+.om-sel__tag--any { background: var(--om-sunk-4); color: var(--om-muted); }
+
+/* ---------- multiselect ---------- */
+.om-ms__control {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  background: var(--om-surface); border: 1px solid var(--om-line); border-radius: 11px;
+  padding: 5px 10px; min-height: 40px; cursor: pointer;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.om-ms__control:hover { border-color: #cdd3bf; }
+.om-ms__control--open { border-color: var(--om-lime-line); box-shadow: 0 0 0 3px rgba(201, 247, 58, .22); }
+.om-ms__control .om-sel__caret { transition: transform .2s ease; }
+.om-ms__control--open .om-sel__caret { transform: rotate(180deg); }
+.om-ms__placeholder { font-size: 13px; color: var(--om-muted-2); }
+
+.om-ms__chip {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--om-lime-soft); border: 1px solid var(--om-lime-line); color: var(--om-lime-ink-2);
+  font-size: 12px; font-weight: 500; padding: 3px 5px 3px 8px; border-radius: 8px;
+}
+.om-ms__chip-x {
+  display: grid; place-items: center; width: 15px; height: 15px; border-radius: 5px;
+  color: #5e7d18; opacity: .72; transition: opacity .15s ease, background .15s ease;
+}
+.om-ms__chip-x::after {
+  content: ""; width: 12px; height: 12px; background: currentColor;
+  -webkit-mask: url("https://api.iconify.design/solar/close-circle-bold.svg") center/contain no-repeat;
+  mask: url("https://api.iconify.design/solar/close-circle-bold.svg") center/contain no-repeat;
+}
+.om-ms__chip-x:hover { background: rgba(70,97,11,.14); opacity: 1; }
+
+.om-ms__option { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 9px; font-size: 13px; cursor: pointer; transition: background .12s ease; }
+.om-ms__option:hover { background: var(--om-sunk-2); }
+.om-ms__option--on { background: #f6fce6; }
+.om-ms__box {
+  flex: 0 0 17px; width: 17px; height: 17px; border-radius: 5px;
+  border: 1.6px solid #cdd3bf; background: var(--om-surface);
+  display: grid; place-items: center; color: var(--om-ink);
+  transition: background .15s ease, border-color .15s ease;
+}
+.om-ms__option--on .om-ms__box { background: var(--om-lime); border-color: var(--om-lime); }
+.om-ms__option--on .om-sel__tick { opacity: 1; }
+.om-ms__flag { width: 20px; height: 15px; flex: 0 0 20px; border-radius: 3px; border: 1px solid var(--om-line-soft); background-color: var(--om-sunk-3); background-position: center; background-size: cover; background-repeat: no-repeat; }
+.om-ms__label { flex: 1; }
+.om-ms__count { font-family: var(--om-mono); font-size: 11px; color: var(--om-muted-2); }
+
+.om-ms__footer {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-top: 1px solid var(--om-line-hair); background: var(--om-sunk-1);
+}
+.om-ms__footer-count { flex: 1; font-size: 12px; color: var(--om-muted); }
+.om-ms__action { font-size: 12.5px; font-weight: 500; color: var(--om-muted); padding: 5px 9px; border-radius: 8px; cursor: pointer; transition: background .15s ease, color .15s ease; }
+.om-ms__action:hover { background: var(--om-sunk-4); color: var(--om-text); }
+.om-ms__action--primary { font-weight: 600; color: var(--om-ink); background: var(--om-lime); padding: 5px 11px; }
+.om-ms__action--primary:hover { background: var(--om-lime-strong); color: var(--om-ink); }

@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="components/tokens.css" />
+<link rel="stylesheet" href="components/panel.css" />
+<link rel="stylesheet" href="components/selects.css" />
+<link rel="stylesheet" href="components/forms.css" />
+</helmet>
+
+<div class="app">
+
+  <aside class="side">
+    <div class="side__brand">
+      <div class="side__logo">N</div>
+      <div class="side__brandtext">
+        <span class="side__name">Nordwell Supply</span>
+        <span class="side__sub">Partner Console</span>
+      </div>
+    </div>
+
+    <nav class="side__nav">
+      <span class="side__section">Overview</span>
+
+      <a href="{{ hrefDash }}" onClick="{{ goDash }}" class="{{ dashClass }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="3" width="7" height="9" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="16" width="7" height="5" rx="1.5"></rect></svg>
+        Dashboard
+      </a>
+
+      <a href="#" onClick="{{ toggleOrders }}" class="{{ ordersGroupClass }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5 12 3l9 4.5v9L12 21 3 16.5z"></path><path d="M3 7.5 12 12l9-4.5M12 12v9"></path></svg>
+        <span class="grow">Orders</span>
+        <span class="nav__badge">18</span>
+        <svg class="nav__chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </a>
+
+      <div class="{{ subClass }}">
+        <div class="sub__clip">
+          <div class="sub__list">
+            <span class="sub__rail"></span>
+            <a href="{{ hrefOrders }}" onClick="{{ goOrders }}" class="{{ allOrdersClass }}">
+              <span class="sub__dot"></span>
+              All orders
+            </a>
+            <a href="#" class="sub__item sub__item--d2">
+              <span class="sub__dot"></span>
+              Quotes &amp; RFQs
+            </a>
+            <a href="#" class="sub__item sub__item--d3">
+              <span class="sub__dot"></span>
+              Returns
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <a href="#" class="nav__item">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7H4M20 12H4M14 17H4"></path></svg>
+        <span class="grow">Catalog</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </a>
+
+      <a href="#" class="nav__item">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8l-9-5-9 5v8l9 5z"></path><path d="M7 10.5v6M12 8v9M17 10.5v6"></path></svg>
+        <span class="grow">Inventory</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </a>
+
+      <a href="{{ hrefForms }}" onClick="{{ goForms }}" class="{{ formsNavClass }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="3"></rect><path d="M8 8h8M8 12h8M8 16h4"></path></svg>
+        Forms
+      </a>
+
+      <a href="{{ hrefCart }}" onClick="{{ goCart }}" class="{{ cartNavClass }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2.2l2.3 11.2a2 2 0 0 0 2 1.6h8.1a2 2 0 0 0 2-1.55L21 8H6.2"></path><circle cx="10" cy="20" r="1.3"></circle><circle cx="18" cy="20" r="1.3"></circle></svg>
+        <span class="grow">Cart</span>
+        <span class="nav__count">{{ cartCount }}</span>
+      </a>
+
+      <span class="side__section side__section--gap">Network</span>
+
+      <a href="#" class="nav__item">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"></circle><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5M17 11.5a2.8 2.8 0 1 0 0-5.6M18.5 19.5c0-2.2-1-3.9-2.6-4.7"></path></svg>
+        <span class="grow">Partners</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </a>
+
+      <a href="#" class="nav__item">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"></path></svg>
+        <span class="grow">Reports</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </a>
+
+      <a href="#" class="nav__item">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 7 19.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 3 13.6H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.7 7l-.1-.1a2 2 0 1 1 2.8-2.8L7.5 4a1.7 1.7 0 0 0 2.9-1.2V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.6 1h.1a2 2 0 1 1 0 4H21a1.7 1.7 0 0 0-1.6 1z"></path></svg>
+        Settings
+      </a>
+    </nav>
+
+    <div class="side__foot">
+      <div class="credit">
+        <div class="credit__top">
+          <span class="credit__label">Credit line used</span>
+          <span class="credit__pct">62%</span>
+        </div>
+        <div class="credit__track">
+          <div class="credit__fill w-62"></div>
+        </div>
+        <div class="credit__note">$248,400 of $400,000</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+
+    <header class="topbar">
+      <div class="crumb">
+        <span class="crumb__root">{{ crumbRoot }}</span>
+        <span class="crumb__sep">/</span>
+        <span class="crumb__leaf">{{ crumbLeaf }}</span>
+      </div>
+
+      <div class="search">
+        <div class="search__wrap">
+          <span class="icon icon--15 search__icon"></span>
+          <input class="search__input" placeholder="Search orders, SKUs, partners" />
+          <span class="search__kbd">⌘K</span>
+        </div>
+      </div>
+
+      <div class="topbar__actions">
+        <button class="icon-btn">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8M13.7 21a2 2 0 0 1-3.4 0"></path></svg>
+          <span class="icon-btn__dot"></span>
+        </button>
+
+        <div data-cart-root="true" class="pop">
+          <button onClick="{{ toggleCart }}" class="{{ cartBtnClass }}">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2.2l2.3 11.2a2 2 0 0 0 2 1.6h8.1a2 2 0 0 0 2-1.55L21 8H6.2"></path><circle cx="10" cy="20" r="1.3"></circle><circle cx="18" cy="20" r="1.3"></circle></svg>
+            <span class="cart-btn__count">{{ cartCount }}</span>
+          </button>
+
+          <div class="{{ cartPanelClass }}">
+            <div class="cart-panel__head">
+              <span class="cart-panel__title">Cart</span>
+              <span class="cart-panel__meta">{{ cartCount }} eSIM plans</span>
+            </div>
+
+            <div class="cart-panel__list">
+              <sc-for list="{{ cartItems }}" as="c" hint-placeholder-count="3">
+                <div class="crow">
+                  <span class="{{ c.flagSmClass }}"></span>
+                  <span class="crow__main">
+                    <span class="crow__name">{{ c.country }}</span>
+                    <span class="crow__meta">{{ c.plan }} · {{ c.operator }}</span>
+                  </span>
+                  <span class="stepper stepper--sm">
+                    <span onClick="{{ c.dec }}" class="stepper__btn">−</span>
+                    <span class="stepper__val">{{ c.qty }}</span>
+                    <span onClick="{{ c.inc }}" class="stepper__btn">+</span>
+                  </span>
+                  <span class="crow__total">{{ c.lineTotal }}</span>
+                  <span onClick="{{ c.remove }}" class="crow__x" title="Remove">
+                    <span class="icon icon--13"></span>
+                  </span>
+                </div>
+              </sc-for>
+            </div>
+
+            <div class="cart-panel__foot">
+              <div class="cart-panel__totals">
+                <span class="cart-panel__totallabel">Total</span>
+                <span class="cart-panel__totalval">{{ cartTotal }}</span>
+              </div>
+              <a href="#cart" onClick="{{ goCart }}" class="cart-panel__cta">Checkout</a>
+            </div>
+          </div>
+        </div>
+
+        <div class="topbar__div"></div>
+
+        <div data-dd-root="true" class="pop">
+          <button onClick="{{ userToggle }}" class="{{ userBtnClass }}">
+            <span class="user-av">EM</span>
+            <span class="user-txt">
+              <span class="user-name">Marsh, Elena</span>
+              <span class="user-org">Harbor &amp; Vine Ltd.</span>
+            </span>
+            <span class="om-sel__caret"></span>
+          </button>
+
+          <div class="{{ userMenuClass }}">
+            <div class="user-menu__head">
+              <span class="user-menu__av">EM</span>
+              <span class="user-menu__id">
+                <span class="user-menu__name">Marsh, Elena</span>
+                <span class="user-menu__mail">elena@harborvine.com</span>
+              </span>
+            </div>
+
+            <div class="user-menu__body">
+              <a href="#" class="user-menu__item user-menu__item--d1">
+                <span class="icon icon--16 user-menu__ico--account"></span>
+                Account
+              </a>
+              <a href="#" class="user-menu__item user-menu__item--d2 user-menu__item--danger">
+                <span class="icon icon--16 user-menu__ico--logout"></span>
+                Logout
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <sc-if value="{{ isDash }}" hint-placeholder-val="{{ true }}">
+      <div class="view">
+
+        <div class="page__head">
+          <div>
+            <h1 class="page__title">Trading overview</h1>
+            <p class="page__sub">Rolling 30 days · updated 12 minutes ago</p>
+          </div>
+          <div class="page__actions">
+            <div class="seg">
+              <span class="seg__item">7d</span>
+              <span class="seg__item seg__item--on">30d</span>
+              <span class="seg__item">QTD</span>
+            </div>
+            <button class="btn-lime">New order</button>
+          </div>
+        </div>
+
+        <div class="grid grid--kpi">
+          <div class="kpi">
+            <div class="kpi__head">
+              <span class="kpi__label">Gross volume</span>
+              <span class="kpi__delta kpi__delta--up">+14.2%</span>
+            </div>
+            <div class="kpi__value">$1,284,900</div>
+            <svg class="kpi__spark" viewBox="0 0 120 30" preserveAspectRatio="none"><polyline class="spark" points="0,24 15,20 30,22 45,14 60,17 75,9 90,12 105,5 120,7"></polyline></svg>
+          </div>
+
+          <div class="kpi">
+            <div class="kpi__head">
+              <span class="kpi__label">Open orders</span>
+              <span class="kpi__delta kpi__delta--up">+6</span>
+            </div>
+            <div class="kpi__value">318</div>
+            <div class="kpi__bars">
+              <sc-for list="{{ miniBars }}" as="b" hint-placeholder-count="7">
+                <span class="{{ b.cls }}"></span>
+              </sc-for>
+            </div>
+          </div>
+
+          <div class="kpi">
+            <div class="kpi__head">
+              <span class="kpi__label">Avg. basket</span>
+              <span class="kpi__delta kpi__delta--down">−2.4%</span>
+            </div>
+            <div class="kpi__value">$4,040</div>
+            <svg class="kpi__spark" viewBox="0 0 120 30" preserveAspectRatio="none"><polyline class="spark" points="0,8 15,11 30,7 45,13 60,10 75,16 90,14 105,20 120,18"></polyline></svg>
+          </div>
+
+          <div class="kpi kpi--ink">
+            <div class="kpi__head">
+              <span class="kpi__label">Fill rate</span>
+              <span class="kpi__delta kpi__delta--lime">SLA ok</span>
+            </div>
+            <div class="kpi__value">96.8%</div>
+            <div class="kpi__track">
+              <div class="kpi__fill w-97"></div>
+            </div>
+            <div class="kpi__note">Target 95% · 12 lines short-shipped</div>
+          </div>
+        </div>
+
+        <div class="grid grid--wide">
+          <div class="card card--chart">
+            <div class="card__head">
+              <div>
+                <h2 class="card__title">Order value by week</h2>
+                <p class="card__sub">Wholesale vs. marketplace channel</p>
+              </div>
+              <div class="legend">
+                <span class="legend__item"><span class="swatch swatch--lime"></span>Wholesale</span>
+                <span class="legend__item"><span class="swatch swatch--ink"></span>Marketplace</span>
+              </div>
+            </div>
+            <div class="chart">
+              <div class="chart__axis">
+                <span>$400k</span><span>$300k</span><span>$200k</span><span>$100k</span><span>0</span>
+              </div>
+              <div class="chart__plot">
+                <div class="chart__grid">
+                  <span class="chart__gridline"></span>
+                  <span class="chart__gridline"></span>
+                  <span class="chart__gridline"></span>
+                  <span class="chart__gridline"></span>
+                  <span class="chart__gridline chart__gridline--base"></span>
+                </div>
+                <div class="chart__cols">
+                  <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="8">
+                    <div class="chart__col">
+                      <div class="chart__pair">
+                        <div class="{{ w.limeClass }}"></div>
+                        <div class="{{ w.inkClass }}"></div>
+                      </div>
+                      <span class="chart__xlabel">{{ w.label }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2 class="card__title">Fulfilment mix</h2>
+            <p class="card__sub card__sub--gap">318 open orders</p>
+            <div class="donut">
+              <div class="donut__wrap">
+                <svg class="donut__svg" viewBox="0 0 42 42">
+                  <circle class="donut__seg donut__seg--track" cx="21" cy="21" r="16"></circle>
+                  <circle class="donut__seg donut__seg--a" cx="21" cy="21" r="16"></circle>
+                  <circle class="donut__seg donut__seg--b" cx="21" cy="21" r="16"></circle>
+                  <circle class="donut__seg donut__seg--c" cx="21" cy="21" r="16"></circle>
+                </svg>
+                <div class="donut__center">
+                  <div>
+                    <div class="donut__pct">46%</div>
+                    <div class="donut__label">shipped</div>
+                  </div>
+                </div>
+              </div>
+              <div class="mix">
+                <div class="mix__row">
+                  <span class="swatch swatch--lime"></span>
+                  <span class="mix__name">Shipped</span>
+                  <span class="mix__val">146</span>
+                </div>
+                <div class="mix__row">
+                  <span class="swatch swatch--ink"></span>
+                  <span class="mix__name">Picking</span>
+                  <span class="mix__val">86</span>
+                </div>
+                <div class="mix__row">
+                  <span class="swatch swatch--mute"></span>
+                  <span class="mix__name">Awaiting stock</span>
+                  <span class="mix__val">51</span>
+                </div>
+                <div class="mix__row">
+                  <span class="swatch swatch--faint"></span>
+                  <span class="mix__name">On hold</span>
+                  <span class="mix__val">35</span>
+                </div>
+              </div>
+            </div>
+            <div class="card__foot">
+              <span class="card__footlabel">Avg. time to ship</span>
+              <span class="card__footval">1.8 days</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid--half">
+          <div class="card">
+            <div class="card__headrow">
+              <h2 class="card__title card__title--tight">Top partners</h2>
+              <a href="#" class="card__link">View all</a>
+            </div>
+            <p class="card__sub">By 30-day volume</p>
+            <sc-for list="{{ partners }}" as="p" hint-placeholder-count="4">
+              <div class="plist__row">
+                <span class="plist__mark">{{ p.mark }}</span>
+                <span class="plist__main">
+                  <span class="plist__name">{{ p.name }}</span>
+                  <span class="plist__meta">{{ p.meta }}</span>
+                </span>
+                <span class="plist__track">
+                  <span class="{{ p.fillClass }}"></span>
+                </span>
+                <span class="plist__val">{{ p.value }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <div class="card">
+            <div class="card__headrow">
+              <h2 class="card__title card__title--tight">Needs attention</h2>
+              <span class="card__pill">5</span>
+            </div>
+            <p class="card__sub">Exceptions across orders and stock</p>
+            <sc-for list="{{ alerts }}" as="a" hint-placeholder-count="4">
+              <div class="alist__row">
+                <span class="{{ a.dotClass }}"></span>
+                <span class="alist__main">
+                  <span class="alist__title">{{ a.title }}</span>
+                  <span class="alist__detail">{{ a.detail }}</span>
+                </span>
+                <span class="alist__time">{{ a.time }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isOrders }}" hint-placeholder-val="{{ false }}">
+      <div class="view">
+
+        <div class="page__head">
+          <div>
+            <h1 class="page__title">Orders</h1>
+            <p class="page__sub">1,204 orders · 18 awaiting your approval</p>
+          </div>
+          <div class="page__actions">
+            <div class="exports">
+              <button class="exp exp--pdf" title="Export PDF">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path><path d="M9 15h6"></path></svg>
+                PDF
+              </button>
+              <button class="exp exp--xls" title="Export Excel">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"></rect><path d="M9 4v16M3 12h18"></path></svg>
+                Excel
+              </button>
+              <button class="exp exp--csv" title="Export CSV">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 20h16"></path></svg>
+                CSV
+              </button>
+              <button class="exp exp--print" title="Print">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9V4h10v5"></path><rect x="4" y="9" width="16" height="7" rx="2"></rect><path d="M7 14h10v6H7z"></path></svg>
+                Print
+              </button>
+            </div>
+            <button class="btn-lime">New order</button>
+          </div>
+        </div>
+
+        <div class="grid grid--kpi">
+          <sc-for list="{{ orderStats }}" as="s" hint-placeholder-count="4">
+            <div class="{{ s.cardClass }}">
+              <div class="stat__head">
+                <span class="stat__id">
+                  <span class="stat__tile">
+                    <span class="{{ s.iconClass }}"></span>
+                  </span>
+                  <span class="stat__label">{{ s.label }}</span>
+                </span>
+                <span class="stat__delta">{{ s.delta }}</span>
+              </div>
+              <div class="stat__value">{{ s.value }}</div>
+              <div class="stat__foot">
+                <span class="stat__track">
+                  <span class="{{ s.fillClass }}"></span>
+                </span>
+                <span class="stat__meta">{{ s.meta }}</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div class="tabs">
+          <div class="tabs__group">
+            <span class="tab tab--on">All <span class="tab__count">1204</span></span>
+            <span class="tab">Awaiting approval <span class="tab__count">18</span></span>
+            <span class="tab">Picking <span class="tab__count">86</span></span>
+            <span class="tab">Shipped <span class="tab__count">146</span></span>
+            <span class="tab">Cancelled</span>
+          </div>
+        </div>
+
+        <div class="filters">
+          <div class="filters__search">
+            <span class="icon icon--15 search__icon"></span>
+            <input class="filters__input" placeholder="Order ID, partner or PO number" />
+          </div>
+
+          <sc-for list="{{ filterDropdowns }}" as="d" hint-placeholder-count="3">
+            <div data-dd-root="true" class="om-sel">
+              <button onClick="{{ d.toggle }}" class="{{ d.controlClass }}">
+                <span class="om-sel__label">{{ d.label }}</span>
+                <span class="om-sel__value">{{ d.value }}</span>
+                <span class="om-sel__caret"></span>
+              </button>
+              <div class="{{ d.menuClass }}">
+                <sc-for list="{{ d.options }}" as="o" hint-placeholder-count="4">
+                  <span onClick="{{ o.pick }}" class="{{ o.cls }}">
+                    <span class="om-sel__option-label">{{ o.label }}</span>
+                    <span class="om-sel__tick"></span>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+
+          <div data-dd-root="true" class="om-sel om-sel--grow">
+            <div onClick="{{ msToggle }}" class="{{ msControlClass }}">
+              <span class="om-sel__label">Countries</span>
+              <sc-for list="{{ msChips }}" as="c" hint-placeholder-count="2">
+                <span class="om-ms__chip">
+                  {{ c.label }}
+                  <span onClick="{{ c.remove }}" class="om-ms__chip-x"></span>
+                </span>
+              </sc-for>
+              <sc-if value="{{ msEmpty }}" hint-placeholder-val="{{ true }}">
+                <span class="om-ms__placeholder">All countries</span>
+              </sc-if>
+              <span class="grow"></span>
+              <span class="om-sel__caret"></span>
+            </div>
+
+            <div class="{{ msMenuClass }}">
+              <div class="om-sel__search">
+                <div class="om-sel__search-inner">
+                  <span class="om-sel__search-icon"></span>
+                  <input value="{{ msQuery }}" onChange="{{ msSearch }}" placeholder="Search countries" />
+                </div>
+              </div>
+              <div class="om-sel__list om-sel__list--short">
+                <sc-for list="{{ msOptions }}" as="o" hint-placeholder-count="6">
+                  <span onClick="{{ o.pick }}" class="{{ o.cls }}">
+                    <span class="om-ms__box">
+                      <span class="om-sel__tick om-sel__tick--sm"></span>
+                    </span>
+                    <span class="{{ o.flagClass }}"></span>
+                    <span class="om-ms__label">{{ o.label }}</span>
+                    <span class="om-ms__count">{{ o.count }}</span>
+                  </span>
+                </sc-for>
+              </div>
+              <div class="om-ms__footer">
+                <span class="om-ms__footer-count">{{ msCountLabel }}</span>
+                <span onClick="{{ msClear }}" class="om-ms__action">Clear</span>
+                <span onClick="{{ msDone }}" class="om-ms__action om-ms__action--primary">Done</span>
+              </div>
+            </div>
+          </div>
+
+          <div data-dd-root="true" class="om-sel">
+            <button onClick="{{ pkgToggle }}" class="{{ pkgControlClass }}">
+              <span class="om-sel__sim"></span>
+              <span class="om-sel__value">{{ pkgValue }}</span>
+              <span class="om-sel__caret"></span>
+            </button>
+            <div class="{{ pkgMenuClass }}">
+              <div class="om-sel__search">
+                <div class="om-sel__search-inner">
+                  <span class="om-sel__search-icon"></span>
+                  <input value="{{ pkgQuery }}" onChange="{{ pkgSearch }}" placeholder="Search data packages" />
+                </div>
+              </div>
+              <div class="om-sel__list">
+                <sc-for list="{{ pkgOptions }}" as="o" hint-placeholder-count="5">
+                  <span onClick="{{ o.pick }}" class="{{ o.cls }}">
+                    <span class="om-sel__option-main">
+                      <span class="om-sel__option-title">{{ o.label }}</span>
+                      <span class="om-sel__option-meta">{{ o.meta }}</span>
+                    </span>
+                    <span class="{{ o.tagClass }}">{{ o.tag }}</span>
+                  </span>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div data-dp-root="true" class="pop">
+            <button onClick="{{ toggleDp }}" class="{{ dpBtnClass }}">
+              <span class="icon icon--15 dp__cico"></span>
+              {{ dpLabel }}
+              <span class="icon icon--13 dp__chev"></span>
+            </button>
+
+            <div class="{{ dpPanelClass }}">
+              <div class="dp__presets">
+                <span class="dp__presets-label">Presets</span>
+                <sc-for list="{{ dpPresets }}" as="p" hint-placeholder-count="6">
+                  <span onClick="{{ p.pick }}" class="{{ p.cls }}">{{ p.label }}</span>
+                </sc-for>
+              </div>
+
+              <div class="dp__cal">
+                <div class="dp__calhead">
+                  <span onClick="{{ dpPrev }}" class="dp__navbtn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"></path></svg>
+                  </span>
+                  <span class="dp__selectors">
+                    <sc-for list="{{ dpSelectors }}" as="sel" hint-placeholder-count="2">
+                      <span data-dd-root="true" class="dp__sel">
+                        <span onClick="{{ sel.toggle }}" class="{{ sel.triggerClass }}">
+                          {{ sel.value }}
+                          <span class="icon icon--12"></span>
+                        </span>
+                        <span class="{{ sel.menuClass }}">
+                          <sc-for list="{{ sel.options }}" as="o" hint-placeholder-count="12">
+                            <span onClick="{{ o.pick }}" class="{{ o.cls }}">{{ o.label }}</span>
+                          </sc-for>
+                        </span>
+                      </span>
+                    </sc-for>
+                  </span>
+                  <span onClick="{{ dpNext }}" class="dp__navbtn">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+                  </span>
+                </div>
+
+                <div class="dp__week">
+                  <sc-for list="{{ dpWeekdays }}" as="w" hint-placeholder-count="7">
+                    <span class="dp__weekday">{{ w.label }}</span>
+                  </sc-for>
+                </div>
+
+                <div class="dp__days">
+                  <sc-for list="{{ dpDays }}" as="d" hint-placeholder-count="35">
+                    <span onClick="{{ d.pick }}" class="{{ d.cls }}">{{ d.label }}</span>
+                  </sc-for>
+                </div>
+
+                <div class="dp__foot">
+                  <span class="dp__range">{{ dpRangeText }}</span>
+                  <span onClick="{{ dpClear }}" class="dp__clear">Clear</span>
+                  <span onClick="{{ dpApply }}" class="dp__apply">Apply</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button class="reset-btn">Reset</button>
+        </div>
+
+        <div class="table-scroll">
+          <div class="table">
+            <div class="table__bar">
+              <span class="table__count">Showing 1–8 of 1,204</span>
+              <span class="grow"></span>
+              <span class="table__sort">
+                Sort
+                <span data-dd-root="true" class="om-sel">
+                  <span onClick="{{ sortToggle }}" class="{{ sortTriggerClass }}">
+                    {{ sortValue }}
+                    <span class="om-sel__caret"></span>
+                  </span>
+                  <span class="{{ sortMenuClass }}">
+                    <sc-for list="{{ sortOptions }}" as="o" hint-placeholder-count="4">
+                      <span onClick="{{ o.pick }}" class="{{ o.cls }}">
+                        <span class="om-sel__option-label">{{ o.label }}</span>
+                        <span class="om-sel__tick"></span>
+                      </span>
+                    </sc-for>
+                  </span>
+                </span>
+              </span>
+            </div>
+
+            <div class="thead">
+              <span><span class="tbox"></span></span>
+              <span>Order</span>
+              <span>Partner</span>
+              <span>Channel</span>
+              <span>Status</span>
+              <span class="thead__right">Value</span>
+              <span>Ship by</span>
+              <span class="thead__right">Actions</span>
+            </div>
+
+            <sc-for list="{{ orders }}" as="o" hint-placeholder-count="8">
+              <div class="trow">
+                <span><span class="tbox"></span></span>
+                <span>
+                  <span class="trow__id">{{ o.id }}</span>
+                  <span class="trow__date">{{ o.date }}</span>
+                </span>
+                <span class="trow__partner">
+                  <span class="trow__mark">{{ o.mark }}</span>
+                  <span class="crow__main">
+                    <span class="trow__name">{{ o.partner }}</span>
+                    <span class="trow__po">{{ o.po }}</span>
+                  </span>
+                </span>
+                <span class="trow__channel">{{ o.channel }}</span>
+                <span>
+                  <span class="{{ o.statusClass }}">
+                    <span class="badge-status__dot"></span>{{ o.status }}
+                  </span>
+                </span>
+                <span class="trow__value">{{ o.value }}</span>
+                <span class="trow__ship">{{ o.ship }}</span>
+                <span class="trow__actions">
+                  <span class="act act--view" title="View"><span class="icon icon--16 act__ico--view"></span></span>
+                  <span class="act act--edit" title="Edit"><span class="icon icon--16 act__ico--edit"></span></span>
+                  <span class="act act--approve" title="Approve"><span class="icon icon--16 act__ico--approve"></span></span>
+                  <span class="act act--delete" title="Delete"><span class="icon icon--16 act__ico--delete"></span></span>
+                  <span class="act act--more" title="More details"><span class="icon icon--16 act__ico--more"></span></span>
+                </span>
+              </div>
+            </sc-for>
+
+            <div class="pager">
+              <span class="pager__info">Page 1 of 151</span>
+              <button class="pager__btn">Previous</button>
+              <span class="pager__page pager__page--on">1</span>
+              <span class="pager__page">2</span>
+              <span class="pager__page">3</span>
+              <span class="pager__dots">…</span>
+              <button class="pager__next">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isCart }}" hint-placeholder-val="{{ false }}">
+      <div class="view">
+
+        <div class="page__head">
+          <div>
+            <h1 class="page__title">Your cart</h1>
+            <p class="page__sub">{{ cartCount }} eSIM plans · reserved for 30 minutes</p>
+          </div>
+          <div class="page__actions">
+            <a href="#" class="btn-quiet">Premium eSIMs</a>
+            <a href="#" class="btn-quiet">Smart eSIMs</a>
+            <a href="{{ hrefDash }}" onClick="{{ goDash }}" class="btn-ink">Dashboard</a>
+          </div>
+        </div>
+
+        <div class="grid grid--split">
+
+          <div class="stack stack--tight">
+            <sc-for list="{{ cartItems }}" as="c" hint-placeholder-count="3">
+              <div class="citem">
+                <span class="{{ c.flagLgClass }}"></span>
+
+                <span class="citem__main">
+                  <span class="citem__titlerow">
+                    <span class="citem__country">{{ c.country }}</span>
+                    <span class="{{ c.badgeClass }}">{{ c.badge }}</span>
+                  </span>
+                  <span class="citem__meta">
+                    <span class="citem__metaitem"><span class="icon icon--14 citem__ico--data"></span>{{ c.data }}</span>
+                    <span class="citem__metaitem"><span class="icon icon--14 citem__ico--time"></span>{{ c.validity }}</span>
+                    <span class="citem__metaitem"><span class="icon icon--14 citem__ico--op"></span>{{ c.operator }}</span>
+                  </span>
+                  <span class="citem__sku">{{ c.sku }} · {{ c.unit }} each</span>
+                </span>
+
+                <span class="citem__right">
+                  <span class="citem__total">{{ c.lineTotal }}</span>
+                  <span class="citem__ctrls">
+                    <span class="stepper">
+                      <span onClick="{{ c.dec }}" class="stepper__btn">−</span>
+                      <span class="stepper__val">{{ c.qty }}</span>
+                      <span onClick="{{ c.inc }}" class="stepper__btn stepper__btn--plus">+</span>
+                    </span>
+                    <span onClick="{{ c.remove }}" class="remove-btn">
+                      <span class="icon icon--13"></span>
+                      Remove
+                    </span>
+                  </span>
+                </span>
+              </div>
+            </sc-for>
+
+            <div class="addmore">
+              <span class="addmore__ico"><span class="icon icon--16"></span></span>
+              <span class="addmore__text">Add another destination — bundles of 5+ activations unlock tier pricing.</span>
+              <a href="#" class="addmore__link">Browse catalog</a>
+            </div>
+          </div>
+
+          <div class="rail">
+
+            <div class="balance">
+              <div class="balance__head">
+                <span class="balance__title">Partner balance</span>
+                <span class="badge-prepaid">Prepaid</span>
+              </div>
+
+              <div class="balance__figs">
+                <span class="balance__fig">
+                  <span class="balance__figlabel">Available now</span>
+                  <span class="balance__figval">{{ balance }}</span>
+                </span>
+                <span class="balance__fig balance__fig--right">
+                  <span class="balance__figlabel">After purchase</span>
+                  <span class="balance__figval balance__figval--lime">{{ afterBalance }}</span>
+                </span>
+              </div>
+
+              <svg class="balance__meter" viewBox="0 0 100 10" preserveAspectRatio="none">
+                <rect class="balance__seg balance__seg--after" x="0" y="0" height="10" width="{{ afterW }}"></rect>
+                <rect class="balance__seg balance__seg--order" y="0" height="10" x="{{ orderX }}" width="{{ orderW }}"></rect>
+              </svg>
+
+              <div class="balance__legend">
+                <span class="legend__item"><span class="swatch swatch--sm swatch--lime"></span>Remaining {{ afterBalance }}</span>
+                <span class="legend__item"><span class="swatch swatch--sm swatch--amber"></span>This order {{ cartTotal }} · {{ usePct }}</span>
+              </div>
+              <div class="balance__limit">Prepaid limit {{ balanceLimit }}</div>
+
+              <a href="#" class="topup">
+                <span class="icon icon--14"></span>
+                Top up balance
+              </a>
+            </div>
+
+            <div class="card">
+              <h2 class="summary__title">Order summary</h2>
+
+              <div class="summary__rows">
+                <div class="summary__row">
+                  <span class="summary__label">Subtotal · {{ cartCount }} plans</span>
+                  <span class="summary__val">{{ subtotal }}</span>
+                </div>
+                <div class="summary__row">
+                  <span class="summary__label summary__label--flex">Partner discount <span class="badge-tier2">TIER 2 · 8%</span></span>
+                  <span class="summary__val summary__val--discount">−{{ discount }}</span>
+                </div>
+                <div class="summary__row">
+                  <span class="summary__label">Platform fee</span>
+                  <span class="summary__val">{{ fee }}</span>
+                </div>
+              </div>
+
+              <div class="summary__rule"></div>
+
+              <div class="summary__totalrow">
+                <span class="summary__totallabel">Total due</span>
+                <span class="summary__totalval">{{ cartTotal }}</span>
+              </div>
+              <div class="summary__note">Charged against prepaid balance · VAT invoiced monthly</div>
+
+              <button class="place-btn">Place order</button>
+
+              <div class="summary__assure">
+                <span class="icon icon--14"></span>
+                QR codes are issued instantly after approval.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isForms }}" hint-placeholder-val="{{ false }}">
+      <div class="view">
+
+        <div class="page__head">
+          <div>
+            <h1 class="page__title">New activation request</h1>
+            <p class="page__sub">Form components — inputs, selects, choices and toggles</p>
+          </div>
+          <div class="page__actions">
+            <button class="om-btn om-btn--ghost">Save draft</button>
+            <button class="om-btn om-btn--primary">Submit request</button>
+          </div>
+        </div>
+
+        <div class="grid grid--split">
+
+          <div class="stack">
+
+            <section class="card">
+              <div class="form__sechead">
+                <h2 class="card__title">Partner details</h2>
+                <p class="card__sub">Who the activation is billed to</p>
+              </div>
+
+              <div class="form__grid">
+                <label class="om-field">
+                  <span class="om-label">Company name <span class="om-label__req">*</span></span>
+                  <input class="om-input" placeholder="Harbor &amp; Vine Ltd." />
+                </label>
+
+                <label class="om-field">
+                  <span class="om-label">Contact email <span class="om-label__req">*</span></span>
+                  <span class="om-input-group">
+                    <span class="om-input-icon om-input-icon--mail"></span>
+                    <input class="om-input" type="email" placeholder="orders@harborvine.com" />
+                  </span>
+                </label>
+
+                <label class="om-field">
+                  <span class="om-label">Phone <span class="om-label__opt">Optional</span></span>
+                  <span class="om-input-group">
+                    <span class="om-affix om-affix--mono">+44</span>
+                    <input class="om-input" placeholder="20 7946 0812" />
+                  </span>
+                </label>
+
+                <label class="om-field">
+                  <span class="om-label">VAT number</span>
+                  <input class="om-input om-input--invalid" value="{{ vatValue }}" onChange="{{ vatChange }}" />
+                  <span class="om-error">Doesn't match the GB VAT format.</span>
+                </label>
+
+                <div class="om-field">
+                  <span class="om-label">Partner tier</span>
+                  <sc-for list="{{ formDropdowns }}" as="d" hint-placeholder-count="1">
+                    <div data-dd-root="true" class="om-sel om-sel--block">
+                      <button onClick="{{ d.toggle }}" class="{{ d.blockControlClass }}">
+                        <span class="om-sel__value">{{ d.value }}</span>
+                        <span class="om-sel__caret"></span>
+                      </button>
+                      <div class="{{ d.menuClass }}">
+                        <sc-for list="{{ d.options }}" as="o" hint-placeholder-count="3">
+                          <span onClick="{{ o.pick }}" class="{{ o.cls }}">
+                            <span class="om-sel__option-label">{{ o.label }}</span>
+                            <span class="om-sel__tick"></span>
+                          </span>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <label class="om-field">
+                  <span class="om-label">Activation date</span>
+                  <input class="om-input" type="date" value="2026-09-14" onChange="{{ noop }}" />
+                </label>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="form__sechead">
+                <h2 class="card__title">Delivery method</h2>
+                <p class="card__sub">How QR codes reach the end customer</p>
+              </div>
+
+              <div class="form__choices">
+                <label class="om-choice">
+                  <span class="om-radio">
+                    <input type="radio" name="delivery" defaultChecked="{{ true }}" />
+                    <span class="om-radio__dot"></span>
+                  </span>
+                  <span class="om-check__text">
+                    Email QR
+                    <span class="om-check__note">Sent on approval</span>
+                  </span>
+                </label>
+                <label class="om-choice">
+                  <span class="om-radio">
+                    <input type="radio" name="delivery" />
+                    <span class="om-radio__dot"></span>
+                  </span>
+                  <span class="om-check__text">
+                    Partner portal
+                    <span class="om-check__note">Download in bulk</span>
+                  </span>
+                </label>
+                <label class="om-choice">
+                  <span class="om-radio">
+                    <input type="radio" name="delivery" />
+                    <span class="om-radio__dot"></span>
+                  </span>
+                  <span class="om-check__text">
+                    API push
+                    <span class="om-check__note">Webhook callback</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="om-field">
+                <span class="om-label">Billing cycle</span>
+                <span class="om-segment">
+                  <span class="om-segment__item">Prepaid</span>
+                  <span class="om-segment__item om-segment__item--on">Monthly invoice</span>
+                  <span class="om-segment__item">Net 30</span>
+                </span>
+              </div>
+            </section>
+          </div>
+
+          <div class="stack">
+
+            <section class="card">
+              <div class="form__sechead">
+                <h2 class="card__title">eSIM configuration</h2>
+                <p class="card__sub">Destinations and data package</p>
+              </div>
+
+              <div class="form__fields">
+                <div class="om-field">
+                  <span class="om-label">Destinations <span class="om-label__req">*</span></span>
+                  <div data-dd-root="true" class="om-sel om-sel--block">
+                    <div onClick="{{ msToggle }}" class="{{ msControlClass }}">
+                      <sc-for list="{{ msChips }}" as="c" hint-placeholder-count="2">
+                        <span class="om-ms__chip">
+                          {{ c.label }}
+                          <span onClick="{{ c.remove }}" class="om-ms__chip-x"></span>
+                        </span>
+                      </sc-for>
+                      <sc-if value="{{ msEmpty }}" hint-placeholder-val="{{ true }}">
+                        <span class="om-ms__placeholder">Select countries</span>
+                      </sc-if>
+                      <span class="grow"></span>
+                      <span class="om-sel__caret"></span>
+                    </div>
+                    <div class="{{ msMenuClass }}">
+                      <div class="om-sel__search">
+                        <div class="om-sel__search-inner">
+                          <span class="om-sel__search-icon"></span>
+                          <input value="{{ msQuery }}" onChange="{{ msSearch }}" placeholder="Search countries" />
+                        </div>
+                      </div>
+                      <div class="om-sel__list om-sel__list--short">
+                        <sc-for list="{{ msOptions }}" as="o" hint-placeholder-count="6">
+                          <span onClick="{{ o.pick }}" class="{{ o.cls }}">
+                            <span class="om-ms__box">
+                              <span class="om-sel__tick om-sel__tick--sm"></span>
+                            </span>
+                            <span class="{{ o.flagClass }}"></span>
+                            <span class="om-ms__label">{{ o.label }}</span>
+                            <span class="om-ms__count">{{ o.count }}</span>
+                          </span>
+                        </sc-for>
+                      </div>
+                      <div class="om-ms__footer">
+                        <span class="om-ms__footer-count">{{ msCountLabel }}</span>
+                        <span onClick="{{ msClear }}" class="om-ms__action">Clear</span>
+                        <span onClick="{{ msDone }}" class="om-ms__action om-ms__action--primary">Done</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="om-help">Multi-country plans are priced per region.</span>
+                </div>
+
+                <div class="om-field">
+                  <span class="om-label">Data package</span>
+                  <div data-dd-root="true" class="om-sel om-sel--block">
+                    <button onClick="{{ pkgToggle }}" class="{{ pkgBlockControlClass }}">
+                      <span class="om-sel__value">{{ pkgValue }}</span>
+                      <span class="om-sel__caret"></span>
+                    </button>
+                    <div class="{{ pkgMenuClass }}">
+                      <div class="om-sel__search">
+                        <div class="om-sel__search-inner">
+                          <span class="om-sel__search-icon"></span>
+                          <input value="{{ pkgQuery }}" onChange="{{ pkgSearch }}" placeholder="Search data packages" />
+                        </div>
+                      </div>
+                      <div class="om-sel__list">
+                        <sc-for list="{{ pkgOptions }}" as="o" hint-placeholder-count="5">
+                          <span onClick="{{ o.pick }}" class="{{ o.cls }}">
+                            <span class="om-sel__option-main">
+                              <span class="om-sel__option-title">{{ o.label }}</span>
+                              <span class="om-sel__option-meta">{{ o.meta }}</span>
+                            </span>
+                            <span class="{{ o.tagClass }}">{{ o.tag }}</span>
+                          </span>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form__grid form__grid--narrow">
+                  <label class="om-field">
+                    <span class="om-label">Quantity</span>
+                    <input class="om-input" type="number" defaultValue="{{ qtyDefault }}" min="1" />
+                  </label>
+                  <label class="om-field">
+                    <span class="om-label">Reference</span>
+                    <input class="om-input" placeholder="PO-77120" />
+                    <span class="om-help">Appears on the invoice.</span>
+                  </label>
+                </div>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="form__sechead">
+                <h2 class="card__title">Add-ons and notes</h2>
+                <p class="card__sub">Optional extras for this request</p>
+              </div>
+
+              <div class="form__addons">
+                <label class="om-check">
+                  <input type="checkbox" defaultChecked="{{ true }}" />
+                  <span class="om-check__box"></span>
+                  <span class="om-check__text">
+                    Priority provisioning
+                    <span class="om-check__note">QR codes issued within 5 minutes</span>
+                  </span>
+                </label>
+                <label class="om-check">
+                  <input type="checkbox" />
+                  <span class="om-check__box"></span>
+                  <span class="om-check__text">
+                    Bundle top-up credit
+                    <span class="om-check__note">Adds 2 GB per activation</span>
+                  </span>
+                </label>
+                <label class="om-check">
+                  <input type="checkbox" disabled="{{ true }}" />
+                  <span class="om-check__box"></span>
+                  <span class="om-check__text">
+                    White-label QR sheet
+                    <span class="om-check__note">Requires tier 1 partnership</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="form__toggles">
+                <label class="om-switch">
+                  <input type="checkbox" defaultChecked="{{ true }}" />
+                  <span class="om-switch__track"><span class="om-switch__thumb"></span></span>
+                  Auto-renew on expiry
+                </label>
+                <label class="om-switch">
+                  <input type="checkbox" />
+                  <span class="om-switch__track"><span class="om-switch__thumb"></span></span>
+                  Notify me on usage over 80%
+                </label>
+              </div>
+
+              <label class="om-field form__notes">
+                <span class="om-label">Notes for fulfilment <span class="om-label__opt">Optional</span></span>
+                <textarea class="om-textarea" placeholder="Anything the operations team should know"></textarea>
+              </label>
+
+              <div class="om-field">
+                <span class="om-label">Attach purchase order</span>
+                <label class="om-drop">
+                  <span class="om-drop__icon"></span>
+                  <span class="drop__main">
+                    <span class="drop__title">Drop a PDF here or browse</span>
+                    <span class="drop__note">Up to 10 MB · PDF, PNG, JPG</span>
+                  </span>
+                  <span class="om-btn om-btn--ghost om-btn--sm">Browse</span>
+                </label>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="form__footer">
+          <span class="form__footernote">Requests are reviewed by the operations team within one business hour.</span>
+          <button class="om-btn om-btn--danger">Discard</button>
+          <button class="om-btn om-btn--ghost">Save draft</button>
+          <button class="om-btn om-btn--ink">Submit request</button>
+        </div>
+      </div>
+    </sc-if>
+
+    <footer class="footer">
+      <span>© 2026 Nordwell Supply — partner console</span>
+      <span class="footer__links"><a href="#">Support</a><a href="#">API docs</a><a href="#">Status</a></span>
+    </footer>
+  </main>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{}">
+const VIEWS = { "#orders": "orders", "#cart": "cart", "#forms": "forms", "#dashboard": "dashboard" };
+const money = (n) => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const BALANCE_LIMIT = 25000;
+
+const STATUS = {
+  approval: { status: "Awaiting approval", tone: "approval" },
+  picking:  { status: "Picking",           tone: "picking" },
+  shipped:  { status: "Shipped",           tone: "shipped" },
+  stock:    { status: "Awaiting stock",    tone: "stock" },
+  hold:     { status: "On hold",           tone: "hold" }
+};
+
+const COUNTRIES = [
+  { code: "jp", label: "Japan", count: 214 }, { code: "us", label: "United States", count: 341 },
+  { code: "es", label: "Spain", count: 168 }, { code: "ae", label: "United Arab Emirates", count: 96 },
+  { code: "gb", label: "United Kingdom", count: 187 }, { code: "de", label: "Germany", count: 152 },
+  { code: "fr", label: "France", count: 143 }, { code: "tr", label: "Türkiye", count: 88 },
+  { code: "sg", label: "Singapore", count: 74 }, { code: "au", label: "Australia", count: 61 }
+];
+const PACKAGES = [
+  { label: "All packages", meta: "No package filter", tag: "Any" },
+  { label: "3 GB · 7 days", meta: "Starter regional", tag: "Smart" },
+  { label: "5 GB · 15 days", meta: "Short-stay travel", tag: "Smart" },
+  { label: "10 GB · 30 days", meta: "Most sold plan", tag: "Premium" },
+  { label: "20 GB · 30 days", meta: "Heavy data", tag: "Premium" },
+  { label: "Unlimited · 30 days", meta: "Fair-use 50 GB", tag: "Premium" }
+];
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const WEEKS = [
+  { label: "W22", lime: 52, ink: 31 }, { label: "W23", lime: 61, ink: 38 },
+  { label: "W24", lime: 44, ink: 42 }, { label: "W25", lime: 72, ink: 49 },
+  { label: "W26", lime: 66, ink: 57 }, { label: "W27", lime: 88, ink: 54 },
+  { label: "W28", lime: 79, ink: 63 }, { label: "W29", lime: 95, ink: 60 }
+];
+const MINI = [40, 62, 48, 78, 55, 92, 70];
+
+const fmtDay = (d) => d ? MONTHS[d.getMonth()].slice(0, 3) + " " + d.getDate() : "—";
+const sameDay = (a, b) => !!a && !!b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const navClass = (on, mod) => "nav__item" + (on ? " nav__item--" + mod : "");
+
+class Component extends DCLogic {
+  state = {
+    view: VIEWS[location.hash] || "dashboard",
+    ordersOpen: true,
+    cartOpen: false,
+    dpOpen: false,
+    dpMonth: new Date(2026, 8, 1),
+    dpStart: new Date(2026, 7, 2),
+    dpEnd: new Date(2026, 8, 1),
+    dpPreset: "Last 30 days",
+    openDd: null,
+    ddValues: { partner: "All partners", channel: "Any", value: "Any", sort: "Newest first", tier: "Tier 2 — Growth" },
+    msCountries: ["jp", "es"],
+    msQuery: "",
+    pkg: "All packages",
+    pkgQuery: "",
+    vat: "GB 88 4412 X",
+    balance: 18420.5,
+    cart: [
+      { sku: "ESM-JP-10", code: "jp", country: "Japan", data: "10 GB", validity: "30 days", operator: "SoftBank", badge: "Premium", unit: 24.5, qty: 2 },
+      { sku: "ESM-US-20", code: "us", country: "United States", data: "20 GB", validity: "30 days", operator: "T-Mobile", badge: "Premium", unit: 31, qty: 1 },
+      { sku: "ESM-ES-5",  code: "es", country: "Spain", data: "5 GB", validity: "15 days", operator: "Movistar", badge: "Smart", unit: 12.75, qty: 4 },
+      { sku: "ESM-AE-3",  code: "ae", country: "United Arab Emirates", data: "3 GB", validity: "7 days", operator: "Etisalat", badge: "Smart", unit: 9.9, qty: 3 }
+    ]
+  };
+
+  componentDidMount() {
+    this._onHash = () => this.setState({ view: VIEWS[location.hash] || "dashboard" });
+    window.addEventListener("hashchange", this._onHash);
+    this._onDocDown = (e) => {
+      if (!e.target.closest) return;
+      if (this.state.cartOpen && !e.target.closest("[data-cart-root]")) this.setState({ cartOpen: false });
+      if (this.state.dpOpen && !e.target.closest("[data-dp-root]")) this.setState({ dpOpen: false });
+      if (this.state.openDd && !e.target.closest("[data-dd-root]")) this.setState({ openDd: null });
+    };
+    document.addEventListener("mousedown", this._onDocDown);
+  }
+  componentWillUnmount() {
+    window.removeEventListener("hashchange", this._onHash);
+    document.removeEventListener("mousedown", this._onDocDown);
+  }
+
+  setQty(sku, delta) {
+    return (e) => {
+      if (e) e.preventDefault();
+      this.setState({
+        cart: this.state.cart
+          .map((i) => (i.sku === sku ? { ...i, qty: Math.max(0, i.qty + delta) } : i))
+          .filter((i) => i.qty > 0)
+      });
+    };
+  }
+  removeItem(sku) {
+    return (e) => { if (e) e.preventDefault(); this.setState({ cart: this.state.cart.filter((i) => i.sku !== sku) }); };
+  }
+
+  ddToggle(key) {
+    return (e) => { if (e) { e.preventDefault(); e.stopPropagation(); } this.setState({ openDd: this.state.openDd === key ? null : key }); };
+  }
+  ddPick(key, label) {
+    return (e) => {
+      if (e) e.preventDefault();
+      this.setState({ ddValues: { ...this.state.ddValues, [key]: label }, openDd: null });
+    };
+  }
+  isOpen(key) { return this.state.openDd === key; }
+
+  buildDropdown(key, label, options) {
+    const open = this.isOpen(key);
+    const current = this.state.ddValues[key];
+    return {
+      key, label, value: current,
+      toggle: this.ddToggle(key),
+      controlClass: "om-sel__control" + (open ? " om-sel__control--open" : ""),
+      blockControlClass: "om-sel__control om-sel__control--block" + (open ? " om-sel__control--open" : ""),
+      menuClass: "om-sel__menu om-sel__menu--fit" + (open ? " om-sel__menu--open" : ""),
+      options: options.map((opt) => ({
+        key: opt, label: opt,
+        pick: this.ddPick(key, opt),
+        cls: "om-sel__option" + (current === opt ? " om-sel__option--on" : "")
+      }))
+    };
+  }
+
+  pickDay(date) {
+    return (e) => {
+      if (e) e.preventDefault();
+      const { dpStart, dpEnd } = this.state;
+      if (!dpStart || (dpStart && dpEnd)) this.setState({ dpStart: date, dpEnd: null, dpPreset: "Custom" });
+      else if (date < dpStart) this.setState({ dpStart: date, dpEnd: dpStart, dpPreset: "Custom" });
+      else this.setState({ dpEnd: date, dpPreset: "Custom" });
+    };
+  }
+  applyPreset(label, days) {
+    return (e) => {
+      if (e) e.preventDefault();
+      const end = new Date(2026, 8, 1);
+      const start = new Date(2026, 8, 1);
+      start.setDate(start.getDate() - (days - 1));
+      this.setState({ dpStart: start, dpEnd: end, dpPreset: label, dpMonth: new Date(start.getFullYear(), start.getMonth(), 1) });
+    };
+  }
+  shiftMonth(delta) {
+    return (e) => {
+      if (e) e.preventDefault();
+      const m = this.state.dpMonth;
+      this.setState({ dpMonth: new Date(m.getFullYear(), m.getMonth() + delta, 1) });
+    };
+  }
+
+  buildDays() {
+    const m = this.state.dpMonth;
+    const y = m.getFullYear(), mo = m.getMonth();
+    const lead = (new Date(y, mo, 1).getDay() + 6) % 7;
+    const total = new Date(y, mo + 1, 0).getDate();
+    const { dpStart, dpEnd } = this.state;
+    const out = [];
+    for (let i = 0; i < lead; i++) {
+      out.push({ key: "b" + i, label: "", cls: "dp__day dp__day--blank", pick: (e) => e.preventDefault() });
+    }
+    for (let d = 1; d <= total; d++) {
+      const date = new Date(y, mo, d);
+      const isStart = sameDay(date, dpStart), isEnd = sameDay(date, dpEnd);
+      const inRange = dpStart && dpEnd && date > dpStart && date < dpEnd;
+      let cls = "dp__day";
+      if (isStart && isEnd) cls += " dp__day--start dp__day--solo";
+      else if (isStart) cls += " dp__day--start";
+      else if (isEnd) cls += " dp__day--end";
+      else if (inRange) cls += " dp__day--in";
+      out.push({ key: "d" + d, label: String(d), cls, pick: this.pickDay(date) });
+    }
+    return out;
+  }
+
+  buildDpSelector(key, value, options, mono, cols) {
+    const open = this.isOpen(key);
+    return {
+      key, value,
+      toggle: this.ddToggle(key),
+      triggerClass: "dp__seltrigger" + (mono ? " dp__seltrigger--mono" : "") + (open ? " dp__seltrigger--open" : ""),
+      menuClass: "dp__selmenu dp__selmenu--cols" + cols + (open ? " dp__selmenu--open" : ""),
+      options
+    };
+  }
+
+  nav(view) {
+    return (e) => {
+      if (e) e.preventDefault();
+      try { history.replaceState(null, "", "#" + view); } catch (_) {}
+      this.setState({ view, cartOpen: false, openDd: null, ordersOpen: view === "orders" ? true : this.state.ordersOpen });
+      window.scrollTo({ top: 0 });
+    };
+  }
+
+  renderVals() {
+    const isDash = this.state.view === "dashboard";
+    const isOrders = this.state.view === "orders";
+    const isCart = this.state.view === "cart";
+    const isForms = this.state.view === "forms";
+
+    const cart = this.state.cart;
+    const subtotal = cart.reduce((s, i) => s + i.unit * i.qty, 0);
+    const discount = subtotal * 0.08;
+    const fee = cart.length ? 4.5 : 0;
+    const total = subtotal - discount + fee;
+    const after = Math.max(0, this.state.balance - total);
+    const gap = 0.7;
+    const rawAfter = this.state.balance ? (after / this.state.balance) * 100 : 0;
+    const rawOrder = this.state.balance ? (total / this.state.balance) * 100 : 0;
+    const orderW = Math.min(100, Math.max(2, rawOrder));
+    const orderX = Math.min(100 - orderW, rawAfter + gap);
+    const afterW = Math.max(0, orderX - gap);
+
+    const subOpen = this.state.ordersOpen;
+    const dpOpen = this.state.dpOpen;
+    const sortOpen = this.isOpen("sort");
+    const msOpen = this.isOpen("countries");
+    const pkgOpen = this.isOpen("pkg");
+    const userOpen = this.isOpen("user");
+    const dpMonth = this.state.dpMonth;
+
+    return {
+      isDash, isOrders, isCart, isForms,
+      hrefDash: "#dashboard", hrefOrders: "#orders", hrefCart: "#cart", hrefForms: "#forms",
+      goDash: this.nav("dashboard"), goOrders: this.nav("orders"), goCart: this.nav("cart"), goForms: this.nav("forms"),
+
+      dashClass: navClass(isDash, "active"),
+      ordersGroupClass: navClass(isOrders || subOpen, subOpen ? "open" : "active"),
+      formsNavClass: navClass(isForms, "active"),
+      cartNavClass: navClass(isCart, "active"),
+      subClass: "sub" + (subOpen ? " sub--open" : ""),
+      allOrdersClass: "sub__item sub__item--d1" + (isOrders ? " sub__item--active" : ""),
+      toggleOrders: (e) => { e.preventDefault(); this.setState({ ordersOpen: !subOpen }); },
+
+      crumbRoot: isOrders ? "Console / Orders" : "Console",
+      crumbLeaf: isDash ? "Dashboard" : isOrders ? "All orders" : isCart ? "Cart" : "New activation request",
+
+      toggleCart: (e) => { e.preventDefault(); this.setState({ cartOpen: !this.state.cartOpen }); },
+      cartBtnClass: "cart-btn" + (this.state.cartOpen ? " cart-btn--on" : ""),
+      cartPanelClass: "cart-panel" + (this.state.cartOpen ? " cart-panel--open" : ""),
+      userToggle: this.ddToggle("user"),
+      userBtnClass: "user-btn" + (userOpen ? " user-btn--on" : ""),
+      userMenuClass: "user-menu" + (userOpen ? " user-menu--open" : ""),
+
+      cartCount: cart.reduce((s, i) => s + i.qty, 0),
+      cartItems: cart.map((i) => ({
+        ...i,
+        plan: i.data + " · " + i.validity,
+        flagSmClass: "crow__flag flag-" + i.code,
+        flagLgClass: "citem__flag flag-lg-" + i.code,
+        badgeClass: "badge-tier badge-tier--" + (i.badge === "Premium" ? "premium" : "smart"),
+        unit: money(i.unit),
+        lineTotal: money(i.unit * i.qty),
+        inc: this.setQty(i.sku, 1),
+        dec: this.setQty(i.sku, -1),
+        remove: this.removeItem(i.sku)
+      })),
+      subtotal: money(subtotal),
+      discount: money(discount),
+      fee: money(fee),
+      cartTotal: money(total),
+      balance: money(this.state.balance),
+      afterBalance: money(after),
+      balanceLimit: money(BALANCE_LIMIT),
+      afterW: afterW.toFixed(2),
+      orderX: orderX.toFixed(2),
+      orderW: orderW.toFixed(2),
+      usePct: (this.state.balance ? (total / this.state.balance) * 100 : 0).toFixed(1) + "%",
+
+      miniBars: MINI.map((h, i) => ({ key: i, cls: "kpi__bar h-" + h + (h === 92 ? " kpi__bar--on" : "") })),
+      weeks: WEEKS.map((w) => ({
+        key: w.label, label: w.label,
+        limeClass: "chart__bar chart__bar--lime h-" + w.lime,
+        inkClass: "chart__bar chart__bar--ink h-" + w.ink
+      })),
+
+      partners: [
+        { mark: "HV", name: "Harbor & Vine Ltd.", meta: "Tier 2 · 46 orders", pct: 92, value: "$284,100" },
+        { mark: "MF", name: "Meridian Foods", meta: "Tier 1 · 38 orders", pct: 74, value: "$226,800" },
+        { mark: "KG", name: "Kestrel Group", meta: "Tier 2 · 31 orders", pct: 58, value: "$178,400" },
+        { mark: "AT", name: "Atlas Trading Co.", meta: "Tier 3 · 24 orders", pct: 41, value: "$126,900" },
+        { mark: "NB", name: "Northbank Retail", meta: "Tier 3 · 19 orders", pct: 29, value: "$88,250" }
+      ].map((p) => ({ ...p, key: p.mark, fillClass: "plist__fill w-" + p.pct })),
+
+      alerts: [
+        { tone: "red", title: "3 orders past ship-by date", detail: "Meridian Foods · warehouse 02", time: "14m" },
+        { tone: "amber", title: "Credit line at 62%", detail: "Harbor & Vine approaching limit", time: "1h" },
+        { tone: "lime", title: "Price list v4 published", detail: "Applies to 214 SKUs from Sep 1", time: "3h" },
+        { tone: "grey", title: "SKU NW-4412 out of stock", detail: "51 orders awaiting replenishment", time: "5h" },
+        { tone: "red", title: "Failed payment on INV-88214", detail: "Atlas Trading Co. · $12,480", time: "1d" }
+      ].map((a) => ({ ...a, key: a.title, dotClass: "alist__dot alist__dot--" + a.tone })),
+
+      orderStats: [
+        { label: "Total orders",  value: "1,204",   delta: "+8.4%",  meta: "vs. 1,111 prior",  pct: 78, tone: "blue",  icon: "box" },
+        { label: "Total revenue", value: "$1.28M",  delta: "+14.2%", meta: "gross booked",     pct: 86, tone: "green", icon: "wallet" },
+        { label: "Total cost",    value: "$886.4K", delta: "+9.1%",  meta: "wholesale + fees", pct: 69, tone: "amber", icon: "cash" },
+        { label: "Total profit",  value: "$398.5K", delta: "31.0%",  meta: "margin",           pct: 62, tone: "ink",   icon: "graph" }
+      ].map((c) => ({
+        ...c, key: c.label,
+        cardClass: "stat stat--" + c.tone,
+        iconClass: "icon icon--16 stat__ico--" + c.icon,
+        fillClass: "stat__fill w-" + c.pct
+      })),
+
+      filterDropdowns: [
+        this.buildDropdown("partner", "Partner", ["All partners", "Harbor & Vine", "Meridian Foods", "Kestrel Group", "Atlas Trading Co."]),
+        this.buildDropdown("channel", "Channel", ["Any", "Wholesale", "Marketplace", "Contract"]),
+        this.buildDropdown("value", "Value", ["Any", "< $5k", "$5k – $25k", "> $25k"])
+      ],
+      formDropdowns: [this.buildDropdown("tier", "Tier", ["Tier 1 — Strategic", "Tier 2 — Growth", "Tier 3 — Standard"])],
+
+      sortValue: this.state.ddValues.sort,
+      sortToggle: this.ddToggle("sort"),
+      sortTriggerClass: "sort-trigger" + (sortOpen ? " sort-trigger--open" : ""),
+      sortMenuClass: "om-sel__menu om-sel__menu--sort" + (sortOpen ? " om-sel__menu--open" : ""),
+      sortOptions: ["Newest first", "Value high → low", "Value low → high", "Ship date"].map((label) => ({
+        key: label, label,
+        pick: this.ddPick("sort", label),
+        cls: "om-sel__option" + (this.state.ddValues.sort === label ? " om-sel__option--on" : "")
+      })),
+
+      msToggle: this.ddToggle("countries"),
+      msControlClass: "om-ms__control" + (msOpen ? " om-ms__control--open" : ""),
+      msMenuClass: "om-sel__menu om-sel__menu--rich om-sel__menu--full" + (msOpen ? " om-sel__menu--open" : ""),
+      msEmpty: this.state.msCountries.length === 0,
+      msQuery: this.state.msQuery,
+      msSearch: (e) => this.setState({ msQuery: e.target.value }),
+      msCountLabel: this.state.msCountries.length ? this.state.msCountries.length + " selected" : "None selected",
+      msClear: (e) => { e.preventDefault(); this.setState({ msCountries: [] }); },
+      msDone: (e) => { e.preventDefault(); this.setState({ openDd: null }); },
+      msChips: COUNTRIES.filter((c) => this.state.msCountries.indexOf(c.code) > -1).map((c) => ({
+        key: c.code, label: c.label,
+        remove: (e) => { e.preventDefault(); e.stopPropagation(); this.setState({ msCountries: this.state.msCountries.filter((x) => x !== c.code) }); }
+      })),
+      msOptions: COUNTRIES.filter((c) => c.label.toLowerCase().indexOf(this.state.msQuery.toLowerCase()) > -1).map((c) => {
+        const on = this.state.msCountries.indexOf(c.code) > -1;
+        return {
+          key: c.code, label: c.label, count: c.count,
+          flagClass: "om-ms__flag flag-" + c.code,
+          cls: "om-ms__option" + (on ? " om-ms__option--on" : ""),
+          pick: (e) => {
+            e.preventDefault();
+            const next = on ? this.state.msCountries.filter((x) => x !== c.code) : this.state.msCountries.concat([c.code]);
+            this.setState({ msCountries: next });
+          }
+        };
+      }),
+
+      pkgValue: this.state.pkg,
+      pkgToggle: this.ddToggle("pkg"),
+      pkgControlClass: "om-sel__control" + (pkgOpen ? " om-sel__control--open" : ""),
+      pkgBlockControlClass: "om-sel__control om-sel__control--block" + (pkgOpen ? " om-sel__control--open" : ""),
+      pkgMenuClass: "om-sel__menu om-sel__menu--rich om-sel__menu--pkg" + (pkgOpen ? " om-sel__menu--open" : ""),
+      pkgQuery: this.state.pkgQuery,
+      pkgSearch: (e) => this.setState({ pkgQuery: e.target.value }),
+      pkgOptions: PACKAGES.filter((p) => (p.label + " " + p.meta).toLowerCase().indexOf(this.state.pkgQuery.toLowerCase()) > -1).map((p) => ({
+        key: p.label, label: p.label, meta: p.meta, tag: p.tag,
+        cls: "om-sel__option om-sel__option--rich" + (this.state.pkg === p.label ? " om-sel__option--on" : ""),
+        tagClass: "om-sel__tag om-sel__tag--" + p.tag.toLowerCase(),
+        pick: (e) => { e.preventDefault(); this.setState({ pkg: p.label, openDd: null }); }
+      })),
+
+      toggleDp: (e) => { e.preventDefault(); this.setState({ dpOpen: !dpOpen }); },
+      dpBtnClass: "dp__btn" + (dpOpen ? " dp__btn--open" : ""),
+      dpPanelClass: "dp__panel" + (dpOpen ? " dp__panel--open" : ""),
+      dpLabel: this.state.dpPreset === "Custom"
+        ? fmtDay(this.state.dpStart) + " – " + fmtDay(this.state.dpEnd)
+        : this.state.dpPreset,
+      dpRangeText: fmtDay(this.state.dpStart) + " → " + fmtDay(this.state.dpEnd) + ", 2026",
+      dpPrev: this.shiftMonth(-1),
+      dpNext: this.shiftMonth(1),
+      dpClear: (e) => { e.preventDefault(); this.setState({ dpStart: null, dpEnd: null, dpPreset: "Custom" }); },
+      dpApply: (e) => { e.preventDefault(); this.setState({ dpOpen: false }); },
+      dpWeekdays: ["M","T","W","T","F","S","S"].map((label, i) => ({ label, key: i })),
+      dpPresets: [
+        { label: "Today", days: 1 }, { label: "Last 7 days", days: 7 },
+        { label: "Last 30 days", days: 30 }, { label: "Last 90 days", days: 90 },
+        { label: "This quarter", days: 63 }, { label: "Year to date", days: 244 }
+      ].map((p) => ({
+        key: p.label, label: p.label,
+        pick: this.applyPreset(p.label, p.days),
+        cls: "dp__preset" + (this.state.dpPreset === p.label ? " dp__preset--on" : "")
+      })),
+      dpDays: this.buildDays(),
+      dpSelectors: [
+        this.buildDpSelector("dpMonth", MONTHS[dpMonth.getMonth()].slice(0, 3),
+          MONTHS.map((label, i) => ({
+            key: label, label: label.slice(0, 3),
+            cls: "dp__selopt" + (dpMonth.getMonth() === i ? " dp__selopt--on" : ""),
+            pick: (e) => { e.preventDefault(); this.setState({ dpMonth: new Date(dpMonth.getFullYear(), i, 1), openDd: null }); }
+          })), false, 3),
+        this.buildDpSelector("dpYear", String(dpMonth.getFullYear()),
+          [2022, 2023, 2024, 2025, 2026, 2027, 2028, 2029].map((y) => ({
+            key: y, label: String(y),
+            cls: "dp__selopt" + (dpMonth.getFullYear() === y ? " dp__selopt--on" : ""),
+            pick: (e) => { e.preventDefault(); this.setState({ dpMonth: new Date(y, dpMonth.getMonth(), 1), openDd: null }); }
+          })), true, 2)
+      ],
+
+      noop: () => {},
+      qtyDefault: 25,
+      vatValue: this.state.vat,
+      vatChange: (e) => this.setState({ vat: e.target.value }),
+
+      orders: [
+        { id: "ORD-24193", date: "Aug 26, 09:12", mark: "HV", partner: "Harbor & Vine Ltd.", po: "PO-77120", channel: "Wholesale", value: "$28,400", ship: "Aug 28", ...STATUS.approval },
+        { id: "ORD-24192", date: "Aug 26, 08:40", mark: "MF", partner: "Meridian Foods", po: "PO-55019", channel: "Contract", value: "$14,120", ship: "Aug 27", ...STATUS.picking },
+        { id: "ORD-24188", date: "Aug 25, 17:02", mark: "KG", partner: "Kestrel Group", po: "PO-31884", channel: "Wholesale", value: "$6,980", ship: "Aug 29", ...STATUS.shipped },
+        { id: "ORD-24185", date: "Aug 25, 14:26", mark: "AT", partner: "Atlas Trading Co.", po: "PO-90211", channel: "Marketplace", value: "$3,240", ship: "Sep 01", ...STATUS.hold },
+        { id: "ORD-24181", date: "Aug 25, 11:05", mark: "NB", partner: "Northbank Retail", po: "PO-14477", channel: "Wholesale", value: "$41,900", ship: "Aug 30", ...STATUS.stock },
+        { id: "ORD-24176", date: "Aug 24, 16:48", mark: "HV", partner: "Harbor & Vine Ltd.", po: "PO-77118", channel: "Wholesale", value: "$18,650", ship: "Aug 27", ...STATUS.shipped },
+        { id: "ORD-24172", date: "Aug 24, 10:19", mark: "SC", partner: "Southcote Bakeries", po: "PO-60432", channel: "Contract", value: "$9,310", ship: "Aug 31", ...STATUS.picking },
+        { id: "ORD-24169", date: "Aug 23, 15:37", mark: "MF", partner: "Meridian Foods", po: "PO-55007", channel: "Marketplace", value: "$2,480", ship: "Aug 26", ...STATUS.approval }
+      ].map((o) => ({ ...o, key: o.id, statusClass: "badge-status badge-status--" + o.tone }))
+    };
+  }
+}
+
+</script>
+</body>
+</html>

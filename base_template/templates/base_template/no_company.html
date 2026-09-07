@@ -1,0 +1,28 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    No company · Attendance
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                No active company
+            </h1>
+        </div>
+    </div>
+    <div class="card">
+        <div class="empty">
+            <div class="empty__icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 21h18M5 21V6l7-3 7 3v15"/>
+                </svg>
+            </div>
+            <div class="empty__title">
+                No active company access
+            </div>
+            <div class="empty__text">
+                Your membership or company may be inactive. Ask your administrator to check your access.
+            </div>
+        </div>
+    </div>
+{% endblock %}

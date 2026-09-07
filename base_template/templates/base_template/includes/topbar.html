@@ -1,0 +1,58 @@
+<header class="topbar">
+    {% if platform_surface %}
+        <button class="btn btn--ghost mobile-menu" type="button" aria-label="Toggle navigation" aria-controls="platform-sidebar" aria-expanded="false">
+            Menu
+        </button>
+        <span class="platform-label">
+            Platform owner
+        </span>
+    {% else %}
+        <form class="topbar__search" action="{% url 'employee_list' %}" method="get">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/>
+                <path d="m20 20-3.5-3.5"/>
+            </svg>
+            <input name="q" type="search" placeholder="Search employees, codes…" aria-label="Search employees">
+        </form>
+    {% endif %}
+    <span class="spacer">
+    </span>
+    {% comment %}
+        The company switcher is what makes tenancy visible: changing it changes
+        every scoped query on the next request. Only companies the user holds an
+        active membership in are listed, and the POST re-validates that.
+    {% endcomment %}
+    {% if memberships|length > 1 %}
+        <form class="switcher" method="post" action="{% url 'switch_company' %}">
+            {% csrf_token %}
+            <label class="sr-only" for="company-switch">
+                Active company
+            </label>
+            <select class="js-select2" id="company-switch" name="company_id" onchange="this.form.submit()">
+                {% for m in memberships %}
+                    <option value="{{ m.company_id }}" {% if m.company_id == active_company.id %}selected{% endif %}>
+                        {{ m.company.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </form>
+    {% endif %}
+    <div class="topbar__user">
+        <span class="topbar__avatar">
+            {{ request.user.email|slice:":1"|upper }}
+        </span>
+        <span>
+            <span class="topbar__name">
+                {{ request.user.get_full_name|default:request.user.email }}
+            </span>
+            <br>
+            <span class="topbar__org">
+                {% if platform_surface %}
+                    Platform management
+                {% else %}
+                    {{ active_company.name|default:"No company" }}
+                {% endif %}
+            </span>
+        </span>
+    </div>
+</header>

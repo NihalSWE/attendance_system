@@ -1,0 +1,139 @@
+{% extends "tenants/platform/base.html" %}
+{% block title %}
+    Companies · Platform
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        Platform
+        <span aria-hidden="true">
+            /
+        </span>
+        Companies
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Companies
+            </h1>
+            <p class="page__sub">
+                Manage your customers and their access.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'platform:company_create' %}">
+                Create company
+            </a>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Your companies
+            </h2>
+            <span class="spacer">
+            </span>
+            <span class="t-muted">
+                <span class="amount">
+                    {{ total }}
+                </span>
+                total
+            </span>
+        </div>
+        <form method="get" class="toolbar table-fallback">
+            <label for="company-search">
+                Search companies
+            </label>
+            <input class="input toolbar__grow" id="company-search" name="q" value="{{ query }}" type="search">
+            <button class="btn btn--ghost">
+                Search
+            </button>
+        </form>
+        <div class="table-scroll">
+            <table id="companies-table" class="table" data-source="{% url 'platform:company_list' %}?format=data" data-query="{{ query }}">
+                <thead>
+                    <tr>
+                        <th>
+                            Company
+                        </th>
+                        <th>
+                            Code
+                        </th>
+                        <th>
+                            Status
+                        </th>
+                        <th class="numeric">
+                            Employees
+                        </th>
+                        <th>
+                            Action
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for company in page %}
+                        <tr>
+                            <td>
+                                {{ company.name }}
+                            </td>
+                            <td>
+                                {{ company.code }}
+                            </td>
+                            <td>
+                                <span class="badge {% if company.status == 'active' %}badge--success{% elif company.status == 'trial' %}badge--warning{% else %}badge--neutral{% endif %}">
+                                    {{ company.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="numeric">
+                                {{ company.employee_count }}
+                            </td>
+                            <td>
+                                <a class="text-link" href="{% url 'platform:company_detail' company.public_id %}">
+                                    Manage
+                                    <span class="sr-only">
+                                        {{ company.name }}
+                                    </span>
+                                </a>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr class="fallback-empty">
+                            <td colspan="5">
+                                <div class="empty">
+                                    <p class="empty__title">
+                                        No companies found
+                                    </p>
+                                    <p class="empty__text">
+                                        Create your first company to begin onboarding.
+                                    </p>
+                                </div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination table-fallback">
+            <span>
+                Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
+            </span>
+            <span class="spacer">
+            </span>
+            {% if page.has_previous %}
+                <a class="pagination__page" href="?page={{ page.previous_page_number }}&q={{ query|urlencode }}">
+                    Previous
+                </a>
+            {% endif %}
+            <span>
+                Page {{ page.number }} of {{ page.paginator.num_pages }}
+            </span>
+            {% if page.has_next %}
+                <a class="pagination__page" href="?page={{ page.next_page_number }}&q={{ query|urlencode }}">
+                    Next
+                </a>
+            {% endif %}
+        </div>
+        <p class="enhancement-note" hidden>
+            Enhanced controls could not load. The table and forms remain available.
+        </p>
+    </div>
+{% endblock %}

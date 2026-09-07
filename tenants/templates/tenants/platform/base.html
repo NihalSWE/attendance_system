@@ -1,0 +1,11 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+{% endblock %}
+{% block extra_js %}
+    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
+    </script>
+    <script defer src="{% static 'base_template/js/platform.js' %}">
+    </script>
+{% endblock %}

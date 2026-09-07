@@ -1,0 +1,104 @@
+{% extends "tenants/platform/base.html" %}
+{% block title %}
+    {{ title }} · Platform
+{% endblock %}
+{% block page %}
+    <div class="form-page">
+        <nav class="crumbs" aria-label="Breadcrumb">
+            <a href="{% url 'platform:company_list' %}">
+                Companies
+            </a>
+            {% if company %}
+                <span>
+                    /
+                </span>
+                <a href="{% url 'platform:company_detail' company.public_id %}">
+                    {{ company.name }}
+                </a>
+            {% endif %}
+            <span>
+                /
+            </span>
+            <span>
+                {{ title }}
+            </span>
+        </nav>
+        <div class="page__head">
+            <div>
+                <h1 class="page__title">
+                    {{ title }}
+                </h1>
+                <p class="page__sub">
+                    {{ company.name }}
+                </p>
+            </div>
+        </div>
+        <form method="post" class="card platform-form" novalidate>
+            {% csrf_token %}
+            <div class="card__head">
+                <h2>
+                    {{ title }}
+                </h2>
+            </div>
+            <div class="card-body stack">
+                {% if explanation %}
+                    <p class="t-muted">
+                        {{ explanation }}
+                    </p>
+                {% endif %}
+                {% if form.errors %}
+                    <div class="alert alert--danger" role="alert">
+                        <div>
+                            <strong>
+                                Please correct the following:
+                            </strong>
+                            {{ form.non_field_errors }}
+                            {% for field in form %}
+                                {% for error in field.errors %}
+                                    <p>
+                                        <a href="#{{ field.id_for_label }}">
+                                            {{ field.label }}: {{ error }}
+                                        </a>
+                                    </p>
+                                {% endfor %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
+                <div class="form-grid">
+                    {% for field in form %}
+                        <div class="field {% if field.errors %}field-invalid{% endif %}" data-field="{{ field.name }}">
+                            <label class="field__label" for="{{ field.id_for_label }}">
+                                {{ field.label }}
+                                {% if field.field.required %}
+                                    <span class="field__req" aria-label="required">
+                                        *
+                                    </span>
+                                {% endif %}
+                            </label>
+                            {{ field }}
+                            {% if field.help_text %}
+                                <div class="field__help" id="{{ field.id_for_label }}_helptext">
+                                    {{ field.help_text }}
+                                </div>
+                            {% endif %}
+                            {% for error in field.errors %}
+                                <p class="field__error">
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn--primary">
+                    {{ submit_label }}
+                </button>
+                <a class="btn btn--ghost" href="{% if company %}{% url 'platform:company_detail' company.public_id %}{% else %}{% url 'platform:company_list' %}{% endif %}">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+{% endblock %}

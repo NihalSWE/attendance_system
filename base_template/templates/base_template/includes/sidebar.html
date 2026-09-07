@@ -1,0 +1,109 @@
+{% load nav %}
+<aside class="sidebar">
+    <div class="sidebar__brand">
+        <span class="sidebar__mark">
+            A
+        </span>
+        <span>
+            Attendance
+        </span>
+    </div>
+    <div class="sidebar__label">
+        Main
+    </div>
+    <a class="sidebar__link {% active request 'dashboard' %}" href="{% url 'dashboard' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="9" rx="1"/>
+            <rect x="14" y="3" width="7" height="5" rx="1"/>
+            <rect x="14" y="12" width="7" height="9" rx="1"/>
+            <rect x="3" y="16" width="7" height="5" rx="1"/>
+        </svg>
+        <span>
+            Dashboard
+        </span>
+    </a>
+    <a class="sidebar__link {% active request 'employee_list' %}" href="{% url 'employee_list' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="9" cy="8" r="3.2"/>
+            <path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
+            <circle cx="17" cy="9.5" r="2.4"/>
+            <path d="M15.5 15.6A4.6 4.6 0 0 1 21 20"/>
+        </svg>
+        <span>
+            Employees
+        </span>
+    </a>
+    <a class="sidebar__link" href="#" aria-disabled="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4.5" width="18" height="16" rx="2"/>
+            <path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>
+        </svg>
+        <span>
+            Attendance
+        </span>
+    </a>
+    <a class="sidebar__link" href="#" aria-disabled="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 3.5h14v17l-3.5-2.2L12 20.5l-3.5-2.2L5 20.5z"/>
+            <path d="M9 9h6M9 13h4"/>
+        </svg>
+        <span>
+            Leave
+        </span>
+    </a>
+    <a class="sidebar__link" href="#" aria-disabled="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="5.5" width="19" height="13" rx="2"/>
+            <circle cx="12" cy="12" r="2.6"/>
+            <path d="M6 12h.01M18 12h.01"/>
+        </svg>
+        <span>
+            Payroll
+        </span>
+    </a>
+    <div class="sidebar__label">
+        Organisation
+    </div>
+    <a class="sidebar__link {% active request 'branch_list' %}" href="{% url 'branch_list' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 21h18M5 21V6l7-3 7 3v15"/>
+            <path d="M10 21v-5h4v5"/>
+        </svg>
+        <span>
+            Branches
+        </span>
+    </a>
+    <a class="sidebar__link {% active request 'department_list' %}" href="{% url 'department_list' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="8.5" y="14" width="7" height="7" rx="1.5"/>
+            <path d="M6.5 10v2h11v-2M12 12v2"/>
+        </svg>
+        <span>
+            Departments
+        </span>
+    </a>
+    <a class="sidebar__link" href="#" aria-disabled="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 7v5l3 2"/>
+        </svg>
+        <span>
+            Schedules
+        </span>
+    </a>
+    <div class="sidebar__foot">
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="sidebar__link nav-button" type="submit">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/>
+                </svg>
+                <span>
+                    Sign out
+                </span>
+            </button>
+        </form>
+    </div>
+</aside>

@@ -1,0 +1,233 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Employees · Attendance
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'dashboard' %}">
+                    Dashboard
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Employees
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Employees
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <button class="btn btn--ghost" type="button" disabled title="Export is not available yet">
+                Export (unavailable)
+            </button>
+            <button class="btn btn--primary" type="button" disabled title="Employee onboarding forms are the next slice">
+                Add employee (coming next)
+            </button>
+        </div>
+    </div>
+    <div class="card">
+        <form class="toolbar" method="get">
+            <div class="toolbar__grow">
+                <label class="sr-only" for="q">
+                    Search
+                </label>
+                <div class="input-group">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="m20 20-3.5-3.5"/>
+                    </svg>
+                    <input class="input" id="q" name="q" value="{{ search }}" placeholder="Name, email or employee code">
+                </div>
+            </div>
+            <label class="sr-only" for="status">
+                Status
+            </label>
+            <select class="input" id="status" name="status" style="width:auto">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if value == status %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+            {% if search or status %}
+                <a class="btn btn--quiet" href="{% url 'employee_list' %}">
+                    Clear
+                </a>
+            {% endif %}
+        </form>
+        {% if rows %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Name
+                            </th>
+                            <th>
+                                Branch
+                            </th>
+                            <th>
+                                Department
+                            </th>
+                            <th>
+                                Designation
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="numeric">
+                                Base rate
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rows %}
+                            <tr>
+                                <td>
+                                    {{ r.a.employee_code|default:"—" }}
+                                </td>
+                                <td>
+                                    {{ r.e.full_name }}
+                                </td>
+                                <td>
+                                    {{ r.a.branch.name|default:"—" }}
+                                </td>
+                                <td>
+                                    {{ r.a.department.name|default:"—" }}
+                                </td>
+                                <td>
+                                    {{ r.a.designation.name|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if r.e.employment_status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% elif r.e.employment_status == 'probation' %}
+                                        <span class="badge badge--warning">
+                                            Probation
+                                        </span>
+                                    {% elif r.e.employment_status == 'resigned' or r.e.employment_status == 'terminated' %}
+                                        <span class="badge badge--danger">
+                                            {{ r.e.get_employment_status_display }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            {{ r.e.get_employment_status_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {% if r.c %}
+                                        {{ r.c.base_rate|floatformat:2 }}
+                                        <span class="t-faint">
+                                            {{ r.c.currency }}
+                                        </span>
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {# Pagination is required on every table, with a real count — spec §4. #}
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ paginator.count }}
+                </span>
+                <span class="pagination__size">
+                    <label class="sr-only" for="per_page">
+                        Rows per page
+                    </label>
+                    <select id="per_page"
+                    onchange="location.search='?per_page='+this.value+'&q={{ search|urlencode }}&status={{ status|urlencode }}'">
+                        <option value="25" {% if per_page == 25 %}selected{% endif %}>
+                            25
+                        </option>
+                        <option value="50" {% if per_page == 50 %}selected{% endif %}>
+                            50
+                        </option>
+                        <option value="100" {% if per_page == 100 %}selected{% endif %}>
+                            100
+                        </option>
+                    </select>
+                    <span>
+                        per page
+                    </span>
+                </span>
+                <span class="pagination__pages">
+                    {% if page.has_previous %}
+                        <a class="pagination__page" href="?page={{ page.previous_page_number }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
+                            Prev
+                        </a>
+                    {% else %}
+                        <button class="pagination__page" disabled>
+                            Prev
+                        </button>
+                    {% endif %}
+                    {% for n in page.adjusted_elided_pages %}
+                        {% if n == page.number %}
+                            <button class="pagination__page is-on">
+                                {{ n }}
+                            </button>
+                        {% elif n == "…" %}
+                            <span class="pagination__dots">
+                                …
+                            </span>
+                        {% else %}
+                            <a class="pagination__page" href="?page={{ n }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
+                                {{ n }}
+                            </a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if page.has_next %}
+                        <a class="pagination__page" href="?page={{ page.next_page_number }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
+                            Next
+                        </a>
+                    {% else %}
+                        <button class="pagination__page" disabled>
+                            Next
+                        </button>
+                    {% endif %}
+                </span>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="m20 20-3.5-3.5"/>
+                    </svg>
+                </div>
+                <div class="empty__title">
+                    No employees match
+                </div>
+                <div class="empty__text">
+                    {% if search or status %}
+                        Try clearing the filters.
+                    {% else %}
+                        Add your first employee to get started.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -1,0 +1,110 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Departments · Attendance
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'dashboard' %}">
+                    Dashboard
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Departments
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Departments
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <button class="btn btn--primary" type="button" disabled title="Company setup forms are the next slice">
+                Add department (coming next)
+            </button>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                All departments
+            </h2>
+            <span class="badge badge--neutral">
+                {{ departments|length }}
+            </span>
+        </div>
+        {% if departments %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Name
+                            </th>
+                            <th>
+                                Branch
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="numeric">
+                                Designations
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in departments %}
+                            <tr>
+                                <td>
+                                    {{ d.code }}
+                                </td>
+                                <td>
+                                    {{ d.name }}
+                                </td>
+                                <td>
+                                    {{ d.branch.name }}
+                                </td>
+                                <td>
+                                    {% if d.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ d.designations.count }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing 1–{{ departments|length }} of {{ departments|length }}
+                </span>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No departments
+                </div>
+                <div class="empty__text">
+                    Add one to place employees.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

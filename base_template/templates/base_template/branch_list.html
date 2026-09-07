@@ -1,0 +1,124 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Branches · Attendance
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'dashboard' %}">
+                    Dashboard
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Branches
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Branches
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <button class="btn btn--primary" type="button" disabled title="Company setup forms are the next slice">
+                Add branch (coming next)
+            </button>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                All branches
+            </h2>
+            <span class="badge badge--neutral">
+                {{ branches|length }}
+            </span>
+        </div>
+        {% if branches %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Name
+                            </th>
+                            <th>
+                                City
+                            </th>
+                            <th>
+                                Default
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="numeric">
+                                Departments
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for b in branches %}
+                            <tr>
+                                <td>
+                                    {{ b.code }}
+                                </td>
+                                <td>
+                                    {{ b.name }}
+                                </td>
+                                <td>
+                                    {{ b.city|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if b.is_default %}
+                                        <span class="badge badge--info">
+                                            Default
+                                        </span>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if b.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ b.departments.count }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing 1–{{ branches|length }} of {{ branches|length }}
+                </span>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No branches
+                </div>
+                <div class="empty__text">
+                    Every company needs at least one.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

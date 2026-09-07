@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Warm Paper / Ink — Group 1: Foundations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ==== inlined: tokens.css + base.css + components.css ==== */
+/* ============================================================================
+   Warm Paper / Ink — token layer
+   Source of truth: WARM_PAPER_INK_SPEC.md §1. Transcribed verbatim.
+
+   Nothing anywhere else in the panel may hard-code a colour. If a value is
+   needed that is not here, add it here and recalculate its contrast first
+   (spec §2). Neutrals keep red >= green >= blue, never by more than ~8 points.
+   ========================================================================= */
+
+:root {
+  /* ---------- Chrome: the sidebar and topbar ---------- */
+  --chrome:            #faf7f2;  /* sidebar background — warm paper           */
+  --chrome-text:       #20201d;  /* sidebar item text                          */
+  --chrome-dim:        #767066;  /* sidebar section labels (MAIN, EXPORT)     */
+  --chrome-line:       #eae5db;  /* border between sidebar and body           */
+  --topbar:            #fffefc;  /* topbar background — a shade lighter       */
+  --topbar-text:       #1a1a18;
+  --search:            #f6f3ee;  /* search field inside the topbar            */
+
+  /* ---------- Surfaces ---------- */
+  --page:              #fffefc;  /* page background behind the cards          */
+  --surface:           #ffffff;  /* cards, tables, inputs                     */
+  --surface-sunken:    #faf8f4;  /* wells, disabled fields, empty states      */
+  --border:            #ebe6dd;  /* every hairline                            */
+  --field:             #ded8cc;  /* input borders — darker than --border      */
+
+  /* ---------- Text ---------- */
+  --text:              #17171a;  /* body copy and headings                    */
+  --muted:             #6f6b63;  /* labels, captions, secondary text          */
+  --faint:             #a39d92;  /* placeholders and disabled text only       */
+
+  /* ---------- Accent: ink ---------- */
+  --accent:            #111113;  /* primary buttons, active nav, focus ring   */
+  --accent-hover:      #2c2c30;
+  --accent-soft:       #f0ede7;  /* quiet chips and highlights                */
+  --accent-ink:        #2c2c30;  /* text on --accent-soft                     */
+  --on-accent:         #ffffff;  /* text on --accent                          */
+  --ring:              rgba(17, 17, 19, .14);
+
+  /* ---------- Status: the only real colour ---------- */
+  --success:           #2f6b34;  --success-soft: #e9f3e9;  --success-ink: #2f6b34;
+  --warning:           #9a6a12;  --warning-soft: #f8f0dd;  --warning-ink: #7d5510;
+  --danger:            #c0392b;  --danger-soft:  #fbeae7;  --danger-ink:  #a32a1e;
+  --info:              #2f5d7c;  --info-soft:    #e8f0f6;  --info-ink:    #24485f;
+
+  /* ---------- Tables ---------- */
+  --thead:             #f5f1ea;  /* header band — warm, not white             */
+  --thead-text:        #615c53;
+  --zebra:             #fdfcfa;  /* even rows — barely there                  */
+  --row-hover:         #f8f6f2;
+
+  /* ---------- Elevation ---------- */
+  --shadow-sm:         0 1px 2px rgba(23, 23, 26, .05);
+  --shadow:            0 1px 3px rgba(23, 23, 26, .06);
+  --shadow-lg:         0 6px 20px rgba(17, 17, 19, .10);
+  --shadow-ink:        0 6px 20px rgba(17, 17, 19, .18);  /* the hero card    */
+
+  /* ---------- Radius ---------- */
+  --r-sm: 6px;  --r: 8px;  --r-lg: 11px;  --r-pill: 999px;
+
+  /* ---------- Spacing (4px base) ---------- */
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s8: 32px;
+}
+
+/* ----------------------------------------------------------------------------
+   Derived values. Not new colours — every one is composed from the tokens
+   above so the palette still lives in exactly one place.
+   ------------------------------------------------------------------------- */
+:root {
+  --ring-width:        3px;
+  --ring-danger:       rgba(192, 57, 43, .12);   /* --danger at 12%           */
+  --sidebar-w:         232px;
+  --topbar-h:          56px;
+  --row-h:             38px;                     /* spec §4: standard density */
+  --tr:                .15s ease;                /* shared transition         */
+
+  /* Secondary text on the inverted hero card. Both measured against --accent
+     #111113 with the same formula that reproduces the spec's §2 table:
+       --on-accent-dim   5.80:1  AA    (this is the spec's own hero label value)
+       --on-accent-soft  9.35:1  AAA   (introduced here, so recalculated) */
+  --on-accent-dim:     #8e8e96;
+  --on-accent-soft:    #b6b6bd;
+}
+
+/* ============================================================================
+   Warm Paper / Ink — base layer: reset, typography, numerics.
+   Type scale is WARM_PAPER_INK_SPEC.md §3, verbatim.
+   ========================================================================= */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  font-family: Sora, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text);
+  background: var(--page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+img, svg, video { max-width: 100%; }
+svg { display: block; }
+
+h1, h2, h3, h4, h5, h6, p, figure { margin: 0; }
+ul, ol { margin: 0; padding: 0; list-style: none; }
+
+a { color: inherit; text-decoration: none; }
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Type scale — spec §3. Sora is wide, so headings carry negative tracking.
+   ------------------------------------------------------------------------ */
+
+.t-page-title { font-size: 22px; font-weight: 700; letter-spacing: -.03em; line-height: 1.25; }
+.t-card-head  { font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
+.t-body       { font-size: 14px; font-weight: 400; }
+.t-cell       { font-size: 13px; font-weight: 400; }
+
+/* Uppercase micro-type: table headers and field labels share these metrics. */
+.t-thead,
+.t-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+.t-label  { color: var(--muted); }
+
+.t-metric { font-size: 22px; font-weight: 700; letter-spacing: -.035em; }
+.t-badge  { font-size: 10px; font-weight: 700; letter-spacing: .02em; }
+
+.t-muted  { color: var(--muted); }
+.t-faint  { color: var(--faint); }
+
+/* ---------------------------------------------------------------------------
+   Numbers are the point of an ERP — spec §3.
+   Without tabular-nums, columns of figures do not line up.
+   ------------------------------------------------------------------------ */
+
+.amount,
+td.numeric,
+th.numeric,
+.metric strong,
+.t-metric {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------------------
+   Layout primitives
+   ------------------------------------------------------------------------ */
+
+.stack   { display: flex; flex-direction: column; gap: var(--s4); }
+.row     { display: flex; align-items: center; gap: var(--s3); }
+.row--between { justify-content: space-between; }
+.spacer  { flex: 1 1 auto; }
+
+.grid    { display: grid; gap: var(--s4); }
+.grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+@media (max-width: 1100px) {
+  .grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .grid--2, .grid--3, .grid--4 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Screen-reader-only, for labels a sighted user gets from context. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* ============================================================================
+   Warm Paper / Ink — foundation components.
+
+   FORM (shape, density, interaction) follows design_reference/ ("Nordwell").
+   COLOUR and TYPE follow WARM_PAPER_INK_SPEC.md. Where the two differ:
+
+     - Field labels: spec type wins (10px/700/uppercase), not the reference's
+       12.5px sentence case.
+     - Radii: the reference's softer corners, expressed through the spec's own
+       radius scale. --r-lg is 11px, which is exactly the reference's input
+       radius, so nothing is invented.
+     - Input fill: the reference tints inputs; the spec puts them on --surface
+       with the darker --field border. Colour rule wins -> white on --field.
+     - Focus ring: the reference glows lime; there is no lime here. Ink ring.
+     - Checked controls: the reference fills lime; filled with --accent instead.
+   ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+   Buttons — spec §4. One primary per view.
+   ------------------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: var(--s2);
+  border: 1px solid transparent;
+  border-radius: var(--r-lg);
+  padding: 9px 16px;
+  font: inherit; font-size: 13px; font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--tr), border-color var(--tr), color var(--tr);
+}
+.btn svg { width: 15px; height: 15px; stroke-width: 2; flex: none; }
+
+.btn--primary       { background: var(--accent); color: var(--on-accent); }
+.btn--primary:hover { background: var(--accent-hover); }
+
+.btn--ghost         { background: var(--surface); border-color: var(--border); color: var(--text); }
+.btn--ghost:hover   { background: var(--surface-sunken); }
+
+.btn--quiet         { background: transparent; color: var(--muted); }
+.btn--quiet:hover   { background: var(--surface-sunken); color: var(--text); }
+
+.btn--danger        { background: var(--danger); color: var(--on-accent); }
+.btn--danger:hover  { background: var(--danger-ink); }
+
+/* Destructive but secondary — used in modal footers beside a ghost cancel. */
+.btn--danger-soft       { background: var(--danger-soft); color: var(--danger-ink); }
+.btn--danger-soft:hover { background: var(--danger); color: var(--on-accent); }
+
+.btn--sm { padding: 7px 12px; font-size: 12px; }
+.btn--lg { padding: 11px 20px; font-size: 14px; }
+.btn--block { width: 100%; }
+
+.btn:disabled,
+.btn.is-disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-icon {
+  display: inline-grid; place-items: center;
+  width: 34px; height: 34px; padding: 0;
+  border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--surface); color: var(--muted); cursor: pointer;
+  transition: background var(--tr), color var(--tr), border-color var(--tr);
+}
+.btn-icon:hover { background: var(--surface-sunken); color: var(--text); }
+.btn-icon svg   { width: 16px; height: 16px; stroke-width: 2; }
+
+/* ---------------------------------------------------------------------------
+   Fields — spec §4 inputs, reference field/label/help composition.
+   ------------------------------------------------------------------------ */
+
+.field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+
+.field__label {
+  display: flex; align-items: center; gap: var(--s1);
+  font-size: 10px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--muted);
+}
+.field__req { color: var(--danger); }
+.field__opt {
+  font-size: 10px; font-weight: 700; letter-spacing: .06em;
+  color: var(--accent-ink); background: var(--accent-soft);
+  padding: 2px 6px; border-radius: var(--r-sm); text-transform: uppercase;
+}
+.field__help  { font-size: 11.5px; color: var(--muted); }
+.field__error { font-size: 11.5px; font-weight: 500; color: var(--danger-ink); }
+
+.input,
+.textarea,
+select.input {
+  width: 100%;
+  border: 1px solid var(--field);
+  border-radius: var(--r-lg);
+  padding: 9px 11px;
+  font: inherit; font-size: 13px;
+  background: var(--surface);
+  color: var(--text);
+  outline: 0;
+  transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
+}
+.input::placeholder,
+.textarea::placeholder { color: var(--faint); }
+
+.input:hover:not(:disabled):not([readonly]),
+.textarea:hover:not(:disabled):not([readonly]) { border-color: var(--muted); }
+
+.input:focus,
+.textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+
+.input:disabled,
+.textarea:disabled {
+  background: var(--surface-sunken); color: var(--faint);
+  border-color: var(--border); cursor: not-allowed;
+}
+
+.input[readonly],
+.textarea[readonly] { background: var(--surface-sunken); color: var(--muted); }
+.input[readonly]:focus,
+.textarea[readonly]:focus { border-color: var(--field); box-shadow: none; }
+
+.input.is-invalid,
+.textarea.is-invalid { border-color: var(--danger); }
+.input.is-invalid:focus,
+.textarea.is-invalid:focus { box-shadow: 0 0 0 var(--ring-width) var(--ring-danger); }
+
+.textarea { min-height: 104px; resize: vertical; line-height: 1.5; }
+
+/* Number inputs carry no spinner arrows — spec §4. */
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Input group: an icon or affix sharing the field's border. */
+.input-group {
+  display: flex; align-items: center; gap: var(--s2);
+  background: var(--surface);
+  border: 1px solid var(--field); border-radius: var(--r-lg);
+  padding: 0 11px;
+  transition: border-color var(--tr), box-shadow var(--tr);
+}
+.input-group:focus-within { border-color: var(--accent); box-shadow: 0 0 0 var(--ring-width) var(--ring); }
+.input-group .input { border: 0; border-radius: 0; padding: 9px 0; background: transparent; }
+.input-group .input:focus { box-shadow: none; }
+.input-group svg { width: 15px; height: 15px; stroke-width: 2; color: var(--muted); flex: none; }
+.input-group__affix { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+/* ---------------------------------------------------------------------------
+   Cards — spec §4. The border does the work; the shadow only lifts.
+   ------------------------------------------------------------------------ */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.card__head {
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: var(--s3);
+}
+.card__head h2 { font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
+.card__body { padding: var(--s4); }
+.card__foot {
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: var(--s2);
+}
+
+/* Metric card. One per screen may be inverted — spec §4. */
+.metric { padding: var(--s4); display: flex; flex-direction: column; gap: var(--s1); }
+.metric__label { font-size: 10px; font-weight: 700; letter-spacing: .09em;
+                 text-transform: uppercase; color: var(--muted); }
+.metric strong { font-size: 22px; font-weight: 700; letter-spacing: -.035em; }
+.metric__note  { font-size: 11.5px; color: var(--muted); }
+
+.metric--hero {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: transparent;
+  box-shadow: var(--shadow-ink);
+}
+.metric--hero .metric__label { color: var(--on-accent-dim); }
+.metric--hero .metric__note  { color: var(--on-accent-soft); }
+
+/* ---------------------------------------------------------------------------
+   Badges — spec §4. All the colour in the palette lives here.
+   ------------------------------------------------------------------------ */
+
+.badge {
+  display: inline-block;
+  border-radius: var(--r-sm);
+  padding: 3px 9px;
+  font-size: 10px; font-weight: 700; letter-spacing: .02em;
+  /* Body leading would make a badge taller than the 38px row it sits in.
+     vertical-align keeps it off the baseline, which otherwise reserves
+     descender space under it and pushes the row taller again. */
+  line-height: 1.2;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.badge--success { background: var(--success-soft); color: var(--success-ink); }
+.badge--warning { background: var(--warning-soft); color: var(--warning-ink); }
+.badge--danger  { background: var(--danger-soft);  color: var(--danger-ink); }
+.badge--info    { background: var(--info-soft);    color: var(--info-ink); }
+.badge--neutral { background: var(--accent-soft);  color: var(--accent-ink); }
+
+/* ---------------------------------------------------------------------------
+   Table — spec §4. Row height lands near 38px: standard density.
+   ------------------------------------------------------------------------ */
+
+.table-wrap { width: 100%; overflow-x: auto; }
+
+.table { width: 100%; border-collapse: collapse; }
+
+.table thead th {
+  background: var(--thead);
+  color: var(--thead-text);
+  font-size: 10px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase;
+  text-align: left;
+  padding: 11px 14px;
+  white-space: nowrap;
+}
+.table--sticky thead th { position: sticky; top: var(--topbar-h); z-index: 10; }
+
+.table tbody td {
+  padding: 11px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  /* The body's 1.55 leading pushes rows to ~44px; the spec fixes standard
+     density near 38px (--row-h), so cells tighten to 1.2. */
+  line-height: 1.2;
+  vertical-align: middle;
+}
+.table tbody tr:nth-child(even) { background: var(--zebra); }
+.table tbody tr:hover           { background: var(--row-hover); }
+
+.table .numeric,
+.table th.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+/* Sortable header — the indicator is ink, never a second colour. */
+.table th.is-sortable { cursor: pointer; user-select: none; }
+.table th.is-sortable:hover { color: var(--text); }
+.table th.is-sortable::after {
+  content: ""; display: inline-block; width: 0; height: 0; margin-left: 6px;
+  vertical-align: middle;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+  border-top: 4px solid currentColor; opacity: .25;
+}
+.table th.is-asc::after  { border-top: 0; border-bottom: 4px solid currentColor; opacity: .9; }
+.table th.is-desc::after { opacity: .9; }
+
+/* ---------------------------------------------------------------------------
+   Pagination — spec §4. Required on every table, with a real count.
+   ------------------------------------------------------------------------ */
+
+.pagination {
+  display: flex; align-items: center; gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--border);
+  color: var(--muted); font-size: 12px;
+  flex-wrap: wrap;
+}
+.pagination__info { font-variant-numeric: tabular-nums; }
+.pagination__pages { display: flex; align-items: center; gap: var(--s1); margin-left: auto; }
+
+.pagination__page {
+  min-width: 30px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit; font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background var(--tr), border-color var(--tr);
+}
+.pagination__page:hover:not(:disabled):not(.is-on) { background: var(--surface-sunken); }
+.pagination__page.is-on {
+  background: var(--accent); border-color: transparent;
+  color: var(--on-accent); font-weight: 700;
+}
+.pagination__page:disabled { opacity: .4; cursor: not-allowed; }
+.pagination__dots { padding: 0 var(--s1); color: var(--faint); }
+
+.pagination__size {
+  display: flex; align-items: center; gap: var(--s2);
+}
+.pagination__size select {
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface); color: var(--text);
+  font: inherit; font-size: 12px; padding: 4px 8px; cursor: pointer;
+}
+
+@media (max-width: 680px) {
+  .pagination { gap: var(--s3); }
+  .pagination__pages { margin-left: 0; width: 100%; }
+}
+
+
+  .sg { max-width: 1180px; margin: 0 auto; padding: var(--s8) var(--s5) 64px; }
+  .sg__h { margin-bottom: var(--s6); }
+  .sg__sec { margin-top: var(--s8); }
+  .sg__sec > h2 { font-size: 10px; font-weight: 700; letter-spacing: .09em;
+                  text-transform: uppercase; color: var(--muted); margin-bottom: var(--s3); }
+  .sw { display: flex; flex-wrap: wrap; gap: var(--s2); }
+  .sw__i { width: 104px; }
+  .sw__c { height: 46px; border: 1px solid var(--border); border-radius: var(--r); }
+  .sw__n { font-size: 10px; color: var(--muted); margin-top: var(--s1); display: block; }
+  .demo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); }
+</style>
+</head>
+<body>
+<div class="sg">
+
+  <div class="sg__h">
+    <h1 class="t-page-title">Foundations</h1>
+    <p class="t-muted">Group 1 — tokens, type, buttons, fields, cards, badges, table, pagination.</p>
+  </div>
+
+  <!-- ---------------- palette ---------------- -->
+  <section class="sg__sec">
+    <h2>Palette</h2>
+    <div class="sw">
+      <div class="sw__i"><div class="sw__c" style="background:var(--chrome)"></div><span class="sw__n">--chrome</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--page)"></div><span class="sw__n">--page</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--surface)"></div><span class="sw__n">--surface</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--surface-sunken)"></div><span class="sw__n">--surface-sunken</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--thead)"></div><span class="sw__n">--thead</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--border)"></div><span class="sw__n">--border</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--field)"></div><span class="sw__n">--field</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--accent)"></div><span class="sw__n">--accent</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--success)"></div><span class="sw__n">--success</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--warning)"></div><span class="sw__n">--warning</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--danger)"></div><span class="sw__n">--danger</span></div>
+      <div class="sw__i"><div class="sw__c" style="background:var(--info)"></div><span class="sw__n">--info</span></div>
+    </div>
+  </section>
+
+  <!-- ---------------- type ---------------- -->
+  <section class="sg__sec">
+    <h2>Type scale</h2>
+    <div class="card"><div class="card__body stack">
+      <div class="t-page-title">Page title — 22px / 700 / −0.03em</div>
+      <div class="t-card-head">Card heading — 13px / 700</div>
+      <div class="t-body">Body — 14px / 400. Warm paper, black ink, colour only where it means something.</div>
+      <div class="t-cell">Table cell — 13px / 400</div>
+      <div class="t-thead t-muted">Table header — 10px / 700 / +0.09em</div>
+      <div class="t-label">Field label — 10px / 700 / uppercase</div>
+      <div class="t-metric">1,284,930.00</div>
+      <div class="t-faint">Faint — placeholders and disabled text only</div>
+    </div></div>
+  </section>
+
+  <!-- ---------------- buttons ---------------- -->
+  <section class="sg__sec">
+    <h2>Buttons</h2>
+    <div class="card"><div class="card__body stack">
+      <div class="demo-row">
+        <button class="btn btn--primary">Primary action</button>
+        <button class="btn btn--ghost">Ghost</button>
+        <button class="btn btn--quiet">Quiet</button>
+        <button class="btn btn--danger">Delete</button>
+        <button class="btn btn--danger-soft">Reverse</button>
+        <button class="btn btn--primary" disabled>Disabled</button>
+      </div>
+      <div class="demo-row">
+        <button class="btn btn--ghost btn--sm">Small</button>
+        <button class="btn btn--ghost">Default</button>
+        <button class="btn btn--ghost btn--lg">Large</button>
+        <button class="btn-icon" aria-label="Filter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
+        </button>
+        <button class="btn btn--primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          With icon
+        </button>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ---------------- fields ---------------- -->
+  <section class="sg__sec">
+    <h2>Fields — every state</h2>
+    <div class="card"><div class="card__body">
+      <div class="grid grid--3">
+        <div class="field">
+          <label class="field__label" for="f1">Employee code</label>
+          <input class="input" id="f1" value="NWT-001">
+        </div>
+        <div class="field">
+          <label class="field__label" for="f2">Full name <span class="field__req">*</span></label>
+          <input class="input" id="f2" placeholder="Placeholder text">
+        </div>
+        <div class="field">
+          <label class="field__label" for="f3">Notes <span class="field__opt">Optional</span></label>
+          <input class="input" id="f3" placeholder="Optional">
+        </div>
+        <div class="field">
+          <label class="field__label" for="f4">Focused</label>
+          <input class="input" id="f4" value="Click to see ink ring" autofocus>
+        </div>
+        <div class="field">
+          <label class="field__label" for="f5">Invalid</label>
+          <input class="input is-invalid" id="f5" value="not-an-email">
+          <span class="field__error">Enter a valid email address.</span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="f6">Disabled</label>
+          <input class="input" id="f6" value="Cannot edit" disabled>
+        </div>
+        <div class="field">
+          <label class="field__label" for="f7">Read only</label>
+          <input class="input" id="f7" value="System generated" readonly>
+        </div>
+        <div class="field">
+          <label class="field__label" for="f8">Base salary</label>
+          <div class="input-group">
+            <span class="input-group__affix">BDT</span>
+            <input class="input numeric" id="f8" type="number" value="30000">
+          </div>
+          <span class="field__help">Monthly gross, before deductions.</span>
+        </div>
+        <div class="field">
+          <label class="field__label" for="f9">Search</label>
+          <div class="input-group">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input class="input" id="f9" placeholder="Search employees">
+          </div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:var(--s4)">
+        <label class="field__label" for="f10">Reason</label>
+        <textarea class="textarea" id="f10" placeholder="Why is this change being made?"></textarea>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ---------------- cards + metrics ---------------- -->
+  <section class="sg__sec">
+    <h2>Cards and metrics — one hero only</h2>
+    <div class="grid grid--4">
+      <div class="card metric metric--hero">
+        <span class="metric__label">Net payroll</span>
+        <strong>1,284,930.00</strong>
+        <span class="metric__note">March 2024 · finalised</span>
+      </div>
+      <div class="card metric">
+        <span class="metric__label">Employees</span>
+        <strong>248</strong>
+        <span class="metric__note">6 joined this month</span>
+      </div>
+      <div class="card metric">
+        <span class="metric__label">Present today</span>
+        <strong>231</strong>
+        <span class="metric__note">93.1% attendance</span>
+      </div>
+      <div class="card metric">
+        <span class="metric__label">Pending leave</span>
+        <strong>12</strong>
+        <span class="metric__note">3 awaiting you</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ---------------- badges ---------------- -->
+  <section class="sg__sec">
+    <h2>Status badges — the only real colour</h2>
+    <div class="card"><div class="card__body demo-row">
+      <span class="badge badge--success">Paid</span>
+      <span class="badge badge--warning">Pending</span>
+      <span class="badge badge--danger">Reversed</span>
+      <span class="badge badge--info">Submitted</span>
+      <span class="badge badge--neutral">Draft</span>
+    </div></div>
+  </section>
+
+  <!-- ---------------- table ---------------- -->
+  <section class="sg__sec">
+    <h2>Table and pagination</h2>
+    <div class="card">
+      <div class="card__head">
+        <h2>Employees</h2>
+        <span class="badge badge--neutral">248</span>
+        <span class="spacer"></span>
+        <button class="btn btn--ghost btn--sm">Export</button>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr>
+              <th class="is-sortable is-asc">Code</th>
+              <th class="is-sortable">Name</th>
+              <th>Department</th>
+              <th>Status</th>
+              <th class="numeric">Base salary</th>
+              <th class="numeric">Days present</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>NWT-001</td><td>Ayesha Rahman</td><td>Human Resources</td><td><span class="badge badge--success">Active</span></td><td class="numeric">60,000.00</td><td class="numeric">22</td></tr>
+            <tr><td>NWT-002</td><td>Tanvir Hossain</td><td>Software</td><td><span class="badge badge--success">Active</span></td><td class="numeric">90,000.00</td><td class="numeric">21</td></tr>
+            <tr><td>NWT-003</td><td>Nusrat Jahan</td><td>Sales</td><td><span class="badge badge--warning">Probation</span></td><td class="numeric">45,000.00</td><td class="numeric">19</td></tr>
+            <tr><td>NWT-004</td><td>Rakib Islam</td><td>Sales</td><td><span class="badge badge--success">Active</span></td><td class="numeric">1,200.00</td><td class="numeric">20</td></tr>
+            <tr><td>NWT-005</td><td>Sabbir Ahmed</td><td>Sales</td><td><span class="badge badge--info">Submitted</span></td><td class="numeric">150.00</td><td class="numeric">18</td></tr>
+            <tr><td>NWT-014</td><td>Sadia Akter</td><td>Software</td><td><span class="badge badge--neutral">Draft</span></td><td class="numeric">42,000.00</td><td class="numeric">17</td></tr>
+            <tr><td>NWT-021</td><td>Karim Uddin</td><td>Software</td><td><span class="badge badge--danger">Resigned</span></td><td class="numeric">40,000.00</td><td class="numeric">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination">
+        <span class="pagination__info">Showing 1–7 of 248</span>
+        <span class="pagination__size">
+          <label class="sr-only" for="ps">Rows per page</label>
+          <select id="ps"><option>25</option><option>50</option><option>100</option></select>
+          <span>per page</span>
+        </span>
+        <span class="pagination__pages">
+          <button class="pagination__page" disabled>Prev</button>
+          <button class="pagination__page is-on">1</button>
+          <button class="pagination__page">2</button>
+          <button class="pagination__page">3</button>
+          <span class="pagination__dots">…</span>
+          <button class="pagination__page">36</button>
+          <button class="pagination__page">Next</button>
+        </span>
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,405 @@
+/* ============================================================================
+Warm Paper / Ink — application shell: sidebar, topbar, page furniture.
+Spec §4 (Sidebar, Topbar) verbatim in colour; reference form for density.
+========================================================================= */
+.shell {
+    display: flex;
+    min-height: 100vh;
+}
+/* ---------------------------------------------------------------------------
+Sidebar — the active item is a solid ink block. Never soften it to a tint.
+------------------------------------------------------------------------ */
+.sidebar {
+    width: var(--sidebar-w);
+    flex: none;
+    background: var(--chrome);
+    border-right: 1px solid var(--chrome-line);
+    padding: var(--s3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s1);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+.sidebar__brand {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: -.03em;
+    color: var(--chrome-text);
+    padding: var(--s2) var(--s2) var(--s4);
+}
+.sidebar__mark {
+    width: 26px;
+    height: 26px;
+    flex: none;
+    border-radius: var(--r-sm);
+    background: var(--accent);
+    color: var(--on-accent);
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-weight: 700;
+}
+.sidebar__label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--chrome-dim);
+    padding: var(--s4) var(--s2) var(--s1);
+}
+.sidebar__link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: var(--r);
+    color: var(--chrome-text);
+    opacity: .78;
+    font-size: 13px;
+    transition: background var(--tr), opacity var(--tr);
+}
+.sidebar__link:hover {
+    opacity: 1;
+    background: var(--accent-soft);
+}
+.sidebar__link.is-active {
+    opacity: 1;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+}
+.sidebar__link svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+    flex: none;
+}
+.sidebar__count {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.sidebar__foot {
+    margin-top: auto;
+    padding-top: var(--s4);
+}
+.nav-button {
+    border:0;
+    background:transparent;
+    width:100%;
+    font-family:inherit;
+    cursor:pointer;
+    text-align:left;
+}
+/* ---------------------------------------------------------------------------
+Topbar — one shade lighter than the sidebar so the two do not merge.
+Hairline only; a shadow here makes it feel heavy.
+------------------------------------------------------------------------ */
+.main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.topbar {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    height: var(--topbar-h);
+    background: var(--topbar);
+    border-bottom: 1px solid var(--border);
+    padding: 0 var(--s4);
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+}
+.topbar__search {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    background: var(--search);
+    border: 1px solid transparent;
+    border-radius: var(--r-lg);
+    padding: 0 11px;
+    width: 320px;
+    max-width: 40vw;
+    transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
+}
+.topbar__search:focus-within {
+    background: var(--surface);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.topbar__search svg {
+    width: 15px;
+    height: 15px;
+    stroke-width: 2;
+    color: var(--muted);
+    flex: none;
+}
+.topbar__search input {
+    border: 0;
+    background: transparent;
+    outline: 0;
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    padding: 8px 0;
+    width: 100%;
+}
+.topbar__search input::placeholder {
+    color: var(--faint);
+}
+.topbar__user {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    padding: 4px 10px 4px 4px;
+    cursor: pointer;
+    font: inherit;
+    transition: background var(--tr);
+}
+.topbar__user:hover {
+    background: var(--surface-sunken);
+}
+.topbar__avatar {
+    width: 26px;
+    height: 26px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--on-accent);
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    font-weight: 700;
+}
+.topbar__name {
+    font-size: 12px;
+    font-weight: 600;
+}
+.topbar__org  {
+    font-size: 10px;
+    color: var(--muted);
+}
+/* Company switcher lives in the topbar; it is what makes tenancy visible. */
+.switcher select {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+/* ---------------------------------------------------------------------------
+Page furniture
+------------------------------------------------------------------------ */
+.page {
+    width: 100%;
+    max-width: 1440px;
+    margin-inline: auto;
+    min-width: 0;
+    padding: var(--s5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s5);
+}
+.page__head {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s3);
+    flex-wrap: wrap;
+}
+.page__title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.03em;
+    line-height: 1.25;
+}
+.page__sub {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 2px;
+}
+.page__actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+}
+.crumbs {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    font-size: 11.5px;
+    color: var(--muted);
+}
+.crumbs a:hover {
+    color: var(--text);
+}
+.crumbs__sep {
+    color: var(--faint);
+}
+/* Toolbar above a table: filters left, actions right. */
+.toolbar {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: var(--s3) var(--s4);
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+}
+.toolbar__grow {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+/* Empty state — sunken well, never a bare white void. */
+.empty {
+    padding: var(--s8) var(--s5);
+    text-align: center;
+    background: var(--surface-sunken);
+}
+.empty__icon {
+    width: 40px;
+    height: 40px;
+    margin: 0 auto var(--s3);
+    border-radius: var(--r-lg);
+    background: var(--accent-soft);
+    display: grid;
+    place-items: center;
+    color: var(--accent-ink);
+}
+.empty__icon svg {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2;
+}
+.empty__title {
+    font-size: 13px;
+    font-weight: 700;
+}
+.empty__text {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-top: var(--s1);
+}
+/* Flash messages */
+.alert {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: var(--s3) var(--s4);
+    font-size: 13px;
+    background: var(--surface);
+}
+.alert--success {
+    background: var(--success-soft);
+    border-color: transparent;
+    color: var(--success-ink);
+}
+.alert--warning {
+    background: var(--warning-soft);
+    border-color: transparent;
+    color: var(--warning-ink);
+}
+.alert--danger  {
+    background: var(--danger-soft);
+    border-color: transparent;
+    color: var(--danger-ink);
+}
+.alert--info    {
+    background: var(--info-soft);
+    border-color: transparent;
+    color: var(--info-ink);
+}
+/* ---------------------------------------------------------------------------
+Auth screen — a single centred card on paper.
+------------------------------------------------------------------------ */
+.auth {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: var(--s5);
+    background: var(--chrome);
+}
+.auth__card {
+    width: 100%;
+    max-width: 380px;
+}
+.auth__brand {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--s2);
+    font-weight: 700;
+    letter-spacing: -.03em;
+    margin-bottom: var(--s5);
+}
+/* ---------------------------------------------------------------------------
+Responsive — the sidebar collapses to icons, then off-canvas.
+------------------------------------------------------------------------ */
+@media (max-width: 1024px) {
+    .sidebar {
+        width: 64px;
+        padding: var(--s3) var(--s2);
+    }
+    .sidebar__brand span,
+    .sidebar__label,
+    .sidebar__link span,
+    .sidebar__count {
+        display: none;
+    }
+    .sidebar__link {
+        justify-content: center;
+        padding: 10px;
+    }
+    .topbar__search {
+        width: 200px;
+    }
+}
+@media (max-width: 680px) {
+    .sidebar {
+        display: none;
+    }
+    .page {
+        width: 100%;
+        max-width: 1440px;
+        margin-inline: auto;
+        min-width: 0;
+        padding: var(--s4) var(--s3);
+    }
+    .topbar {
+        padding: 0 var(--s3);
+    }
+    .topbar__search {
+        max-width: none;
+        flex: 1 1 auto;
+        width: auto;
+    }
+    .topbar__name, .topbar__org {
+        display: none;
+    }
+    .page__actions {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+.crumbs {
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+}
