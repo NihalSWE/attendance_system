@@ -128,8 +128,16 @@ bypass.
 Model names and app labels are chosen for readability in code. The physical
 table name is set separately with `Meta.db_table`.
 
-- `leaves`, `attendance` and `payroll` models all use the **`payroll_`** table
-  prefix. They are one payroll family in the database.
+- Table name is `<prefix>_<snake_case_model_name>`: `LeaveType` -> `payroll_leave_type`.
+- `leaves`, `attendance` and `payroll` models all use the **`payroll_`** prefix.
+  They are one payroll family in the database.
+- If the snake_case name already begins with `payroll_`, do not prefix again:
+  `PayrollRun` -> `payroll_run`, never `payroll_payroll_run`.
+- Model class names stay natural - `LeaveType`, never `PayrollLeaveType`.
+  `db_table` changes the physical table only; `LeaveType.objects.all()` and all
+  FK/join behaviour are unaffected.
+- Company, branch, employee and other non-payroll tables keep their own app
+  prefix; they are shared infrastructure, not payroll artifacts.
 - Every other app uses its own label as the prefix.
 - **Always set `db_table` explicitly** on a new model, so an app rename can never
   silently rename a table.

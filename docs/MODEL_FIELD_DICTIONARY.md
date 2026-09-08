@@ -49,10 +49,10 @@ best for the project. The **physical table name is set separately** with
 
 | App | Table prefix | Example |
 |---|---|---|
-| `leaves` | **`payroll_`** | `LeaveRequest` -> `payroll_leaverequest` |
-| `attendance` | **`payroll_`** | `AttendanceRecord` -> `payroll_attendancerecord` |
-| `payroll` | **`payroll_`** | `PayrollRun` -> `payroll_payrollrun` |
-| every other app | its own label | `Employee` -> `employees_employee` |
+| `leaves` | **`payroll_`** | `LeaveRequest` -> `payroll_leave_request` |
+| `attendance` | **`payroll_`** | `AttendanceRecord` -> `payroll_attendance_record` |
+| `payroll` | **`payroll_`** | `PayrollRun` -> `payroll_run` |
+| every other app | its own label | `Employee` -> `employees_employee` (unchanged) |
 
 Leave, attendance and payroll form one payroll family in the database, so they
 share one prefix and sort together. Salary models already live in the `payroll`
@@ -63,8 +63,10 @@ Rules:
 - Always set `db_table` explicitly on a new model. Never rely on Django's
   implicit `<app>_<model>` name, because it silently changes if an app is ever
   renamed.
-- The table name is lowercase `<prefix>_<modelname>`, model name lowercased with
-  no separators, matching Django's own convention.
+- The table name is `<prefix>_<snake_case_model_name>`: `LeaveType` becomes
+  `payroll_leave_type`. Words are separated by underscores.
+- When the snake_case name already begins with `payroll_`, it is NOT prefixed
+  again: `PayrollRun` becomes `payroll_run`, never `payroll_payroll_run`.
 - Implicit M2M junction tables inherit their parent's prefix automatically.
 - Table names verified collision-free across all 88 tables after this rule was
   applied.

@@ -287,7 +287,7 @@
           "note": "nullable DateTimeField."
         }
       ],
-      "table": "accounts_companymembership",
+      "table": "accounts_company_membership",
       "tenant": true,
       "constraints": "Constraints: unique `(company, user)`; departments selected in scope must belong to a selected/allowed branch and the same company. The two M2M fields create implicit junction tables unless later replaced by an explicit scope model."
     },
@@ -743,7 +743,7 @@
           "note": "BooleanField."
         }
       ],
-      "table": "tenants_companyfeature",
+      "table": "tenants_company_feature",
       "tenant": true,
       "constraints": "Constraints: prevent overlapping active overrides for the same company/feature/effect. Effective access combines package snapshot and this dated override."
     },
@@ -1687,7 +1687,7 @@
           "note": "nullable CharField: assigned_devices, department_devices, branch_devices, company_devices; null inherits the assigned branch/company policy. This employee-level override lives on dated assignment history; changing it closes the old interval and creates its successor."
         }
       ],
-      "table": "employees_employeeassignment",
+      "table": "employees_employee_assignment",
       "tenant": true,
       "constraints": "Constraints: department belongs to branch; designation belongs to department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
     },
@@ -1840,7 +1840,7 @@
           "note": "draft, active, ended, cancelled."
         }
       ],
-      "table": "employees_employeecompensation",
+      "table": "employees_employee_compensation",
       "tenant": true,
       "constraints": "Constraints: positive base rate; currency matches company policy; non-overlapping active compensation ranges per employee."
     },
@@ -1942,7 +1942,7 @@
           "note": "timestamps."
         }
       ],
-      "table": "access_control_accesspermission",
+      "table": "access_control_access_permission",
       "tenant": false,
       "constraints": ""
     },
@@ -2079,7 +2079,7 @@
           "note": "TextField."
         }
       ],
-      "table": "access_control_designationpermission",
+      "table": "access_control_designation_permission",
       "tenant": true,
       "constraints": "Constraints: unique effective rule per designation/permission; a child designation cannot exceed its allowed parent ceiling unless a company administrator explicitly changes the hierarchy policy."
     },
@@ -2227,7 +2227,7 @@
           "note": "active/revoked/expired."
         }
       ],
-      "table": "access_control_employeepermissionoverride",
+      "table": "access_control_employee_permission_override",
       "tenant": true,
       "constraints": "Constraints: grant must be allowed by designation and grantor authority; selected departments belong to selected branches/company."
     },
@@ -2569,7 +2569,7 @@
           "note": "active/ended."
         }
       ],
-      "table": "scheduling_departmentshift",
+      "table": "scheduling_department_shift",
       "tenant": true,
       "constraints": "Constraints: no overlapping duplicate department/shift assignments; at most one default at a time. In single-shift company mode all active department shifts must reference the company shift."
     },
@@ -2717,7 +2717,7 @@
           "note": "active/ended/cancelled."
         }
       ],
-      "table": "scheduling_employeeshiftassignment",
+      "table": "scheduling_employee_shift_assignment",
       "tenant": true,
       "constraints": "Constraints: no overlapping effective assignments for an employee. Validate department eligibility except for an authorized override."
     },
@@ -2906,7 +2906,7 @@
           "note": "DateTimeField."
         }
       ],
-      "table": "scheduling_companyattendancesettings",
+      "table": "scheduling_company_attendance_settings",
       "tenant": true,
       "constraints": "Constraint: company_shift required only in single-shift mode. Historical AttendanceRecord snapshots preserve rules actually used."
     },
@@ -3032,7 +3032,7 @@
           "note": "active/ended."
         }
       ],
-      "table": "scheduling_weeklyoffrule",
+      "table": "scheduling_weekly_off_rule",
       "tenant": true,
       "constraints": "Constraints: prevent overlapping duplicate weekday rules for the same company/branch."
     },
@@ -3348,7 +3348,7 @@
           "note": "draft, approved, cancelled."
         }
       ],
-      "table": "scheduling_holidayworkassignment",
+      "table": "scheduling_holiday_work_assignment",
       "tenant": true,
       "constraints": "Constraints: exactly one applicable source (dated holiday or recurring weekly-off rule); source applies on work_date; one active assignment per employee/work_date/source."
     },
@@ -3439,7 +3439,7 @@
           "note": "timestamps."
         }
       ],
-      "table": "devices_devicevendor",
+      "table": "devices_device_vendor",
       "tenant": false,
       "constraints": "Relations: DeviceModel and optional BiometricTemplate format metadata."
     },
@@ -3541,7 +3541,7 @@
           "note": "timestamps."
         }
       ],
-      "table": "devices_devicemodel",
+      "table": "devices_device_model",
       "tenant": false,
       "constraints": "Constraint: unique `(vendor, model_code)`."
     },
@@ -3777,7 +3777,7 @@
           "note": "pending, active, offline, suspended, retired."
         }
       ],
-      "table": "devices_biometricdevice",
+      "table": "devices_biometric_device",
       "tenant": true,
       "constraints": "Constraints: unique `(company, serial_number)`; device branch belongs to company."
     },
@@ -3896,7 +3896,7 @@
           "note": "active/ended."
         }
       ],
-      "table": "devices_devicedepartment",
+      "table": "devices_device_department",
       "tenant": true,
       "constraints": "Constraints: device and department have the same company and branch; no overlapping duplicate mapping. This is the explicit through table for `BiometricDevice.departments`. Active mappings restrict department_devices mode; no active mappings means a shared branch device in that mode. These mappings do not additionally restrict branch_devices/company_devices mode or an explicit assigned-device grant."
     },
@@ -4105,7 +4105,7 @@
           "note": "optional fields."
         }
       ],
-      "table": "devices_deviceenrollment",
+      "table": "devices_device_enrollment",
       "tenant": true,
       "constraints": "Constraints: no overlapping use of one `(device, device_user_id)`; no overlapping duplicate employee/device authorization; resolve historical mapping using the punch timestamp. Enrollment identity, master enablement, and explicit assigned-device grant are separate concerns. Keep historical authorization changes in the audit trail; see DEVICE_ATTENDANCE_POLICY.md."
     },
@@ -4347,7 +4347,7 @@
           "note": "nullable audit fields."
         }
       ],
-      "table": "devices_biometrictemplate",
+      "table": "devices_biometric_template",
       "tenant": true,
       "constraints": "Constraints: checksum/employee/type/format duplicate detection; face has no finger_position. Database backups and application logs must protect the encrypted data and key references."
     },
@@ -4498,7 +4498,7 @@
           "note": "CharField idempotency key."
         }
       ],
-      "table": "devices_deviceenrollmenttemplate",
+      "table": "devices_device_enrollment_template",
       "tenant": true,
       "constraints": "Constraints: unique active `(device_enrollment, biometric_template)`; employee and compatibility must match enrollment/device."
     },
@@ -4683,7 +4683,7 @@
           "note": "PositiveBigIntegerField for concurrency control."
         }
       ],
-      "table": "devices_devicesyncstate",
+      "table": "devices_device_sync_state",
       "tenant": true,
       "constraints": ""
     },
@@ -4942,7 +4942,7 @@
           "note": "TextField."
         }
       ],
-      "table": "devices_devicemessage",
+      "table": "devices_device_message",
       "tenant": true,
       "constraints": "Constraints: one raw representation must exist; reliable `(device, idempotency_key)` unique when non-null. A payload hash alone is not safe proof that two punches are identical."
     },
@@ -5245,7 +5245,7 @@
           "note": "nullable DateTimeField."
         }
       ],
-      "table": "devices_punchevent",
+      "table": "devices_punch_event",
       "tenant": true,
       "constraints": "Constraints: unique `(device_message, source_record_index)`; reliable vendor punch identity unique per device when present. Timestamp is never the sole unique key."
     },
@@ -5398,7 +5398,7 @@
           "note": "TextField."
         }
       ],
-      "table": "payroll_punchallocation",
+      "table": "payroll_punch_allocation",
       "tenant": true,
       "constraints": "Constraints: exactly one source (PunchEvent or approved AttendanceCorrection); unique source per calculation version; sequence unique within attendance/version. Merge all authorized devices into one employee/shift stream ordered by event time; never restart alternating IN/OUT at each device or incoming batch."
     },
@@ -5542,7 +5542,7 @@
           "note": "PositiveIntegerField."
         }
       ],
-      "table": "payroll_attendancesession",
+      "table": "payroll_attendance_session",
       "tenant": true,
       "constraints": "Constraints: end after start; allocation directions correct; sequence unique per record/version. Both allocations belong to this attendance record and employee/company, but may originate from different devices. Never require matching device IDs."
     },
@@ -5854,7 +5854,7 @@
           "note": "BooleanField summary; authoritative lock belongs to finalized payroll."
         }
       ],
-      "table": "payroll_attendancerecord",
+      "table": "payroll_attendance_record",
       "tenant": true,
       "constraints": "Constraint: unique `(company, employee, work_date)`; assignment applies on work date and department/branch match it."
     },
@@ -6105,7 +6105,7 @@
           "note": "nullable fields."
         }
       ],
-      "table": "payroll_attendancecorrection",
+      "table": "payroll_attendance_correction",
       "tenant": true,
       "constraints": ""
     },
@@ -6346,7 +6346,7 @@
           "note": "PositiveIntegerField."
         }
       ],
-      "table": "payroll_attendancepenaltyrule",
+      "table": "payroll_attendance_penalty_rule",
       "tenant": true,
       "constraints": "Constraint: rule inputs consistent with metric/method. Activated rule versions are immutable."
     },
@@ -6557,7 +6557,7 @@
           "note": "DateTimeField."
         }
       ],
-      "table": "payroll_penaltyassessment",
+      "table": "payroll_penalty_assessment",
       "tenant": true,
       "constraints": "Constraint: unique occurrence identity per company; one original payroll posting."
     },
@@ -6654,7 +6654,7 @@
           "note": "JSONField."
         }
       ],
-      "table": "payroll_penaltyassessmentattendance",
+      "table": "payroll_penalty_assessment_attendance",
       "tenant": true,
       "constraints": "Constraint: unique `(penalty_assessment, attendance_record)`. This is the explicit M2M through table."
     },
@@ -6787,7 +6787,7 @@
           "note": "active/inactive."
         }
       ],
-      "table": "payroll_leavetype",
+      "table": "payroll_leave_type",
       "tenant": true,
       "constraints": "Constraint: unique `(company, code)`."
     },
@@ -6935,7 +6935,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_leavepolicy",
+      "table": "payroll_leave_policy",
       "tenant": true,
       "constraints": "Constraints: department requires matching branch; only one applicable default per scope. Avoid a migration cycle by adding current_version after the initial version table or treating it as a cached pointer."
     },
@@ -7137,7 +7137,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_leavepolicyversion",
+      "table": "payroll_leave_policy_version",
       "tenant": true,
       "constraints": "Constraints: unique `(leave_policy, version_number)`; non-overlapping active effective periods. Freeze after use."
     },
@@ -7490,7 +7490,7 @@
           "note": "active/inactive."
         }
       ],
-      "table": "payroll_leavepolicytyperule",
+      "table": "payroll_leave_policy_type_rule",
       "tenant": true,
       "constraints": "Constraint: unique `(policy_version, leave_type)`; percentages and limits valid."
     },
@@ -7618,7 +7618,7 @@
           "note": "active/ended/cancelled."
         }
       ],
-      "table": "payroll_employeeleavepolicyassignment",
+      "table": "payroll_employee_leave_policy_assignment",
       "tenant": true,
       "constraints": "Constraint: no overlapping explicit employee policy assignments."
     },
@@ -7773,7 +7773,7 @@
           "note": "PositiveBigIntegerField for balance concurrency."
         }
       ],
-      "table": "payroll_leaveentitlement",
+      "table": "payroll_leave_entitlement",
       "tenant": true,
       "constraints": "Constraint: unique entitlement for employee/type/period/policy context; overlapping accounts for the same type require explicit migration/reconciliation."
     },
@@ -7972,7 +7972,7 @@
           "deletion": "SET_NULL"
         }
       ],
-      "table": "payroll_leavebalanceentry",
+      "table": "payroll_leave_balance_entry",
       "tenant": true,
       "constraints": "Constraints: nonzero balance or reservation delta; unique source key; one reversal per entry; source fields consistent with kind."
     },
@@ -8180,7 +8180,7 @@
           "note": "nullable DateTimeField."
         }
       ],
-      "table": "payroll_leaverequest",
+      "table": "payroll_leave_request",
       "tenant": true,
       "constraints": "Constraints: amendment/cancellation needs original request with same company/employee; approved request requires segments and completed approvals."
     },
@@ -8378,7 +8378,7 @@
           "note": "active, superseded, cancelled."
         }
       ],
-      "table": "payroll_leaverequestsegment",
+      "table": "payroll_leave_request_segment",
       "tenant": true,
       "constraints": "Constraints: duration-specific fields required; end not before start; no overlap with active segments for employee after expanding intervals."
     },
@@ -8600,7 +8600,7 @@
           "note": "nullable DateTimeField."
         }
       ],
-      "table": "payroll_leaveday",
+      "table": "payroll_leave_day",
       "tenant": true,
       "constraints": "Constraints: covered interval positive and within relevant work date/shift; active approved intervals do not overlap; pay type matches percentage."
     },
@@ -8777,7 +8777,7 @@
           "note": "JSONField."
         }
       ],
-      "table": "payroll_leaveapprovalstep",
+      "table": "payroll_leave_approval_step",
       "tenant": true,
       "constraints": "Constraints: exactly one target FK; unique target/stage/approver; decision fields required when decided."
     },
@@ -8939,7 +8939,7 @@
           "note": "active, replaced, removed."
         }
       ],
-      "table": "payroll_leaveattachment",
+      "table": "payroll_leave_attachment",
       "tenant": true,
       "constraints": "Constraint: exactly one target."
     },
@@ -9165,7 +9165,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_leaveencashment",
+      "table": "payroll_leave_encashment",
       "tenant": true,
       "constraints": "Constraint: approved units cannot exceed eligible available balance. Resulting payroll lines point back to this row, so reversals and off-cycle corrections remain possible."
     },
@@ -9364,7 +9364,7 @@
           "note": "CharField."
         }
       ],
-      "table": "payroll_leavecompensatorycredit",
+      "table": "payroll_leave_compensatory_credit",
       "tenant": true,
       "constraints": "Constraints: unique qualifying source/treatment; do not award overtime and leave together unless treatment explicitly permits it."
     },
@@ -9684,7 +9684,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_leavefareassistanceclaim",
+      "table": "payroll_leave_fare_assistance_claim",
       "tenant": true,
       "constraints": "Constraints: same-company qualifying leave; policy eligibility; unique active occurrence slot per employee/benefit cycle. Resulting PayrollLine rows point back to the claim. LFA never changes LeaveEntitlement."
     },
@@ -9911,7 +9911,7 @@
           "note": "PositiveIntegerField for optimistic concurrency/display."
         }
       ],
-      "table": "payroll_payrollsettings",
+      "table": "payroll_settings",
       "tenant": true,
       "constraints": "Constraint: unique `company` (implement as O2O semantics)."
     },
@@ -10253,7 +10253,7 @@
           "note": "nullable FK -> User/DateTimeField."
         }
       ],
-      "table": "payroll_payrollpolicyversion",
+      "table": "payroll_policy_version",
       "tenant": true,
       "constraints": "Constraints: unique `(company, code, version_number)`; no overlapping active date ranges for the same code; activated versions are immutable."
     },
@@ -10485,7 +10485,7 @@
           "note": "BooleanField."
         }
       ],
-      "table": "payroll_salarycomponent",
+      "table": "payroll_salary_component",
       "tenant": true,
       "constraints": "Constraints: unique `(company, code)`; category and sign behavior must agree."
     },
@@ -10656,7 +10656,7 @@
           "note": "nullable FK -> User/DateTimeField."
         }
       ],
-      "table": "payroll_salarystructure",
+      "table": "payroll_salary_structure",
       "tenant": true,
       "constraints": "Relations: components are M2M -> SalaryComponent through SalaryStructureComponent.\nConstraints: unique `(company, code, version_number)`; at most one active default structure for a company/date; activated structures are immutable except retirement metadata."
     },
@@ -10876,7 +10876,7 @@
           "note": "BooleanField."
         }
       ],
-      "table": "payroll_salarystructurecomponent",
+      "table": "payroll_salary_structure_component",
       "tenant": true,
       "constraints": "Constraints: unique `(salary_structure, salary_component)`; both belong to the same company; required operands depend on calculation method."
     },
@@ -11024,7 +11024,7 @@
           "note": "nullable FK -> User/DateTimeField."
         }
       ],
-      "table": "payroll_employeesalarystructureassignment",
+      "table": "payroll_employee_salary_structure_assignment",
       "tenant": true,
       "constraints": "Constraints: no overlapping active assignments for an employee; employee and structure belong to the same company."
     },
@@ -11233,7 +11233,7 @@
           "note": "TextField, blank."
         }
       ],
-      "table": "payroll_payrollperiod",
+      "table": "payroll_period",
       "tenant": true,
       "constraints": "Constraints: unique `(company, code)`; `period_start <= period_end`; regular periods of the same frequency should not overlap."
     },
@@ -11504,7 +11504,7 @@
           "note": "JSONField."
         }
       ],
-      "table": "payroll_payrollrun",
+      "table": "payroll_run",
       "tenant": true,
       "constraints": "Constraints: unique `(company, idempotency_key)` and `(payroll_period, run_type, revision_number)`; only one posted regular result chain may be authoritative for an employee/period."
     },
@@ -11746,7 +11746,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_payrollrecord",
+      "table": "payroll_record",
       "tenant": true,
       "constraints": "Constraints: unique `(payroll_run, employee)`; employee belongs to run company; totals equal active line sums and allocations cannot exceed payable balance."
     },
@@ -12048,7 +12048,7 @@
           "note": "JSONField."
         }
       ],
-      "table": "payroll_payrollcompensationsegment",
+      "table": "payroll_compensation_segment",
       "tenant": true,
       "constraints": "Constraints: segment dates must fall inside the period, cannot overlap for the same PayrollRecord, and referenced history rows must cover the segment."
     },
@@ -12362,7 +12362,7 @@
           "note": "calculated, reviewed, overridden, reversed."
         }
       ],
-      "table": "payroll_payrolldailyline",
+      "table": "payroll_daily_line",
       "tenant": true,
       "constraints": "Constraints: unique `(payroll_segment, work_date)`; all evidence belongs to the employee/company/date; fractions are nonnegative and bounded where applicable."
     },
@@ -12706,7 +12706,7 @@
           "note": "active, void, reversed."
         }
       ],
-      "table": "payroll_payrollline",
+      "table": "payroll_line",
       "tenant": true,
       "constraints": "Constraints: source fields must agree with `source_type`; at most one typed source for a normal line; prevent duplicate active posting from the same source/component/run; reversal lines reference an original and use the opposite financial effect."
     },
@@ -12876,7 +12876,7 @@
           "note": "nullable DateTimeField."
         }
       ],
-      "table": "payroll_payrollapprovalstep",
+      "table": "payroll_approval_step",
       "tenant": true,
       "constraints": "Constraints: unique `(payroll_run, sequence)`; assignee must have company access; steps execute in order unless policy explicitly permits parallel stages."
     },
@@ -13087,7 +13087,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_salarypayment",
+      "table": "payroll_salary_payment",
       "tenant": true,
       "constraints": "Constraints: unique `(company, payment_reference)` and `(company, idempotency_key)`; allocated amount cannot exceed completed payment amount."
     },
@@ -13226,7 +13226,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_salarypaymentallocation",
+      "table": "payroll_salary_payment_allocation",
       "tenant": true,
       "constraints": "Constraints: unique `(company, allocation_reference)`; payment and payroll record belong to the same employee/company/currency; active allocations cannot overallocate either side."
     },
@@ -13446,7 +13446,7 @@
           "note": "DecimalField cached balance."
         }
       ],
-      "table": "payroll_salaryadvance",
+      "table": "payroll_salary_advance",
       "tenant": true,
       "constraints": "Constraints: unique `(company, request_reference)`; approved amount cannot exceed requested amount without explicit override; outstanding derives from disbursements minus applied recoveries/reversals."
     },
@@ -13612,7 +13612,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_advancedisbursement",
+      "table": "payroll_advance_disbursement",
       "tenant": true,
       "constraints": "Constraints: unique `(company, disbursement_reference)`; completed active disbursements cannot exceed approved advance amount."
     },
@@ -13787,7 +13787,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_salaryadvancerecovery",
+      "table": "payroll_salary_advance_recovery",
       "tenant": true,
       "constraints": "Relations: PayrollLine points to this row when method is payroll_deduction.\nConstraints: unique `(company, idempotency_key)`; posted/received recoveries cannot exceed outstanding principal unless explicitly treated as a refundable overpayment."
     },
@@ -14050,7 +14050,7 @@
           "note": "cached DecimalField balances."
         }
       ],
-      "table": "payroll_employeeloan",
+      "table": "payroll_employee_loan",
       "tenant": true,
       "constraints": "Constraints: unique `(company, loan_reference)`; balances reconcile to completed disbursements, repayments, and approved waivers/write-offs."
     },
@@ -14216,7 +14216,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_loandisbursement",
+      "table": "payroll_loan_disbursement",
       "tenant": true,
       "constraints": "Constraints: unique `(company, disbursement_reference)`; completed disbursements cannot exceed approved principal."
     },
@@ -14427,7 +14427,7 @@
           "note": "JSONField."
         }
       ],
-      "table": "payroll_loaninstallment",
+      "table": "payroll_loan_installment",
       "tenant": true,
       "constraints": "Constraints: unique `(employee_loan, installment_number)`; component totals reconcile to total due; paid summaries derive from active allocations."
     },
@@ -14602,7 +14602,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_loanrepayment",
+      "table": "payroll_loan_repayment",
       "tenant": true,
       "constraints": "Relations: PayrollLine points to this row when method is payroll_deduction.\nConstraints: unique `(company, repayment_reference)` and `(company, idempotency_key)`; allocations cannot exceed the active repayment amount."
     },
@@ -14750,7 +14750,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_loanrepaymentallocation",
+      "table": "payroll_loan_repayment_allocation",
       "tenant": true,
       "constraints": "Constraints: repayment and installment belong to the same loan/company/currency; active allocations cannot exceed the repayment or remaining installment balances."
     },
@@ -15023,7 +15023,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_payrolladjustment",
+      "table": "payroll_adjustment",
       "tenant": true,
       "constraints": "Constraints: unique `(company, adjustment_reference)` and `(company, idempotency_key)`; target/source fields agree with adjustment type; a balance-only waiver must not silently create salary earnings."
     },
@@ -15254,7 +15254,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_payrollremittance",
+      "table": "payroll_remittance",
       "tenant": true,
       "constraints": "Constraints: unique `(company, remittance_reference)` and `(company, idempotency_key)`; active allocations cannot exceed a completed remittance."
     },
@@ -15384,7 +15384,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "payroll_payrollremittanceallocation",
+      "table": "payroll_remittance_allocation",
       "tenant": true,
       "constraints": "Constraints: remittance and line must have the same company/currency/provider-compatible component; active allocations cannot exceed either available remittance value or line liability."
     },
@@ -15655,7 +15655,7 @@
           "note": "DateTimeField."
         }
       ],
-      "table": "subscriptions_packagefeature",
+      "table": "subscriptions_package_feature",
       "tenant": false,
       "constraints": "Constraint: unique `(package, feature)`."
     },
@@ -15898,7 +15898,7 @@
           "note": "TextField, blank."
         }
       ],
-      "table": "subscriptions_companysubscription",
+      "table": "subscriptions_company_subscription",
       "tenant": true,
       "constraints": "Constraints: unique `(company, subscription_reference)`; normally no overlapping active/trial subscriptions; entitlements use the subscription snapshot plus explicit CompanyFeature overrides. Capacity counting policy must define whether employees, users, or both are billable—the current recommendation is active employees."
     },
@@ -16112,7 +16112,7 @@
           "note": "optional CharField for tamper-evident chaining."
         }
       ],
-      "table": "auditlog_auditlog",
+      "table": "auditlog_audit_log",
       "tenant": false,
       "constraints": ""
     },
@@ -16120,7 +16120,7 @@
       "name": "CompanyMembership_allowed_branches",
       "app": "accounts",
       "number": null,
-      "table": "accounts_companymembership_allowed_branches",
+      "table": "accounts_company_membership_allowed_branches",
       "tenant": false,
       "junction": true,
       "constraints": "Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id.",
@@ -16159,7 +16159,7 @@
       "name": "CompanyMembership_allowed_departments",
       "app": "accounts",
       "number": null,
-      "table": "accounts_companymembership_allowed_departments",
+      "table": "accounts_company_membership_allowed_departments",
       "tenant": false,
       "junction": true,
       "constraints": "Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id.",
@@ -16198,7 +16198,7 @@
       "name": "EmployeePermissionOverride_allowed_branches",
       "app": "access_control",
       "number": null,
-      "table": "access_control_employeepermissionoverride_allowed_branches",
+      "table": "access_control_employee_permission_override_allowed_branches",
       "tenant": false,
       "junction": true,
       "constraints": "Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id.",
@@ -16237,7 +16237,7 @@
       "name": "EmployeePermissionOverride_allowed_departments",
       "app": "access_control",
       "number": null,
-      "table": "access_control_employeepermissionoverride_allowed_departments",
+      "table": "access_control_employee_permission_override_allowed_departments",
       "tenant": false,
       "junction": true,
       "constraints": "Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id.",
@@ -16276,7 +16276,7 @@
       "name": "PayrollDailyLine_leave_days",
       "app": "payroll",
       "number": null,
-      "table": "payroll_payrolldailyline_leave_days",
+      "table": "payroll_daily_line_leave_days",
       "tenant": false,
       "junction": true,
       "constraints": "Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id.",

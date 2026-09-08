@@ -26,7 +26,7 @@ Table accounts_user {
   Note: "User | Global/platform scope; AuditLog company is optional. Relations: memberships, optional employee links, and actor/audit relations. Deactivate accounts instead of deleting them."
 }
 
-Table accounts_companymembership {
+Table accounts_company_membership {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -85,7 +85,7 @@ Table tenants_feature {
   Note: "Feature | Global/platform scope; AuditLog company is optional. Relations: PackageFeature, CompanyFeature, AccessPermission."
 }
 
-Table tenants_companyfeature {
+Table tenants_company_feature {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -194,7 +194,7 @@ Table employees_employee {
   Note: "Employee | Direct company ownership. Constraints: unique `(company, user)` when user is not null. All business history references this permanent identity."
 }
 
-Table employees_employeeassignment {
+Table employees_employee_assignment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -215,7 +215,7 @@ Table employees_employeeassignment {
   Note: "EmployeeAssignment | Direct company ownership. Constraints: department belongs to branch; designation belongs to department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
 }
 
-Table employees_employeecompensation {
+Table employees_employee_compensation {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -234,7 +234,7 @@ Table employees_employeecompensation {
   Note: "EmployeeCompensation | Direct company ownership. Constraints: positive base rate; currency matches company policy; non-overlapping active compensation ranges per employee."
 }
 
-Table access_control_accesspermission {
+Table access_control_access_permission {
   id bigint [pk, increment, not null, note: "BigAutoField, PK."]
   feature_id bigint [not null, note: "FK -> Feature, PROTECT."]
   code varchar [not null, unique, note: "CharField, globally unique, e.g. `leave.approve`."]
@@ -248,7 +248,7 @@ Table access_control_accesspermission {
   Note: "AccessPermission | Global/platform scope; AuditLog company is optional. "
 }
 
-Table access_control_designationpermission {
+Table access_control_designation_permission {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -265,7 +265,7 @@ Table access_control_designationpermission {
   Note: "DesignationPermission | Direct company ownership. Constraints: unique effective rule per designation/permission; a child designation cannot exceed its allowed parent ceiling unless a company administrator explicitly changes the hierarchy policy."
 }
 
-Table access_control_employeepermissionoverride {
+Table access_control_employee_permission_override {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -309,7 +309,7 @@ Table scheduling_shift {
   Note: "Shift | Direct company ownership. Constraints: unique `(company, code)`; timing and minute thresholds must be internally consistent."
 }
 
-Table scheduling_departmentshift {
+Table scheduling_department_shift {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -325,7 +325,7 @@ Table scheduling_departmentshift {
   Note: "DepartmentShift | Direct company ownership. Constraints: no overlapping duplicate department/shift assignments; at most one default at a time. In single-shift company mode all active department shifts must reference the company shift."
 }
 
-Table scheduling_employeeshiftassignment {
+Table scheduling_employee_shift_assignment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -343,7 +343,7 @@ Table scheduling_employeeshiftassignment {
   Note: "EmployeeShiftAssignment | Direct company ownership. Constraints: no overlapping effective assignments for an employee. Validate department eligibility except for an authorized override."
 }
 
-Table scheduling_companyattendancesettings {
+Table scheduling_company_attendance_settings {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, unique, note: "O2O -> Company, PROTECT, primary tenant owner."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -366,7 +366,7 @@ Table scheduling_companyattendancesettings {
   Note: "CompanyAttendanceSettings | Direct company ownership. Constraint: company_shift required only in single-shift mode. Historical AttendanceRecord snapshots preserve rules actually used."
 }
 
-Table scheduling_weeklyoffrule {
+Table scheduling_weekly_off_rule {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -400,7 +400,7 @@ Table scheduling_holiday {
   Note: "Holiday | Direct company ownership. Constraints: unique active holiday per `(company, branch, holiday_date)`, treating null branch as a comparable company-wide scope."
 }
 
-Table scheduling_holidayworkassignment {
+Table scheduling_holiday_work_assignment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -420,7 +420,7 @@ Table scheduling_holidayworkassignment {
   Note: "HolidayWorkAssignment | Direct company ownership. Constraints: exactly one applicable source (dated holiday or recurring weekly-off rule); source applies on work_date; one active assignment per employee/work_date/source."
 }
 
-Table devices_devicevendor {
+Table devices_device_vendor {
   id bigint [pk, increment, not null, note: "BigAutoField, PK."]
   code varchar [not null, unique, note: "unique identifiers/display name."]
   name varchar [not null, unique, note: "unique identifiers/display name."]
@@ -433,7 +433,7 @@ Table devices_devicevendor {
   Note: "DeviceVendor | Global/platform scope; AuditLog company is optional. Relations: DeviceModel and optional BiometricTemplate format metadata."
 }
 
-Table devices_devicemodel {
+Table devices_device_model {
   id bigint [pk, increment, not null, note: "BigAutoField, PK."]
   vendor_id bigint [not null, note: "FK -> DeviceVendor, PROTECT."]
   model_code varchar [not null, note: "CharField."]
@@ -447,7 +447,7 @@ Table devices_devicemodel {
   Note: "DeviceModel | Global/platform scope; AuditLog company is optional. Constraint: unique `(vendor, model_code)`."
 }
 
-Table devices_biometricdevice {
+Table devices_biometric_device {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -475,7 +475,7 @@ Table devices_biometricdevice {
   Note: "BiometricDevice | Direct company ownership. Constraints: unique `(company, serial_number)`; device branch belongs to company."
 }
 
-Table devices_devicedepartment {
+Table devices_device_department {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -490,7 +490,7 @@ Table devices_devicedepartment {
   Note: "DeviceDepartment | Direct company ownership. Constraints: device and department have the same company and branch; no overlapping duplicate mapping. This is the explicit through table for `BiometricDevice.departments`. Active mappings restrict department_devices mode; no active mappings means a shared branch device in that mode. These mappings do not additionally restrict branch_devices/company_devices mode or an explicit assigned-device grant."
 }
 
-Table devices_deviceenrollment {
+Table devices_device_enrollment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -515,7 +515,7 @@ Table devices_deviceenrollment {
   Note: "DeviceEnrollment | Direct company ownership. Constraints: no overlapping use of one `(device, device_user_id)`; no overlapping duplicate employee/device authorization; resolve historical mapping using the punch timestamp. Enrollment identity, master enablement, and explicit assigned-device grant are separate concerns. Keep historical authorization changes in the audit trail; see DEVICE_ATTENDANCE_POLICY.md."
 }
 
-Table devices_biometrictemplate {
+Table devices_biometric_template {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -543,7 +543,7 @@ Table devices_biometrictemplate {
   Note: "BiometricTemplate | Direct company ownership. Constraints: checksum/employee/type/format duplicate detection; face has no finger_position. Database backups and application logs must protect the encrypted data and key references."
 }
 
-Table devices_deviceenrollmenttemplate {
+Table devices_device_enrollment_template {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -562,7 +562,7 @@ Table devices_deviceenrollmenttemplate {
   Note: "DeviceEnrollmentTemplate | Direct company ownership. Constraints: unique active `(device_enrollment, biometric_template)`; employee and compatibility must match enrollment/device."
 }
 
-Table devices_devicesyncstate {
+Table devices_device_sync_state {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -585,7 +585,7 @@ Table devices_devicesyncstate {
   Note: "DeviceSyncState | Direct company ownership. "
 }
 
-Table devices_devicemessage {
+Table devices_device_message {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -616,7 +616,7 @@ Table devices_devicemessage {
   Note: "DeviceMessage | Direct company ownership. Constraints: one raw representation must exist; reliable `(device, idempotency_key)` unique when non-null. A payload hash alone is not safe proof that two punches are identical."
 }
 
-Table devices_punchevent {
+Table devices_punch_event {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -651,7 +651,7 @@ Table devices_punchevent {
   Note: "PunchEvent | Direct company ownership. Constraints: unique `(device_message, source_record_index)`; reliable vendor punch identity unique per device when present. Timestamp is never the sole unique key."
 }
 
-Table payroll_punchallocation {
+Table payroll_punch_allocation {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -670,7 +670,7 @@ Table payroll_punchallocation {
   Note: "PunchAllocation | Direct company ownership. Constraints: exactly one source (PunchEvent or approved AttendanceCorrection); unique source per calculation version; sequence unique within attendance/version. Merge all authorized devices into one employee/shift stream ordered by event time; never restart alternating IN/OUT at each device or incoming batch."
 }
 
-Table payroll_attendancesession {
+Table payroll_attendance_session {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -688,7 +688,7 @@ Table payroll_attendancesession {
   Note: "AttendanceSession | Direct company ownership. Constraints: end after start; allocation directions correct; sequence unique per record/version. Both allocations belong to this attendance record and employee/company, but may originate from different devices. Never require matching device IDs."
 }
 
-Table payroll_attendancerecord {
+Table payroll_attendance_record {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -724,7 +724,7 @@ Table payroll_attendancerecord {
   Note: "AttendanceRecord | Direct company ownership. Constraint: unique `(company, employee, work_date)`; assignment applies on work date and department/branch match it."
 }
 
-Table payroll_attendancecorrection {
+Table payroll_attendance_correction {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -753,7 +753,7 @@ Table payroll_attendancecorrection {
   Note: "AttendanceCorrection | Direct company ownership. "
 }
 
-Table payroll_attendancepenaltyrule {
+Table payroll_attendance_penalty_rule {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -782,7 +782,7 @@ Table payroll_attendancepenaltyrule {
   Note: "AttendancePenaltyRule | Direct company ownership. Constraint: rule inputs consistent with metric/method. Activated rule versions are immutable."
 }
 
-Table payroll_penaltyassessment {
+Table payroll_penalty_assessment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -807,7 +807,7 @@ Table payroll_penaltyassessment {
   Note: "PenaltyAssessment | Direct company ownership. Constraint: unique occurrence identity per company; one original payroll posting."
 }
 
-Table payroll_penaltyassessmentattendance {
+Table payroll_penalty_assessment_attendance {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -820,7 +820,7 @@ Table payroll_penaltyassessmentattendance {
   Note: "PenaltyAssessmentAttendance | Direct company ownership. Constraint: unique `(penalty_assessment, attendance_record)`. This is the explicit M2M through table."
 }
 
-Table payroll_leavetype {
+Table payroll_leave_type {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -837,7 +837,7 @@ Table payroll_leavetype {
   Note: "LeaveType | Direct company ownership. Constraint: unique `(company, code)`."
 }
 
-Table payroll_leavepolicy {
+Table payroll_leave_policy {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -855,7 +855,7 @@ Table payroll_leavepolicy {
   Note: "LeavePolicy | Direct company ownership. Constraints: department requires matching branch; only one applicable default per scope. Avoid a migration cycle by adding current_version after the initial version table or treating it as a cached pointer."
 }
 
-Table payroll_leavepolicyversion {
+Table payroll_leave_policy_version {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -879,7 +879,7 @@ Table payroll_leavepolicyversion {
   Note: "LeavePolicyVersion | Direct company ownership. Constraints: unique `(leave_policy, version_number)`; non-overlapping active effective periods. Freeze after use."
 }
 
-Table payroll_leavepolicytyperule {
+Table payroll_leave_policy_type_rule {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -920,7 +920,7 @@ Table payroll_leavepolicytyperule {
   Note: "LeavePolicyTypeRule | Direct company ownership. Constraint: unique `(policy_version, leave_type)`; percentages and limits valid."
 }
 
-Table payroll_employeeleavepolicyassignment {
+Table payroll_employee_leave_policy_assignment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -936,7 +936,7 @@ Table payroll_employeeleavepolicyassignment {
   Note: "EmployeeLeavePolicyAssignment | Direct company ownership. Constraint: no overlapping explicit employee policy assignments."
 }
 
-Table payroll_leaveentitlement {
+Table payroll_leave_entitlement {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -955,7 +955,7 @@ Table payroll_leaveentitlement {
   Note: "LeaveEntitlement | Direct company ownership. Constraint: unique entitlement for employee/type/period/policy context; overlapping accounts for the same type require explicit migration/reconciliation."
 }
 
-Table payroll_leavebalanceentry {
+Table payroll_leave_balance_entry {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -978,7 +978,7 @@ Table payroll_leavebalanceentry {
   Note: "LeaveBalanceEntry | Direct company ownership. Constraints: nonzero balance or reservation delta; unique source key; one reversal per entry; source fields consistent with kind."
 }
 
-Table payroll_leaverequest {
+Table payroll_leave_request {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1002,7 +1002,7 @@ Table payroll_leaverequest {
   Note: "LeaveRequest | Direct company ownership. Constraints: amendment/cancellation needs original request with same company/employee; approved request requires segments and completed approvals."
 }
 
-Table payroll_leaverequestsegment {
+Table payroll_leave_request_segment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1026,7 +1026,7 @@ Table payroll_leaverequestsegment {
   Note: "LeaveRequestSegment | Direct company ownership. Constraints: duration-specific fields required; end not before start; no overlap with active segments for employee after expanding intervals."
 }
 
-Table payroll_leaveday {
+Table payroll_leave_day {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1052,7 +1052,7 @@ Table payroll_leaveday {
   Note: "LeaveDay | Direct company ownership. Constraints: covered interval positive and within relevant work date/shift; active approved intervals do not overlap; pay type matches percentage."
 }
 
-Table payroll_leaveapprovalstep {
+Table payroll_leave_approval_step {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1073,7 +1073,7 @@ Table payroll_leaveapprovalstep {
   Note: "LeaveApprovalStep | Direct company ownership. Constraints: exactly one target FK; unique target/stage/approver; decision fields required when decided."
 }
 
-Table payroll_leaveattachment {
+Table payroll_leave_attachment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1093,7 +1093,7 @@ Table payroll_leaveattachment {
   Note: "LeaveAttachment | Direct company ownership. Constraint: exactly one target."
 }
 
-Table payroll_leaveencashment {
+Table payroll_leave_encashment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1119,7 +1119,7 @@ Table payroll_leaveencashment {
   Note: "LeaveEncashment | Direct company ownership. Constraint: approved units cannot exceed eligible available balance. Resulting payroll lines point back to this row, so reversals and off-cycle corrections remain possible."
 }
 
-Table payroll_leavecompensatorycredit {
+Table payroll_leave_compensatory_credit {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1142,7 +1142,7 @@ Table payroll_leavecompensatorycredit {
   Note: "LeaveCompensatoryCredit | Direct company ownership. Constraints: unique qualifying source/treatment; do not award overtime and leave together unless treatment explicitly permits it."
 }
 
-Table payroll_leavefareassistanceclaim {
+Table payroll_leave_fare_assistance_claim {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1178,7 +1178,7 @@ Table payroll_leavefareassistanceclaim {
   Note: "LeaveFareAssistanceClaim | Direct company ownership. Constraints: same-company qualifying leave; policy eligibility; unique active occurrence slot per employee/benefit cycle. Resulting PayrollLine rows point back to the claim. LFA never changes LeaveEntitlement."
 }
 
-Table payroll_payrollsettings {
+Table payroll_settings {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, unique, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1205,7 +1205,7 @@ Table payroll_payrollsettings {
   Note: "PayrollSettings | Direct company ownership. Constraint: unique `company` (implement as O2O semantics)."
 }
 
-Table payroll_payrollpolicyversion {
+Table payroll_policy_version {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1245,7 +1245,7 @@ Table payroll_payrollpolicyversion {
   Note: "PayrollPolicyVersion | Direct company ownership. Constraints: unique `(company, code, version_number)`; no overlapping active date ranges for the same code; activated versions are immutable."
 }
 
-Table payroll_salarycomponent {
+Table payroll_salary_component {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1273,7 +1273,7 @@ Table payroll_salarycomponent {
   Note: "SalaryComponent | Direct company ownership. Constraints: unique `(company, code)`; category and sign behavior must agree."
 }
 
-Table payroll_salarystructure {
+Table payroll_salary_structure {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1294,7 +1294,7 @@ Table payroll_salarystructure {
   Note: "SalaryStructure | Direct company ownership. Relations: components are M2M -> SalaryComponent through SalaryStructureComponent.\nConstraints: unique `(company, code, version_number)`; at most one active default structure for a company/date; activated structures are immutable except retirement metadata."
 }
 
-Table payroll_salarystructurecomponent {
+Table payroll_salary_structure_component {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1320,7 +1320,7 @@ Table payroll_salarystructurecomponent {
   Note: "SalaryStructureComponent | Direct company ownership. Constraints: unique `(salary_structure, salary_component)`; both belong to the same company; required operands depend on calculation method."
 }
 
-Table payroll_employeesalarystructureassignment {
+Table payroll_employee_salary_structure_assignment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1338,7 +1338,7 @@ Table payroll_employeesalarystructureassignment {
   Note: "EmployeeSalaryStructureAssignment | Direct company ownership. Constraints: no overlapping active assignments for an employee; employee and structure belong to the same company."
 }
 
-Table payroll_payrollperiod {
+Table payroll_period {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1363,7 +1363,7 @@ Table payroll_payrollperiod {
   Note: "PayrollPeriod | Direct company ownership. Constraints: unique `(company, code)`; `period_start <= period_end`; regular periods of the same frequency should not overlap."
 }
 
-Table payroll_payrollrun {
+Table payroll_run {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1394,7 +1394,7 @@ Table payroll_payrollrun {
   Note: "PayrollRun | Direct company ownership. Constraints: unique `(company, idempotency_key)` and `(payroll_period, run_type, revision_number)`; only one posted regular result chain may be authoritative for an employee/period."
 }
 
-Table payroll_payrollrecord {
+Table payroll_record {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1422,7 +1422,7 @@ Table payroll_payrollrecord {
   Note: "PayrollRecord | Direct company ownership. Constraints: unique `(payroll_run, employee)`; employee belongs to run company; totals equal active line sums and allocations cannot exceed payable balance."
 }
 
-Table payroll_payrollcompensationsegment {
+Table payroll_compensation_segment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1456,7 +1456,7 @@ Table payroll_payrollcompensationsegment {
   Note: "PayrollCompensationSegment | Direct company ownership. Constraints: segment dates must fall inside the period, cannot overlap for the same PayrollRecord, and referenced history rows must cover the segment."
 }
 
-Table payroll_payrolldailyline {
+Table payroll_daily_line {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1492,7 +1492,7 @@ Table payroll_payrolldailyline {
   Note: "PayrollDailyLine | Direct company ownership. Constraints: unique `(payroll_segment, work_date)`; all evidence belongs to the employee/company/date; fractions are nonnegative and bounded where applicable."
 }
 
-Table payroll_payrollline {
+Table payroll_line {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1530,7 +1530,7 @@ Table payroll_payrollline {
   Note: "PayrollLine | Direct company ownership. Constraints: source fields must agree with `source_type`; at most one typed source for a normal line; prevent duplicate active posting from the same source/component/run; reversal lines reference an original and use the opposite financial effect."
 }
 
-Table payroll_payrollapprovalstep {
+Table payroll_approval_step {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1550,7 +1550,7 @@ Table payroll_payrollapprovalstep {
   Note: "PayrollApprovalStep | Direct company ownership. Constraints: unique `(payroll_run, sequence)`; assignee must have company access; steps execute in order unless policy explicitly permits parallel stages."
 }
 
-Table payroll_salarypayment {
+Table payroll_salary_payment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1575,7 +1575,7 @@ Table payroll_salarypayment {
   Note: "SalaryPayment | Direct company ownership. Constraints: unique `(company, payment_reference)` and `(company, idempotency_key)`; allocated amount cannot exceed completed payment amount."
 }
 
-Table payroll_salarypaymentallocation {
+Table payroll_salary_payment_allocation {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1592,7 +1592,7 @@ Table payroll_salarypaymentallocation {
   Note: "SalaryPaymentAllocation | Direct company ownership. Constraints: unique `(company, allocation_reference)`; payment and payroll record belong to the same employee/company/currency; active allocations cannot overallocate either side."
 }
 
-Table payroll_salaryadvance {
+Table payroll_salary_advance {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1618,7 +1618,7 @@ Table payroll_salaryadvance {
   Note: "SalaryAdvance | Direct company ownership. Constraints: unique `(company, request_reference)`; approved amount cannot exceed requested amount without explicit override; outstanding derives from disbursements minus applied recoveries/reversals."
 }
 
-Table payroll_advancedisbursement {
+Table payroll_advance_disbursement {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1638,7 +1638,7 @@ Table payroll_advancedisbursement {
   Note: "AdvanceDisbursement | Direct company ownership. Constraints: unique `(company, disbursement_reference)`; completed active disbursements cannot exceed approved advance amount."
 }
 
-Table payroll_salaryadvancerecovery {
+Table payroll_salary_advance_recovery {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1659,7 +1659,7 @@ Table payroll_salaryadvancerecovery {
   Note: "SalaryAdvanceRecovery | Direct company ownership. Relations: PayrollLine points to this row when method is payroll_deduction.\nConstraints: unique `(company, idempotency_key)`; posted/received recoveries cannot exceed outstanding principal unless explicitly treated as a refundable overpayment."
 }
 
-Table payroll_employeeloan {
+Table payroll_employee_loan {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1690,7 +1690,7 @@ Table payroll_employeeloan {
   Note: "EmployeeLoan | Direct company ownership. Constraints: unique `(company, loan_reference)`; balances reconcile to completed disbursements, repayments, and approved waivers/write-offs."
 }
 
-Table payroll_loandisbursement {
+Table payroll_loan_disbursement {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1710,7 +1710,7 @@ Table payroll_loandisbursement {
   Note: "LoanDisbursement | Direct company ownership. Constraints: unique `(company, disbursement_reference)`; completed disbursements cannot exceed approved principal."
 }
 
-Table payroll_loaninstallment {
+Table payroll_loan_installment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1735,7 +1735,7 @@ Table payroll_loaninstallment {
   Note: "LoanInstallment | Direct company ownership. Constraints: unique `(employee_loan, installment_number)`; component totals reconcile to total due; paid summaries derive from active allocations."
 }
 
-Table payroll_loanrepayment {
+Table payroll_loan_repayment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1756,7 +1756,7 @@ Table payroll_loanrepayment {
   Note: "LoanRepayment | Direct company ownership. Relations: PayrollLine points to this row when method is payroll_deduction.\nConstraints: unique `(company, repayment_reference)` and `(company, idempotency_key)`; allocations cannot exceed the active repayment amount."
 }
 
-Table payroll_loanrepaymentallocation {
+Table payroll_loan_repayment_allocation {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1774,7 +1774,7 @@ Table payroll_loanrepaymentallocation {
   Note: "LoanRepaymentAllocation | Direct company ownership. Constraints: repayment and installment belong to the same loan/company/currency; active allocations cannot exceed the repayment or remaining installment balances."
 }
 
-Table payroll_payrolladjustment {
+Table payroll_adjustment {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1805,7 +1805,7 @@ Table payroll_payrolladjustment {
   Note: "PayrollAdjustment | Direct company ownership. Constraints: unique `(company, adjustment_reference)` and `(company, idempotency_key)`; target/source fields agree with adjustment type; a balance-only waiver must not silently create salary earnings."
 }
 
-Table payroll_payrollremittance {
+Table payroll_remittance {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1832,7 +1832,7 @@ Table payroll_payrollremittance {
   Note: "PayrollRemittance | Direct company ownership. Constraints: unique `(company, remittance_reference)` and `(company, idempotency_key)`; active allocations cannot exceed a completed remittance."
 }
 
-Table payroll_payrollremittanceallocation {
+Table payroll_remittance_allocation {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1871,7 +1871,7 @@ Table subscriptions_package {
   Note: "Package | Global/platform scope; AuditLog company is optional. Relations: features are M2M -> Feature through PackageFeature; CompanySubscription references Package."
 }
 
-Table subscriptions_packagefeature {
+Table subscriptions_package_feature {
   id bigint [pk, increment, not null, note: "BigAutoField, PK."]
   package_id bigint [not null, note: "FK -> Package, CASCADE."]
   feature_id bigint [not null, note: "FK -> Feature, PROTECT."]
@@ -1883,7 +1883,7 @@ Table subscriptions_packagefeature {
   Note: "PackageFeature | Global/platform scope; AuditLog company is optional. Constraint: unique `(package, feature)`."
 }
 
-Table subscriptions_companysubscription {
+Table subscriptions_company_subscription {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
@@ -1912,7 +1912,7 @@ Table subscriptions_companysubscription {
   Note: "CompanySubscription | Direct company ownership. Constraints: unique `(company, subscription_reference)`; normally no overlapping active/trial subscriptions; entitlements use the subscription snapshot plus explicit CompanyFeature overrides. Capacity counting policy must define whether employees, users, or both are billable—the current recommendation is active employees."
 }
 
-Table auditlog_auditlog {
+Table auditlog_audit_log {
   id bigint [pk, increment, not null, note: "BigAutoField, PK."]
   company_id bigint [null, note: "nullable FK -> Company, PROTECT; null only for platform-level actions."]
   actor_user_id bigint [null, note: "nullable FK -> User, SET_NULL."]
@@ -1938,7 +1938,7 @@ Table auditlog_auditlog {
   Note: "AuditLog | Global/platform scope; AuditLog company is optional. "
 }
 
-Table accounts_companymembership_allowed_branches {
+Table accounts_company_membership_allowed_branches {
   id bigint [pk, increment, not null]
   companymembership_id bigint [not null]
   branch_id bigint [not null]
@@ -1948,7 +1948,7 @@ Table accounts_companymembership_allowed_branches {
   Note: "CompanyMembership_allowed_branches | Parent-owned junction. Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id."
 }
 
-Table accounts_companymembership_allowed_departments {
+Table accounts_company_membership_allowed_departments {
   id bigint [pk, increment, not null]
   companymembership_id bigint [not null]
   department_id bigint [not null]
@@ -1958,7 +1958,7 @@ Table accounts_companymembership_allowed_departments {
   Note: "CompanyMembership_allowed_departments | Parent-owned junction. Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id."
 }
 
-Table access_control_employeepermissionoverride_allowed_branches {
+Table access_control_employee_permission_override_allowed_branches {
   id bigint [pk, increment, not null]
   employeepermissionoverride_id bigint [not null]
   branch_id bigint [not null]
@@ -1968,7 +1968,7 @@ Table access_control_employeepermissionoverride_allowed_branches {
   Note: "EmployeePermissionOverride_allowed_branches | Parent-owned junction. Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id."
 }
 
-Table access_control_employeepermissionoverride_allowed_departments {
+Table access_control_employee_permission_override_allowed_departments {
   id bigint [pk, increment, not null]
   employeepermissionoverride_id bigint [not null]
   department_id bigint [not null]
@@ -1978,7 +1978,7 @@ Table access_control_employeepermissionoverride_allowed_departments {
   Note: "EmployeePermissionOverride_allowed_departments | Parent-owned junction. Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id."
 }
 
-Table payroll_payrolldailyline_leave_days {
+Table payroll_daily_line_leave_days {
   id bigint [pk, increment, not null]
   payrolldailyline_id bigint [not null]
   leaveday_id bigint [not null]
@@ -1988,17 +1988,17 @@ Table payroll_payrolldailyline_leave_days {
   Note: "PayrollDailyLine_leave_days | Parent-owned junction. Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id."
 }
 
-Ref: accounts_companymembership.company_id > tenants_company.id
-Ref: accounts_companymembership.created_by_id > accounts_user.id
-Ref: accounts_companymembership.updated_by_id > accounts_user.id
-Ref: accounts_companymembership.user_id > accounts_user.id
-Ref: accounts_companymembership.invited_by_id > accounts_user.id
+Ref: accounts_company_membership.company_id > tenants_company.id
+Ref: accounts_company_membership.created_by_id > accounts_user.id
+Ref: accounts_company_membership.updated_by_id > accounts_user.id
+Ref: accounts_company_membership.user_id > accounts_user.id
+Ref: accounts_company_membership.invited_by_id > accounts_user.id
 Ref: tenants_company.created_by_id > accounts_user.id
 Ref: tenants_company.updated_by_id > accounts_user.id
 Ref: tenants_company.suspended_by_id > accounts_user.id
-Ref: tenants_companyfeature.company_id > tenants_company.id
-Ref: tenants_companyfeature.feature_id > tenants_feature.id
-Ref: tenants_companyfeature.granted_by_id > accounts_user.id
+Ref: tenants_company_feature.company_id > tenants_company.id
+Ref: tenants_company_feature.feature_id > tenants_feature.id
+Ref: tenants_company_feature.granted_by_id > accounts_user.id
 Ref: organization_branch.company_id > tenants_company.id
 Ref: organization_branch.created_by_id > accounts_user.id
 Ref: organization_branch.updated_by_id > accounts_user.id
@@ -2015,444 +2015,444 @@ Ref: employees_employee.company_id > tenants_company.id
 Ref: employees_employee.created_by_id > accounts_user.id
 Ref: employees_employee.updated_by_id > accounts_user.id
 Ref: employees_employee.user_id > accounts_user.id
-Ref: employees_employeeassignment.company_id > tenants_company.id
-Ref: employees_employeeassignment.created_by_id > accounts_user.id
-Ref: employees_employeeassignment.updated_by_id > accounts_user.id
-Ref: employees_employeeassignment.employee_id > employees_employee.id
-Ref: employees_employeeassignment.branch_id > organization_branch.id
-Ref: employees_employeeassignment.department_id > organization_department.id
-Ref: employees_employeeassignment.designation_id > organization_designation.id
-Ref: employees_employeeassignment.manager_id > employees_employee.id
-Ref: employees_employeecompensation.company_id > tenants_company.id
-Ref: employees_employeecompensation.created_by_id > accounts_user.id
-Ref: employees_employeecompensation.updated_by_id > accounts_user.id
-Ref: employees_employeecompensation.employee_id > employees_employee.id
-Ref: access_control_accesspermission.feature_id > tenants_feature.id
-Ref: access_control_designationpermission.company_id > tenants_company.id
-Ref: access_control_designationpermission.created_by_id > accounts_user.id
-Ref: access_control_designationpermission.updated_by_id > accounts_user.id
-Ref: access_control_designationpermission.designation_id > organization_designation.id
-Ref: access_control_designationpermission.permission_id > access_control_accesspermission.id
-Ref: access_control_employeepermissionoverride.company_id > tenants_company.id
-Ref: access_control_employeepermissionoverride.created_by_id > accounts_user.id
-Ref: access_control_employeepermissionoverride.updated_by_id > accounts_user.id
-Ref: access_control_employeepermissionoverride.employee_id > employees_employee.id
-Ref: access_control_employeepermissionoverride.permission_id > access_control_accesspermission.id
-Ref: access_control_employeepermissionoverride.granted_by_id > accounts_user.id
+Ref: employees_employee_assignment.company_id > tenants_company.id
+Ref: employees_employee_assignment.created_by_id > accounts_user.id
+Ref: employees_employee_assignment.updated_by_id > accounts_user.id
+Ref: employees_employee_assignment.employee_id > employees_employee.id
+Ref: employees_employee_assignment.branch_id > organization_branch.id
+Ref: employees_employee_assignment.department_id > organization_department.id
+Ref: employees_employee_assignment.designation_id > organization_designation.id
+Ref: employees_employee_assignment.manager_id > employees_employee.id
+Ref: employees_employee_compensation.company_id > tenants_company.id
+Ref: employees_employee_compensation.created_by_id > accounts_user.id
+Ref: employees_employee_compensation.updated_by_id > accounts_user.id
+Ref: employees_employee_compensation.employee_id > employees_employee.id
+Ref: access_control_access_permission.feature_id > tenants_feature.id
+Ref: access_control_designation_permission.company_id > tenants_company.id
+Ref: access_control_designation_permission.created_by_id > accounts_user.id
+Ref: access_control_designation_permission.updated_by_id > accounts_user.id
+Ref: access_control_designation_permission.designation_id > organization_designation.id
+Ref: access_control_designation_permission.permission_id > access_control_access_permission.id
+Ref: access_control_employee_permission_override.company_id > tenants_company.id
+Ref: access_control_employee_permission_override.created_by_id > accounts_user.id
+Ref: access_control_employee_permission_override.updated_by_id > accounts_user.id
+Ref: access_control_employee_permission_override.employee_id > employees_employee.id
+Ref: access_control_employee_permission_override.permission_id > access_control_access_permission.id
+Ref: access_control_employee_permission_override.granted_by_id > accounts_user.id
 Ref: scheduling_shift.company_id > tenants_company.id
 Ref: scheduling_shift.created_by_id > accounts_user.id
 Ref: scheduling_shift.updated_by_id > accounts_user.id
-Ref: scheduling_departmentshift.company_id > tenants_company.id
-Ref: scheduling_departmentshift.created_by_id > accounts_user.id
-Ref: scheduling_departmentshift.updated_by_id > accounts_user.id
-Ref: scheduling_departmentshift.department_id > organization_department.id
-Ref: scheduling_departmentshift.shift_id > scheduling_shift.id
-Ref: scheduling_employeeshiftassignment.company_id > tenants_company.id
-Ref: scheduling_employeeshiftassignment.created_by_id > accounts_user.id
-Ref: scheduling_employeeshiftassignment.updated_by_id > accounts_user.id
-Ref: scheduling_employeeshiftassignment.employee_id > employees_employee.id
-Ref: scheduling_employeeshiftassignment.shift_id > scheduling_shift.id
-Ref: scheduling_employeeshiftassignment.assigned_by_id > accounts_user.id
-Ref: scheduling_companyattendancesettings.company_id - tenants_company.id
-Ref: scheduling_companyattendancesettings.created_by_id > accounts_user.id
-Ref: scheduling_companyattendancesettings.updated_by_id > accounts_user.id
-Ref: scheduling_companyattendancesettings.company_shift_id > scheduling_shift.id
-Ref: scheduling_weeklyoffrule.company_id > tenants_company.id
-Ref: scheduling_weeklyoffrule.created_by_id > accounts_user.id
-Ref: scheduling_weeklyoffrule.updated_by_id > accounts_user.id
-Ref: scheduling_weeklyoffrule.branch_id > organization_branch.id
+Ref: scheduling_department_shift.company_id > tenants_company.id
+Ref: scheduling_department_shift.created_by_id > accounts_user.id
+Ref: scheduling_department_shift.updated_by_id > accounts_user.id
+Ref: scheduling_department_shift.department_id > organization_department.id
+Ref: scheduling_department_shift.shift_id > scheduling_shift.id
+Ref: scheduling_employee_shift_assignment.company_id > tenants_company.id
+Ref: scheduling_employee_shift_assignment.created_by_id > accounts_user.id
+Ref: scheduling_employee_shift_assignment.updated_by_id > accounts_user.id
+Ref: scheduling_employee_shift_assignment.employee_id > employees_employee.id
+Ref: scheduling_employee_shift_assignment.shift_id > scheduling_shift.id
+Ref: scheduling_employee_shift_assignment.assigned_by_id > accounts_user.id
+Ref: scheduling_company_attendance_settings.company_id - tenants_company.id
+Ref: scheduling_company_attendance_settings.created_by_id > accounts_user.id
+Ref: scheduling_company_attendance_settings.updated_by_id > accounts_user.id
+Ref: scheduling_company_attendance_settings.company_shift_id > scheduling_shift.id
+Ref: scheduling_weekly_off_rule.company_id > tenants_company.id
+Ref: scheduling_weekly_off_rule.created_by_id > accounts_user.id
+Ref: scheduling_weekly_off_rule.updated_by_id > accounts_user.id
+Ref: scheduling_weekly_off_rule.branch_id > organization_branch.id
 Ref: scheduling_holiday.company_id > tenants_company.id
 Ref: scheduling_holiday.created_by_id > accounts_user.id
 Ref: scheduling_holiday.updated_by_id > accounts_user.id
 Ref: scheduling_holiday.branch_id > organization_branch.id
 Ref: scheduling_holiday.cancelled_by_id > accounts_user.id
-Ref: scheduling_holidayworkassignment.company_id > tenants_company.id
-Ref: scheduling_holidayworkassignment.created_by_id > accounts_user.id
-Ref: scheduling_holidayworkassignment.updated_by_id > accounts_user.id
-Ref: scheduling_holidayworkassignment.employee_id > employees_employee.id
-Ref: scheduling_holidayworkassignment.holiday_id > scheduling_holiday.id
-Ref: scheduling_holidayworkassignment.weekly_off_rule_id > scheduling_weeklyoffrule.id
-Ref: scheduling_holidayworkassignment.shift_id > scheduling_shift.id
-Ref: scheduling_holidayworkassignment.approved_by_id > accounts_user.id
-Ref: devices_devicemodel.vendor_id > devices_devicevendor.id
-Ref: devices_biometricdevice.company_id > tenants_company.id
-Ref: devices_biometricdevice.created_by_id > accounts_user.id
-Ref: devices_biometricdevice.updated_by_id > accounts_user.id
-Ref: devices_biometricdevice.branch_id > organization_branch.id
-Ref: devices_biometricdevice.device_model_id > devices_devicemodel.id
-Ref: devices_devicedepartment.company_id > tenants_company.id
-Ref: devices_devicedepartment.created_by_id > accounts_user.id
-Ref: devices_devicedepartment.updated_by_id > accounts_user.id
-Ref: devices_devicedepartment.device_id > devices_biometricdevice.id
-Ref: devices_devicedepartment.department_id > organization_department.id
-Ref: devices_deviceenrollment.company_id > tenants_company.id
-Ref: devices_deviceenrollment.created_by_id > accounts_user.id
-Ref: devices_deviceenrollment.updated_by_id > accounts_user.id
-Ref: devices_deviceenrollment.device_id > devices_biometricdevice.id
-Ref: devices_deviceenrollment.employee_id > employees_employee.id
-Ref: devices_biometrictemplate.company_id > tenants_company.id
-Ref: devices_biometrictemplate.created_by_id > accounts_user.id
-Ref: devices_biometrictemplate.updated_by_id > accounts_user.id
-Ref: devices_biometrictemplate.employee_id > employees_employee.id
-Ref: devices_biometrictemplate.vendor_id > devices_devicevendor.id
-Ref: devices_biometrictemplate.compatible_device_model_id > devices_devicemodel.id
-Ref: devices_biometrictemplate.captured_from_device_id > devices_biometricdevice.id
-Ref: devices_biometrictemplate.revoked_by_id > accounts_user.id
-Ref: devices_deviceenrollmenttemplate.company_id > tenants_company.id
-Ref: devices_deviceenrollmenttemplate.device_enrollment_id > devices_deviceenrollment.id
-Ref: devices_deviceenrollmenttemplate.biometric_template_id > devices_biometrictemplate.id
-Ref: devices_devicesyncstate.company_id > tenants_company.id
-Ref: devices_devicesyncstate.device_id - devices_biometricdevice.id
-Ref: devices_devicemessage.company_id > tenants_company.id
-Ref: devices_devicemessage.device_id > devices_biometricdevice.id
-Ref: devices_devicemessage.branch_id > organization_branch.id
-Ref: devices_punchevent.company_id > tenants_company.id
-Ref: devices_punchevent.device_message_id > devices_devicemessage.id
-Ref: devices_punchevent.device_id > devices_biometricdevice.id
-Ref: devices_punchevent.branch_id > organization_branch.id
-Ref: devices_punchevent.device_enrollment_id > devices_deviceenrollment.id
-Ref: devices_punchevent.employee_id > employees_employee.id
-Ref: devices_punchevent.duplicate_of_id > devices_punchevent.id
-Ref: payroll_punchallocation.company_id > tenants_company.id
-Ref: payroll_punchallocation.attendance_record_id > payroll_attendancerecord.id
-Ref: payroll_punchallocation.punch_event_id > devices_punchevent.id
-Ref: payroll_punchallocation.attendance_correction_id > payroll_attendancecorrection.id
-Ref: payroll_attendancesession.company_id > tenants_company.id
-Ref: payroll_attendancesession.attendance_record_id > payroll_attendancerecord.id
-Ref: payroll_attendancesession.in_allocation_id - payroll_punchallocation.id
-Ref: payroll_attendancesession.out_allocation_id - payroll_punchallocation.id
-Ref: payroll_attendancerecord.company_id > tenants_company.id
-Ref: payroll_attendancerecord.employee_id > employees_employee.id
-Ref: payroll_attendancerecord.employee_assignment_id > employees_employeeassignment.id
-Ref: payroll_attendancerecord.branch_id > organization_branch.id
-Ref: payroll_attendancerecord.department_id > organization_department.id
-Ref: payroll_attendancerecord.shift_id > scheduling_shift.id
-Ref: payroll_attendancerecord.reviewed_by_id > accounts_user.id
-Ref: payroll_attendancecorrection.company_id > tenants_company.id
-Ref: payroll_attendancecorrection.created_by_id > accounts_user.id
-Ref: payroll_attendancecorrection.updated_by_id > accounts_user.id
-Ref: payroll_attendancecorrection.attendance_record_id > payroll_attendancerecord.id
-Ref: payroll_attendancecorrection.requested_by_user_id > accounts_user.id
-Ref: payroll_attendancecorrection.requested_for_employee_id > employees_employee.id
-Ref: payroll_attendancecorrection.target_punch_event_id > devices_punchevent.id
-Ref: payroll_attendancecorrection.approved_by_id > accounts_user.id
-Ref: payroll_attendancepenaltyrule.company_id > tenants_company.id
-Ref: payroll_attendancepenaltyrule.created_by_id > accounts_user.id
-Ref: payroll_attendancepenaltyrule.updated_by_id > accounts_user.id
-Ref: payroll_penaltyassessment.company_id > tenants_company.id
-Ref: payroll_penaltyassessment.employee_id > employees_employee.id
-Ref: payroll_penaltyassessment.penalty_rule_id > payroll_attendancepenaltyrule.id
-Ref: payroll_penaltyassessment.payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_penaltyassessment.approved_by_id > accounts_user.id
-Ref: payroll_penaltyassessment.reversal_of_id > payroll_penaltyassessment.id
-Ref: payroll_penaltyassessmentattendance.company_id > tenants_company.id
-Ref: payroll_penaltyassessmentattendance.penalty_assessment_id > payroll_penaltyassessment.id
-Ref: payroll_penaltyassessmentattendance.attendance_record_id > payroll_attendancerecord.id
-Ref: payroll_leavetype.company_id > tenants_company.id
-Ref: payroll_leavetype.created_by_id > accounts_user.id
-Ref: payroll_leavetype.updated_by_id > accounts_user.id
-Ref: payroll_leavepolicy.company_id > tenants_company.id
-Ref: payroll_leavepolicy.created_by_id > accounts_user.id
-Ref: payroll_leavepolicy.updated_by_id > accounts_user.id
-Ref: payroll_leavepolicy.branch_id > organization_branch.id
-Ref: payroll_leavepolicy.department_id > organization_department.id
-Ref: payroll_leavepolicy.current_version_id > payroll_leavepolicyversion.id
-Ref: payroll_leavepolicyversion.company_id > tenants_company.id
-Ref: payroll_leavepolicyversion.created_by_id > accounts_user.id
-Ref: payroll_leavepolicyversion.updated_by_id > accounts_user.id
-Ref: payroll_leavepolicyversion.leave_policy_id > payroll_leavepolicy.id
-Ref: payroll_leavepolicyversion.lfa_salary_component_id > payroll_salarycomponent.id
-Ref: payroll_leavepolicyversion.activated_by_id > accounts_user.id
-Ref: payroll_leavepolicytyperule.company_id > tenants_company.id
-Ref: payroll_leavepolicytyperule.created_by_id > accounts_user.id
-Ref: payroll_leavepolicytyperule.updated_by_id > accounts_user.id
-Ref: payroll_leavepolicytyperule.policy_version_id > payroll_leavepolicyversion.id
-Ref: payroll_leavepolicytyperule.leave_type_id > payroll_leavetype.id
-Ref: payroll_employeeleavepolicyassignment.company_id > tenants_company.id
-Ref: payroll_employeeleavepolicyassignment.created_by_id > accounts_user.id
-Ref: payroll_employeeleavepolicyassignment.updated_by_id > accounts_user.id
-Ref: payroll_employeeleavepolicyassignment.employee_id > employees_employee.id
-Ref: payroll_employeeleavepolicyassignment.leave_policy_id > payroll_leavepolicy.id
-Ref: payroll_leaveentitlement.company_id > tenants_company.id
-Ref: payroll_leaveentitlement.employee_id > employees_employee.id
-Ref: payroll_leaveentitlement.leave_type_id > payroll_leavetype.id
-Ref: payroll_leaveentitlement.policy_version_id > payroll_leavepolicyversion.id
-Ref: payroll_leaveentitlement.closed_by_id > accounts_user.id
-Ref: payroll_leavebalanceentry.company_id > tenants_company.id
-Ref: payroll_leavebalanceentry.entitlement_id > payroll_leaveentitlement.id
-Ref: payroll_leavebalanceentry.source_grant_id > payroll_leavebalanceentry.id
-Ref: payroll_leavebalanceentry.leave_request_id > payroll_leaverequest.id
-Ref: payroll_leavebalanceentry.leave_day_id > payroll_leaveday.id
-Ref: payroll_leavebalanceentry.leave_encashment_id > payroll_leaveencashment.id
-Ref: payroll_leavebalanceentry.compensatory_credit_id > payroll_leavecompensatorycredit.id
-Ref: payroll_leavebalanceentry.reversal_of_id - payroll_leavebalanceentry.id
-Ref: payroll_leavebalanceentry.posted_by_id > accounts_user.id
-Ref: payroll_leaverequest.company_id > tenants_company.id
-Ref: payroll_leaverequest.created_by_id > accounts_user.id
-Ref: payroll_leaverequest.updated_by_id > accounts_user.id
-Ref: payroll_leaverequest.employee_id > employees_employee.id
-Ref: payroll_leaverequest.submission_assignment_id > employees_employeeassignment.id
-Ref: payroll_leaverequest.policy_version_id > payroll_leavepolicyversion.id
-Ref: payroll_leaverequest.original_request_id > payroll_leaverequest.id
-Ref: payroll_leaverequest.supersedes_id > payroll_leaverequest.id
-Ref: payroll_leaverequest.submitted_by_id > accounts_user.id
-Ref: payroll_leaverequestsegment.company_id > tenants_company.id
-Ref: payroll_leaverequestsegment.leave_request_id > payroll_leaverequest.id
-Ref: payroll_leaverequestsegment.leave_type_id > payroll_leavetype.id
-Ref: payroll_leaverequestsegment.original_segment_id > payroll_leaverequestsegment.id
-Ref: payroll_leaveday.company_id > tenants_company.id
-Ref: payroll_leaveday.request_segment_id > payroll_leaverequestsegment.id
-Ref: payroll_leaveday.employee_id > employees_employee.id
-Ref: payroll_leaveday.employee_assignment_id > employees_employeeassignment.id
-Ref: payroll_leaveday.policy_type_rule_id > payroll_leavepolicytyperule.id
-Ref: payroll_leaveday.entitlement_id > payroll_leaveentitlement.id
-Ref: payroll_leaveday.supersedes_id > payroll_leaveday.id
-Ref: payroll_leaveapprovalstep.company_id > tenants_company.id
-Ref: payroll_leaveapprovalstep.leave_request_id > payroll_leaverequest.id
-Ref: payroll_leaveapprovalstep.leave_encashment_id > payroll_leaveencashment.id
-Ref: payroll_leaveapprovalstep.compensatory_credit_id > payroll_leavecompensatorycredit.id
-Ref: payroll_leaveapprovalstep.lfa_claim_id > payroll_leavefareassistanceclaim.id
-Ref: payroll_leaveapprovalstep.approver_membership_id > accounts_companymembership.id
-Ref: payroll_leaveapprovalstep.delegated_from_membership_id > accounts_companymembership.id
-Ref: payroll_leaveattachment.company_id > tenants_company.id
-Ref: payroll_leaveattachment.leave_request_id > payroll_leaverequest.id
-Ref: payroll_leaveattachment.lfa_claim_id > payroll_leavefareassistanceclaim.id
-Ref: payroll_leaveattachment.uploaded_by_id > accounts_user.id
-Ref: payroll_leaveencashment.company_id > tenants_company.id
-Ref: payroll_leaveencashment.created_by_id > accounts_user.id
-Ref: payroll_leaveencashment.updated_by_id > accounts_user.id
-Ref: payroll_leaveencashment.employee_id > employees_employee.id
-Ref: payroll_leaveencashment.entitlement_id > payroll_leaveentitlement.id
-Ref: payroll_leaveencashment.policy_version_id > payroll_leavepolicyversion.id
-Ref: payroll_leaveencashment.target_payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_leaveencashment.approved_by_id > accounts_user.id
-Ref: payroll_leaveencashment.reversal_of_id > payroll_leaveencashment.id
-Ref: payroll_leavecompensatorycredit.company_id > tenants_company.id
-Ref: payroll_leavecompensatorycredit.created_by_id > accounts_user.id
-Ref: payroll_leavecompensatorycredit.updated_by_id > accounts_user.id
-Ref: payroll_leavecompensatorycredit.employee_id > employees_employee.id
-Ref: payroll_leavecompensatorycredit.source_attendance_id > payroll_attendancerecord.id
-Ref: payroll_leavecompensatorycredit.entitlement_id > payroll_leaveentitlement.id
-Ref: payroll_leavecompensatorycredit.policy_type_rule_id > payroll_leavepolicytyperule.id
-Ref: payroll_leavecompensatorycredit.approved_by_id > accounts_user.id
-Ref: payroll_leavecompensatorycredit.balance_entry_id - payroll_leavebalanceentry.id
-Ref: payroll_leavefareassistanceclaim.company_id > tenants_company.id
-Ref: payroll_leavefareassistanceclaim.created_by_id > accounts_user.id
-Ref: payroll_leavefareassistanceclaim.updated_by_id > accounts_user.id
-Ref: payroll_leavefareassistanceclaim.employee_id > employees_employee.id
-Ref: payroll_leavefareassistanceclaim.employee_assignment_id > employees_employeeassignment.id
-Ref: payroll_leavefareassistanceclaim.policy_version_id > payroll_leavepolicyversion.id
-Ref: payroll_leavefareassistanceclaim.qualifying_leave_request_id > payroll_leaverequest.id
-Ref: payroll_leavefareassistanceclaim.compensation_id > employees_employeecompensation.id
-Ref: payroll_leavefareassistanceclaim.target_payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_leavefareassistanceclaim.approved_by_id > accounts_user.id
-Ref: payroll_leavefareassistanceclaim.reversal_of_id > payroll_leavefareassistanceclaim.id
-Ref: payroll_payrollsettings.company_id - tenants_company.id
-Ref: payroll_payrollsettings.created_by_id > accounts_user.id
-Ref: payroll_payrollsettings.updated_by_id > accounts_user.id
-Ref: payroll_payrollsettings.default_policy_version_id > payroll_payrollpolicyversion.id
-Ref: payroll_payrollsettings.default_salary_structure_id > payroll_salarystructure.id
-Ref: payroll_payrollpolicyversion.company_id > tenants_company.id
-Ref: payroll_payrollpolicyversion.created_by_id > accounts_user.id
-Ref: payroll_payrollpolicyversion.updated_by_id > accounts_user.id
-Ref: payroll_payrollpolicyversion.activated_by_id > accounts_user.id
-Ref: payroll_salarycomponent.company_id > tenants_company.id
-Ref: payroll_salarycomponent.created_by_id > accounts_user.id
-Ref: payroll_salarycomponent.updated_by_id > accounts_user.id
-Ref: payroll_salarystructure.company_id > tenants_company.id
-Ref: payroll_salarystructure.created_by_id > accounts_user.id
-Ref: payroll_salarystructure.updated_by_id > accounts_user.id
-Ref: payroll_salarystructure.activated_by_id > accounts_user.id
-Ref: payroll_salarystructurecomponent.company_id > tenants_company.id
-Ref: payroll_salarystructurecomponent.created_by_id > accounts_user.id
-Ref: payroll_salarystructurecomponent.updated_by_id > accounts_user.id
-Ref: payroll_salarystructurecomponent.salary_structure_id > payroll_salarystructure.id
-Ref: payroll_salarystructurecomponent.salary_component_id > payroll_salarycomponent.id
-Ref: payroll_salarystructurecomponent.percentage_base_component_id > payroll_salarycomponent.id
-Ref: payroll_employeesalarystructureassignment.company_id > tenants_company.id
-Ref: payroll_employeesalarystructureassignment.created_by_id > accounts_user.id
-Ref: payroll_employeesalarystructureassignment.updated_by_id > accounts_user.id
-Ref: payroll_employeesalarystructureassignment.employee_id > employees_employee.id
-Ref: payroll_employeesalarystructureassignment.salary_structure_id > payroll_salarystructure.id
-Ref: payroll_employeesalarystructureassignment.approved_by_id > accounts_user.id
-Ref: payroll_payrollperiod.company_id > tenants_company.id
-Ref: payroll_payrollperiod.created_by_id > accounts_user.id
-Ref: payroll_payrollperiod.updated_by_id > accounts_user.id
-Ref: payroll_payrollperiod.opened_by_id > accounts_user.id
-Ref: payroll_payrollperiod.closed_by_id > accounts_user.id
-Ref: payroll_payrollrun.company_id > tenants_company.id
-Ref: payroll_payrollrun.created_by_id > accounts_user.id
-Ref: payroll_payrollrun.updated_by_id > accounts_user.id
-Ref: payroll_payrollrun.payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_payrollrun.source_run_id > payroll_payrollrun.id
-Ref: payroll_payrollrun.policy_version_id > payroll_payrollpolicyversion.id
-Ref: payroll_payrollrun.generated_by_id > accounts_user.id
-Ref: payroll_payrollrun.approved_by_id > accounts_user.id
-Ref: payroll_payrollrun.posted_by_id > accounts_user.id
-Ref: payroll_payrollrecord.company_id > tenants_company.id
-Ref: payroll_payrollrecord.created_by_id > accounts_user.id
-Ref: payroll_payrollrecord.updated_by_id > accounts_user.id
-Ref: payroll_payrollrecord.payroll_run_id > payroll_payrollrun.id
-Ref: payroll_payrollrecord.employee_id > employees_employee.id
-Ref: payroll_payrollrecord.employee_assignment_at_period_end_id > employees_employeeassignment.id
-Ref: payroll_payrollrecord.approved_by_id > accounts_user.id
-Ref: payroll_payrollrecord.reversal_of_id - payroll_payrollrecord.id
-Ref: payroll_payrollcompensationsegment.company_id > tenants_company.id
-Ref: payroll_payrollcompensationsegment.created_by_id > accounts_user.id
-Ref: payroll_payrollcompensationsegment.updated_by_id > accounts_user.id
-Ref: payroll_payrollcompensationsegment.payroll_record_id > payroll_payrollrecord.id
-Ref: payroll_payrollcompensationsegment.employee_assignment_id > employees_employeeassignment.id
-Ref: payroll_payrollcompensationsegment.employee_compensation_id > employees_employeecompensation.id
-Ref: payroll_payrollcompensationsegment.salary_structure_assignment_id > payroll_employeesalarystructureassignment.id
-Ref: payroll_payrollcompensationsegment.policy_version_id > payroll_payrollpolicyversion.id
-Ref: payroll_payrollcompensationsegment.branch_id > organization_branch.id
-Ref: payroll_payrollcompensationsegment.department_id > organization_department.id
-Ref: payroll_payrollcompensationsegment.designation_id > organization_designation.id
-Ref: payroll_payrolldailyline.company_id > tenants_company.id
-Ref: payroll_payrolldailyline.created_by_id > accounts_user.id
-Ref: payroll_payrolldailyline.updated_by_id > accounts_user.id
-Ref: payroll_payrolldailyline.payroll_segment_id > payroll_payrollcompensationsegment.id
-Ref: payroll_payrolldailyline.attendance_record_id > payroll_attendancerecord.id
-Ref: payroll_payrolldailyline.holiday_id > scheduling_holiday.id
-Ref: payroll_payrolldailyline.weekly_off_rule_id > scheduling_weeklyoffrule.id
-Ref: payroll_payrolldailyline.holiday_work_assignment_id > scheduling_holidayworkassignment.id
-Ref: payroll_payrollline.company_id > tenants_company.id
-Ref: payroll_payrollline.created_by_id > accounts_user.id
-Ref: payroll_payrollline.updated_by_id > accounts_user.id
-Ref: payroll_payrollline.payroll_record_id > payroll_payrollrecord.id
-Ref: payroll_payrollline.payroll_segment_id > payroll_payrollcompensationsegment.id
-Ref: payroll_payrollline.payroll_daily_line_id > payroll_payrolldailyline.id
-Ref: payroll_payrollline.salary_component_id > payroll_salarycomponent.id
-Ref: payroll_payrollline.penalty_assessment_id > payroll_penaltyassessment.id
-Ref: payroll_payrollline.payroll_adjustment_id > payroll_payrolladjustment.id
-Ref: payroll_payrollline.salary_advance_recovery_id > payroll_salaryadvancerecovery.id
-Ref: payroll_payrollline.loan_repayment_id > payroll_loanrepayment.id
-Ref: payroll_payrollline.leave_encashment_id > payroll_leaveencashment.id
-Ref: payroll_payrollline.lfa_claim_id > payroll_leavefareassistanceclaim.id
-Ref: payroll_payrollline.original_line_id > payroll_payrollline.id
-Ref: payroll_payrollapprovalstep.company_id > tenants_company.id
-Ref: payroll_payrollapprovalstep.created_by_id > accounts_user.id
-Ref: payroll_payrollapprovalstep.updated_by_id > accounts_user.id
-Ref: payroll_payrollapprovalstep.payroll_run_id > payroll_payrollrun.id
-Ref: payroll_payrollapprovalstep.required_permission_id > access_control_accesspermission.id
-Ref: payroll_payrollapprovalstep.assigned_designation_id > organization_designation.id
-Ref: payroll_payrollapprovalstep.assigned_user_id > accounts_user.id
-Ref: payroll_payrollapprovalstep.acted_by_id > accounts_user.id
-Ref: payroll_salarypayment.company_id > tenants_company.id
-Ref: payroll_salarypayment.created_by_id > accounts_user.id
-Ref: payroll_salarypayment.updated_by_id > accounts_user.id
-Ref: payroll_salarypayment.employee_id > employees_employee.id
-Ref: payroll_salarypayment.processed_by_id > accounts_user.id
-Ref: payroll_salarypayment.reversal_of_id - payroll_salarypayment.id
-Ref: payroll_salarypaymentallocation.company_id > tenants_company.id
-Ref: payroll_salarypaymentallocation.created_by_id > accounts_user.id
-Ref: payroll_salarypaymentallocation.updated_by_id > accounts_user.id
-Ref: payroll_salarypaymentallocation.salary_payment_id > payroll_salarypayment.id
-Ref: payroll_salarypaymentallocation.payroll_record_id > payroll_payrollrecord.id
-Ref: payroll_salarypaymentallocation.reversal_of_id - payroll_salarypaymentallocation.id
-Ref: payroll_salaryadvance.company_id > tenants_company.id
-Ref: payroll_salaryadvance.created_by_id > accounts_user.id
-Ref: payroll_salaryadvance.updated_by_id > accounts_user.id
-Ref: payroll_salaryadvance.employee_id > employees_employee.id
-Ref: payroll_salaryadvance.first_recovery_period_id > payroll_payrollperiod.id
-Ref: payroll_salaryadvance.approved_by_id > accounts_user.id
-Ref: payroll_advancedisbursement.company_id > tenants_company.id
-Ref: payroll_advancedisbursement.created_by_id > accounts_user.id
-Ref: payroll_advancedisbursement.updated_by_id > accounts_user.id
-Ref: payroll_advancedisbursement.salary_advance_id > payroll_salaryadvance.id
-Ref: payroll_advancedisbursement.processed_by_id > accounts_user.id
-Ref: payroll_advancedisbursement.reversal_of_id - payroll_advancedisbursement.id
-Ref: payroll_salaryadvancerecovery.company_id > tenants_company.id
-Ref: payroll_salaryadvancerecovery.created_by_id > accounts_user.id
-Ref: payroll_salaryadvancerecovery.updated_by_id > accounts_user.id
-Ref: payroll_salaryadvancerecovery.salary_advance_id > payroll_salaryadvance.id
-Ref: payroll_salaryadvancerecovery.payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_salaryadvancerecovery.reversal_of_id - payroll_salaryadvancerecovery.id
-Ref: payroll_employeeloan.company_id > tenants_company.id
-Ref: payroll_employeeloan.created_by_id > accounts_user.id
-Ref: payroll_employeeloan.updated_by_id > accounts_user.id
-Ref: payroll_employeeloan.employee_id > employees_employee.id
-Ref: payroll_employeeloan.approved_by_id > accounts_user.id
-Ref: payroll_loandisbursement.company_id > tenants_company.id
-Ref: payroll_loandisbursement.created_by_id > accounts_user.id
-Ref: payroll_loandisbursement.updated_by_id > accounts_user.id
-Ref: payroll_loandisbursement.employee_loan_id > payroll_employeeloan.id
-Ref: payroll_loandisbursement.processed_by_id > accounts_user.id
-Ref: payroll_loandisbursement.reversal_of_id - payroll_loandisbursement.id
-Ref: payroll_loaninstallment.company_id > tenants_company.id
-Ref: payroll_loaninstallment.created_by_id > accounts_user.id
-Ref: payroll_loaninstallment.updated_by_id > accounts_user.id
-Ref: payroll_loaninstallment.employee_loan_id > payroll_employeeloan.id
-Ref: payroll_loaninstallment.payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_loaninstallment.deferred_to_id > payroll_loaninstallment.id
-Ref: payroll_loanrepayment.company_id > tenants_company.id
-Ref: payroll_loanrepayment.created_by_id > accounts_user.id
-Ref: payroll_loanrepayment.updated_by_id > accounts_user.id
-Ref: payroll_loanrepayment.employee_loan_id > payroll_employeeloan.id
-Ref: payroll_loanrepayment.payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_loanrepayment.reversal_of_id - payroll_loanrepayment.id
-Ref: payroll_loanrepaymentallocation.company_id > tenants_company.id
-Ref: payroll_loanrepaymentallocation.created_by_id > accounts_user.id
-Ref: payroll_loanrepaymentallocation.updated_by_id > accounts_user.id
-Ref: payroll_loanrepaymentallocation.loan_repayment_id > payroll_loanrepayment.id
-Ref: payroll_loanrepaymentallocation.loan_installment_id > payroll_loaninstallment.id
-Ref: payroll_loanrepaymentallocation.reversal_of_id - payroll_loanrepaymentallocation.id
-Ref: payroll_payrolladjustment.company_id > tenants_company.id
-Ref: payroll_payrolladjustment.created_by_id > accounts_user.id
-Ref: payroll_payrolladjustment.updated_by_id > accounts_user.id
-Ref: payroll_payrolladjustment.employee_id > employees_employee.id
-Ref: payroll_payrolladjustment.salary_component_id > payroll_salarycomponent.id
-Ref: payroll_payrolladjustment.target_payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_payrolladjustment.salary_advance_id > payroll_salaryadvance.id
-Ref: payroll_payrolladjustment.employee_loan_id > payroll_employeeloan.id
-Ref: payroll_payrolladjustment.approved_by_id > accounts_user.id
-Ref: payroll_payrolladjustment.reversal_of_id - payroll_payrolladjustment.id
-Ref: payroll_payrollremittance.company_id > tenants_company.id
-Ref: payroll_payrollremittance.created_by_id > accounts_user.id
-Ref: payroll_payrollremittance.updated_by_id > accounts_user.id
-Ref: payroll_payrollremittance.payroll_period_id > payroll_payrollperiod.id
-Ref: payroll_payrollremittance.approved_by_id > accounts_user.id
-Ref: payroll_payrollremittance.processed_by_id > accounts_user.id
-Ref: payroll_payrollremittance.reversal_of_id - payroll_payrollremittance.id
-Ref: payroll_payrollremittanceallocation.company_id > tenants_company.id
-Ref: payroll_payrollremittanceallocation.created_by_id > accounts_user.id
-Ref: payroll_payrollremittanceallocation.updated_by_id > accounts_user.id
-Ref: payroll_payrollremittanceallocation.payroll_remittance_id > payroll_payrollremittance.id
-Ref: payroll_payrollremittanceallocation.payroll_line_id > payroll_payrollline.id
-Ref: payroll_payrollremittanceallocation.reversal_of_id - payroll_payrollremittanceallocation.id
+Ref: scheduling_holiday_work_assignment.company_id > tenants_company.id
+Ref: scheduling_holiday_work_assignment.created_by_id > accounts_user.id
+Ref: scheduling_holiday_work_assignment.updated_by_id > accounts_user.id
+Ref: scheduling_holiday_work_assignment.employee_id > employees_employee.id
+Ref: scheduling_holiday_work_assignment.holiday_id > scheduling_holiday.id
+Ref: scheduling_holiday_work_assignment.weekly_off_rule_id > scheduling_weekly_off_rule.id
+Ref: scheduling_holiday_work_assignment.shift_id > scheduling_shift.id
+Ref: scheduling_holiday_work_assignment.approved_by_id > accounts_user.id
+Ref: devices_device_model.vendor_id > devices_device_vendor.id
+Ref: devices_biometric_device.company_id > tenants_company.id
+Ref: devices_biometric_device.created_by_id > accounts_user.id
+Ref: devices_biometric_device.updated_by_id > accounts_user.id
+Ref: devices_biometric_device.branch_id > organization_branch.id
+Ref: devices_biometric_device.device_model_id > devices_device_model.id
+Ref: devices_device_department.company_id > tenants_company.id
+Ref: devices_device_department.created_by_id > accounts_user.id
+Ref: devices_device_department.updated_by_id > accounts_user.id
+Ref: devices_device_department.device_id > devices_biometric_device.id
+Ref: devices_device_department.department_id > organization_department.id
+Ref: devices_device_enrollment.company_id > tenants_company.id
+Ref: devices_device_enrollment.created_by_id > accounts_user.id
+Ref: devices_device_enrollment.updated_by_id > accounts_user.id
+Ref: devices_device_enrollment.device_id > devices_biometric_device.id
+Ref: devices_device_enrollment.employee_id > employees_employee.id
+Ref: devices_biometric_template.company_id > tenants_company.id
+Ref: devices_biometric_template.created_by_id > accounts_user.id
+Ref: devices_biometric_template.updated_by_id > accounts_user.id
+Ref: devices_biometric_template.employee_id > employees_employee.id
+Ref: devices_biometric_template.vendor_id > devices_device_vendor.id
+Ref: devices_biometric_template.compatible_device_model_id > devices_device_model.id
+Ref: devices_biometric_template.captured_from_device_id > devices_biometric_device.id
+Ref: devices_biometric_template.revoked_by_id > accounts_user.id
+Ref: devices_device_enrollment_template.company_id > tenants_company.id
+Ref: devices_device_enrollment_template.device_enrollment_id > devices_device_enrollment.id
+Ref: devices_device_enrollment_template.biometric_template_id > devices_biometric_template.id
+Ref: devices_device_sync_state.company_id > tenants_company.id
+Ref: devices_device_sync_state.device_id - devices_biometric_device.id
+Ref: devices_device_message.company_id > tenants_company.id
+Ref: devices_device_message.device_id > devices_biometric_device.id
+Ref: devices_device_message.branch_id > organization_branch.id
+Ref: devices_punch_event.company_id > tenants_company.id
+Ref: devices_punch_event.device_message_id > devices_device_message.id
+Ref: devices_punch_event.device_id > devices_biometric_device.id
+Ref: devices_punch_event.branch_id > organization_branch.id
+Ref: devices_punch_event.device_enrollment_id > devices_device_enrollment.id
+Ref: devices_punch_event.employee_id > employees_employee.id
+Ref: devices_punch_event.duplicate_of_id > devices_punch_event.id
+Ref: payroll_punch_allocation.company_id > tenants_company.id
+Ref: payroll_punch_allocation.attendance_record_id > payroll_attendance_record.id
+Ref: payroll_punch_allocation.punch_event_id > devices_punch_event.id
+Ref: payroll_punch_allocation.attendance_correction_id > payroll_attendance_correction.id
+Ref: payroll_attendance_session.company_id > tenants_company.id
+Ref: payroll_attendance_session.attendance_record_id > payroll_attendance_record.id
+Ref: payroll_attendance_session.in_allocation_id - payroll_punch_allocation.id
+Ref: payroll_attendance_session.out_allocation_id - payroll_punch_allocation.id
+Ref: payroll_attendance_record.company_id > tenants_company.id
+Ref: payroll_attendance_record.employee_id > employees_employee.id
+Ref: payroll_attendance_record.employee_assignment_id > employees_employee_assignment.id
+Ref: payroll_attendance_record.branch_id > organization_branch.id
+Ref: payroll_attendance_record.department_id > organization_department.id
+Ref: payroll_attendance_record.shift_id > scheduling_shift.id
+Ref: payroll_attendance_record.reviewed_by_id > accounts_user.id
+Ref: payroll_attendance_correction.company_id > tenants_company.id
+Ref: payroll_attendance_correction.created_by_id > accounts_user.id
+Ref: payroll_attendance_correction.updated_by_id > accounts_user.id
+Ref: payroll_attendance_correction.attendance_record_id > payroll_attendance_record.id
+Ref: payroll_attendance_correction.requested_by_user_id > accounts_user.id
+Ref: payroll_attendance_correction.requested_for_employee_id > employees_employee.id
+Ref: payroll_attendance_correction.target_punch_event_id > devices_punch_event.id
+Ref: payroll_attendance_correction.approved_by_id > accounts_user.id
+Ref: payroll_attendance_penalty_rule.company_id > tenants_company.id
+Ref: payroll_attendance_penalty_rule.created_by_id > accounts_user.id
+Ref: payroll_attendance_penalty_rule.updated_by_id > accounts_user.id
+Ref: payroll_penalty_assessment.company_id > tenants_company.id
+Ref: payroll_penalty_assessment.employee_id > employees_employee.id
+Ref: payroll_penalty_assessment.penalty_rule_id > payroll_attendance_penalty_rule.id
+Ref: payroll_penalty_assessment.payroll_period_id > payroll_period.id
+Ref: payroll_penalty_assessment.approved_by_id > accounts_user.id
+Ref: payroll_penalty_assessment.reversal_of_id > payroll_penalty_assessment.id
+Ref: payroll_penalty_assessment_attendance.company_id > tenants_company.id
+Ref: payroll_penalty_assessment_attendance.penalty_assessment_id > payroll_penalty_assessment.id
+Ref: payroll_penalty_assessment_attendance.attendance_record_id > payroll_attendance_record.id
+Ref: payroll_leave_type.company_id > tenants_company.id
+Ref: payroll_leave_type.created_by_id > accounts_user.id
+Ref: payroll_leave_type.updated_by_id > accounts_user.id
+Ref: payroll_leave_policy.company_id > tenants_company.id
+Ref: payroll_leave_policy.created_by_id > accounts_user.id
+Ref: payroll_leave_policy.updated_by_id > accounts_user.id
+Ref: payroll_leave_policy.branch_id > organization_branch.id
+Ref: payroll_leave_policy.department_id > organization_department.id
+Ref: payroll_leave_policy.current_version_id > payroll_leave_policy_version.id
+Ref: payroll_leave_policy_version.company_id > tenants_company.id
+Ref: payroll_leave_policy_version.created_by_id > accounts_user.id
+Ref: payroll_leave_policy_version.updated_by_id > accounts_user.id
+Ref: payroll_leave_policy_version.leave_policy_id > payroll_leave_policy.id
+Ref: payroll_leave_policy_version.lfa_salary_component_id > payroll_salary_component.id
+Ref: payroll_leave_policy_version.activated_by_id > accounts_user.id
+Ref: payroll_leave_policy_type_rule.company_id > tenants_company.id
+Ref: payroll_leave_policy_type_rule.created_by_id > accounts_user.id
+Ref: payroll_leave_policy_type_rule.updated_by_id > accounts_user.id
+Ref: payroll_leave_policy_type_rule.policy_version_id > payroll_leave_policy_version.id
+Ref: payroll_leave_policy_type_rule.leave_type_id > payroll_leave_type.id
+Ref: payroll_employee_leave_policy_assignment.company_id > tenants_company.id
+Ref: payroll_employee_leave_policy_assignment.created_by_id > accounts_user.id
+Ref: payroll_employee_leave_policy_assignment.updated_by_id > accounts_user.id
+Ref: payroll_employee_leave_policy_assignment.employee_id > employees_employee.id
+Ref: payroll_employee_leave_policy_assignment.leave_policy_id > payroll_leave_policy.id
+Ref: payroll_leave_entitlement.company_id > tenants_company.id
+Ref: payroll_leave_entitlement.employee_id > employees_employee.id
+Ref: payroll_leave_entitlement.leave_type_id > payroll_leave_type.id
+Ref: payroll_leave_entitlement.policy_version_id > payroll_leave_policy_version.id
+Ref: payroll_leave_entitlement.closed_by_id > accounts_user.id
+Ref: payroll_leave_balance_entry.company_id > tenants_company.id
+Ref: payroll_leave_balance_entry.entitlement_id > payroll_leave_entitlement.id
+Ref: payroll_leave_balance_entry.source_grant_id > payroll_leave_balance_entry.id
+Ref: payroll_leave_balance_entry.leave_request_id > payroll_leave_request.id
+Ref: payroll_leave_balance_entry.leave_day_id > payroll_leave_day.id
+Ref: payroll_leave_balance_entry.leave_encashment_id > payroll_leave_encashment.id
+Ref: payroll_leave_balance_entry.compensatory_credit_id > payroll_leave_compensatory_credit.id
+Ref: payroll_leave_balance_entry.reversal_of_id - payroll_leave_balance_entry.id
+Ref: payroll_leave_balance_entry.posted_by_id > accounts_user.id
+Ref: payroll_leave_request.company_id > tenants_company.id
+Ref: payroll_leave_request.created_by_id > accounts_user.id
+Ref: payroll_leave_request.updated_by_id > accounts_user.id
+Ref: payroll_leave_request.employee_id > employees_employee.id
+Ref: payroll_leave_request.submission_assignment_id > employees_employee_assignment.id
+Ref: payroll_leave_request.policy_version_id > payroll_leave_policy_version.id
+Ref: payroll_leave_request.original_request_id > payroll_leave_request.id
+Ref: payroll_leave_request.supersedes_id > payroll_leave_request.id
+Ref: payroll_leave_request.submitted_by_id > accounts_user.id
+Ref: payroll_leave_request_segment.company_id > tenants_company.id
+Ref: payroll_leave_request_segment.leave_request_id > payroll_leave_request.id
+Ref: payroll_leave_request_segment.leave_type_id > payroll_leave_type.id
+Ref: payroll_leave_request_segment.original_segment_id > payroll_leave_request_segment.id
+Ref: payroll_leave_day.company_id > tenants_company.id
+Ref: payroll_leave_day.request_segment_id > payroll_leave_request_segment.id
+Ref: payroll_leave_day.employee_id > employees_employee.id
+Ref: payroll_leave_day.employee_assignment_id > employees_employee_assignment.id
+Ref: payroll_leave_day.policy_type_rule_id > payroll_leave_policy_type_rule.id
+Ref: payroll_leave_day.entitlement_id > payroll_leave_entitlement.id
+Ref: payroll_leave_day.supersedes_id > payroll_leave_day.id
+Ref: payroll_leave_approval_step.company_id > tenants_company.id
+Ref: payroll_leave_approval_step.leave_request_id > payroll_leave_request.id
+Ref: payroll_leave_approval_step.leave_encashment_id > payroll_leave_encashment.id
+Ref: payroll_leave_approval_step.compensatory_credit_id > payroll_leave_compensatory_credit.id
+Ref: payroll_leave_approval_step.lfa_claim_id > payroll_leave_fare_assistance_claim.id
+Ref: payroll_leave_approval_step.approver_membership_id > accounts_company_membership.id
+Ref: payroll_leave_approval_step.delegated_from_membership_id > accounts_company_membership.id
+Ref: payroll_leave_attachment.company_id > tenants_company.id
+Ref: payroll_leave_attachment.leave_request_id > payroll_leave_request.id
+Ref: payroll_leave_attachment.lfa_claim_id > payroll_leave_fare_assistance_claim.id
+Ref: payroll_leave_attachment.uploaded_by_id > accounts_user.id
+Ref: payroll_leave_encashment.company_id > tenants_company.id
+Ref: payroll_leave_encashment.created_by_id > accounts_user.id
+Ref: payroll_leave_encashment.updated_by_id > accounts_user.id
+Ref: payroll_leave_encashment.employee_id > employees_employee.id
+Ref: payroll_leave_encashment.entitlement_id > payroll_leave_entitlement.id
+Ref: payroll_leave_encashment.policy_version_id > payroll_leave_policy_version.id
+Ref: payroll_leave_encashment.target_payroll_period_id > payroll_period.id
+Ref: payroll_leave_encashment.approved_by_id > accounts_user.id
+Ref: payroll_leave_encashment.reversal_of_id > payroll_leave_encashment.id
+Ref: payroll_leave_compensatory_credit.company_id > tenants_company.id
+Ref: payroll_leave_compensatory_credit.created_by_id > accounts_user.id
+Ref: payroll_leave_compensatory_credit.updated_by_id > accounts_user.id
+Ref: payroll_leave_compensatory_credit.employee_id > employees_employee.id
+Ref: payroll_leave_compensatory_credit.source_attendance_id > payroll_attendance_record.id
+Ref: payroll_leave_compensatory_credit.entitlement_id > payroll_leave_entitlement.id
+Ref: payroll_leave_compensatory_credit.policy_type_rule_id > payroll_leave_policy_type_rule.id
+Ref: payroll_leave_compensatory_credit.approved_by_id > accounts_user.id
+Ref: payroll_leave_compensatory_credit.balance_entry_id - payroll_leave_balance_entry.id
+Ref: payroll_leave_fare_assistance_claim.company_id > tenants_company.id
+Ref: payroll_leave_fare_assistance_claim.created_by_id > accounts_user.id
+Ref: payroll_leave_fare_assistance_claim.updated_by_id > accounts_user.id
+Ref: payroll_leave_fare_assistance_claim.employee_id > employees_employee.id
+Ref: payroll_leave_fare_assistance_claim.employee_assignment_id > employees_employee_assignment.id
+Ref: payroll_leave_fare_assistance_claim.policy_version_id > payroll_leave_policy_version.id
+Ref: payroll_leave_fare_assistance_claim.qualifying_leave_request_id > payroll_leave_request.id
+Ref: payroll_leave_fare_assistance_claim.compensation_id > employees_employee_compensation.id
+Ref: payroll_leave_fare_assistance_claim.target_payroll_period_id > payroll_period.id
+Ref: payroll_leave_fare_assistance_claim.approved_by_id > accounts_user.id
+Ref: payroll_leave_fare_assistance_claim.reversal_of_id > payroll_leave_fare_assistance_claim.id
+Ref: payroll_settings.company_id - tenants_company.id
+Ref: payroll_settings.created_by_id > accounts_user.id
+Ref: payroll_settings.updated_by_id > accounts_user.id
+Ref: payroll_settings.default_policy_version_id > payroll_policy_version.id
+Ref: payroll_settings.default_salary_structure_id > payroll_salary_structure.id
+Ref: payroll_policy_version.company_id > tenants_company.id
+Ref: payroll_policy_version.created_by_id > accounts_user.id
+Ref: payroll_policy_version.updated_by_id > accounts_user.id
+Ref: payroll_policy_version.activated_by_id > accounts_user.id
+Ref: payroll_salary_component.company_id > tenants_company.id
+Ref: payroll_salary_component.created_by_id > accounts_user.id
+Ref: payroll_salary_component.updated_by_id > accounts_user.id
+Ref: payroll_salary_structure.company_id > tenants_company.id
+Ref: payroll_salary_structure.created_by_id > accounts_user.id
+Ref: payroll_salary_structure.updated_by_id > accounts_user.id
+Ref: payroll_salary_structure.activated_by_id > accounts_user.id
+Ref: payroll_salary_structure_component.company_id > tenants_company.id
+Ref: payroll_salary_structure_component.created_by_id > accounts_user.id
+Ref: payroll_salary_structure_component.updated_by_id > accounts_user.id
+Ref: payroll_salary_structure_component.salary_structure_id > payroll_salary_structure.id
+Ref: payroll_salary_structure_component.salary_component_id > payroll_salary_component.id
+Ref: payroll_salary_structure_component.percentage_base_component_id > payroll_salary_component.id
+Ref: payroll_employee_salary_structure_assignment.company_id > tenants_company.id
+Ref: payroll_employee_salary_structure_assignment.created_by_id > accounts_user.id
+Ref: payroll_employee_salary_structure_assignment.updated_by_id > accounts_user.id
+Ref: payroll_employee_salary_structure_assignment.employee_id > employees_employee.id
+Ref: payroll_employee_salary_structure_assignment.salary_structure_id > payroll_salary_structure.id
+Ref: payroll_employee_salary_structure_assignment.approved_by_id > accounts_user.id
+Ref: payroll_period.company_id > tenants_company.id
+Ref: payroll_period.created_by_id > accounts_user.id
+Ref: payroll_period.updated_by_id > accounts_user.id
+Ref: payroll_period.opened_by_id > accounts_user.id
+Ref: payroll_period.closed_by_id > accounts_user.id
+Ref: payroll_run.company_id > tenants_company.id
+Ref: payroll_run.created_by_id > accounts_user.id
+Ref: payroll_run.updated_by_id > accounts_user.id
+Ref: payroll_run.payroll_period_id > payroll_period.id
+Ref: payroll_run.source_run_id > payroll_run.id
+Ref: payroll_run.policy_version_id > payroll_policy_version.id
+Ref: payroll_run.generated_by_id > accounts_user.id
+Ref: payroll_run.approved_by_id > accounts_user.id
+Ref: payroll_run.posted_by_id > accounts_user.id
+Ref: payroll_record.company_id > tenants_company.id
+Ref: payroll_record.created_by_id > accounts_user.id
+Ref: payroll_record.updated_by_id > accounts_user.id
+Ref: payroll_record.payroll_run_id > payroll_run.id
+Ref: payroll_record.employee_id > employees_employee.id
+Ref: payroll_record.employee_assignment_at_period_end_id > employees_employee_assignment.id
+Ref: payroll_record.approved_by_id > accounts_user.id
+Ref: payroll_record.reversal_of_id - payroll_record.id
+Ref: payroll_compensation_segment.company_id > tenants_company.id
+Ref: payroll_compensation_segment.created_by_id > accounts_user.id
+Ref: payroll_compensation_segment.updated_by_id > accounts_user.id
+Ref: payroll_compensation_segment.payroll_record_id > payroll_record.id
+Ref: payroll_compensation_segment.employee_assignment_id > employees_employee_assignment.id
+Ref: payroll_compensation_segment.employee_compensation_id > employees_employee_compensation.id
+Ref: payroll_compensation_segment.salary_structure_assignment_id > payroll_employee_salary_structure_assignment.id
+Ref: payroll_compensation_segment.policy_version_id > payroll_policy_version.id
+Ref: payroll_compensation_segment.branch_id > organization_branch.id
+Ref: payroll_compensation_segment.department_id > organization_department.id
+Ref: payroll_compensation_segment.designation_id > organization_designation.id
+Ref: payroll_daily_line.company_id > tenants_company.id
+Ref: payroll_daily_line.created_by_id > accounts_user.id
+Ref: payroll_daily_line.updated_by_id > accounts_user.id
+Ref: payroll_daily_line.payroll_segment_id > payroll_compensation_segment.id
+Ref: payroll_daily_line.attendance_record_id > payroll_attendance_record.id
+Ref: payroll_daily_line.holiday_id > scheduling_holiday.id
+Ref: payroll_daily_line.weekly_off_rule_id > scheduling_weekly_off_rule.id
+Ref: payroll_daily_line.holiday_work_assignment_id > scheduling_holiday_work_assignment.id
+Ref: payroll_line.company_id > tenants_company.id
+Ref: payroll_line.created_by_id > accounts_user.id
+Ref: payroll_line.updated_by_id > accounts_user.id
+Ref: payroll_line.payroll_record_id > payroll_record.id
+Ref: payroll_line.payroll_segment_id > payroll_compensation_segment.id
+Ref: payroll_line.payroll_daily_line_id > payroll_daily_line.id
+Ref: payroll_line.salary_component_id > payroll_salary_component.id
+Ref: payroll_line.penalty_assessment_id > payroll_penalty_assessment.id
+Ref: payroll_line.payroll_adjustment_id > payroll_adjustment.id
+Ref: payroll_line.salary_advance_recovery_id > payroll_salary_advance_recovery.id
+Ref: payroll_line.loan_repayment_id > payroll_loan_repayment.id
+Ref: payroll_line.leave_encashment_id > payroll_leave_encashment.id
+Ref: payroll_line.lfa_claim_id > payroll_leave_fare_assistance_claim.id
+Ref: payroll_line.original_line_id > payroll_line.id
+Ref: payroll_approval_step.company_id > tenants_company.id
+Ref: payroll_approval_step.created_by_id > accounts_user.id
+Ref: payroll_approval_step.updated_by_id > accounts_user.id
+Ref: payroll_approval_step.payroll_run_id > payroll_run.id
+Ref: payroll_approval_step.required_permission_id > access_control_access_permission.id
+Ref: payroll_approval_step.assigned_designation_id > organization_designation.id
+Ref: payroll_approval_step.assigned_user_id > accounts_user.id
+Ref: payroll_approval_step.acted_by_id > accounts_user.id
+Ref: payroll_salary_payment.company_id > tenants_company.id
+Ref: payroll_salary_payment.created_by_id > accounts_user.id
+Ref: payroll_salary_payment.updated_by_id > accounts_user.id
+Ref: payroll_salary_payment.employee_id > employees_employee.id
+Ref: payroll_salary_payment.processed_by_id > accounts_user.id
+Ref: payroll_salary_payment.reversal_of_id - payroll_salary_payment.id
+Ref: payroll_salary_payment_allocation.company_id > tenants_company.id
+Ref: payroll_salary_payment_allocation.created_by_id > accounts_user.id
+Ref: payroll_salary_payment_allocation.updated_by_id > accounts_user.id
+Ref: payroll_salary_payment_allocation.salary_payment_id > payroll_salary_payment.id
+Ref: payroll_salary_payment_allocation.payroll_record_id > payroll_record.id
+Ref: payroll_salary_payment_allocation.reversal_of_id - payroll_salary_payment_allocation.id
+Ref: payroll_salary_advance.company_id > tenants_company.id
+Ref: payroll_salary_advance.created_by_id > accounts_user.id
+Ref: payroll_salary_advance.updated_by_id > accounts_user.id
+Ref: payroll_salary_advance.employee_id > employees_employee.id
+Ref: payroll_salary_advance.first_recovery_period_id > payroll_period.id
+Ref: payroll_salary_advance.approved_by_id > accounts_user.id
+Ref: payroll_advance_disbursement.company_id > tenants_company.id
+Ref: payroll_advance_disbursement.created_by_id > accounts_user.id
+Ref: payroll_advance_disbursement.updated_by_id > accounts_user.id
+Ref: payroll_advance_disbursement.salary_advance_id > payroll_salary_advance.id
+Ref: payroll_advance_disbursement.processed_by_id > accounts_user.id
+Ref: payroll_advance_disbursement.reversal_of_id - payroll_advance_disbursement.id
+Ref: payroll_salary_advance_recovery.company_id > tenants_company.id
+Ref: payroll_salary_advance_recovery.created_by_id > accounts_user.id
+Ref: payroll_salary_advance_recovery.updated_by_id > accounts_user.id
+Ref: payroll_salary_advance_recovery.salary_advance_id > payroll_salary_advance.id
+Ref: payroll_salary_advance_recovery.payroll_period_id > payroll_period.id
+Ref: payroll_salary_advance_recovery.reversal_of_id - payroll_salary_advance_recovery.id
+Ref: payroll_employee_loan.company_id > tenants_company.id
+Ref: payroll_employee_loan.created_by_id > accounts_user.id
+Ref: payroll_employee_loan.updated_by_id > accounts_user.id
+Ref: payroll_employee_loan.employee_id > employees_employee.id
+Ref: payroll_employee_loan.approved_by_id > accounts_user.id
+Ref: payroll_loan_disbursement.company_id > tenants_company.id
+Ref: payroll_loan_disbursement.created_by_id > accounts_user.id
+Ref: payroll_loan_disbursement.updated_by_id > accounts_user.id
+Ref: payroll_loan_disbursement.employee_loan_id > payroll_employee_loan.id
+Ref: payroll_loan_disbursement.processed_by_id > accounts_user.id
+Ref: payroll_loan_disbursement.reversal_of_id - payroll_loan_disbursement.id
+Ref: payroll_loan_installment.company_id > tenants_company.id
+Ref: payroll_loan_installment.created_by_id > accounts_user.id
+Ref: payroll_loan_installment.updated_by_id > accounts_user.id
+Ref: payroll_loan_installment.employee_loan_id > payroll_employee_loan.id
+Ref: payroll_loan_installment.payroll_period_id > payroll_period.id
+Ref: payroll_loan_installment.deferred_to_id > payroll_loan_installment.id
+Ref: payroll_loan_repayment.company_id > tenants_company.id
+Ref: payroll_loan_repayment.created_by_id > accounts_user.id
+Ref: payroll_loan_repayment.updated_by_id > accounts_user.id
+Ref: payroll_loan_repayment.employee_loan_id > payroll_employee_loan.id
+Ref: payroll_loan_repayment.payroll_period_id > payroll_period.id
+Ref: payroll_loan_repayment.reversal_of_id - payroll_loan_repayment.id
+Ref: payroll_loan_repayment_allocation.company_id > tenants_company.id
+Ref: payroll_loan_repayment_allocation.created_by_id > accounts_user.id
+Ref: payroll_loan_repayment_allocation.updated_by_id > accounts_user.id
+Ref: payroll_loan_repayment_allocation.loan_repayment_id > payroll_loan_repayment.id
+Ref: payroll_loan_repayment_allocation.loan_installment_id > payroll_loan_installment.id
+Ref: payroll_loan_repayment_allocation.reversal_of_id - payroll_loan_repayment_allocation.id
+Ref: payroll_adjustment.company_id > tenants_company.id
+Ref: payroll_adjustment.created_by_id > accounts_user.id
+Ref: payroll_adjustment.updated_by_id > accounts_user.id
+Ref: payroll_adjustment.employee_id > employees_employee.id
+Ref: payroll_adjustment.salary_component_id > payroll_salary_component.id
+Ref: payroll_adjustment.target_payroll_period_id > payroll_period.id
+Ref: payroll_adjustment.salary_advance_id > payroll_salary_advance.id
+Ref: payroll_adjustment.employee_loan_id > payroll_employee_loan.id
+Ref: payroll_adjustment.approved_by_id > accounts_user.id
+Ref: payroll_adjustment.reversal_of_id - payroll_adjustment.id
+Ref: payroll_remittance.company_id > tenants_company.id
+Ref: payroll_remittance.created_by_id > accounts_user.id
+Ref: payroll_remittance.updated_by_id > accounts_user.id
+Ref: payroll_remittance.payroll_period_id > payroll_period.id
+Ref: payroll_remittance.approved_by_id > accounts_user.id
+Ref: payroll_remittance.processed_by_id > accounts_user.id
+Ref: payroll_remittance.reversal_of_id - payroll_remittance.id
+Ref: payroll_remittance_allocation.company_id > tenants_company.id
+Ref: payroll_remittance_allocation.created_by_id > accounts_user.id
+Ref: payroll_remittance_allocation.updated_by_id > accounts_user.id
+Ref: payroll_remittance_allocation.payroll_remittance_id > payroll_remittance.id
+Ref: payroll_remittance_allocation.payroll_line_id > payroll_line.id
+Ref: payroll_remittance_allocation.reversal_of_id - payroll_remittance_allocation.id
 Ref: subscriptions_package.created_by_id > accounts_user.id
 Ref: subscriptions_package.updated_by_id > accounts_user.id
-Ref: subscriptions_packagefeature.package_id > subscriptions_package.id
-Ref: subscriptions_packagefeature.feature_id > tenants_feature.id
-Ref: subscriptions_companysubscription.company_id > tenants_company.id
-Ref: subscriptions_companysubscription.created_by_id > accounts_user.id
-Ref: subscriptions_companysubscription.updated_by_id > accounts_user.id
-Ref: subscriptions_companysubscription.package_id > subscriptions_package.id
-Ref: auditlog_auditlog.company_id > tenants_company.id
-Ref: auditlog_auditlog.actor_user_id > accounts_user.id
-Ref: auditlog_auditlog.actor_membership_id > accounts_companymembership.id
-Ref: accounts_companymembership_allowed_branches.companymembership_id > accounts_companymembership.id
-Ref: accounts_companymembership_allowed_branches.branch_id > organization_branch.id
-Ref: accounts_companymembership_allowed_departments.companymembership_id > accounts_companymembership.id
-Ref: accounts_companymembership_allowed_departments.department_id > organization_department.id
-Ref: access_control_employeepermissionoverride_allowed_branches.employeepermissionoverride_id > access_control_employeepermissionoverride.id
-Ref: access_control_employeepermissionoverride_allowed_branches.branch_id > organization_branch.id
-Ref: access_control_employeepermissionoverride_allowed_departments.employeepermissionoverride_id > access_control_employeepermissionoverride.id
-Ref: access_control_employeepermissionoverride_allowed_departments.department_id > organization_department.id
-Ref: payroll_payrolldailyline_leave_days.payrolldailyline_id > payroll_payrolldailyline.id
-Ref: payroll_payrolldailyline_leave_days.leaveday_id > payroll_leaveday.id
+Ref: subscriptions_package_feature.package_id > subscriptions_package.id
+Ref: subscriptions_package_feature.feature_id > tenants_feature.id
+Ref: subscriptions_company_subscription.company_id > tenants_company.id
+Ref: subscriptions_company_subscription.created_by_id > accounts_user.id
+Ref: subscriptions_company_subscription.updated_by_id > accounts_user.id
+Ref: subscriptions_company_subscription.package_id > subscriptions_package.id
+Ref: auditlog_audit_log.company_id > tenants_company.id
+Ref: auditlog_audit_log.actor_user_id > accounts_user.id
+Ref: auditlog_audit_log.actor_membership_id > accounts_company_membership.id
+Ref: accounts_company_membership_allowed_branches.companymembership_id > accounts_company_membership.id
+Ref: accounts_company_membership_allowed_branches.branch_id > organization_branch.id
+Ref: accounts_company_membership_allowed_departments.companymembership_id > accounts_company_membership.id
+Ref: accounts_company_membership_allowed_departments.department_id > organization_department.id
+Ref: access_control_employee_permission_override_allowed_branches.employeepermissionoverride_id > access_control_employee_permission_override.id
+Ref: access_control_employee_permission_override_allowed_branches.branch_id > organization_branch.id
+Ref: access_control_employee_permission_override_allowed_departments.employeepermissionoverride_id > access_control_employee_permission_override.id
+Ref: access_control_employee_permission_override_allowed_departments.department_id > organization_department.id
+Ref: payroll_daily_line_leave_days.payrolldailyline_id > payroll_daily_line.id
+Ref: payroll_daily_line_leave_days.leaveday_id > payroll_leave_day.id
 
 TableGroup accounts {
   accounts_user
-  accounts_companymembership
-  accounts_companymembership_allowed_branches
-  accounts_companymembership_allowed_departments
+  accounts_company_membership
+  accounts_company_membership_allowed_branches
+  accounts_company_membership_allowed_departments
 }
 
 TableGroup tenants {
   tenants_company
   tenants_feature
-  tenants_companyfeature
+  tenants_company_feature
 }
 
 TableGroup organization {
@@ -2463,105 +2463,105 @@ TableGroup organization {
 
 TableGroup employees {
   employees_employee
-  employees_employeeassignment
-  employees_employeecompensation
+  employees_employee_assignment
+  employees_employee_compensation
 }
 
 TableGroup access_control {
-  access_control_accesspermission
-  access_control_designationpermission
-  access_control_employeepermissionoverride
-  access_control_employeepermissionoverride_allowed_branches
-  access_control_employeepermissionoverride_allowed_departments
+  access_control_access_permission
+  access_control_designation_permission
+  access_control_employee_permission_override
+  access_control_employee_permission_override_allowed_branches
+  access_control_employee_permission_override_allowed_departments
 }
 
 TableGroup scheduling {
   scheduling_shift
-  scheduling_departmentshift
-  scheduling_employeeshiftassignment
-  scheduling_companyattendancesettings
-  scheduling_weeklyoffrule
+  scheduling_department_shift
+  scheduling_employee_shift_assignment
+  scheduling_company_attendance_settings
+  scheduling_weekly_off_rule
   scheduling_holiday
-  scheduling_holidayworkassignment
+  scheduling_holiday_work_assignment
 }
 
 TableGroup devices {
-  devices_devicevendor
-  devices_devicemodel
-  devices_biometricdevice
-  devices_devicedepartment
-  devices_deviceenrollment
-  devices_biometrictemplate
-  devices_deviceenrollmenttemplate
-  devices_devicesyncstate
-  devices_devicemessage
-  devices_punchevent
+  devices_device_vendor
+  devices_device_model
+  devices_biometric_device
+  devices_device_department
+  devices_device_enrollment
+  devices_biometric_template
+  devices_device_enrollment_template
+  devices_device_sync_state
+  devices_device_message
+  devices_punch_event
 }
 
 TableGroup attendance {
-  payroll_punchallocation
-  payroll_attendancesession
-  payroll_attendancerecord
-  payroll_attendancecorrection
-  payroll_attendancepenaltyrule
-  payroll_penaltyassessment
-  payroll_penaltyassessmentattendance
+  payroll_punch_allocation
+  payroll_attendance_session
+  payroll_attendance_record
+  payroll_attendance_correction
+  payroll_attendance_penalty_rule
+  payroll_penalty_assessment
+  payroll_penalty_assessment_attendance
 }
 
 TableGroup leaves {
-  payroll_leavetype
-  payroll_leavepolicy
-  payroll_leavepolicyversion
-  payroll_leavepolicytyperule
-  payroll_employeeleavepolicyassignment
-  payroll_leaveentitlement
-  payroll_leavebalanceentry
-  payroll_leaverequest
-  payroll_leaverequestsegment
-  payroll_leaveday
-  payroll_leaveapprovalstep
-  payroll_leaveattachment
-  payroll_leaveencashment
-  payroll_leavecompensatorycredit
-  payroll_leavefareassistanceclaim
+  payroll_leave_type
+  payroll_leave_policy
+  payroll_leave_policy_version
+  payroll_leave_policy_type_rule
+  payroll_employee_leave_policy_assignment
+  payroll_leave_entitlement
+  payroll_leave_balance_entry
+  payroll_leave_request
+  payroll_leave_request_segment
+  payroll_leave_day
+  payroll_leave_approval_step
+  payroll_leave_attachment
+  payroll_leave_encashment
+  payroll_leave_compensatory_credit
+  payroll_leave_fare_assistance_claim
 }
 
 TableGroup payroll {
-  payroll_payrollsettings
-  payroll_payrollpolicyversion
-  payroll_salarycomponent
-  payroll_salarystructure
-  payroll_salarystructurecomponent
-  payroll_employeesalarystructureassignment
-  payroll_payrollperiod
-  payroll_payrollrun
-  payroll_payrollrecord
-  payroll_payrollcompensationsegment
-  payroll_payrolldailyline
-  payroll_payrollline
-  payroll_payrollapprovalstep
-  payroll_salarypayment
-  payroll_salarypaymentallocation
-  payroll_salaryadvance
-  payroll_advancedisbursement
-  payroll_salaryadvancerecovery
-  payroll_employeeloan
-  payroll_loandisbursement
-  payroll_loaninstallment
-  payroll_loanrepayment
-  payroll_loanrepaymentallocation
-  payroll_payrolladjustment
-  payroll_payrollremittance
-  payroll_payrollremittanceallocation
-  payroll_payrolldailyline_leave_days
+  payroll_settings
+  payroll_policy_version
+  payroll_salary_component
+  payroll_salary_structure
+  payroll_salary_structure_component
+  payroll_employee_salary_structure_assignment
+  payroll_period
+  payroll_run
+  payroll_record
+  payroll_compensation_segment
+  payroll_daily_line
+  payroll_line
+  payroll_approval_step
+  payroll_salary_payment
+  payroll_salary_payment_allocation
+  payroll_salary_advance
+  payroll_advance_disbursement
+  payroll_salary_advance_recovery
+  payroll_employee_loan
+  payroll_loan_disbursement
+  payroll_loan_installment
+  payroll_loan_repayment
+  payroll_loan_repayment_allocation
+  payroll_adjustment
+  payroll_remittance
+  payroll_remittance_allocation
+  payroll_daily_line_leave_days
 }
 
 TableGroup subscriptions {
   subscriptions_package
-  subscriptions_packagefeature
-  subscriptions_companysubscription
+  subscriptions_package_feature
+  subscriptions_company_subscription
 }
 
 TableGroup auditlog {
-  auditlog_auditlog
+  auditlog_audit_log
 }

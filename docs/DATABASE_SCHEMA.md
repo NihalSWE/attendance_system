@@ -269,60 +269,60 @@ The list below is the compact database relationship schema. Scalar columns are d
 
 ### attendance (tables prefixed `payroll_`)
 
-32. `payroll_punchallocation` — tenant; FK `attendance_record_id`; exactly one of `punch_event_id` or approved `attendance_correction_id`; role/order/version.
-33. `payroll_attendancesession` — tenant; FK `attendance_record_id`; nullable in/out allocation FKs; inferred worked/break interval.
-34. `payroll_attendancerecord` — tenant; FKs `employee_id`, `employee_assignment_id`, snapshot `branch_id`, `department_id`, `shift_id`; unique employee/work-date/calculation version rules.
-35. `payroll_attendancecorrection` — tenant; FKs `attendance_record_id`, `requested_for_employee_id`, optional target punch and user/approval actors; immutable request/decision trail.
-36. `payroll_attendancepenaltyrule` — tenant; versioned/effective attendance-to-financial rule definition.
-37. `payroll_penaltyassessment` — tenant; FKs `employee_id`, `penalty_rule_id`, optional `payroll_period_id`, approval actor, reversal self-FK.
-38. `payroll_penaltyassessmentattendance` — tenant; FKs `penalty_assessment_id`, `attendance_record_id`; named evidence through table.
+32. `payroll_punch_allocation` — tenant; FK `attendance_record_id`; exactly one of `punch_event_id` or approved `attendance_correction_id`; role/order/version.
+33. `payroll_attendance_session` — tenant; FK `attendance_record_id`; nullable in/out allocation FKs; inferred worked/break interval.
+34. `payroll_attendance_record` — tenant; FKs `employee_id`, `employee_assignment_id`, snapshot `branch_id`, `department_id`, `shift_id`; unique employee/work-date/calculation version rules.
+35. `payroll_attendance_correction` — tenant; FKs `attendance_record_id`, `requested_for_employee_id`, optional target punch and user/approval actors; immutable request/decision trail.
+36. `payroll_attendance_penalty_rule` — tenant; versioned/effective attendance-to-financial rule definition.
+37. `payroll_penalty_assessment` — tenant; FKs `employee_id`, `penalty_rule_id`, optional `payroll_period_id`, approval actor, reversal self-FK.
+38. `payroll_penalty_assessment_attendance` — tenant; FKs `penalty_assessment_id`, `attendance_record_id`; named evidence through table.
 
 ### leaves (tables prefixed `payroll_`)
 
-39. `payroll_leavetype` — tenant leave category and unit/balance behavior.
-40. `payroll_leavepolicy` — tenant; optional scope FKs `branch_id`, `department_id`; nullable current version FK.
-41. `payroll_leavepolicyversion` — tenant; FK `leave_policy_id`; optional LFA salary component FK; immutable dated rule snapshot.
-42. `payroll_leavepolicytyperule` — tenant; FKs `policy_version_id`, `leave_type_id`; accrual, pay, limits, documents, encashment, and compensatory settings.
-43. `payroll_employeeleavepolicyassignment` — tenant; FKs `employee_id`, `leave_policy_id`; effective-dated employee override.
-44. `payroll_leaveentitlement` — tenant; FKs `employee_id`, `leave_type_id`, `policy_version_id`; period bucket and cached balance.
-45. `payroll_leavebalanceentry` — tenant; FK `entitlement_id`; typed nullable source FKs and reversal self-FK; immutable signed ledger entry.
-46. `payroll_leaverequest` — tenant; FKs `employee_id`, `submission_assignment_id`, `policy_version_id`; original/superseding self-FKs and submitter.
-47. `payroll_leaverequestsegment` — tenant; FKs `leave_request_id`, `leave_type_id`; optional original self-FK; full-day/half-day/hourly interval.
-48. `payroll_leaveday` — tenant; FKs `request_segment_id`, `employee_id`, assignment/rule snapshots, optional entitlement, superseding self-FK.
-49. `payroll_leaveapprovalstep` — tenant; exactly one target FK among request/encashment/comp-credit/LFA; approver and delegation membership FKs.
-50. `payroll_leaveattachment` — tenant; exactly one target FK to LeaveRequest or LFA claim; uploader FK and private-file metadata.
-51. `payroll_leaveencashment` — tenant; FKs employee/entitlement/policy version/optional target period; approval and reversal links.
-52. `payroll_leavecompensatorycredit` — tenant; FKs employee/source attendance/entitlement/policy type rule; optional O2O balance ledger entry.
-53. `payroll_leavefareassistanceclaim` — tenant; FKs employee, assignment/policy/compensation snapshots, optional qualifying request/target period; approvals and reversal.
+39. `payroll_leave_type` — tenant leave category and unit/balance behavior.
+40. `payroll_leave_policy` — tenant; optional scope FKs `branch_id`, `department_id`; nullable current version FK.
+41. `payroll_leave_policy_version` — tenant; FK `leave_policy_id`; optional LFA salary component FK; immutable dated rule snapshot.
+42. `payroll_leave_policy_type_rule` — tenant; FKs `policy_version_id`, `leave_type_id`; accrual, pay, limits, documents, encashment, and compensatory settings.
+43. `payroll_employee_leave_policy_assignment` — tenant; FKs `employee_id`, `leave_policy_id`; effective-dated employee override.
+44. `payroll_leave_entitlement` — tenant; FKs `employee_id`, `leave_type_id`, `policy_version_id`; period bucket and cached balance.
+45. `payroll_leave_balance_entry` — tenant; FK `entitlement_id`; typed nullable source FKs and reversal self-FK; immutable signed ledger entry.
+46. `payroll_leave_request` — tenant; FKs `employee_id`, `submission_assignment_id`, `policy_version_id`; original/superseding self-FKs and submitter.
+47. `payroll_leave_request_segment` — tenant; FKs `leave_request_id`, `leave_type_id`; optional original self-FK; full-day/half-day/hourly interval.
+48. `payroll_leave_day` — tenant; FKs `request_segment_id`, `employee_id`, assignment/rule snapshots, optional entitlement, superseding self-FK.
+49. `payroll_leave_approval_step` — tenant; exactly one target FK among request/encashment/comp-credit/LFA; approver and delegation membership FKs.
+50. `payroll_leave_attachment` — tenant; exactly one target FK to LeaveRequest or LFA claim; uploader FK and private-file metadata.
+51. `payroll_leave_encashment` — tenant; FKs employee/entitlement/policy version/optional target period; approval and reversal links.
+52. `payroll_leave_compensatory_credit` — tenant; FKs employee/source attendance/entitlement/policy type rule; optional O2O balance ledger entry.
+53. `payroll_leave_fare_assistance_claim` — tenant; FKs employee, assignment/policy/compensation snapshots, optional qualifying request/target period; approvals and reversal.
 
 ### payroll (tables prefixed `payroll_`)
 
-54. `payroll_payrollsettings` — tenant O2O company; optional default policy/structure FKs; current mutable defaults.
-55. `payroll_payrollpolicyversion` — tenant; effective-dated immutable payroll formula/rule snapshot and activation actor.
-56. `payroll_salarycomponent` — tenant earning/deduction/reimbursement/contribution catalogue.
-57. `payroll_salarystructure` — tenant versioned component bundle and activation actor.
-58. `payroll_salarystructurecomponent` — tenant; FKs salary structure/component and optional percentage-base component; named M2M through table.
-59. `payroll_employeesalarystructureassignment` — tenant; FKs employee/structure/approval actor; effective-dated assignment.
-60. `payroll_payrollperiod` — tenant period/control dates and open/close actors.
-61. `payroll_payrollrun` — tenant; FKs period/policy/source run and processing actors; idempotent calculation revision.
-62. `payroll_payrollrecord` — tenant; FKs run/employee/assignment snapshot; optional reversal self-O2O; employee totals header.
-63. `payroll_payrollcompensationsegment` — tenant; FKs record, assignment, compensation, optional structure assignment, policy, branch, department, designation.
-64. `payroll_payrolldailyline` — tenant; FK segment, optional attendance/holiday/weekly-off/holiday-work FKs; M2M LeaveDay evidence.
-65. `payroll_payrollline` — tenant; FKs record/component and optional segment/day plus typed source and reversal FKs; authoritative itemized posting.
-66. `payroll_payrollapprovalstep` — tenant; FK run; optional permission/designation/user assignees and acting user.
-67. `payroll_salarypayment` — tenant; FK employee and processing actor; reversal self-O2O; actual settlement transaction.
-68. `payroll_salarypaymentallocation` — tenant; FKs payment/record; reversal self-O2O; supports partial and combined settlement.
-69. `payroll_salaryadvance` — tenant; FK employee, optional first recovery period, approval actor; agreement and cached balance.
-70. `payroll_advancedisbursement` — tenant; FK salary advance/processor and reversal self-O2O; actual money released.
-71. `payroll_salaryadvancerecovery` — tenant; FK advance/optional period/reversal; recovery event referenced by PayrollLine when deducted from pay.
-72. `payroll_employeeloan` — tenant; FK employee/approval actor; terms and cached balance.
-73. `payroll_loandisbursement` — tenant; FK loan/processor/reversal; actual loan funds released.
-74. `payroll_loaninstallment` — tenant; FK loan/optional period/deferred-to installment; scheduled obligation.
-75. `payroll_loanrepayment` — tenant; FK loan/optional period/reversal; actual recovery referenced by PayrollLine when deducted from pay.
-76. `payroll_loanrepaymentallocation` — tenant; FKs repayment/installment/reversal; principal/interest/fee split.
-77. `payroll_payrolladjustment` — tenant; FK employee and optional component/period/advance/loan; approval and reversal links.
-78. `payroll_payrollremittance` — tenant; FK period, approval/processor actors, reversal; third-party payment.
-79. `payroll_payrollremittanceallocation` — tenant; FKs remittance/payroll line/reversal; liability settlement.
+54. `payroll_settings` — tenant O2O company; optional default policy/structure FKs; current mutable defaults.
+55. `payroll_policy_version` — tenant; effective-dated immutable payroll formula/rule snapshot and activation actor.
+56. `payroll_salary_component` — tenant earning/deduction/reimbursement/contribution catalogue.
+57. `payroll_salary_structure` — tenant versioned component bundle and activation actor.
+58. `payroll_salary_structure_component` — tenant; FKs salary structure/component and optional percentage-base component; named M2M through table.
+59. `payroll_employee_salary_structure_assignment` — tenant; FKs employee/structure/approval actor; effective-dated assignment.
+60. `payroll_period` — tenant period/control dates and open/close actors.
+61. `payroll_run` — tenant; FKs period/policy/source run and processing actors; idempotent calculation revision.
+62. `payroll_record` — tenant; FKs run/employee/assignment snapshot; optional reversal self-O2O; employee totals header.
+63. `payroll_compensation_segment` — tenant; FKs record, assignment, compensation, optional structure assignment, policy, branch, department, designation.
+64. `payroll_daily_line` — tenant; FK segment, optional attendance/holiday/weekly-off/holiday-work FKs; M2M LeaveDay evidence.
+65. `payroll_line` — tenant; FKs record/component and optional segment/day plus typed source and reversal FKs; authoritative itemized posting.
+66. `payroll_approval_step` — tenant; FK run; optional permission/designation/user assignees and acting user.
+67. `payroll_salary_payment` — tenant; FK employee and processing actor; reversal self-O2O; actual settlement transaction.
+68. `payroll_salary_payment_allocation` — tenant; FKs payment/record; reversal self-O2O; supports partial and combined settlement.
+69. `payroll_salary_advance` — tenant; FK employee, optional first recovery period, approval actor; agreement and cached balance.
+70. `payroll_advance_disbursement` — tenant; FK salary advance/processor and reversal self-O2O; actual money released.
+71. `payroll_salary_advance_recovery` — tenant; FK advance/optional period/reversal; recovery event referenced by PayrollLine when deducted from pay.
+72. `payroll_employee_loan` — tenant; FK employee/approval actor; terms and cached balance.
+73. `payroll_loan_disbursement` — tenant; FK loan/processor/reversal; actual loan funds released.
+74. `payroll_loan_installment` — tenant; FK loan/optional period/deferred-to installment; scheduled obligation.
+75. `payroll_loan_repayment` — tenant; FK loan/optional period/reversal; actual recovery referenced by PayrollLine when deducted from pay.
+76. `payroll_loan_repayment_allocation` — tenant; FKs repayment/installment/reversal; principal/interest/fee split.
+77. `payroll_adjustment` — tenant; FK employee and optional component/period/advance/loan; approval and reversal links.
+78. `payroll_remittance` — tenant; FK period, approval/processor actors, reversal; third-party payment.
+79. `payroll_remittance_allocation` — tenant; FKs remittance/payroll line/reversal; liability settlement.
 
 ### subscriptions
 
@@ -342,7 +342,7 @@ These five tables exist physically even though they are not separate Django mode
 2. `accounts_companymembership_allowed_departments` — FKs membership and department; unique pair.
 3. `access_control_employeepermissionoverride_allowed_branches` — FKs override and branch; unique pair.
 4. `access_control_employeepermissionoverride_allowed_departments` — FKs override and department; unique pair.
-5. `payroll_payrolldailyline_leave_days` — FKs payroll daily line and leave day; unique pair.
+5. `payroll_daily_line_leave_days` — FKs payroll daily line and leave day; unique pair.
 
 If these scope/evidence links later need their own dates, reason, actor, or audit history, replace the relevant implicit table with a named through model and update the model count.
 

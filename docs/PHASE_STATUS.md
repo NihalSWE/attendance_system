@@ -10,8 +10,12 @@ User feedback corrected the onboarding contract. Read [UI_AND_ONBOARDING_CONVENT
 Physical table names are now set explicitly with `Meta.db_table`, separately from
 Django model names and app labels (which stay chosen for code readability).
 `leaves`, `attendance` and `payroll` models all use the **`payroll_`** table
-prefix; every other app uses its own label. Salary models already live in the
-`payroll` app and are unaffected.
+prefix, with the model name in snake_case: `LeaveType` -> `payroll_leave_type`,
+`AttendanceRecord` -> `payroll_attendance_record`, `PayrollRun` -> `payroll_run`
+(never double-prefixed). Model class names are unchanged - `LeaveType`, not
+`PayrollLeaveType`. Company, branch and employee tables keep their own app
+prefix because they are shared infrastructure used by every future module
+(HR, Accounting), not payroll artifacts.
 
 Applied to the 48 models in `leaves`, `attendance` and `payroll` that are **not
 yet implemented**, so no table rename is required — the same free-rename window

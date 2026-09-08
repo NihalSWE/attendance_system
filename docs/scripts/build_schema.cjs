@@ -82,12 +82,18 @@ function parseField(model,n,d,index,names) {
 }
 const junctions=[];
 for (const model of models) {
-  // Physical table prefix. Django model names and app labels stay as designed;
-  // only the db_table changes. Leave, attendance and payroll are one payroll
-  // family in the database, so they share the payroll_ prefix. Every other app
-  // uses its own label. See MODEL_FIELD_DICTIONARY.md 'Physical table naming'.
-  const TABLE_PREFIX={leaves:'payroll',attendance:'payroll',payroll:'payroll'};
-  model.table=(TABLE_PREFIX[model.app]||model.app)+'_'+model.name.toLowerCase();
+  // Physical table naming. Django model names and app labels stay as designed;
+  // only db_table changes. Model name -> snake_case, e.g. LeaveType -> leave_type.
+  // leaves/attendance/payroll are one payroll family in the database and all get
+  // the payroll_ prefix - unless the snake_case name already begins with it
+  // (PayrollRun -> payroll_run, never payroll_payroll_run).
+  // See MODEL_FIELD_DICTIONARY.md 'Physical table naming'.
+  const PAYROLL_FAMILY=new Set(['leaves','attendance','payroll']);
+  const snake=n=>n.replace(/([a-z0-9])([A-Z])/g,'$1_$2').replace(/([A-Z]+)([A-Z][a-z])/g,'$1_$2').toLowerCase();
+  const base=snake(model.name);
+  model.table=PAYROLL_FAMILY.has(model.app)
+    ? (base.startsWith('payroll_')||base==='payroll' ? base : 'payroll_'+base)
+    : model.app+'_'+base;
   model.tenant=model.lines.some(l=>l.startsWith('Common fields: TenantOwned'));
   const commonActor=model.lines.some(l=>/^Common fields:.*(?:actor tracking|creator\/updater)/.test(l));
   model.constraints=model.lines.filter(l=>/^Constraints?:|^Relations:/.test(l)).join('\n');
