@@ -32,6 +32,13 @@ settings are policy configuration rather than attendance records. Renaming eithe
 needs an explicit `AlterModelTable` migration and a deliberate decision — open
 question for the lead.
 
+`tenants.Feature` now uses `db_table = "module"` (migration
+`tenants.0005_alter_feature_table`, applied). Pure `AlterModelTable`: the model is
+still `Feature`, its three rows (`leave`, `attendance`, `payroll`) are unchanged,
+and the 4 CompanyFeature grants plus 7 AccessPermission FKs are intact. Table
+names serve the client's vocabulary; the backend structure stays whatever suits
+the project. 131 tests still pass.
+
 Device tables (`devices_*`) are unaffected, so the parallel device workstream
 needs no change.
 

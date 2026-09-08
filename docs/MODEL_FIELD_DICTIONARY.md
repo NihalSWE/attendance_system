@@ -71,6 +71,14 @@ Rules:
 - Table names verified collision-free across all 88 tables after this rule was
   applied.
 
+**Client-facing table names.** Some table names exist to match the client's
+vocabulary, not ours. `Feature` uses `db_table = "module"` because the client
+thinks in modules (Payroll now; HR and Accounting later). The model stays
+`Feature`, its three rows stay as they are, and no relationship changes —
+`db_table` is cosmetic. **Never restructure data to satisfy a naming
+preference**: if a client's preferred name implies a different structure, that is
+a conversation about the data model, not something a table name can paper over.
+
 **Already-migrated tables are not renamed by this rule.** `employees_employeecompensation`
 and `scheduling_companyattendancesettings` hold live data and keep their current
 names: compensation is dated employment history that payroll *reads*, and

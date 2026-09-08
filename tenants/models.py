@@ -100,7 +100,10 @@ class Feature(TimeStamped):
     sort_order = models.PositiveIntegerField(default=0)
 
     class Meta:
-        db_table = "tenants_feature"
+        # Client-facing table name. The model stays `Feature` because that is what
+        # it is in our code; the client's vocabulary is "module". db_table is
+        # cosmetic - no data, relationship or query behaviour changes.
+        db_table = "module"
         ordering = ("sort_order", "code")
 
     def __str__(self):
