@@ -22,3 +22,24 @@ Creating a company also creates Head Office and CompanyAttendanceSettings in the
 Root has no implicit tenant. `common.admin.TenantOwnedAdmin` explicitly scopes edit-form construction, related choices, validation, saving and rendering to the object's company, and restores context afterward. The company is read-only on an existing support-admin form. Related choices exclude other companies. Root-only cross-company listings use all_objects. This fixes the settings edit crash without weakening TenantManager. Support admin writes use Django's admin log; custom platform writes use AuditLog.
 
 Feature is a database catalogue, not a choices field. CompanyFeature stores dated enable/disable grants for a company. A future module must check both company entitlement and the person's action permission, including in business services. Feature enablement never implies that an unimplemented module exists.
+
+## Select controls — superseded rule (2026-09-08)
+
+Earlier guidance said "fixed choices use styled native selects; database-backed
+choices use Select2". That is **superseded**: **every** select is a real Select2 —
+single, multiple, and fixed choice lists alike.
+
+Reason: a native select can be styled in its closed state, but its open dropdown
+is drawn by the operating system, which is precisely the default appearance the
+design replaces. `StyledFormMixin` applies `js-select2` to every `Select` and
+`SelectMultiple`; `.select` remains as the no-JavaScript fallback. Radio and
+checkbox groups are unaffected.
+
+## Overlay controls must not be clipped
+
+Pop-out panels (date picker, and any future menu or popover) are appended to
+`<body>` with `position: fixed` and placed from the trigger's rectangle. `.card`
+uses `overflow: hidden` for its rounded corners, so a panel positioned inside a
+card gets cut off. Placement prefers below the trigger, flips above only when
+below will not fit, clamps to the viewport edges, and re-anchors on scroll and
+resize.
