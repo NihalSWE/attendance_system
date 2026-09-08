@@ -55,6 +55,8 @@ class AuditLog(models.Model):
             "company.status_changed": "Company status changed", "company.feature_changed": "Feature access changed",
             "user.created": "Account created", "membership.granted": "Membership granted",
             "membership.updated": "Membership updated",
+            "branch.created": "Branch created", "branch.updated": "Branch updated",
+            "branch.status_changed": "Branch status changed",
         }.get(self.action, self.action)
 
     class Meta:

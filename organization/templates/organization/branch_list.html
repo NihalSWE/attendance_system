@@ -1,0 +1,241 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Branches · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Branches
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Branches
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_manage %}
+                <a class="btn btn--primary" href="{% url 'organization:branch_create' %}">
+                    Add branch
+                </a>
+            {% else %}
+                <button class="btn btn--primary" type="button" disabled
+                        title="Requires owner or company administrator access">
+                    Add branch
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if restricted_scope %}
+        <div class="alert alert--info">
+            You are scoped to specific branches, so this list shows only those.
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                All branches
+            </h2>
+            <span class="spacer">
+            </span>
+            <span class="t-muted">
+                <span class="amount">
+                    {{ paginator.count }}
+                </span>
+                total
+            </span>
+        </div>
+
+        <form class="toolbar" method="get">
+            <div class="toolbar__grow">
+                <label class="sr-only" for="q">
+                    Search branches
+                </label>
+                <div class="input-group">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="m20 20-3.5-3.5"/>
+                    </svg>
+                    <input class="input" id="q" name="q" value="{{ search }}"
+                           placeholder="Name, code or city">
+                </div>
+            </div>
+            <label class="sr-only" for="status">
+                Status
+            </label>
+            <select class="input select" id="status" name="status">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if value == status %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+            {% if search or status %}
+                <a class="btn btn--quiet" href="{% url 'organization:branch_list' %}">
+                    Clear
+                </a>
+            {% endif %}
+        </form>
+
+        {% if branches %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Name
+                            </th>
+                            <th>
+                                City
+                            </th>
+                            <th>
+                                Default
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="numeric">
+                                Departments
+                            </th>
+                            <th>
+                                <span class="sr-only">
+                                    Actions
+                                </span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for b in branches %}
+                            <tr>
+                                <td>
+                                    {{ b.code }}
+                                </td>
+                                <td>
+                                    {{ b.name }}
+                                </td>
+                                <td>
+                                    {{ b.city|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if b.is_default %}
+                                        <span class="badge badge--info">
+                                            Default
+                                        </span>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if b.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ b.department_count }}
+                                </td>
+                                <td>
+                                    {% if can_manage %}
+                                        <a class="btn btn--ghost btn--sm"
+                                           href="{% url 'organization:branch_edit' b.pk %}">
+                                            Edit
+                                        </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ paginator.count }}
+                </span>
+                <span class="pagination__pages">
+                    {% if page.has_previous %}
+                        <a class="pagination__page"
+                           href="?page={{ page.previous_page_number }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
+                            Prev
+                        </a>
+                    {% else %}
+                        <button class="pagination__page" disabled>
+                            Prev
+                        </button>
+                    {% endif %}
+                    {% for n in page.adjusted_elided_pages %}
+                        {% if n == page.number %}
+                            <button class="pagination__page is-on">
+                                {{ n }}
+                            </button>
+                        {% elif n == "…" %}
+                            <span class="pagination__dots">
+                                …
+                            </span>
+                        {% else %}
+                            <a class="pagination__page"
+                               href="?page={{ n }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
+                                {{ n }}
+                            </a>
+                        {% endif %}
+                    {% endfor %}
+                    {% if page.has_next %}
+                        <a class="pagination__page"
+                           href="?page={{ page.next_page_number }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
+                            Next
+                        </a>
+                    {% else %}
+                        <button class="pagination__page" disabled>
+                            Next
+                        </button>
+                    {% endif %}
+                </span>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 21h18M5 21V6l7-3 7 3v15"/>
+                        <path d="M10 21v-5h4v5"/>
+                    </svg>
+                </div>
+                <div class="empty__title">
+                    No branches match
+                </div>
+                <div class="empty__text">
+                    {% if search or status %}
+                        Try clearing the filters.
+                    {% else %}
+                        Add a branch to start building your organisation.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

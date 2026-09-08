@@ -42,6 +42,41 @@ the project. 131 tests still pass.
 Device tables (`devices_*`) are unaffected, so the parallel device workstream
 needs no change.
 
+## Branch write flow — 2026-09-08
+
+First company-administrator write workflow. `organization/services.py` holds the
+authorization and the writes (`require_company_membership`,
+`require_structure_manager`, `visible_branches`, `assert_branch_in_scope`,
+`get_branch_for_edit`, `create_branch`, `update_branch`, `set_branch_status`);
+`organization/{forms,views,urls}.py` and `organization/templates/organization/`
+provide the UI. `auditlog.services.record_company_event` records a company
+actor (USER + membership) as distinct from the platform owner.
+
+Enforced on every write: active membership, role (owner/company_admin only),
+branch row scope re-checked against submitted ids, and a field whitelist so a
+crafted POST cannot reach an unexposed column. Each write shares one transaction
+with its audit row. Exactly one active default branch per company is maintained
+by demoting the previous one; the default branch cannot be retired; retiring
+never deletes.
+
+Controls corrected after review: native selects now draw our own chevron
+(`appearance:none` plus currentColor gradients - no hex, no SVG file), and a
+custom date picker / date-range picker was built from `design_reference/`
+(`datepicker.css`, `datepicker.js`) replacing raw `input type=date`. Select2 was
+already themed in `vendor-controls.css` and wired in `forms.js`.
+`Branch.device_attendance_scope_override` was REMOVED from the branch form - it
+is device-domain configuration, has no company default to override yet, and
+belongs with attendance/device settings. The model field and service whitelist
+keep it.
+
+Known limitation: branch row scoping is currently unreachable in practice,
+because `uniq_current_company_administrator` allows only one non-ended
+owner/company_admin per company and only those roles may manage structure. The
+enforcement is in place for when more roles gain structure rights.
+
+147 tests pass on PostgreSQL (16 new), `check` clean, no migration drift, no new
+migrations, no new environment variables.
+
 ## Current checkpoint
 
 - **Current deliverable:** P1 platform onboarding implemented; company setup and employee write workflows remain next. See [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md) for files/functions and the UI workflow.

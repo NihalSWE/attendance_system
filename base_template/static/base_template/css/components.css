@@ -531,3 +531,86 @@ select.input, select.dt-input {
     background-size: 5px 5px;
     background-repeat: no-repeat;
 }
+
+/* ---------------------------------------------------------------------------
+   Native select — "fixed choices use styled native selects" (project rule).
+   The box is styled with our tokens; the OS keeps drawing the arrow, which
+   avoids baking a hard-coded colour into a background image.
+   StyledFormMixin adds `.select` to every non-Select2 <select>.
+   ------------------------------------------------------------------------ */
+
+.select,
+select.input {
+    cursor: pointer;
+    padding-right: var(--s8);
+    background-color: var(--surface);
+    /* Replace the OS dropdown arrow with our own chevron. Built from two
+       gradients using currentColor, so it inherits --text and needs no SVG
+       file and no hard-coded colour. */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image:
+        linear-gradient(45deg, transparent 50%, currentColor 50%),
+        linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position: right 17px center, right 12px center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+}
+.select:focus,
+select.input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.select::-ms-expand,
+select.input::-ms-expand {
+    display: none;
+}
+.select:disabled,
+select.input:disabled {
+    cursor: not-allowed;
+    background: var(--surface-sunken);
+    color: var(--faint);
+}
+
+/* ---------------------------------------------------------------------------
+   Checkbox / radio row — a control beside its label, aligned on the first line.
+   ------------------------------------------------------------------------ */
+
+.check {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--s2);
+    cursor: pointer;
+    user-select: none;
+    font-size: 13px;
+}
+.check input[type="checkbox"],
+.check input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    margin: 2px 0 0;
+    flex: none;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+.check input:disabled {
+    cursor: not-allowed;
+}
+.check input:disabled + span {
+    color: var(--faint);
+}
+
+/* ---------------------------------------------------------------------------
+   Form page — a narrower container centred inside the content area, per the
+   project layout rule. Wide data tables use the full width; forms do not.
+   ------------------------------------------------------------------------ */
+
+.form-page {
+    width: 100%;
+    max-width: 880px;
+    margin-inline: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s5);
+}

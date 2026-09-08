@@ -1,0 +1,310 @@
+/* ============================================================================
+   Date picker and date-range picker.
+
+   FORM follows design_reference/ (.dp__btn / .dp__panel / .dp__presets /
+   .dp__cal / .dp__day). COLOUR follows WARM_PAPER_INK_SPEC.md: the reference's
+   lime selection becomes the ink accent, and its remote iconify masks are
+   replaced with inline SVG so nothing is fetched at runtime.
+
+   Progressive enhancement: the real <input> keeps the value and posts normally.
+   With JavaScript off, it stays a usable native date field.
+   ========================================================================= */
+
+.dp {
+    position: relative;
+    width: 100%;
+}
+
+.dp__native {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 0;
+    height: 0;
+}
+
+/* ---------------------------------------------------------------- trigger */
+
+.dp__btn {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    width: 100%;
+    border: 1px solid var(--field);
+    border-radius: var(--r-lg);
+    padding: 9px 11px;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color var(--tr), box-shadow var(--tr), background var(--tr);
+}
+.dp__btn:hover {
+    border-color: var(--muted);
+}
+.dp__btn:focus-visible,
+.dp__btn--open {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.dp__btn svg {
+    width: 15px;
+    height: 15px;
+    stroke-width: 2;
+    flex: none;
+    color: var(--muted);
+}
+.dp__value {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-variant-numeric: tabular-nums;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dp__value--empty {
+    color: var(--faint);
+}
+.dp__chev {
+    transition: transform .2s ease;
+}
+.dp__btn--open .dp__chev {
+    transform: rotate(180deg);
+}
+
+/* ------------------------------------------------------------------ panel */
+
+.dp__panel {
+    position: absolute;
+    z-index: 60;
+    top: calc(100% + 6px);
+    left: 0;
+    display: flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    transform: translateY(-4px) scale(.985);
+    pointer-events: none;
+    transition: opacity .15s ease, transform .15s ease;
+}
+.dp__panel--open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+/* Flip above the trigger when there is no room below. */
+.dp__panel--up {
+    top: auto;
+    bottom: calc(100% + 6px);
+}
+/* Keep the panel on screen near the right edge. */
+.dp__panel--right {
+    left: auto;
+    right: 0;
+}
+
+/* --------------------------------------------------------------- presets */
+
+.dp__presets {
+    width: 156px;
+    flex: 0 0 156px;
+    border-right: 1px solid var(--border);
+    padding: var(--s3) 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--surface-sunken);
+    border-radius: var(--r-lg) 0 0 var(--r-lg);
+}
+.dp__presets-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: var(--s1) 10px var(--s2);
+}
+.dp__preset {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 10px;
+    border-radius: var(--r);
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background var(--tr), color var(--tr);
+}
+.dp__preset:hover {
+    background: var(--accent-soft);
+}
+.dp__preset--on {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 700;
+}
+
+/* -------------------------------------------------------------- calendar */
+
+.dp__cal {
+    padding: 14px 16px 16px;
+    width: 288px;
+}
+.dp__calhead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s2);
+    margin-bottom: var(--s3);
+}
+.dp__navbtn {
+    width: 26px;
+    height: 26px;
+    flex: none;
+    border: 0;
+    border-radius: var(--r);
+    background: transparent;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    color: var(--muted);
+    transition: background var(--tr), color var(--tr);
+}
+.dp__navbtn:hover {
+    background: var(--surface-sunken);
+    color: var(--text);
+}
+.dp__navbtn svg {
+    width: 14px;
+    height: 14px;
+    stroke-width: 2.5;
+}
+.dp__selectors {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.dp__seltrigger {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 4px 9px;
+    cursor: pointer;
+    transition: background var(--tr);
+}
+.dp__seltrigger:hover {
+    background: var(--surface-sunken);
+}
+
+.dp__week,
+.dp__days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+.dp__week {
+    margin-bottom: var(--s1);
+}
+.dp__weekday {
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: var(--s1) 0;
+}
+.dp__day {
+    height: 32px;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    border: 0;
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background var(--tr), color var(--tr);
+}
+.dp__day:hover {
+    background: var(--surface-sunken);
+}
+.dp__day--muted {
+    color: var(--faint);
+}
+.dp__day--today {
+    box-shadow: inset 0 0 0 1px var(--field);
+}
+/* The selected day is a solid ink block - the same device the active nav item
+   uses. In a palette with no colour, a tint would be invisible. */
+.dp__day--on,
+.dp__day--on:hover {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 700;
+}
+/* Range: quiet fill between the two ends, ink blocks at the ends. */
+.dp__day--in-range {
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    border-radius: 0;
+}
+.dp__day--range-start {
+    border-radius: var(--r) 0 0 var(--r);
+}
+.dp__day--range-end {
+    border-radius: 0 var(--r) var(--r) 0;
+}
+.dp__day:disabled {
+    color: var(--faint);
+    cursor: not-allowed;
+    background: transparent;
+}
+
+/* ------------------------------------------------------------------ foot */
+
+.dp__foot {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: var(--s3) 16px;
+    border-top: 1px solid var(--border);
+}
+.dp__foot .spacer {
+    flex: 1 1 auto;
+}
+
+@media (max-width: 680px) {
+    .dp__panel {
+        flex-direction: column;
+    }
+    .dp__presets {
+        width: auto;
+        flex: none;
+        border-right: 0;
+        border-bottom: 1px solid var(--border);
+        border-radius: var(--r-lg) var(--r-lg) 0 0;
+        flex-direction: row;
+        flex-wrap: wrap;
+    }
+    .dp__presets-label {
+        width: 100%;
+    }
+    .dp__cal {
+        width: 100%;
+        min-width: 268px;
+    }
+}

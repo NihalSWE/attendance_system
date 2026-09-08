@@ -1,0 +1,153 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'organization:branch_list' %}">
+            Branches
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {% if mode == 'create' %}Add{% else %}Edit{% endif %}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Branch details
+                </h2>
+            </div>
+            <div class="card__body">
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="stack">
+                    {% csrf_token %}
+
+                    <div class="grid grid--2">
+                        {% for field in form %}
+                            {% if field.name != 'is_default' %}
+                                <div class="field">
+                                    <label class="field__label" for="{{ field.id_for_label }}">
+                                        {{ field.label }}
+                                        {% if field.field.required %}
+                                            <span class="field__req">
+                                                *
+                                            </span>
+                                        {% endif %}
+                                    </label>
+                                    {{ field }}
+                                    {% if field.help_text %}
+                                        <span class="field__help">
+                                            {{ field.help_text }}
+                                        </span>
+                                    {% endif %}
+                                    {% for error in field.errors %}
+                                        <span class="field__error">
+                                            {{ error }}
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    <div class="field">
+                        <label class="check">
+                            {{ form.is_default }}
+                            <span>
+                                {{ form.is_default.label }}
+                            </span>
+                        </label>
+                        {% if form.is_default.help_text %}
+                            <span class="field__help">
+                                {{ form.is_default.help_text }}
+                            </span>
+                        {% endif %}
+                        {% for error in form.is_default.errors %}
+                            <span class="field__error">
+                                {{ error }}
+                            </span>
+                        {% endfor %}
+                    </div>
+
+                    <div class="row">
+                        <button class="btn btn--primary" type="submit">
+                            {% if mode == 'create' %}Create branch{% else %}Save changes{% endif %}
+                        </button>
+                        <a class="btn btn--ghost" href="{% url 'organization:branch_list' %}">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if mode == 'edit' %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        Status
+                    </h2>
+                </div>
+                <div class="card__body">
+                    <p class="field__help">
+                        Retiring a branch keeps its departments, employees and history.
+                        Nothing is deleted. The default branch cannot be retired.
+                    </p>
+                    <form method="post" class="stack"
+                          action="{% url 'organization:branch_status' branch.pk %}">
+                        {% csrf_token %}
+                        <div class="field">
+                            <label class="field__label" for="id_status">
+                                Status
+                            </label>
+                            <select class="input select" id="id_status" name="status">
+                                {% for value, label in status_form.fields.status.choices %}
+                                    <option value="{{ value }}"
+                                            {% if value == branch.status %}selected{% endif %}>
+                                        {{ label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="field__label" for="id_reason">
+                                Reason
+                            </label>
+                            <textarea class="textarea" id="id_reason" name="reason" rows="3"
+                                      placeholder="Recorded in the audit trail"></textarea>
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--ghost" type="submit">
+                                Update status
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

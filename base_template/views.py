@@ -123,15 +123,6 @@ def employee_list(request):
 
 @login_required
 @company_admin_required
-def branch_list(request):
-    if not request.company_id:
-        return _no_company(request)
-    branches = Branch.objects.order_by("-is_default", "name")
-    return render(request, "base_template/branch_list.html", {"branches": branches})
-
-
-@login_required
-@company_admin_required
 def department_list(request):
     if not request.company_id:
         return _no_company(request)

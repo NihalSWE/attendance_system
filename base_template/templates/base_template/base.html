@@ -18,6 +18,7 @@
         <link rel="stylesheet" href="{% static 'base_template/css/components.css' %}">
         <link rel="stylesheet" href="{% static 'base_template/css/shell.css' %}">
         <link rel="stylesheet" href="{% static 'base_template/css/vendor-controls.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/datepicker.css' %}">
         {% block extra_css %}
         {% endblock %}
     </head>
@@ -58,6 +59,8 @@
         <script defer src="https://cdn.jsdelivr.net/npm/select2@4.0.13/dist/js/select2.min.js">
         </script>
         <script defer src="{% static 'base_template/js/forms.js' %}">
+        </script>
+        <script defer src="{% static 'base_template/js/datepicker.js' %}">
         </script>
         {% block extra_js %}
         {% endblock %}
