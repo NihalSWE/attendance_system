@@ -78,9 +78,11 @@
 /* ------------------------------------------------------------------ panel */
 
 .dp__panel {
-    position: absolute;
-    z-index: 60;
-    top: calc(100% + 6px);
+    /* Fixed and appended to <body>: an ancestor card uses overflow:hidden for
+       its rounded corners, which would otherwise clip the calendar. */
+    position: fixed;
+    z-index: 200;
+    top: 0;
     left: 0;
     display: flex;
     background: var(--surface);
@@ -96,16 +98,6 @@
     opacity: 1;
     transform: translateY(0) scale(1);
     pointer-events: auto;
-}
-/* Flip above the trigger when there is no room below. */
-.dp__panel--up {
-    top: auto;
-    bottom: calc(100% + 6px);
-}
-/* Keep the panel on screen near the right edge. */
-.dp__panel--right {
-    left: auto;
-    right: 0;
 }
 
 /* --------------------------------------------------------------- presets */

@@ -41,10 +41,17 @@ class StyledFormMixin:
         for field in self.fields.values():
             widget = field.widget
             widget.attrs["class"] = "input"
-            if isinstance(field, (forms.ModelChoiceField, forms.ModelMultipleChoiceField)):
-                widget.attrs["class"] += " js-select2"
-            elif isinstance(widget, forms.Select):
-                widget.attrs["class"] += " select"
+            # Every <select> becomes a real Select2 - single, multiple, and
+            # fixed choice lists alike. A native select can style its closed box
+            # but its open dropdown is drawn by the operating system, which is
+            # exactly the default appearance we are replacing. `.select` stays as
+            # the no-JavaScript fallback.
+            if isinstance(widget, forms.SelectMultiple):
+                widget.attrs["class"] += " select js-select2 js-select2--multiple"
+            elif isinstance(widget, forms.Select) and not isinstance(
+                widget, (forms.RadioSelect, forms.CheckboxSelectMultiple)
+            ):
+                widget.attrs["class"] += " select js-select2"
             if isinstance(widget, forms.Textarea):
                 widget.attrs.update({"class": "textarea", "rows": 3})
             if isinstance(field, (forms.IntegerField, forms.DecimalField, forms.FloatField)):

@@ -157,7 +157,9 @@
         btn.innerHTML = ICON_CAL + '<span class="dp__value dp__value--empty"></span>' + ICON_CHEV;
         var panel = document.createElement("div");
         panel.className = "dp__panel";
-        wrap.append(btn, panel);
+        // Lives on <body> so no ancestor overflow can clip it.
+        document.body.appendChild(panel);
+        wrap.append(btn);
         input.parentNode.insertBefore(wrap, input);
         wrap.appendChild(input);
         input.classList.add("dp__native");
@@ -165,15 +167,41 @@
         return {wrap: wrap, btn: btn, panel: panel, value: btn.querySelector(".dp__value")};
     }
 
+    var openPanel = null;
+
     function placePanel(shell) {
-        var rect = shell.btn.getBoundingClientRect();
-        shell.panel.classList.toggle("dp__panel--up",
-            rect.bottom + 380 > window.innerHeight && rect.top > 380);
-        shell.panel.classList.toggle("dp__panel--right",
-            rect.left + 460 > window.innerWidth);
+        var btn = shell.btn.getBoundingClientRect();
+        var panel = shell.panel;
+        panel.style.visibility = "hidden";
+        panel.style.display = "flex";
+        var w = panel.offsetWidth;
+        var h = panel.offsetHeight;
+        panel.style.display = "";
+        panel.style.visibility = "";
+
+        var gap = 6;
+        // Prefer below; flip above only when below would not fit but above does.
+        var top = btn.bottom + gap;
+        if (top + h > window.innerHeight - 8 && btn.top - gap - h > 8) {
+            top = btn.top - gap - h;
+        }
+        top = Math.max(8, Math.min(top, window.innerHeight - h - 8));
+
+        var left = btn.left;
+        if (left + w > window.innerWidth - 8) left = window.innerWidth - w - 8;
+        left = Math.max(8, left);
+
+        panel.style.top = Math.round(top) + "px";
+        panel.style.left = Math.round(left) + "px";
     }
 
-    var openPanel = null;
+    // Keep an open panel anchored while the page moves underneath it.
+    function trackWhileOpen() {
+        if (openPanel) placePanel(openPanel);
+    }
+    window.addEventListener("scroll", trackWhileOpen, true);
+    window.addEventListener("resize", trackWhileOpen);
+
     function closeOpen() {
         if (openPanel) {
             openPanel.panel.classList.remove("dp__panel--open");
@@ -183,7 +211,8 @@
         }
     }
     document.addEventListener("click", function (e) {
-        if (openPanel && !openPanel.wrap.contains(e.target)) closeOpen();
+        if (openPanel && !openPanel.wrap.contains(e.target)
+            && !openPanel.panel.contains(e.target)) closeOpen();
     });
     document.addEventListener("keydown", function (e) {
         if (e.key === "Escape" && openPanel) {

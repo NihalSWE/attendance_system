@@ -2,7 +2,20 @@
 document.addEventListener("DOMContentLoaded", function () {
     const $ = window.jQuery;
     if ($ && $.fn.select2) {
-        $(".js-select2").select2({theme: "paper", width: "100%", minimumResultsForSearch: 0});
+        $(".js-select2").each(function () {
+            var $el = $(this);
+            var count = $el.find("option").length;
+            $el.select2({
+                theme: "paper",
+                width: "100%",
+                // A short fixed list needs no search box; a long or
+                // database-backed one does.
+                minimumResultsForSearch: count > 8 ? 0 : Infinity,
+                closeOnSelect: !$el.prop("multiple"),
+                placeholder: $el.data("placeholder") || null,
+                allowClear: !$el.prop("required") && !$el.prop("multiple")
+            });
+        });
     }
     document.querySelectorAll("input[data-phone-prefix]").forEach(function (input) {
         function normalize() {
