@@ -1,0 +1,611 @@
+// BASIC VISUAL DIAGRAM ONLY — NOT A MIGRATION OR REPLACEMENT MODEL PLAN.
+// The authoritative advanced schema and Django implementation remain unchanged.
+// Selected actor FKs, lifecycle fields and advanced models are intentionally omitted.
+// Payroll/run/segment/posting and leave-policy layers are collapsed as noted.
+// All references between company-owned rows must agree on company and employee.
+Project attendance_basic_diagram {
+    database_type: 'PostgreSQL'
+    Note: 'A simplified relationship map, not a production database specification. Read README.md beside this file for deliberate shortcuts.'
+}
+
+// ==================== ACCOUNTS AND COMPANY ACCESS ====================
+
+Table User {
+    id integer [primary key]
+    name varchar
+}
+
+Table Company {
+    id integer [primary key]
+    name varchar
+}
+
+Table CompanyMembership {
+    id integer [primary key]
+    company_id integer [not null]
+    role varchar
+    status varchar
+    user_id integer [not null]
+
+    indexes {
+        (company_id, user_id) [unique]
+    }
+
+    Note: 'One current master administrator per company; other staff memberships are allowed. Conditional master-account uniqueness is omitted from this basic diagram, not removed from the real design.'
+}
+
+Table Feature {
+    id integer [primary key]
+    name varchar
+
+    Note: 'Module catalogue: attendance, leave, payroll. No separate Module table is needed for this basic view.'
+}
+
+Table CompanyFeature {
+    id integer [primary key]
+    company_id integer [not null]
+    effect varchar
+    starts_at timestamp
+    ends_at timestamp [null]
+    feature_id integer [not null]
+
+    Note: 'Company entitlement. Dated rows preserve changes; enabling a feature does not grant user action permissions.'
+}
+
+Table AccessPermission {
+    id integer [primary key]
+    name varchar
+    action varchar
+    feature_id integer [not null]
+
+    Note: 'One permission belongs to a feature, for example leave.approve. Replaces the mini diagram Permission + Access pair.'
+}
+
+// ==================== ORGANIZATION AND EMPLOYEES ====================
+
+Table Branch {
+    id integer [primary key]
+    company_id integer [not null]
+    name varchar
+}
+
+Table Department {
+    id integer [primary key]
+    company_id integer [not null]
+    name varchar
+    branch_id integer [not null]
+}
+
+Table Designation {
+    id integer [primary key]
+    company_id integer [not null]
+    title varchar
+    department_id integer [not null]
+    parent_id integer [null]
+}
+
+Table Employee {
+    id integer [primary key]
+    company_id integer [not null]
+    name varchar
+    user_id integer [null]
+
+    indexes {
+        (company_id, user_id) [unique]
+    }
+
+    Note: 'Permanent person identity; login is optional. PostgreSQL permits multiple NULL user references.'
+}
+
+Table EmployeeAssignment {
+    id integer [primary key]
+    company_id integer [not null]
+    employee_code varchar
+    effective_from timestamp
+    effective_to timestamp [null]
+    employee_id integer [not null]
+    branch_id integer [not null]
+    department_id integer [not null]
+    designation_id integer [not null]
+    manager_id integer [null]
+
+    Note: 'Dated history. Department must belong to branch and designation to department. No overlapping assignments or occupancy of a reusable employee code. A historical boolean cannot express these intervals.'
+}
+
+Table EmployeeCompensation {
+    id integer [primary key]
+    company_id integer [not null]
+    salary numeric
+    effective_from timestamp
+    effective_to timestamp [null]
+    employee_id integer [not null]
+
+    Note: 'Dated salary history; salary is a simplified label for the full compensation rate/basis fields.'
+}
+
+Table DesignationPermission {
+    id integer [primary key]
+    company_id integer [not null]
+    access_level varchar
+    designation_id integer [not null]
+    permission_id integer [not null]
+}
+
+Table EmployeePermissionOverride {
+    id integer [primary key]
+    company_id integer [not null]
+    effect varchar
+    employee_id integer [not null]
+    permission_id integer [not null]
+
+    Note: 'Employee-specific grant/revoke. Replaces the undefined EmployeeRegistrationAccess box for permission purposes. Biometric registration is represented separately by DeviceEnrollment.'
+}
+
+// ==================== SCHEDULING ====================
+
+Table Shift {
+    id integer [primary key]
+    company_id integer [not null]
+    name varchar
+}
+
+Table DepartmentShift {
+    id integer [primary key]
+    company_id integer [not null]
+    effective_from date
+    effective_to date [null]
+    department_id integer [not null]
+    shift_id integer [not null]
+}
+
+Table EmployeeShiftAssignment {
+    id integer [primary key]
+    company_id integer [not null]
+    effective_from timestamp
+    effective_to timestamp [null]
+    employee_id integer [not null]
+    shift_id integer [not null]
+
+    Note: 'Department eligibility is validated using dated organization and DepartmentShift history; a second department_shift FK is not needed.'
+}
+
+Table CompanyAttendanceSettings {
+    id integer [primary key]
+    company_id integer [not null]
+    shift_mode varchar
+    company_shift_id integer [null]
+
+    indexes {
+        (company_id) [unique]
+    }
+
+    Note: 'One settings row per company. A company shift is required only for single-shift mode.'
+}
+
+Table WeeklyOffRule {
+    id integer [primary key]
+    company_id integer [not null]
+    weekday integer
+    branch_id integer [null]
+
+    Note: 'NULL branch means company-wide.'
+}
+
+Table Holiday {
+    id integer [primary key]
+    company_id integer [not null]
+    name varchar
+    holiday_date date
+    branch_id integer [null]
+
+    Note: 'NULL branch means company-wide.'
+}
+
+Table HolidayWorkAssignment {
+    id integer [primary key]
+    company_id integer [not null]
+    work_date date
+    employee_id integer [not null]
+    holiday_id integer [null]
+    weekly_off_rule_id integer [null]
+    shift_id integer [null]
+
+    Note: 'Exactly one source: a holiday OR a weekly-off rule applying on work_date.'
+}
+
+// ==================== DEVICES AND RAW EVIDENCE ====================
+
+Table DeviceVendor {
+    id integer [primary key]
+    name varchar
+
+    Note: 'Global reference data; device ownership belongs to BiometricDevice, not its manufacturer.'
+}
+
+Table DeviceModel {
+    id integer [primary key]
+    model_name varchar
+    vendor_id integer [not null]
+}
+
+Table BiometricDevice {
+    id integer [primary key]
+    company_id integer [not null]
+    serial_number varchar
+    model_id integer [not null]
+    branch_id integer [not null]
+
+    indexes {
+        (company_id, serial_number) [unique]
+    }
+}
+
+Table DeviceDepartment {
+    id integer [primary key]
+    company_id integer [not null]
+    device_id integer [not null]
+    department_id integer [not null]
+}
+
+Table DeviceEnrollment {
+    id integer [primary key]
+    company_id integer [not null]
+    device_user_id varchar
+    effective_from timestamp
+    effective_to timestamp [null]
+    device_id integer [not null]
+    employee_id integer [not null]
+
+    Note: 'Recognition mapping and attendance authorization are distinct; detailed authorization fields are omitted here.'
+}
+
+Table BiometricTemplate {
+    id integer [primary key]
+    company_id integer [not null]
+    employee_id integer [not null]
+
+    Note: 'Template belongs to the employee; its deployments are recorded separately.'
+}
+
+Table DeviceEnrollmentTemplate {
+    id integer [primary key]
+    company_id integer [not null]
+    device_enrollment_id integer [not null]
+    biometric_template_id integer [not null]
+
+    Note: 'Links an enrollment to a deployed template. Both must refer to the same employee.'
+}
+
+Table DeviceSyncState {
+    id integer [primary key]
+    company_id integer [not null]
+    sync_status varchar
+    device_id integer [not null]
+
+    indexes {
+        (device_id) [unique]
+    }
+}
+
+Table DeviceMessage {
+    id integer [primary key]
+    company_id integer [not null]
+    device_id integer [not null]
+
+    Note: 'Raw source evidence, retained independently of attendance calculations.'
+}
+
+Table PunchEvent {
+    id integer [primary key]
+    company_id integer [not null]
+    punched_at timestamp
+    device_message_id integer [not null]
+    device_id integer [not null]
+    device_enrollment_id integer [null]
+    employee_id integer [null]
+    duplicate_of_id integer [null]
+
+    Note: 'Employee/enrollment may be unresolved. Retain raw evidence and suspected duplicates. Approved manual input uses AttendanceCorrection.'
+}
+
+// ==================== ATTENDANCE ====================
+
+Table AttendanceRecord {
+    id integer [primary key]
+    company_id integer [not null]
+    work_date date
+    employee_id integer [not null]
+    employee_assignment_id integer [not null]
+    shift_id integer [not null]
+
+    indexes {
+        (company_id, employee_id, work_date) [unique]
+    }
+
+    Note: 'One daily result can contain multiple sessions and allocations; assignment identifies historical organizational placement.'
+}
+
+Table AttendanceCorrection {
+    id integer [primary key]
+    company_id integer [not null]
+    status varchar
+    attendance_record_id integer [not null]
+    target_punch_event_id integer [null]
+
+    Note: 'Approved manual correction supplies calculation inputs without rewriting raw punches.'
+}
+
+Table PunchAllocation {
+    id integer [primary key]
+    company_id integer [not null]
+    attendance_record_id integer [not null]
+    punch_event_id integer [null]
+    attendance_correction_id integer [null]
+
+    Note: 'Exactly one source: raw punch OR approved correction. Source exclusivity and calculation-version rules are omitted from the visual diagram.'
+}
+
+Table AttendanceSession {
+    id integer [primary key]
+    company_id integer [not null]
+    attendance_record_id integer [not null]
+    in_allocation_id integer [null]
+    out_allocation_id integer [null]
+
+    Note: 'IN and OUT are separate allocations of the same daily record. One may be missing; punches may come from different authorized devices.'
+}
+
+Table AttendancePenaltyRule {
+    id integer [primary key]
+    company_id integer [not null]
+    name varchar
+}
+
+Table PenaltyAssessment {
+    id integer [primary key]
+    company_id integer [not null]
+    employee_id integer [not null]
+    penalty_rule_id integer [not null]
+    payroll_period_id integer [null]
+
+    Note: 'Assessment may be supported by several attendance days through PenaltyAssessmentAttendance.'
+}
+
+Table PenaltyAssessmentAttendance {
+    id integer [primary key]
+    company_id integer [not null]
+    penalty_assessment_id integer [not null]
+    attendance_record_id integer [not null]
+
+    indexes {
+        (penalty_assessment_id, attendance_record_id) [unique]
+    }
+}
+
+// ==================== BASIC LEAVE ====================
+
+Table LeaveType {
+    id integer [primary key]
+    company_id integer [not null]
+    name varchar
+}
+
+Table LeaveRequest {
+    id integer [primary key]
+    company_id integer [not null]
+    status varchar
+    employee_id integer [not null]
+    leave_type_id integer [not null]
+
+    Note: 'Diagram shortcut: one leave type per request; policy/rule and request-segment layers are intentionally omitted.'
+}
+
+Table LeaveDay {
+    id integer [primary key]
+    company_id integer [not null]
+    date date
+    approved_pay_percentage numeric
+    leave_request_id integer [not null]
+    employee_assignment_id integer [not null]
+
+    Note: 'Direct request link is a visual shortcut for the full request-segment/policy chain. Multiple partial allocations can occur on one date.'
+}
+
+// ==================== BASIC PAYROLL AND ADVANCES ====================
+
+Table PayrollSettings {
+    id integer [primary key]
+    company_id integer [not null]
+
+    indexes {
+        (company_id) [unique]
+    }
+}
+
+Table PayrollPeriod {
+    id integer [primary key]
+    company_id integer [not null]
+    start_date date
+    end_date date
+}
+
+Table PayrollRecord {
+    id integer [primary key]
+    company_id integer [not null]
+    employee_id integer [not null]
+    payroll_period_id integer [not null]
+
+    Note: 'Direct period link collapses PayrollRun for this diagram. Do not infer that the full system permits only one run/revision per period.'
+}
+
+Table PayrollDailyLine {
+    id integer [primary key]
+    company_id integer [not null]
+    work_date date
+    payroll_record_id integer [not null]
+    employee_compensation_id integer [not null]
+    employee_assignment_id integer [not null]
+    attendance_record_id integer [null]
+    holiday_id integer [null]
+    weekly_off_rule_id integer [null]
+
+    Note: 'Direct record and history links collapse PayrollCompensationSegment. Leave evidence is many-to-many below. Final payroll posting models remain in the advanced plan.'
+}
+
+Table SalaryAdvance {
+    id integer [primary key]
+    company_id integer [not null]
+    amount numeric
+    employee_id integer [not null]
+    first_recovery_period_id integer [null]
+
+    Note: 'Agreement only, not proof of payment. Disbursement and payment tables are intentionally outside this mini diagram.'
+}
+
+Table SalaryAdvanceRecovery {
+    id integer [primary key]
+    company_id integer [not null]
+    amount numeric
+    salary_advance_id integer [not null]
+    payroll_record_id integer [null]
+
+    Note: 'An advance can be recovered over several payrolls. Direct payroll-record link collapses the full PayrollLine posting relationship. NULL permits non-payroll recovery.'
+}
+
+Table PayrollAdjustment {
+    id integer [primary key]
+    company_id integer [not null]
+    amount numeric
+    employee_id integer [not null]
+    target_payroll_period_id integer [null]
+    payroll_record_id integer [null]
+
+    Note: 'Target period identifies intent; optional payroll-record link summarizes posting via PayrollLine in the advanced plan.'
+}
+
+// ==================== DOMAIN RELATIONSHIPS ====================
+Ref: CompanyMembership.user_id > User.id
+Ref: CompanyFeature.feature_id > Feature.id
+Ref: AccessPermission.feature_id > Feature.id
+Ref: Department.branch_id > Branch.id
+Ref: Designation.department_id > Department.id
+Ref: Designation.parent_id > Designation.id
+Ref: Employee.user_id > User.id
+Ref: EmployeeAssignment.employee_id > Employee.id
+Ref: EmployeeAssignment.branch_id > Branch.id
+Ref: EmployeeAssignment.department_id > Department.id
+Ref: EmployeeAssignment.designation_id > Designation.id
+Ref: EmployeeAssignment.manager_id > Employee.id
+Ref: EmployeeCompensation.employee_id > Employee.id
+Ref: DesignationPermission.designation_id > Designation.id
+Ref: DesignationPermission.permission_id > AccessPermission.id
+Ref: EmployeePermissionOverride.employee_id > Employee.id
+Ref: EmployeePermissionOverride.permission_id > AccessPermission.id
+Ref: DepartmentShift.department_id > Department.id
+Ref: DepartmentShift.shift_id > Shift.id
+Ref: EmployeeShiftAssignment.employee_id > Employee.id
+Ref: EmployeeShiftAssignment.shift_id > Shift.id
+Ref: CompanyAttendanceSettings.company_shift_id > Shift.id
+Ref: WeeklyOffRule.branch_id > Branch.id
+Ref: Holiday.branch_id > Branch.id
+Ref: HolidayWorkAssignment.employee_id > Employee.id
+Ref: HolidayWorkAssignment.holiday_id > Holiday.id
+Ref: HolidayWorkAssignment.weekly_off_rule_id > WeeklyOffRule.id
+Ref: HolidayWorkAssignment.shift_id > Shift.id
+Ref: DeviceModel.vendor_id > DeviceVendor.id
+Ref: BiometricDevice.model_id > DeviceModel.id
+Ref: BiometricDevice.branch_id > Branch.id
+Ref: DeviceDepartment.device_id > BiometricDevice.id
+Ref: DeviceDepartment.department_id > Department.id
+Ref: DeviceEnrollment.device_id > BiometricDevice.id
+Ref: DeviceEnrollment.employee_id > Employee.id
+Ref: BiometricTemplate.employee_id > Employee.id
+Ref: DeviceEnrollmentTemplate.device_enrollment_id > DeviceEnrollment.id
+Ref: DeviceEnrollmentTemplate.biometric_template_id > BiometricTemplate.id
+Ref: DeviceMessage.device_id > BiometricDevice.id
+Ref: PunchEvent.device_message_id > DeviceMessage.id
+Ref: PunchEvent.device_id > BiometricDevice.id
+Ref: PunchEvent.device_enrollment_id > DeviceEnrollment.id
+Ref: PunchEvent.employee_id > Employee.id
+Ref: PunchEvent.duplicate_of_id > PunchEvent.id
+Ref: AttendanceRecord.employee_id > Employee.id
+Ref: AttendanceRecord.employee_assignment_id > EmployeeAssignment.id
+Ref: AttendanceRecord.shift_id > Shift.id
+Ref: AttendanceCorrection.attendance_record_id > AttendanceRecord.id
+Ref: AttendanceCorrection.target_punch_event_id > PunchEvent.id
+Ref: PunchAllocation.attendance_record_id > AttendanceRecord.id
+Ref: PunchAllocation.punch_event_id > PunchEvent.id
+Ref: PunchAllocation.attendance_correction_id > AttendanceCorrection.id
+Ref: AttendanceSession.attendance_record_id > AttendanceRecord.id
+Ref: AttendanceSession.in_allocation_id > PunchAllocation.id
+Ref: AttendanceSession.out_allocation_id > PunchAllocation.id
+Ref: PenaltyAssessment.employee_id > Employee.id
+Ref: PenaltyAssessment.penalty_rule_id > AttendancePenaltyRule.id
+Ref: PenaltyAssessment.payroll_period_id > PayrollPeriod.id
+Ref: PenaltyAssessmentAttendance.penalty_assessment_id > PenaltyAssessment.id
+Ref: PenaltyAssessmentAttendance.attendance_record_id > AttendanceRecord.id
+Ref: LeaveRequest.employee_id > Employee.id
+Ref: LeaveRequest.leave_type_id > LeaveType.id
+Ref: LeaveDay.leave_request_id > LeaveRequest.id
+Ref: LeaveDay.employee_assignment_id > EmployeeAssignment.id
+Ref: PayrollRecord.employee_id > Employee.id
+Ref: PayrollRecord.payroll_period_id > PayrollPeriod.id
+Ref: PayrollDailyLine.payroll_record_id > PayrollRecord.id
+Ref: PayrollDailyLine.employee_compensation_id > EmployeeCompensation.id
+Ref: PayrollDailyLine.employee_assignment_id > EmployeeAssignment.id
+Ref: PayrollDailyLine.attendance_record_id > AttendanceRecord.id
+Ref: PayrollDailyLine.holiday_id > Holiday.id
+Ref: PayrollDailyLine.weekly_off_rule_id > WeeklyOffRule.id
+Ref: SalaryAdvance.employee_id > Employee.id
+Ref: SalaryAdvance.first_recovery_period_id > PayrollPeriod.id
+Ref: SalaryAdvanceRecovery.salary_advance_id > SalaryAdvance.id
+Ref: SalaryAdvanceRecovery.payroll_record_id > PayrollRecord.id
+Ref: PayrollAdjustment.employee_id > Employee.id
+Ref: PayrollAdjustment.target_payroll_period_id > PayrollPeriod.id
+Ref: PayrollAdjustment.payroll_record_id > PayrollRecord.id
+Ref: BiometricDevice.id - DeviceSyncState.device_id
+Ref: PayrollDailyLine.id <> LeaveDay.id
+
+// ==================== DIRECT TENANT OWNERSHIP ====================
+Ref: CompanyMembership.company_id > Company.id
+Ref: CompanyFeature.company_id > Company.id
+Ref: Branch.company_id > Company.id
+Ref: Department.company_id > Company.id
+Ref: Designation.company_id > Company.id
+Ref: Employee.company_id > Company.id
+Ref: EmployeeAssignment.company_id > Company.id
+Ref: EmployeeCompensation.company_id > Company.id
+Ref: DesignationPermission.company_id > Company.id
+Ref: EmployeePermissionOverride.company_id > Company.id
+Ref: Shift.company_id > Company.id
+Ref: DepartmentShift.company_id > Company.id
+Ref: EmployeeShiftAssignment.company_id > Company.id
+Ref: Company.id - CompanyAttendanceSettings.company_id
+Ref: WeeklyOffRule.company_id > Company.id
+Ref: Holiday.company_id > Company.id
+Ref: HolidayWorkAssignment.company_id > Company.id
+Ref: BiometricDevice.company_id > Company.id
+Ref: DeviceDepartment.company_id > Company.id
+Ref: DeviceEnrollment.company_id > Company.id
+Ref: BiometricTemplate.company_id > Company.id
+Ref: DeviceEnrollmentTemplate.company_id > Company.id
+Ref: DeviceSyncState.company_id > Company.id
+Ref: DeviceMessage.company_id > Company.id
+Ref: PunchEvent.company_id > Company.id
+Ref: AttendanceRecord.company_id > Company.id
+Ref: AttendanceCorrection.company_id > Company.id
+Ref: PunchAllocation.company_id > Company.id
+Ref: AttendanceSession.company_id > Company.id
+Ref: AttendancePenaltyRule.company_id > Company.id
+Ref: PenaltyAssessment.company_id > Company.id
+Ref: PenaltyAssessmentAttendance.company_id > Company.id
+Ref: LeaveType.company_id > Company.id
+Ref: LeaveRequest.company_id > Company.id
+Ref: LeaveDay.company_id > Company.id
+Ref: Company.id - PayrollSettings.company_id
+Ref: PayrollPeriod.company_id > Company.id
+Ref: PayrollRecord.company_id > Company.id
+Ref: PayrollDailyLine.company_id > Company.id
+Ref: SalaryAdvance.company_id > Company.id
+Ref: SalaryAdvanceRecovery.company_id > Company.id
+Ref: PayrollAdjustment.company_id > Company.id

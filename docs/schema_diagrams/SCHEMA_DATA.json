@@ -5398,7 +5398,7 @@
           "note": "TextField."
         }
       ],
-      "table": "attendance_punchallocation",
+      "table": "payroll_punchallocation",
       "tenant": true,
       "constraints": "Constraints: exactly one source (PunchEvent or approved AttendanceCorrection); unique source per calculation version; sequence unique within attendance/version. Merge all authorized devices into one employee/shift stream ordered by event time; never restart alternating IN/OUT at each device or incoming batch."
     },
@@ -5542,7 +5542,7 @@
           "note": "PositiveIntegerField."
         }
       ],
-      "table": "attendance_attendancesession",
+      "table": "payroll_attendancesession",
       "tenant": true,
       "constraints": "Constraints: end after start; allocation directions correct; sequence unique per record/version. Both allocations belong to this attendance record and employee/company, but may originate from different devices. Never require matching device IDs."
     },
@@ -5854,7 +5854,7 @@
           "note": "BooleanField summary; authoritative lock belongs to finalized payroll."
         }
       ],
-      "table": "attendance_attendancerecord",
+      "table": "payroll_attendancerecord",
       "tenant": true,
       "constraints": "Constraint: unique `(company, employee, work_date)`; assignment applies on work date and department/branch match it."
     },
@@ -6105,7 +6105,7 @@
           "note": "nullable fields."
         }
       ],
-      "table": "attendance_attendancecorrection",
+      "table": "payroll_attendancecorrection",
       "tenant": true,
       "constraints": ""
     },
@@ -6346,7 +6346,7 @@
           "note": "PositiveIntegerField."
         }
       ],
-      "table": "attendance_attendancepenaltyrule",
+      "table": "payroll_attendancepenaltyrule",
       "tenant": true,
       "constraints": "Constraint: rule inputs consistent with metric/method. Activated rule versions are immutable."
     },
@@ -6557,7 +6557,7 @@
           "note": "DateTimeField."
         }
       ],
-      "table": "attendance_penaltyassessment",
+      "table": "payroll_penaltyassessment",
       "tenant": true,
       "constraints": "Constraint: unique occurrence identity per company; one original payroll posting."
     },
@@ -6654,7 +6654,7 @@
           "note": "JSONField."
         }
       ],
-      "table": "attendance_penaltyassessmentattendance",
+      "table": "payroll_penaltyassessmentattendance",
       "tenant": true,
       "constraints": "Constraint: unique `(penalty_assessment, attendance_record)`. This is the explicit M2M through table."
     },
@@ -6787,7 +6787,7 @@
           "note": "active/inactive."
         }
       ],
-      "table": "leaves_leavetype",
+      "table": "payroll_leavetype",
       "tenant": true,
       "constraints": "Constraint: unique `(company, code)`."
     },
@@ -6935,7 +6935,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "leaves_leavepolicy",
+      "table": "payroll_leavepolicy",
       "tenant": true,
       "constraints": "Constraints: department requires matching branch; only one applicable default per scope. Avoid a migration cycle by adding current_version after the initial version table or treating it as a cached pointer."
     },
@@ -7137,7 +7137,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "leaves_leavepolicyversion",
+      "table": "payroll_leavepolicyversion",
       "tenant": true,
       "constraints": "Constraints: unique `(leave_policy, version_number)`; non-overlapping active effective periods. Freeze after use."
     },
@@ -7490,7 +7490,7 @@
           "note": "active/inactive."
         }
       ],
-      "table": "leaves_leavepolicytyperule",
+      "table": "payroll_leavepolicytyperule",
       "tenant": true,
       "constraints": "Constraint: unique `(policy_version, leave_type)`; percentages and limits valid."
     },
@@ -7618,7 +7618,7 @@
           "note": "active/ended/cancelled."
         }
       ],
-      "table": "leaves_employeeleavepolicyassignment",
+      "table": "payroll_employeeleavepolicyassignment",
       "tenant": true,
       "constraints": "Constraint: no overlapping explicit employee policy assignments."
     },
@@ -7773,7 +7773,7 @@
           "note": "PositiveBigIntegerField for balance concurrency."
         }
       ],
-      "table": "leaves_leaveentitlement",
+      "table": "payroll_leaveentitlement",
       "tenant": true,
       "constraints": "Constraint: unique entitlement for employee/type/period/policy context; overlapping accounts for the same type require explicit migration/reconciliation."
     },
@@ -7972,7 +7972,7 @@
           "deletion": "SET_NULL"
         }
       ],
-      "table": "leaves_leavebalanceentry",
+      "table": "payroll_leavebalanceentry",
       "tenant": true,
       "constraints": "Constraints: nonzero balance or reservation delta; unique source key; one reversal per entry; source fields consistent with kind."
     },
@@ -8180,7 +8180,7 @@
           "note": "nullable DateTimeField."
         }
       ],
-      "table": "leaves_leaverequest",
+      "table": "payroll_leaverequest",
       "tenant": true,
       "constraints": "Constraints: amendment/cancellation needs original request with same company/employee; approved request requires segments and completed approvals."
     },
@@ -8378,7 +8378,7 @@
           "note": "active, superseded, cancelled."
         }
       ],
-      "table": "leaves_leaverequestsegment",
+      "table": "payroll_leaverequestsegment",
       "tenant": true,
       "constraints": "Constraints: duration-specific fields required; end not before start; no overlap with active segments for employee after expanding intervals."
     },
@@ -8600,7 +8600,7 @@
           "note": "nullable DateTimeField."
         }
       ],
-      "table": "leaves_leaveday",
+      "table": "payroll_leaveday",
       "tenant": true,
       "constraints": "Constraints: covered interval positive and within relevant work date/shift; active approved intervals do not overlap; pay type matches percentage."
     },
@@ -8777,7 +8777,7 @@
           "note": "JSONField."
         }
       ],
-      "table": "leaves_leaveapprovalstep",
+      "table": "payroll_leaveapprovalstep",
       "tenant": true,
       "constraints": "Constraints: exactly one target FK; unique target/stage/approver; decision fields required when decided."
     },
@@ -8939,7 +8939,7 @@
           "note": "active, replaced, removed."
         }
       ],
-      "table": "leaves_leaveattachment",
+      "table": "payroll_leaveattachment",
       "tenant": true,
       "constraints": "Constraint: exactly one target."
     },
@@ -9165,7 +9165,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "leaves_leaveencashment",
+      "table": "payroll_leaveencashment",
       "tenant": true,
       "constraints": "Constraint: approved units cannot exceed eligible available balance. Resulting payroll lines point back to this row, so reversals and off-cycle corrections remain possible."
     },
@@ -9364,7 +9364,7 @@
           "note": "CharField."
         }
       ],
-      "table": "leaves_leavecompensatorycredit",
+      "table": "payroll_leavecompensatorycredit",
       "tenant": true,
       "constraints": "Constraints: unique qualifying source/treatment; do not award overtime and leave together unless treatment explicitly permits it."
     },
@@ -9684,7 +9684,7 @@
           "deletion": "PROTECT"
         }
       ],
-      "table": "leaves_leavefareassistanceclaim",
+      "table": "payroll_leavefareassistanceclaim",
       "tenant": true,
       "constraints": "Constraints: same-company qualifying leave; policy eligibility; unique active occurrence slot per employee/benefit cycle. Resulting PayrollLine rows point back to the claim. LFA never changes LeaveEntitlement."
     },

@@ -5,6 +5,32 @@
 User feedback corrected the onboarding contract. Read [UI_AND_ONBOARDING_CONVENTIONS.md](UI_AND_ONBOARDING_CONVENTIONS.md) and [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md). Implemented one current master administrator per company with backend/database uniqueness, account editing, generated string codes/slugs, Bangladesh defaults, scoped Django admin forms, explicit `/platform/companies/`, centered responsive pages and readable four-space templates. No new environment variables. Existing data preserved; only the two shared demo memberships were ended with explicit user approval and audit entries. Full suite: 131 tests passed; the strengthened settings-admin valid-POST check also passed in the seven-test focused rerun. Browser creation/admin/feature flows and screenshots checked at 1440/768/375px. P1 remains in progress: next is company organization/scheduling writes and scoped authorization, then employee lifecycle pages. This supersedes earlier existing-account/role-picker examples.
 
 
+## Table naming decision — 2026-09-08
+
+Physical table names are now set explicitly with `Meta.db_table`, separately from
+Django model names and app labels (which stay chosen for code readability).
+`leaves`, `attendance` and `payroll` models all use the **`payroll_`** table
+prefix; every other app uses its own label. Salary models already live in the
+`payroll` app and are unaffected.
+
+Applied to the 48 models in `leaves`, `attendance` and `payroll` that are **not
+yet implemented**, so no table rename is required — the same free-rename window
+used for `workforce` -> `employees`. `docs/scripts/build_schema.cjs` implements
+the rule and the schema artifacts were regenerated: 83 models / 88 tables /
+1,615 columns / 453 FKs unchanged, 49 tables now `payroll_` prefixed, **no
+duplicate table names**.
+
+Two already-migrated tables were deliberately **not** renamed:
+`employees_employeecompensation` (8 rows) and
+`scheduling_companyattendancesettings` (3 rows). Compensation is dated employment
+history that payroll reads rather than a payroll artifact, and attendance
+settings are policy configuration rather than attendance records. Renaming either
+needs an explicit `AlterModelTable` migration and a deliberate decision — open
+question for the lead.
+
+Device tables (`devices_*`) are unaffected, so the parallel device workstream
+needs no change.
+
 ## Current checkpoint
 
 - **Current deliverable:** P1 platform onboarding implemented; company setup and employee write workflows remain next. See [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md) for files/functions and the UI workflow.

@@ -41,6 +41,41 @@ ActorTracked:
   updated_by — nullable FK -> User, SET_NULL
 ```
 
+## Physical table naming
+
+Django **model names and app labels are chosen for the code** — whatever reads
+best for the project. The **physical table name is set separately** with
+`Meta.db_table`, and that is what appears in PostgreSQL.
+
+| App | Table prefix | Example |
+|---|---|---|
+| `leaves` | **`payroll_`** | `LeaveRequest` -> `payroll_leaverequest` |
+| `attendance` | **`payroll_`** | `AttendanceRecord` -> `payroll_attendancerecord` |
+| `payroll` | **`payroll_`** | `PayrollRun` -> `payroll_payrollrun` |
+| every other app | its own label | `Employee` -> `employees_employee` |
+
+Leave, attendance and payroll form one payroll family in the database, so they
+share one prefix and sort together. Salary models already live in the `payroll`
+app, so they need no change.
+
+Rules:
+
+- Always set `db_table` explicitly on a new model. Never rely on Django's
+  implicit `<app>_<model>` name, because it silently changes if an app is ever
+  renamed.
+- The table name is lowercase `<prefix>_<modelname>`, model name lowercased with
+  no separators, matching Django's own convention.
+- Implicit M2M junction tables inherit their parent's prefix automatically.
+- Table names verified collision-free across all 88 tables after this rule was
+  applied.
+
+**Already-migrated tables are not renamed by this rule.** `employees_employeecompensation`
+and `scheduling_companyattendancesettings` hold live data and keep their current
+names: compensation is dated employment history that payroll *reads*, and
+attendance settings are policy configuration rather than attendance records.
+Renaming either would need an explicit `AlterModelTable` migration and a
+deliberate decision.
+
 Every tenant-owned relation must be validated as belonging to the same company. Forms alone are not sufficient; enforce this in services and database constraints where possible.
 
 Device authorization and pairing follow [DEVICE_ATTENDANCE_POLICY.md](DEVICE_ATTENDANCE_POLICY.md). Enrollment identifies a person; the effective device scope determines whether a punch counts. Entry and exit devices need not match.

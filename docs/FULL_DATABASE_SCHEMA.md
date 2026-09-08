@@ -1,8 +1,5 @@
 # Complete attendance database schema — every field
 
-> Implemented schema correction (2026-09-07): Company.code remains varchar/string but is generated from a PostgreSQL sequence starting at 10001; slug is generated with name-based numeric suffixes. Existing identifiers remain unchanged. Company defaults are BDT, BD, Asia/Dhaka. CompanyMembership now has conditional uniqueness on company and user for non-ended owner/company_admin roles (one current master per company, not shared across companies). Historical ended memberships remain. CompanyAttendanceSettings.company is implemented as FK + UNIQUE (one-to-one cardinality). No new model/table/column was added by this correction; generated diagrams retain the same relationships. See UI_AND_ONBOARDING_CONVENTIONS.md for workflow rules.
-
-
 This is the field-level schema for the proposed attendance project: **83 domain models, 5 implicit M2M junctions, 1615 columns, and 453 foreign-key relationships**. No database or Django application is generated.
 
 - [Interactive diagram](ATTENDANCE_SCHEMA.html): search a table, zoom, and highlight its relationships.
@@ -872,7 +869,7 @@ Constraints: unique `(device_message, source_record_index)`; reliable vendor pun
 
 ### PunchAllocation
 
-Physical table: `attendance_punchallocation`. Direct tenant owner: `company_id`.
+Physical table: `payroll_punchallocation`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -880,9 +877,9 @@ Physical table: `attendance_punchallocation`. Direct tenant owner: `company_id`.
 | `company_id` | `bigint` | FK | No | `tenants_company.id` |
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
-| `attendance_record_id` | `bigint` | FK | No | `attendance_attendancerecord.id` |
+| `attendance_record_id` | `bigint` | FK | No | `payroll_attendancerecord.id` |
 | `punch_event_id` | `bigint` | FK | Yes | `devices_punchevent.id` |
-| `attendance_correction_id` | `bigint` | FK | Yes | `attendance_attendancecorrection.id` |
+| `attendance_correction_id` | `bigint` | FK | Yes | `payroll_attendancecorrection.id` |
 | `sequence_number` | `integer` | — | No | — |
 | `event_at` | `timestamptz` | — | No | — |
 | `interpreted_direction` | `varchar` | — | No | — |
@@ -895,7 +892,7 @@ Physical table: `attendance_punchallocation`. Direct tenant owner: `company_id`.
 Constraints: exactly one source (PunchEvent or approved AttendanceCorrection); unique source per calculation version; sequence unique within attendance/version. Merge all authorized devices into one employee/shift stream ordered by event time; never restart alternating IN/OUT at each device or incoming batch.
 ### AttendanceSession
 
-Physical table: `attendance_attendancesession`. Direct tenant owner: `company_id`.
+Physical table: `payroll_attendancesession`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -903,10 +900,10 @@ Physical table: `attendance_attendancesession`. Direct tenant owner: `company_id
 | `company_id` | `bigint` | FK | No | `tenants_company.id` |
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
-| `attendance_record_id` | `bigint` | FK | No | `attendance_attendancerecord.id` |
+| `attendance_record_id` | `bigint` | FK | No | `payroll_attendancerecord.id` |
 | `sequence_number` | `integer` | — | No | — |
-| `in_allocation_id` | `bigint` | FK/UQ | Yes | `attendance_punchallocation.id` |
-| `out_allocation_id` | `bigint` | FK/UQ | Yes | `attendance_punchallocation.id` |
+| `in_allocation_id` | `bigint` | FK/UQ | Yes | `payroll_punchallocation.id` |
+| `out_allocation_id` | `bigint` | FK/UQ | Yes | `payroll_punchallocation.id` |
 | `started_at` | `timestamptz` | — | Yes | — |
 | `ended_at` | `timestamptz` | — | Yes | — |
 | `worked_minutes` | `integer` | — | No | — |
@@ -917,7 +914,7 @@ Physical table: `attendance_attendancesession`. Direct tenant owner: `company_id
 Constraints: end after start; allocation directions correct; sequence unique per record/version. Both allocations belong to this attendance record and employee/company, but may originate from different devices. Never require matching device IDs.
 ### AttendanceRecord
 
-Physical table: `attendance_attendancerecord`. Direct tenant owner: `company_id`.
+Physical table: `payroll_attendancerecord`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -957,7 +954,7 @@ Physical table: `attendance_attendancerecord`. Direct tenant owner: `company_id`
 Constraint: unique `(company, employee, work_date)`; assignment applies on work date and department/branch match it.
 ### AttendanceCorrection
 
-Physical table: `attendance_attendancecorrection`. Direct tenant owner: `company_id`.
+Physical table: `payroll_attendancecorrection`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -967,7 +964,7 @@ Physical table: `attendance_attendancecorrection`. Direct tenant owner: `company
 | `updated_at` | `timestamptz` | — | No | — |
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
-| `attendance_record_id` | `bigint` | FK | No | `attendance_attendancerecord.id` |
+| `attendance_record_id` | `bigint` | FK | No | `payroll_attendancerecord.id` |
 | `requested_by_user_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `requested_for_employee_id` | `bigint` | FK | No | `employees_employee.id` |
 | `correction_type` | `varchar` | — | No | — |
@@ -988,7 +985,7 @@ Physical table: `attendance_attendancecorrection`. Direct tenant owner: `company
 | `resulting_calculation_version` | `integer` | — | Yes | — |
 ### AttendancePenaltyRule
 
-Physical table: `attendance_attendancepenaltyrule`. Direct tenant owner: `company_id`.
+Physical table: `payroll_attendancepenaltyrule`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1021,7 +1018,7 @@ Physical table: `attendance_attendancepenaltyrule`. Direct tenant owner: `compan
 Constraint: rule inputs consistent with metric/method. Activated rule versions are immutable.
 ### PenaltyAssessment
 
-Physical table: `attendance_penaltyassessment`. Direct tenant owner: `company_id`.
+Physical table: `payroll_penaltyassessment`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1030,7 +1027,7 @@ Physical table: `attendance_penaltyassessment`. Direct tenant owner: `company_id
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
-| `penalty_rule_id` | `bigint` | FK | No | `attendance_attendancepenaltyrule.id` |
+| `penalty_rule_id` | `bigint` | FK | No | `payroll_attendancepenaltyrule.id` |
 | `payroll_period_id` | `bigint` | FK | Yes | `payroll_payrollperiod.id` |
 | `period_start` | `date` | — | No | — |
 | `period_end` | `date` | — | No | — |
@@ -1044,13 +1041,13 @@ Physical table: `attendance_penaltyassessment`. Direct tenant owner: `company_id
 | `status` | `varchar` | — | No | — |
 | `approved_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `approved_at` | `timestamptz` | — | Yes | — |
-| `reversal_of_id` | `bigint` | FK | Yes | `attendance_penaltyassessment.id` |
+| `reversal_of_id` | `bigint` | FK | Yes | `payroll_penaltyassessment.id` |
 | `calculated_at` | `timestamptz` | — | No | — |
 
 Constraint: unique occurrence identity per company; one original payroll posting.
 ### PenaltyAssessmentAttendance
 
-Physical table: `attendance_penaltyassessmentattendance`. Direct tenant owner: `company_id`.
+Physical table: `payroll_penaltyassessmentattendance`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1058,8 +1055,8 @@ Physical table: `attendance_penaltyassessmentattendance`. Direct tenant owner: `
 | `company_id` | `bigint` | FK | No | `tenants_company.id` |
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
-| `penalty_assessment_id` | `bigint` | FK | No | `attendance_penaltyassessment.id` |
-| `attendance_record_id` | `bigint` | FK | No | `attendance_attendancerecord.id` |
+| `penalty_assessment_id` | `bigint` | FK | No | `payroll_penaltyassessment.id` |
+| `attendance_record_id` | `bigint` | FK | No | `payroll_attendancerecord.id` |
 | `sequence_number` | `integer` | — | No | — |
 | `qualifying_value` | `numeric(18,6)` | — | No | — |
 | `reason_snapshot` | `jsonb` | — | No | — |
@@ -1070,7 +1067,7 @@ Constraint: unique `(penalty_assessment, attendance_record)`. This is the explic
 
 ### LeaveType
 
-Physical table: `leaves_leavetype`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leavetype`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1091,7 +1088,7 @@ Physical table: `leaves_leavetype`. Direct tenant owner: `company_id`.
 Constraint: unique `(company, code)`.
 ### LeavePolicy
 
-Physical table: `leaves_leavepolicy`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leavepolicy`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1108,12 +1105,12 @@ Physical table: `leaves_leavepolicy`. Direct tenant owner: `company_id`.
 | `department_id` | `bigint` | FK | Yes | `organization_department.id` |
 | `is_company_default` | `boolean` | — | No | — |
 | `status` | `varchar` | — | No | — |
-| `current_version_id` | `bigint` | FK | Yes | `leaves_leavepolicyversion.id` |
+| `current_version_id` | `bigint` | FK | Yes | `payroll_leavepolicyversion.id` |
 
 Constraints: department requires matching branch; only one applicable default per scope. Avoid a migration cycle by adding current_version after the initial version table or treating it as a cached pointer.
 ### LeavePolicyVersion
 
-Physical table: `leaves_leavepolicyversion`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leavepolicyversion`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1123,7 +1120,7 @@ Physical table: `leaves_leavepolicyversion`. Direct tenant owner: `company_id`.
 | `updated_at` | `timestamptz` | — | No | — |
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
-| `leave_policy_id` | `bigint` | FK | No | `leaves_leavepolicy.id` |
+| `leave_policy_id` | `bigint` | FK | No | `payroll_leavepolicy.id` |
 | `version_number` | `integer` | — | No | — |
 | `effective_from` | `date` | — | No | — |
 | `effective_to` | `date` | — | Yes | — |
@@ -1141,7 +1138,7 @@ Physical table: `leaves_leavepolicyversion`. Direct tenant owner: `company_id`.
 Constraints: unique `(leave_policy, version_number)`; non-overlapping active effective periods. Freeze after use.
 ### LeavePolicyTypeRule
 
-Physical table: `leaves_leavepolicytyperule`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leavepolicytyperule`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1151,8 +1148,8 @@ Physical table: `leaves_leavepolicytyperule`. Direct tenant owner: `company_id`.
 | `updated_at` | `timestamptz` | — | No | — |
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
-| `policy_version_id` | `bigint` | FK | No | `leaves_leavepolicyversion.id` |
-| `leave_type_id` | `bigint` | FK | No | `leaves_leavetype.id` |
+| `policy_version_id` | `bigint` | FK | No | `payroll_leavepolicyversion.id` |
+| `leave_type_id` | `bigint` | FK | No | `payroll_leavetype.id` |
 | `balance_unit` | `varchar` | — | No | — |
 | `annual_allowance` | `numeric(18,6)` | — | No | — |
 | `grant_method` | `varchar` | — | No | — |
@@ -1186,7 +1183,7 @@ Physical table: `leaves_leavepolicytyperule`. Direct tenant owner: `company_id`.
 Constraint: unique `(policy_version, leave_type)`; percentages and limits valid.
 ### EmployeeLeavePolicyAssignment
 
-Physical table: `leaves_employeeleavepolicyassignment`. Direct tenant owner: `company_id`.
+Physical table: `payroll_employeeleavepolicyassignment`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1197,7 +1194,7 @@ Physical table: `leaves_employeeleavepolicyassignment`. Direct tenant owner: `co
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
-| `leave_policy_id` | `bigint` | FK | No | `leaves_leavepolicy.id` |
+| `leave_policy_id` | `bigint` | FK | No | `payroll_leavepolicy.id` |
 | `effective_from` | `date` | — | No | — |
 | `effective_to` | `date` | — | Yes | — |
 | `reason` | `text` | — | No | — |
@@ -1206,7 +1203,7 @@ Physical table: `leaves_employeeleavepolicyassignment`. Direct tenant owner: `co
 Constraint: no overlapping explicit employee policy assignments.
 ### LeaveEntitlement
 
-Physical table: `leaves_leaveentitlement`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leaveentitlement`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1215,8 +1212,8 @@ Physical table: `leaves_leaveentitlement`. Direct tenant owner: `company_id`.
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
-| `leave_type_id` | `bigint` | FK | No | `leaves_leavetype.id` |
-| `policy_version_id` | `bigint` | FK | No | `leaves_leavepolicyversion.id` |
+| `leave_type_id` | `bigint` | FK | No | `payroll_leavetype.id` |
+| `policy_version_id` | `bigint` | FK | No | `payroll_leavepolicyversion.id` |
 | `period_start` | `date` | — | No | — |
 | `period_end` | `date` | — | No | — |
 | `balance_unit` | `varchar` | — | No | — |
@@ -1229,7 +1226,7 @@ Physical table: `leaves_leaveentitlement`. Direct tenant owner: `company_id`.
 Constraint: unique entitlement for employee/type/period/policy context; overlapping accounts for the same type require explicit migration/reconciliation.
 ### LeaveBalanceEntry
 
-Physical table: `leaves_leavebalanceentry`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leavebalanceentry`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1237,26 +1234,26 @@ Physical table: `leaves_leavebalanceentry`. Direct tenant owner: `company_id`.
 | `company_id` | `bigint` | FK | No | `tenants_company.id` |
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
-| `entitlement_id` | `bigint` | FK | No | `leaves_leaveentitlement.id` |
+| `entitlement_id` | `bigint` | FK | No | `payroll_leaveentitlement.id` |
 | `entry_kind` | `varchar` | — | No | — |
 | `balance_delta` | `numeric(18,6)` | — | No | — |
 | `reservation_delta` | `numeric(18,6)` | — | No | — |
 | `effective_at` | `timestamptz` | — | No | — |
 | `expires_at` | `timestamptz` | — | Yes | — |
-| `source_grant_id` | `bigint` | FK | Yes | `leaves_leavebalanceentry.id` |
+| `source_grant_id` | `bigint` | FK | Yes | `payroll_leavebalanceentry.id` |
 | `source_idempotency_key` | `varchar` | — | No | — |
-| `leave_request_id` | `bigint` | FK | Yes | `leaves_leaverequest.id` |
-| `leave_day_id` | `bigint` | FK | Yes | `leaves_leaveday.id` |
-| `leave_encashment_id` | `bigint` | FK | Yes | `leaves_leaveencashment.id` |
-| `compensatory_credit_id` | `bigint` | FK | Yes | `leaves_leavecompensatorycredit.id` |
-| `reversal_of_id` | `bigint` | FK/UQ | Yes | `leaves_leavebalanceentry.id` |
+| `leave_request_id` | `bigint` | FK | Yes | `payroll_leaverequest.id` |
+| `leave_day_id` | `bigint` | FK | Yes | `payroll_leaveday.id` |
+| `leave_encashment_id` | `bigint` | FK | Yes | `payroll_leaveencashment.id` |
+| `compensatory_credit_id` | `bigint` | FK | Yes | `payroll_leavecompensatorycredit.id` |
+| `reversal_of_id` | `bigint` | FK/UQ | Yes | `payroll_leavebalanceentry.id` |
 | `reason` | `text` | — | No | — |
 | `posted_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 
 Constraints: nonzero balance or reservation delta; unique source key; one reversal per entry; source fields consistent with kind.
 ### LeaveRequest
 
-Physical table: `leaves_leaverequest`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leaverequest`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1269,10 +1266,10 @@ Physical table: `leaves_leaverequest`. Direct tenant owner: `company_id`.
 | `public_id` | `uuid` | UQ | No | — |
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
 | `submission_assignment_id` | `bigint` | FK | No | `employees_employeeassignment.id` |
-| `policy_version_id` | `bigint` | FK | No | `leaves_leavepolicyversion.id` |
+| `policy_version_id` | `bigint` | FK | No | `payroll_leavepolicyversion.id` |
 | `action_type` | `varchar` | — | No | — |
-| `original_request_id` | `bigint` | FK | Yes | `leaves_leaverequest.id` |
-| `supersedes_id` | `bigint` | FK | Yes | `leaves_leaverequest.id` |
+| `original_request_id` | `bigint` | FK | Yes | `payroll_leaverequest.id` |
+| `supersedes_id` | `bigint` | FK | Yes | `payroll_leaverequest.id` |
 | `reason` | `text` | — | No | — |
 | `status` | `varchar` | — | No | — |
 | `submitted_at` | `timestamptz` | — | Yes | — |
@@ -1284,7 +1281,7 @@ Physical table: `leaves_leaverequest`. Direct tenant owner: `company_id`.
 Constraints: amendment/cancellation needs original request with same company/employee; approved request requires segments and completed approvals.
 ### LeaveRequestSegment
 
-Physical table: `leaves_leaverequestsegment`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leaverequestsegment`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1292,8 +1289,8 @@ Physical table: `leaves_leaverequestsegment`. Direct tenant owner: `company_id`.
 | `company_id` | `bigint` | FK | No | `tenants_company.id` |
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
-| `leave_request_id` | `bigint` | FK | No | `leaves_leaverequest.id` |
-| `leave_type_id` | `bigint` | FK | No | `leaves_leavetype.id` |
+| `leave_request_id` | `bigint` | FK | No | `payroll_leaverequest.id` |
+| `leave_type_id` | `bigint` | FK | No | `payroll_leavetype.id` |
 | `duration_type` | `varchar` | — | No | — |
 | `start_date` | `date` | — | No | — |
 | `end_date` | `date` | — | No | — |
@@ -1305,14 +1302,14 @@ Physical table: `leaves_leaverequestsegment`. Direct tenant owner: `company_id`.
 | `requested_minutes` | `integer` | — | No | — |
 | `requested_pay_type` | `varchar` | — | No | — |
 | `requested_pay_percentage` | `numeric(18,6)` | — | Yes | — |
-| `original_segment_id` | `bigint` | FK | Yes | `leaves_leaverequestsegment.id` |
+| `original_segment_id` | `bigint` | FK | Yes | `payroll_leaverequestsegment.id` |
 | `sequence_number` | `integer` | — | No | — |
 | `status` | `varchar` | — | No | — |
 
 Constraints: duration-specific fields required; end not before start; no overlap with active segments for employee after expanding intervals.
 ### LeaveDay
 
-Physical table: `leaves_leaveday`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leaveday`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1320,11 +1317,11 @@ Physical table: `leaves_leaveday`. Direct tenant owner: `company_id`.
 | `company_id` | `bigint` | FK | No | `tenants_company.id` |
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
-| `request_segment_id` | `bigint` | FK | No | `leaves_leaverequestsegment.id` |
+| `request_segment_id` | `bigint` | FK | No | `payroll_leaverequestsegment.id` |
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
 | `employee_assignment_id` | `bigint` | FK | No | `employees_employeeassignment.id` |
-| `policy_type_rule_id` | `bigint` | FK | No | `leaves_leavepolicytyperule.id` |
-| `entitlement_id` | `bigint` | FK | Yes | `leaves_leaveentitlement.id` |
+| `policy_type_rule_id` | `bigint` | FK | No | `payroll_leavepolicytyperule.id` |
+| `entitlement_id` | `bigint` | FK | Yes | `payroll_leaveentitlement.id` |
 | `work_date` | `date` | — | No | — |
 | `covered_start_at` | `timestamptz` | — | No | — |
 | `covered_end_at` | `timestamptz` | — | No | — |
@@ -1336,13 +1333,13 @@ Physical table: `leaves_leaveday`. Direct tenant owner: `company_id`.
 | `calendar_snapshot` | `jsonb` | — | No | — |
 | `shift_snapshot` | `jsonb` | — | No | — |
 | `status` | `varchar` | — | No | — |
-| `supersedes_id` | `bigint` | FK | Yes | `leaves_leaveday.id` |
+| `supersedes_id` | `bigint` | FK | Yes | `payroll_leaveday.id` |
 | `consumed_at` | `timestamptz` | — | Yes | — |
 
 Constraints: covered interval positive and within relevant work date/shift; active approved intervals do not overlap; pay type matches percentage.
 ### LeaveApprovalStep
 
-Physical table: `leaves_leaveapprovalstep`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leaveapprovalstep`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1350,10 +1347,10 @@ Physical table: `leaves_leaveapprovalstep`. Direct tenant owner: `company_id`.
 | `company_id` | `bigint` | FK | No | `tenants_company.id` |
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
-| `leave_request_id` | `bigint` | FK | Yes | `leaves_leaverequest.id` |
-| `leave_encashment_id` | `bigint` | FK | Yes | `leaves_leaveencashment.id` |
-| `compensatory_credit_id` | `bigint` | FK | Yes | `leaves_leavecompensatorycredit.id` |
-| `lfa_claim_id` | `bigint` | FK | Yes | `leaves_leavefareassistanceclaim.id` |
+| `leave_request_id` | `bigint` | FK | Yes | `payroll_leaverequest.id` |
+| `leave_encashment_id` | `bigint` | FK | Yes | `payroll_leaveencashment.id` |
+| `compensatory_credit_id` | `bigint` | FK | Yes | `payroll_leavecompensatorycredit.id` |
+| `lfa_claim_id` | `bigint` | FK | Yes | `payroll_leavefareassistanceclaim.id` |
 | `stage_number` | `integer` | — | No | — |
 | `stage_name` | `varchar` | — | No | — |
 | `approver_membership_id` | `bigint` | FK | No | `accounts_companymembership.id` |
@@ -1367,7 +1364,7 @@ Physical table: `leaves_leaveapprovalstep`. Direct tenant owner: `company_id`.
 Constraints: exactly one target FK; unique target/stage/approver; decision fields required when decided.
 ### LeaveAttachment
 
-Physical table: `leaves_leaveattachment`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leaveattachment`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1375,8 +1372,8 @@ Physical table: `leaves_leaveattachment`. Direct tenant owner: `company_id`.
 | `company_id` | `bigint` | FK | No | `tenants_company.id` |
 | `created_at` | `timestamptz` | — | No | — |
 | `updated_at` | `timestamptz` | — | No | — |
-| `leave_request_id` | `bigint` | FK | Yes | `leaves_leaverequest.id` |
-| `lfa_claim_id` | `bigint` | FK | Yes | `leaves_leavefareassistanceclaim.id` |
+| `leave_request_id` | `bigint` | FK | Yes | `payroll_leaverequest.id` |
+| `lfa_claim_id` | `bigint` | FK | Yes | `payroll_leavefareassistanceclaim.id` |
 | `file` | `varchar` | — | No | — |
 | `original_filename` | `varchar` | — | No | — |
 | `content_type` | `varchar` | — | No | — |
@@ -1391,7 +1388,7 @@ Physical table: `leaves_leaveattachment`. Direct tenant owner: `company_id`.
 Constraint: exactly one target.
 ### LeaveEncashment
 
-Physical table: `leaves_leaveencashment`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leaveencashment`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1402,8 +1399,8 @@ Physical table: `leaves_leaveencashment`. Direct tenant owner: `company_id`.
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
-| `entitlement_id` | `bigint` | FK | No | `leaves_leaveentitlement.id` |
-| `policy_version_id` | `bigint` | FK | No | `leaves_leavepolicyversion.id` |
+| `entitlement_id` | `bigint` | FK | No | `payroll_leaveentitlement.id` |
+| `policy_version_id` | `bigint` | FK | No | `payroll_leavepolicyversion.id` |
 | `requested_units` | `numeric(18,6)` | — | No | — |
 | `approved_units` | `numeric(18,6)` | — | No | — |
 | `conversion_rate_snapshot` | `numeric(18,2)` | — | No | — |
@@ -1416,12 +1413,12 @@ Physical table: `leaves_leaveencashment`. Direct tenant owner: `company_id`.
 | `approved_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `approved_at` | `timestamptz` | — | Yes | — |
 | `source_key` | `varchar` | — | No | — |
-| `reversal_of_id` | `bigint` | FK | Yes | `leaves_leaveencashment.id` |
+| `reversal_of_id` | `bigint` | FK | Yes | `payroll_leaveencashment.id` |
 
 Constraint: approved units cannot exceed eligible available balance. Resulting payroll lines point back to this row, so reversals and off-cycle corrections remain possible.
 ### LeaveCompensatoryCredit
 
-Physical table: `leaves_leavecompensatorycredit`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leavecompensatorycredit`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1432,9 +1429,9 @@ Physical table: `leaves_leavecompensatorycredit`. Direct tenant owner: `company_
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
-| `source_attendance_id` | `bigint` | FK | No | `attendance_attendancerecord.id` |
-| `entitlement_id` | `bigint` | FK | No | `leaves_leaveentitlement.id` |
-| `policy_type_rule_id` | `bigint` | FK | No | `leaves_leavepolicytyperule.id` |
+| `source_attendance_id` | `bigint` | FK | No | `payroll_attendancerecord.id` |
+| `entitlement_id` | `bigint` | FK | No | `payroll_leaveentitlement.id` |
+| `policy_type_rule_id` | `bigint` | FK | No | `payroll_leavepolicytyperule.id` |
 | `source_work_minutes` | `integer` | — | No | — |
 | `approved_credit_units` | `numeric(18,6)` | — | No | — |
 | `expires_at` | `timestamptz` | — | Yes | — |
@@ -1442,13 +1439,13 @@ Physical table: `leaves_leavecompensatorycredit`. Direct tenant owner: `company_
 | `status` | `varchar` | — | No | — |
 | `approved_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `approved_at` | `timestamptz` | — | Yes | — |
-| `balance_entry_id` | `bigint` | FK/UQ | Yes | `leaves_leavebalanceentry.id` |
+| `balance_entry_id` | `bigint` | FK/UQ | Yes | `payroll_leavebalanceentry.id` |
 | `source_key` | `varchar` | — | No | — |
 
 Constraints: unique qualifying source/treatment; do not award overtime and leave together unless treatment explicitly permits it.
 ### LeaveFareAssistanceClaim
 
-Physical table: `leaves_leavefareassistanceclaim`. Direct tenant owner: `company_id`.
+Physical table: `payroll_leavefareassistanceclaim`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -1460,8 +1457,8 @@ Physical table: `leaves_leavefareassistanceclaim`. Direct tenant owner: `company
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
 | `employee_assignment_id` | `bigint` | FK | No | `employees_employeeassignment.id` |
-| `policy_version_id` | `bigint` | FK | No | `leaves_leavepolicyversion.id` |
-| `qualifying_leave_request_id` | `bigint` | FK | Yes | `leaves_leaverequest.id` |
+| `policy_version_id` | `bigint` | FK | No | `payroll_leavepolicyversion.id` |
+| `qualifying_leave_request_id` | `bigint` | FK | Yes | `payroll_leaverequest.id` |
 | `compensation_id` | `bigint` | FK | Yes | `employees_employeecompensation.id` |
 | `benefit_date` | `date` | — | No | — |
 | `cycle_start` | `date` | — | No | — |
@@ -1483,7 +1480,7 @@ Physical table: `leaves_leavefareassistanceclaim`. Direct tenant owner: `company
 | `posted_at` | `timestamptz` | — | Yes | — |
 | `approved_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `idempotency_key` | `varchar` | — | No | — |
-| `reversal_of_id` | `bigint` | FK | Yes | `leaves_leavefareassistanceclaim.id` |
+| `reversal_of_id` | `bigint` | FK | Yes | `payroll_leavefareassistanceclaim.id` |
 
 Constraints: same-company qualifying leave; policy eligibility; unique active occurrence slot per employee/benefit cycle. Resulting PayrollLine rows point back to the claim. LFA never changes LeaveEntitlement.
 
@@ -1823,7 +1820,7 @@ Physical table: `payroll_payrolldailyline`. Direct tenant owner: `company_id`.
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `payroll_segment_id` | `bigint` | FK | No | `payroll_payrollcompensationsegment.id` |
 | `work_date` | `date` | — | No | — |
-| `attendance_record_id` | `bigint` | FK | Yes | `attendance_attendancerecord.id` |
+| `attendance_record_id` | `bigint` | FK | Yes | `payroll_attendancerecord.id` |
 | `holiday_id` | `bigint` | FK | Yes | `scheduling_holiday.id` |
 | `weekly_off_rule_id` | `bigint` | FK | Yes | `scheduling_weeklyoffrule.id` |
 | `holiday_work_assignment_id` | `bigint` | FK | Yes | `scheduling_holidayworkassignment.id` |
@@ -1866,12 +1863,12 @@ Physical table: `payroll_payrollline`. Direct tenant owner: `company_id`.
 | `payroll_daily_line_id` | `bigint` | FK | Yes | `payroll_payrolldailyline.id` |
 | `salary_component_id` | `bigint` | FK | No | `payroll_salarycomponent.id` |
 | `source_type` | `varchar` | — | No | — |
-| `penalty_assessment_id` | `bigint` | FK | Yes | `attendance_penaltyassessment.id` |
+| `penalty_assessment_id` | `bigint` | FK | Yes | `payroll_penaltyassessment.id` |
 | `payroll_adjustment_id` | `bigint` | FK | Yes | `payroll_payrolladjustment.id` |
 | `salary_advance_recovery_id` | `bigint` | FK | Yes | `payroll_salaryadvancerecovery.id` |
 | `loan_repayment_id` | `bigint` | FK | Yes | `payroll_loanrepayment.id` |
-| `leave_encashment_id` | `bigint` | FK | Yes | `leaves_leaveencashment.id` |
-| `lfa_claim_id` | `bigint` | FK | Yes | `leaves_leavefareassistanceclaim.id` |
+| `leave_encashment_id` | `bigint` | FK | Yes | `payroll_leaveencashment.id` |
+| `lfa_claim_id` | `bigint` | FK | Yes | `payroll_leavefareassistanceclaim.id` |
 | `description` | `text` | — | No | — |
 | `service_date` | `date` | — | Yes | — |
 | `service_period_start` | `date` | — | Yes | — |
@@ -2277,7 +2274,7 @@ Physical table: `payroll_payrolldailyline_leave_days`. Implicit M2M junction.
 |---|---|---|---|---|
 | `id` | `bigint` | PK | No | — |
 | `payrolldailyline_id` | `bigint` | FK | No | `payroll_payrolldailyline.id` |
-| `leaveday_id` | `bigint` | FK | No | `leaves_leaveday.id` |
+| `leaveday_id` | `bigint` | FK | No | `payroll_leaveday.id` |
 
 Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id.
 

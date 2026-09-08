@@ -82,7 +82,12 @@ function parseField(model,n,d,index,names) {
 }
 const junctions=[];
 for (const model of models) {
-  model.table=model.app+'_'+model.name.toLowerCase();
+  // Physical table prefix. Django model names and app labels stay as designed;
+  // only the db_table changes. Leave, attendance and payroll are one payroll
+  // family in the database, so they share the payroll_ prefix. Every other app
+  // uses its own label. See MODEL_FIELD_DICTIONARY.md 'Physical table naming'.
+  const TABLE_PREFIX={leaves:'payroll',attendance:'payroll',payroll:'payroll'};
+  model.table=(TABLE_PREFIX[model.app]||model.app)+'_'+model.name.toLowerCase();
   model.tenant=model.lines.some(l=>l.startsWith('Common fields: TenantOwned'));
   const commonActor=model.lines.some(l=>/^Common fields:.*(?:actor tracking|creator\/updater)/.test(l));
   model.constraints=model.lines.filter(l=>/^Constraints?:|^Relations:/.test(l)).join('\n');

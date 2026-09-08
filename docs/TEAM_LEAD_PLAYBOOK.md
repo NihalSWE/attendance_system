@@ -123,6 +123,21 @@ bypass to be explicit, audited and limited to support duties, never the normal
 tenant-query path. The fix for "root sees nothing" is a platform area, not a
 bypass.
 
+## Physical table naming (binding — adopted 2026-09-08)
+
+Model names and app labels are chosen for readability in code. The physical
+table name is set separately with `Meta.db_table`.
+
+- `leaves`, `attendance` and `payroll` models all use the **`payroll_`** table
+  prefix. They are one payroll family in the database.
+- Every other app uses its own label as the prefix.
+- **Always set `db_table` explicitly** on a new model, so an app rename can never
+  silently rename a table.
+- `docs/scripts/build_schema.cjs` implements this rule, so regenerated schema
+  documents stay correct. Change the rule there, not by hand-editing artifacts.
+- Already-migrated tables are not renamed retroactively without a deliberate
+  decision and an `AlterModelTable` migration.
+
 ## Wording discipline: duplicates
 
 Never say attendance "ignores duplicate scans". The actual rule:
