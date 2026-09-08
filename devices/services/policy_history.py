@@ -26,10 +26,18 @@ unresolved — so correctness does not depend on every screen in the project
 remembering to audit, only on audited changes being complete.
 """
 
+from datetime import timedelta
+
 from auditlog.models import AuditLog
 
 # Sentinel distinguishing "recorded as null" from "not recorded at all".
 _MISSING = object()
+
+# auto_now_add and auto_now each call timezone.now() separately, so a row that
+# has never been edited still has created_at and updated_at a few microseconds
+# apart. Used only when evaluating as of a row's own creation, so that this
+# microsecond gap does not read as an edit.
+UNMODIFIED_TOLERANCE = timedelta(seconds=1)
 
 
 class PolicyUnresolved(Exception):
@@ -49,8 +57,21 @@ def value_at(obj, field, instant):
     current = getattr(obj, field)
 
     updated_at = getattr(obj, "updated_at", None)
-    if updated_at is None or updated_at <= instant:
-        # Untouched since the punch: current state is historical state.
+    if updated_at is None:
+        return current
+
+    # A punch that predates the row entirely is judged by that row's initial
+    # configuration — the "including the initial configuration" case in
+    # DEVICE_ATTENDANCE_POLICY.md. This covers a backlog punch from earlier on
+    # the day a company was first set up. Evaluating as of creation reconstructs
+    # back through any audited change made since.
+    created_at = getattr(obj, "created_at", None)
+    effective_instant = instant
+    if created_at is not None and instant < created_at:
+        effective_instant = created_at + UNMODIFIED_TOLERANCE
+
+    if updated_at <= effective_instant:
+        # Untouched since then: current state is historical state.
         return current
 
     changes = list(
@@ -58,7 +79,7 @@ def value_at(obj, field, instant):
             object_app=obj._meta.app_label,
             object_model=obj._meta.model_name,
             object_id=str(obj.pk),
-            occurred_at__gt=instant,
+            occurred_at__gt=effective_instant,
         ).order_by("occurred_at", "pk")
     )
     if not changes:

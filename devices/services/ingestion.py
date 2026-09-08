@@ -198,12 +198,14 @@ def capture_message(*, device, parsed, raw_body, source_ip=None, headers=None,
     return message, True
 
 
-def _natural_key_duplicate(*, device, punch, punched_at_utc, exclude_message_id):
-    """An identical punch already recorded from a previous message.
+def _natural_key_duplicate(*, device, punch, punched_at_utc):
+    """An identical punch already recorded.
 
     Identity is the device, the device-reported user id, the interpreted
     instant and the vendor status code — never the timestamp alone
-    (MODEL_FIELD_DICTIONARY.md section 31).
+    (MODEL_FIELD_DICTIONARY.md section 31). The row being evaluated has not
+    been saved yet, so it cannot match itself; rows earlier in the same batch
+    are compared, because a device can repeat a record within one batch.
     """
     return (
         PunchEvent.all_objects.filter(
@@ -213,7 +215,6 @@ def _natural_key_duplicate(*, device, punch, punched_at_utc, exclude_message_id)
             punched_at_utc=punched_at_utc,
             reported_status_code=punch.reported_status_code,
         )
-        .exclude(device_message_id=exclude_message_id)
         .order_by("id")
         .first()
     )
@@ -231,11 +232,13 @@ def _repeat_window_seconds(company_id):
     return seconds if seconds is not None else DEFAULT_REPEAT_WINDOW_SECONDS
 
 
-def _nearby_punch(*, device, punch, punched_at_utc, window_seconds, exclude_message_id):
+def _nearby_punch(*, device, punch, punched_at_utc, window_seconds):
     """A different punch from the same identity within the repeat window.
 
     Proximity is *not* proof of duplication, so this only supports marking a
-    row ``probable_duplicate`` for review; it never excludes it.
+    row ``probable_duplicate`` for review; it never excludes it. Rows earlier
+    in the same batch count: a rapid repeat usually arrives inside one upload,
+    not in a later one.
     """
     if window_seconds <= 0:
         return None
@@ -249,7 +252,6 @@ def _nearby_punch(*, device, punch, punched_at_utc, window_seconds, exclude_mess
             punched_at_utc__lte=punched_at_utc + delta,
         )
         .exclude(punched_at_utc=punched_at_utc)
-        .exclude(device_message_id=exclude_message_id)
         .order_by("id")
         .first()
     )
@@ -296,10 +298,7 @@ def extract_punch_events(*, device, message, parsed):
         duplicate_of = None
 
         identical = _natural_key_duplicate(
-            device=device,
-            punch=punch,
-            punched_at_utc=punched_at_utc,
-            exclude_message_id=message.pk,
+            device=device, punch=punch, punched_at_utc=punched_at_utc
         )
         if identical is not None:
             # A retransmitted record: kept as evidence, excluded from
@@ -313,7 +312,6 @@ def extract_punch_events(*, device, message, parsed):
                 punch=punch,
                 punched_at_utc=punched_at_utc,
                 window_seconds=window_seconds,
-                exclude_message_id=message.pk,
             )
             if nearby is not None:
                 # Ambiguous repeat: flagged for a human, never auto-excluded.
