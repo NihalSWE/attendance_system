@@ -17,7 +17,7 @@
 
     var MONTHS = ["January", "February", "March", "April", "May", "June",
                   "July", "August", "September", "October", "November", "December"];
-    var WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+    var WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 
     var ICON_CAL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>';
     var ICON_CHEV = '<svg class="dp__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
@@ -67,16 +67,31 @@
         prev.setAttribute("aria-label", "Previous month");
         var label = document.createElement("div");
         label.className = "dp__selectors";
-        var monthBtn = document.createElement("button");
-        monthBtn.type = "button";
-        monthBtn.className = "dp__seltrigger";
-        monthBtn.disabled = true;
+        // Real month/year dropdowns, as the reference has. A disabled label
+        // would force dozens of clicks to reach a distant year.
+        var monthSel = document.createElement("select");
+        monthSel.className = "js-select";
+        MONTHS.forEach(function (m, i) {
+            var o = document.createElement("option");
+            o.value = i;
+            o.textContent = m.slice(0, 3);
+            monthSel.appendChild(o);
+        });
+        var yearSel = document.createElement("select");
+        yearSel.className = "js-select";
+        var thisYear = new Date().getFullYear();
+        for (var y = thisYear - 80; y <= thisYear + 10; y++) {
+            var o = document.createElement("option");
+            o.value = y;
+            o.textContent = y;
+            yearSel.appendChild(o);
+        }
         var next = document.createElement("button");
         next.type = "button";
         next.className = "dp__navbtn";
         next.innerHTML = ICON_NEXT;
         next.setAttribute("aria-label", "Next month");
-        label.appendChild(monthBtn);
+        label.append(monthSel, yearSel);
         head.append(prev, label, next);
 
         var week = document.createElement("div");
@@ -94,9 +109,17 @@
 
         var view = startOfDay(new Date());
         var state = {start: null, end: null, single: null};
+        var syncing = false;   // true while render() writes the dropdowns
 
         function render() {
-            monthBtn.textContent = MONTHS[view.getMonth()] + " " + view.getFullYear();
+            syncing = true;
+            monthSel.value = String(view.getMonth());
+            yearSel.value = String(view.getFullYear());
+            if (window.initCustomSelects) window.initCustomSelects(head);
+            // Repaint the custom triggers without re-entering render().
+            monthSel.dispatchEvent(new Event("change", {bubbles: false}));
+            yearSel.dispatchEvent(new Event("change", {bubbles: false}));
+            syncing = false;
             days.textContent = "";
             var first = new Date(view.getFullYear(), view.getMonth(), 1);
             // Monday-first grid.
@@ -130,6 +153,17 @@
                 cursor = addDays(cursor, 1);
             }
         }
+
+        monthSel.addEventListener("change", function () {
+            if (syncing) return;
+            view = new Date(view.getFullYear(), Number(monthSel.value), 1);
+            render();
+        });
+        yearSel.addEventListener("change", function () {
+            if (syncing) return;
+            view = new Date(Number(yearSel.value), view.getMonth(), 1);
+            render();
+        });
 
         prev.addEventListener("click", function () {
             view = new Date(view.getFullYear(), view.getMonth() - 1, 1);
@@ -304,6 +338,10 @@
             shell.value.classList.toggle("dp__value--empty", !start && !end);
         }
         function commit() {
+            if (typeof summary !== "undefined" && summary) {
+                summary.textContent = (start || end)
+                    ? pretty(start) + " → " + (pretty(end) || "…") : "";
+            }
             startInput.value = iso(start);
             endInput.value = iso(end);
             startInput.dispatchEvent(new Event("change", {bubbles: true}));
@@ -373,6 +411,8 @@
             calendar.render();
             commit();
         });
+        var summary = document.createElement("span");
+        summary.className = "dp__summary";
         var spacer = document.createElement("span");
         spacer.className = "spacer";
         var apply = document.createElement("button");
@@ -380,7 +420,7 @@
         apply.className = "btn btn--primary btn--sm";
         apply.textContent = "Apply";
         apply.addEventListener("click", closeOpen);
-        foot.append(clear, spacer, apply);
+        foot.append(summary, spacer, clear, apply);
         calendar.el.appendChild(foot);
 
         shell.btn.setAttribute("aria-haspopup", "dialog");

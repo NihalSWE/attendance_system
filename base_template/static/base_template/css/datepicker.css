@@ -183,6 +183,26 @@
     align-items: center;
     gap: 6px;
 }
+.dp__selectors .cs {
+    width: auto;
+}
+.dp__selectors .cs__control {
+    padding: 4px 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    border-radius: var(--r);
+    white-space: nowrap;
+}
+.dp__selectors .cs__caret {
+    width: 12px;
+    height: 12px;
+}
+/* Range summary in the footer, as the reference shows it. */
+.dp__summary {
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
 .dp__seltrigger {
     border: 1px solid var(--border);
     border-radius: var(--r);
@@ -240,8 +260,8 @@
 .dp__day--today {
     box-shadow: inset 0 0 0 1px var(--field);
 }
-/* The selected day is a solid ink block - the same device the active nav item
-   uses. In a palette with no colour, a tint would be invisible. */
+/* Reference form: the chosen day is a filled block; range interior is a quiet
+   tint. Ink replaces the reference's lime. */
 .dp__day--on,
 .dp__day--on:hover {
     background: var(--accent);

@@ -23,17 +23,28 @@ Root has no implicit tenant. `common.admin.TenantOwnedAdmin` explicitly scopes e
 
 Feature is a database catalogue, not a choices field. CompanyFeature stores dated enable/disable grants for a company. A future module must check both company entitlement and the person's action permission, including in business services. Feature enablement never implies that an unimplemented module exists.
 
-## Select controls — superseded rule (2026-09-08)
+## Select controls — the rule (2026-09-08)
 
-Earlier guidance said "fixed choices use styled native selects; database-backed
-choices use Select2". That is **superseded**: **every** select is a real Select2 —
-single, multiple, and fixed choice lists alike.
+**The control follows the DATA, not the widget.**
 
-Reason: a native select can be styled in its closed state, but its open dropdown
-is drawn by the operating system, which is precisely the default appearance the
-design replaces. `StyledFormMixin` applies `js-select2` to every `Select` and
-`SelectMultiple`; `.select` remains as the no-JavaScript fallback. Radio and
-checkbox groups are unaffected.
+| Data | Control | Why |
+|---|---|---|
+| Database-backed (`ModelChoiceField`, `ModelMultipleChoiceField`) | **Select2** | dynamic lists; may need search, paging, remote loading |
+| Static choice lists (`ChoiceField`, status/type enums) | **our custom select** (`customselect.js`, `.cs__*`) | fixed and short; needs no search machinery |
+| Multiple selection | **Select2 multiple** | removable tags |
+
+`StyledFormMixin` applies `js-select2` to the first, `js-select` to the second.
+`.select` stays on both as the no-JavaScript fallback.
+
+A native `<select>` is not acceptable for a static list: its closed box can be
+styled, but its **open dropdown is drawn by the operating system** and cannot be.
+`customselect.js` replaces it with our own panel — form taken from
+`design_reference/` (`.om-sel` control/menu/option/tick), colour from our tokens,
+selected option a solid ink block, inline SVG instead of the reference's remote
+iconify masks. The real `<select>` stays in the form and posts normally.
+
+Hand-written selects in templates must carry `js-select` themselves; only
+form-rendered fields get it automatically.
 
 ## Overlay controls must not be clipped
 

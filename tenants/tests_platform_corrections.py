@@ -100,14 +100,12 @@ class PlatformCorrectionsTests(TestCase):
     def test_control_types_and_phone_normalization(self):
         self.assertNotIn("role", AdministratorForm().fields)
         self.assertNotIn("user", AdministratorForm().fields)
-        # Every select is a real Select2 - database-backed and fixed choice lists
-        # alike. A native select can style its closed box, but its open dropdown
-        # is drawn by the operating system. Supersedes the earlier rule that kept
-        # fixed choices native.
+        # Select2 is for database-backed lists only.
         self.assertIn("js-select2", CompanyFeatureForm().fields["feature"].widget.attrs["class"])
-        self.assertIn("js-select2", CompanyStatusForm().fields["status"].widget.attrs["class"])
-        # `.select` remains as the no-JavaScript fallback.
-        self.assertIn("select", CompanyStatusForm().fields["status"].widget.attrs["class"])
+        # A static choice list uses our own custom select, never Select2.
+        status_classes = CompanyStatusForm().fields["status"].widget.attrs["class"]
+        self.assertNotIn("js-select2", status_classes)
+        self.assertIn("js-select", status_classes)
         self.assertEqual(normalize_bd_phone("01712345678"), "8801712345678")
         self.assertEqual(normalize_bd_phone("+8801712345678"), "8801712345678")
         self.assertEqual(normalize_bd_phone("+88"), "")
