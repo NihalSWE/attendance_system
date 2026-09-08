@@ -7,7 +7,7 @@ config/urls.py for that reason. The administrator screens live under
 ``/devices/``.
 """
 
-from django.urls import path
+from django.urls import path, re_path
 
 from devices.views import ingestion, ui
 
@@ -18,6 +18,9 @@ ingestion_urlpatterns = [
     path("iclock/cdata", ingestion.cdata, name="iclock_cdata"),
     path("iclock/getrequest", ingestion.getrequest, name="iclock_getrequest"),
     path("iclock/devicecmd", ingestion.devicecmd, name="iclock_devicecmd"),
+    # Last: anything else the firmware sends is captured verbatim instead of
+    # 404ing, so commissioning a real device shows us what it actually does.
+    re_path(r"^iclock/(?P<tail>.*)$", ingestion.capture, name="iclock_capture"),
 ]
 
 # Administrator-facing (session, CSRF, tenant-scoped).

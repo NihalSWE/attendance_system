@@ -18,7 +18,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
 from devices.adapters import UnknownAdapterError, get_adapter
-from devices.models import BiometricDevice
+from devices.adapters.base import ParsedMessage
+from devices.models import BiometricDevice, DeviceMessage
 from devices.services.ingestion import (
     DeviceAuthenticationError,
     authenticate_device,
@@ -125,6 +126,55 @@ def getrequest(request):
 
     BiometricDevice.all_objects.filter(pk=device.pk).update(
         last_seen_at=timezone.now(), ip_address_last_seen=_client_ip(request)
+    )
+    return _text("OK")
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def capture(request, tail=""):
+    """Catch-all for any other /iclock/ path the firmware uses.
+
+    The documented ADMS paths are not the whole story: firmware varies, and a
+    404 during commissioning teaches us nothing about what the device actually
+    sends. This stores the request verbatim as an unknown-type message so it
+    can be read in the message log, then acknowledges.
+
+    Acknowledging an unparsed request is safe because the payload is durably
+    stored first — no evidence is lost, and the row is visible as unknown. It
+    is not safe to leave the device retrying forever against a 404 while its
+    buffer fills.
+    """
+    try:
+        device = _resolve_device(request)
+    except DeviceAuthenticationError as exc:
+        logger.warning("Rejected device request on /iclock/%s: %s", tail, exc)
+        return _unauthorized()
+
+    raw_body, encoding = _body_text(request)
+    parsed = ParsedMessage(
+        message_type=DeviceMessage.MessageType.UNKNOWN,
+        payload_json={
+            "path": request.path,
+            "method": request.method,
+            "query": dict(request.GET),
+        },
+        parse_error=(
+            f"Unrecognised device path {request.path!r}; stored for inspection "
+            "rather than parsed."
+        ),
+    )
+    ingest(
+        device=device,
+        parsed=parsed,
+        raw_body=raw_body,
+        source_ip=_client_ip(request),
+        headers=request.headers,
+        content_type=request.content_type or "",
+        encoding=encoding,
+    )
+    logger.info(
+        "Captured unrecognised device request: %s %s", request.method, request.path
     )
     return _text("OK")
 

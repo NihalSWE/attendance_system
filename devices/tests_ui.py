@@ -382,3 +382,43 @@ class DeviceScreenTests(TestCase):
         response = self.client.get(reverse("devices:punch_detail", args=[punch.pk]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "never enrolled here")
+
+
+class SetupInstructionTests(TestCase):
+    """The values an administrator types into the device must be connectable."""
+
+    def setUp(self):
+        from devices.services import setup_instructions
+
+        self.setup_instructions = setup_instructions
+        self.factory_path = "/devices/"
+
+    def _address(self, **extra):
+        from django.test import RequestFactory
+
+        request = RequestFactory().get(self.factory_path, **extra)
+        return self.setup_instructions.server_address(request)
+
+    def test_plain_http_reports_port_80(self):
+        scheme, _, port = self._address()
+        self.assertEqual(scheme, "http")
+        self.assertEqual(port, 80)
+
+    def test_tls_terminating_proxy_reports_https_on_443(self):
+        # A tunnel forwards plain HTTP, so the request looks insecure. Telling
+        # the administrator "port 80, HTTPS no" hands them a device setting
+        # that cannot connect.
+        scheme, _, port = self._address(HTTP_X_FORWARDED_PROTO="https")
+        self.assertEqual(scheme, "https")
+        self.assertEqual(port, 443)
+
+    def test_proxy_chain_uses_the_clients_scheme(self):
+        scheme, _, port = self._address(HTTP_X_FORWARDED_PROTO="https, http")
+        self.assertEqual(scheme, "https")
+        self.assertEqual(port, 443)
+
+    def test_localhost_is_reported_as_unreachable_by_a_device(self):
+        self.assertTrue(self.setup_instructions.is_unreachable_host("127.0.0.1"))
+        self.assertFalse(
+            self.setup_instructions.is_unreachable_host("tunnel.ngrok-free.dev")
+        )

@@ -33,10 +33,24 @@ def server_address(request):
     Read from the actual request, so an administrator viewing the page through
     an ngrok tunnel is told the tunnel hostname rather than localhost — which
     the device cannot reach at all.
+
+    A tunnel or load balancer terminates TLS and forwards plain HTTP, so
+    ``request`` looks insecure even though the device must connect on HTTPS
+    port 443. ``X-Forwarded-Proto`` carries the scheme the client actually
+    used, and getting this wrong hands the administrator a port number that
+    cannot connect. Read here rather than via SECURE_PROXY_SSL_HEADER so the
+    correction stays inside the device screens instead of changing
+    ``request.is_secure()`` for the whole project.
     """
     parts = urlsplit(request.build_absolute_uri("/"))
     host = parts.hostname or ""
     scheme = parts.scheme or "http"
+
+    forwarded = request.META.get("HTTP_X_FORWARDED_PROTO", "")
+    if forwarded:
+        # A proxy chain sends a comma-separated list; the client's is first.
+        scheme = forwarded.split(",")[0].strip().lower() or scheme
+
     port = parts.port or (443 if scheme == "https" else 80)
     return scheme, host, port
 
