@@ -24,6 +24,12 @@ env = environ.Env(
     DEBUG=(bool, False),
     ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
     DB_CONN_MAX_AGE=(int, 60),
+    # Origins allowed to submit browser forms. A biometric device reaches this
+    # server through a tunnel hostname during development; the *device*
+    # endpoints are CSRF-exempt and device-authenticated, but the admin screens
+    # served over that same hostname still need it. Devices push inbound, so
+    # localhost is not reachable from them (see docs/DEVICE_SETUP.md).
+    CSRF_TRUSTED_ORIGINS=(list, ['https://*.ngrok-free.dev', 'https://*.ngrok-free.app']),
 )
 environ.Env.read_env(BASE_DIR / '.env')
 
@@ -42,6 +48,8 @@ SECRET_KEY = env(
 DEBUG = env('DEBUG')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS')
+
+CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS')
 
 
 # Application definition
