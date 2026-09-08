@@ -224,13 +224,14 @@ class IngestionEndpointTests(TestCase):
         flagged = PunchEvent.all_objects.get(
             dedupe_status=PunchEvent.DedupeStatus.PROBABLE_DUPLICATE
         )
-        self.assertEqual(
-            flagged.processing_status, PunchEvent.ProcessingStatus.NEEDS_REVIEW
-        )
-        # Not excluded: a human decides.
+        # Marked and linked, so a reviewer can see what it resembles — but not
+        # confirmed, which is what would exclude it as a retransmission.
+        self.assertIsNotNone(flagged.duplicate_of_id)
         self.assertNotEqual(
-            flagged.processing_status, PunchEvent.ProcessingStatus.EXCLUDED
+            flagged.dedupe_status, PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE
         )
+        # Both scans survive as evidence.
+        self.assertEqual(PunchEvent.all_objects.count(), 2)
 
     # --- malformed input --------------------------------------------------
 

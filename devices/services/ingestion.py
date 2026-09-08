@@ -26,6 +26,7 @@ from django.utils import timezone
 
 from common.tenant import use_company
 from devices.models import BiometricDevice, DeviceMessage, DeviceSyncState, PunchEvent
+from devices.services.processing import resolve_and_authorize_safely
 
 logger = logging.getLogger(__name__)
 
@@ -349,6 +350,11 @@ def extract_punch_events(*, device, message, parsed):
         except IntegrityError:
             # Concurrent extraction of the same record; the constraint held.
             continue
+
+        # Evaluate immediately so an administrator sees a decided punch, not a
+        # pending one. Failure here is recorded on the row; the punch itself is
+        # already durable and is never lost.
+        resolve_and_authorize_safely(event)
 
         result.created.append(event)
         if dedupe_status == PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE:
