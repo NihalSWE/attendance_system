@@ -34,6 +34,10 @@ static public IP or an inbound open port at the client site.
 - Employee resolution and device-scope authorization at punch time.
 - Retry, offline-backlog drain, deduplication, clock-skew handling.
 - A vendor-neutral **simulator** plus repeatable fixtures.
+- **The complete device management UI** — every screen an administrator needs to
+  register, configure, monitor and troubleshoot devices. See section 2a.
+- **Device settings**, both sides: the values stored in our database, and the
+  instructions telling an administrator what to type into the physical device.
 
 ### You STOP at `PunchEvent`
 
@@ -45,6 +49,91 @@ now. That is the integration point, and it is done jointly, later.
 Instead you deliver a written **ingestion contract**: exactly what a `PunchEvent`
 row is guaranteed to contain, so the attendance engine can be built against it
 before your adapter is finished.
+
+---
+
+## 2a. Device management UI — you build this
+
+Backend ingestion with no screens is not a usable feature. An administrator must
+be able to do all of this in the browser, without a shell or Django admin:
+
+**Devices**
+- List registered devices with status, branch, last seen, last message.
+- Register a new device: name, serial number, branch, model, timezone, and the
+  authentication credential the device will present.
+- Edit a device; retire/decommission one without deleting its punch history.
+- Show live health from `DeviceSyncState`: last punch received, consecutive
+  errors, estimated backlog, clock offset.
+
+**Device settings (this is the part that was previously under-specified)**
+- Our `BiometricDevice` model already carries `external_device_id`, `timezone`,
+  `authentication_key_id`, `authentication_secret_hash` and a validated
+  `settings` JSONField for vendor-specific configuration. Use them.
+- **Surface the exact values an administrator must enter on the SenseFace 2A**:
+  the server address/domain, port, path, and the comm/auth key. The admin should
+  be able to read them off the screen and type them into the device menu. Do not
+  make them guess a URL.
+- **Discovering which settings the SenseFace 2A actually exposes is part of your
+  job.** Go through the device's own menus (server/ADMS settings, comm key, push
+  interval, timezone, verification mode, log capacity, and anything else present),
+  document them, and decide which we must store, which we must display as setup
+  instructions, and which we can ignore. Report your findings.
+
+**Enrollment**
+- Map an employee to a device user id (`DeviceEnrollment`), on dated intervals.
+- Toggle `attendance_enabled` (the hard per-enrollment denial) and
+  `assigned_device_authorized` (only consulted in assigned_devices mode), with
+  the difference between recognition and authorization made obvious in the UI.
+- Device/department mapping (`DeviceDepartment`) for department_devices mode.
+
+**Troubleshooting**
+- Raw `DeviceMessage` log with processing status and payload, for diagnosing a
+  device that is misbehaving.
+- `PunchEvent` list filtered by device/employee/date showing
+  `authorization_status`, and *why* a punch was excluded.
+- An unresolved queue: unknown device user ids, unmatched employees,
+  `policy_unresolved` punches awaiting review.
+
+**Design rules — non-negotiable**
+- `WARM_PAPER_INK_SPEC.md` is authoritative for colour, typography and tokens.
+  Every colour comes from a token; never introduce a hex value.
+- `design_reference/` is authoritative for component form and layout.
+- Reuse the existing CSS in `base_template/static/base_template/css/`
+  (`tokens.css`, `base.css`, `components.css`, `shell.css`) and the existing
+  component classes. Do not invent a parallel design system.
+- Real DataTables for data tables, real Select2 for database-backed choices,
+  styled native selects for fixed choices. Tables need a real result count and
+  pagination. Four-space indentation in templates.
+- Feature pages live in the `devices` app; shared shell stays in
+  `base_template`.
+
+## 2b. Reaching your machine from the device
+
+The device pushes *inbound* to your server, so `localhost` is not reachable from
+it. For local development expose your dev server with a tunnel (ngrok or
+similar) and configure that hostname on the device. The project already trusts
+`*.ngrok-free.dev` in `CSRF_TRUSTED_ORIGINS`; add what you need there, and tell
+Ajay if that list must change.
+
+Note that the ingestion endpoint is called by a device, not a browser: it will
+need CSRF exemption on that path plus its own device authentication. Do not
+weaken CSRF anywhere else.
+
+## 2c. Boundary on device-scope settings
+
+The scope *fields* are split across two owners. Coordinate before building:
+
+| Setting | Model | Owner |
+|---|---|---|
+| Company default `device_attendance_scope` | `scheduling.CompanyAttendanceSettings` | **Ajay** |
+| Branch `device_attendance_scope_override` | `organization.Branch` | **Ajay** |
+| Employee `device_attendance_scope_override` | `employees.EmployeeAssignment` | **Ajay** |
+| `DeviceEnrollment.attendance_enabled` / `assigned_device_authorized` | `devices` | **You** |
+| `DeviceDepartment` mapping | `devices` | **You** |
+
+You *read* the first three when evaluating a punch; Ajay builds their screens as
+part of company settings. You build the last two. Confirm with Ajay before
+building any screen that edits a field on his models.
 
 ---
 
@@ -205,11 +294,15 @@ are migrated. You should not need to change them.
 5. Device-scope authorization writing `authorization_status` and
    `authorization_snapshot`.
 6. Simulator and fixtures covering the policy document's scenarios.
-7. **Then** the real SenseFace 2A: capture payloads, verify the ack contract, run
-   the offline/backlog test.
-8. Publish the `PunchEvent` contract for the attendance engine.
+7. Device management UI: device list/register/edit, enrollment, device settings
+   with the on-device setup instructions, sync health, raw message log and the
+   unresolved queue (section 2a).
+8. **Then** the real SenseFace 2A: walk its settings menus and document them,
+   capture payloads, verify the ack contract, run the offline/backlog test.
+9. Publish the `PunchEvent` contract for the attendance engine.
 
-Steps 1-6 need no hardware at all.
+Steps 1-7 need no hardware at all. Step 7 can and should be built against the
+simulator, so the screens are ready before the device is wired in.
 
 ---
 
@@ -228,6 +321,15 @@ A slice is done only when every one of these holds:
   `makemigrations --check --dry-run` reports no drift.
 - Simulator evidence and real-device evidence are reported **separately**. A
   passing simulator is never presented as proof that the SenseFace 2A works.
+- An administrator can register a device, enroll an employee on it, change its
+  settings and see its sync health **entirely in the browser** — no shell, no
+  Django admin. Cold-start rule from the playbook applies.
+- No dead controls: every button either works or is disabled with a stated
+  reason.
+- The screen tells the administrator exactly what to enter on the physical
+  device (server address, port, path, comm key) rather than assuming they know.
+- Screens use the existing design tokens and components, with no new colours,
+  and are checked at 1440, 768 and 375 px.
 
 ---
 
