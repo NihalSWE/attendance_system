@@ -738,3 +738,12 @@ class PunchEvent(TenantOwned):
 
     def __str__(self):
         return f"punch {self.device_user_id} @ {self.punched_at_utc}"
+
+    @property
+    def display_timezone(self):
+        """Timezone to render device-local times in, or None for the default.
+
+        ``{% timezone %}`` raises on an empty string, and device_timezone can
+        legitimately be blank for a punch captured before the device had one.
+        """
+        return self.device_timezone or None

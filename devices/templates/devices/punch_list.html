@@ -1,0 +1,221 @@
+{% extends "devices/base.html" %}
+{% load tz %}
+{% block title %}
+    Punches · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Punches
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Punches
+            </h1>
+            <p class="page__sub">
+                Every punch received, including the ones that do not count — each with the reason it was excluded.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'devices:unresolved_queue' %}">
+                Unresolved queue
+            </a>
+        </div>
+    </div>
+    <div class="card">
+        <form class="toolbar" method="get">
+            <div class="toolbar__grow">
+                <label class="sr-only" for="q">
+                    Search punches
+                </label>
+                <div class="input-group">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="m20 20-3.5-3.5"/>
+                    </svg>
+                    <input class="input" id="q" name="q" value="{{ search }}" placeholder="Employee or user number">
+                </div>
+            </div>
+            <label class="sr-only" for="device">
+                Device
+            </label>
+            <select class="input select" id="device" name="device" style="width:auto">
+                <option value="">
+                    All devices
+                </option>
+                {% for d in devices %}
+                    <option value="{{ d.pk }}" {% if device == d.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ d.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="authorization">
+                Authorisation
+            </label>
+            <select class="input select" id="authorization" name="authorization" style="width:auto">
+                <option value="">
+                    Any authorisation
+                </option>
+                {% for value, label in authorization_statuses %}
+                    <option value="{{ value }}" {% if value == authorization %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="dedupe">
+                Duplicate status
+            </label>
+            <select class="input select" id="dedupe" name="dedupe" style="width:auto">
+                <option value="">
+                    Any duplicate status
+                </option>
+                {% for value, label in dedupe_statuses %}
+                    <option value="{{ value }}" {% if value == dedupe %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--primary" type="submit">
+                Apply
+            </button>
+            <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}">
+                Clear
+            </a>
+        </form>
+        <div class="card__head">
+            <h2>
+                Punch events
+            </h2>
+            <span class="badge badge--neutral">
+                {{ total_count }}
+            </span>
+        </div>
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Punched (device time)
+                            </th>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Device
+                            </th>
+                            <th>
+                                Method
+                            </th>
+                            <th>
+                                Outcome
+                            </th>
+                            <th>
+                                Why
+                            </th>
+                            <th class="no-sort">
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for punch in page.object_list %}
+                            <tr>
+                                <td>
+                                    {% comment %}
+                                        Rendered in the device's own timezone. Without
+                                        this the value is converted to the server's
+                                        TIME_ZONE while still labelled with the
+                                        device's, which reads as the wrong time.
+                                    {% endcomment %}
+                                    {% timezone punch.display_timezone %}
+                                        {{ punch.punched_at_device|date:"j M Y, H:i:s" }}
+                                    {% endtimezone %}
+                                    <div class="t-faint">
+                                        {{ punch.device_timezone }}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if punch.employee %}
+                                        {{ punch.employee.full_name }}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            user {{ punch.device_user_id }} (unresolved)
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ punch.device.name }}
+                                </td>
+                                <td>
+                                    {{ punch.get_verification_method_display }}
+                                </td>
+                                <td>
+                                    {% if punch.processing_status == 'excluded' %}
+                                        <span class="badge badge--danger">
+                                            Excluded
+                                        </span>
+                                    {% elif punch.processing_status == 'needs_review' %}
+                                        <span class="badge badge--warning">
+                                            Needs review
+                                        </span>
+                                    {% elif punch.processing_status == 'failed' %}
+                                        <span class="badge badge--danger">
+                                            Failed
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--success">
+                                            Counts
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if punch.dedupe_status == 'confirmed_duplicate' %}
+                                        Retransmission of an earlier punch
+                                    {% elif punch.dedupe_status == 'probable_duplicate' %}
+                                        Close to another scan — needs a decision
+                                    {% elif punch.authorization_status == 'authorized' %}
+                                        <span class="t-faint">
+                                            Authorised
+                                        </span>
+                                    {% else %}
+                                        {{ punch.get_authorization_status_display }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:punch_detail' punch.pk %}">
+                                        Detail
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="t-faint" data-filter-note hidden>
+                The filter box searches the rows on this page. The count and pager above cover every matching punch.
+            </p>
+            {% include "devices/includes/pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No punches
+                </div>
+                <div class="empty__text">
+                    {% if search or device or authorization or dedupe %}
+                        Try clearing the filters.
+                    {% else %}
+                        Punches appear here as soon as a device sends them.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

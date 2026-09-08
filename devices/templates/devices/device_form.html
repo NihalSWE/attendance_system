@@ -1,0 +1,60 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    {{ title }} · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                {% if device %}
+                    <a href="{% url 'devices:device_detail' device.public_id %}">
+                        {{ device.name }}
+                    </a>
+                    <span class="crumbs__sep">
+                        /
+                    </span>
+                    <span>
+                        Edit
+                    </span>
+                {% else %}
+                    <span>
+                        Register
+                    </span>
+                {% endif %}
+            </nav>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                The serial number is how an inbound push is matched to this record, so it must match the device exactly.
+            </p>
+        </div>
+    </div>
+    <form method="post" class="card" novalidate>
+        {% csrf_token %}
+        <div class="card__head">
+            <h2>
+                Device details
+            </h2>
+        </div>
+        <div class="card__body">
+            <div class="grid grid--2">
+                {% include "devices/includes/form_fields.html" %}
+            </div>
+        </div>
+        <div class="card__foot">
+            <button class="btn btn--primary" type="submit">
+                {{ submit_label }}
+            </button>
+            <a class="btn btn--ghost" href="{% if device %}{% url 'devices:device_detail' device.public_id %}{% else %}{% url 'devices:device_list' %}{% endif %}">
+                Cancel
+            </a>
+        </div>
+    </form>
+{% endblock %}

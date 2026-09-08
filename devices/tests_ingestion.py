@@ -39,16 +39,19 @@ ATTLOG_TWO_RECORDS = (
 class IngestionEndpointTests(TestCase):
     def setUp(self):
         self.client = Client()
-        self.vendor = DeviceVendor.objects.create(
-            code="zkteco", name="ZKTeco", adapter_key="zkteco_adms_push"
-        )
-        self.device_model = DeviceModel.objects.create(
+        self.vendor = DeviceVendor.objects.get_or_create(
+            code="zkteco",
+            defaults={"name": "ZKTeco", "adapter_key": "zkteco_adms_push"},
+        )[0]
+        self.device_model = DeviceModel.objects.get_or_create(
             vendor=self.vendor,
             model_code="senseface-2a",
-            name="SenseFace 2A",
-            protocol=DeviceModel.Protocol.ADMS_PUSH,
-            capabilities={"push": True, "face": True},
-        )
+            defaults={
+                "name": "SenseFace 2A",
+                "protocol": DeviceModel.Protocol.ADMS_PUSH,
+                "capabilities": {"push": True, "face": True},
+            },
+        )[0]
         self.company = Company.objects.create(code="A", slug="a", name="Company A")
         with use_company(self.company):
             self.branch = Branch.objects.create(

@@ -61,17 +61,28 @@ def resolve_enrollment(*, device, device_user_id, at):
             ),
         )
 
-    ever_enrolled = DeviceEnrollment.all_objects.filter(
+    others = DeviceEnrollment.all_objects.filter(
         company_id=device.company_id, device=device, device_user_id=device_user_id
-    ).exists()
+    )
 
-    if ever_enrolled:
+    if others.exists():
+        # The status vocabulary is fixed by the field contract, so both an
+        # ended mapping and one that has not started yet are recorded as
+        # expired_enrollment. The reason says which, because the administrator
+        # fixes "enrolled this afternoon, punches arrived from this morning"
+        # differently from "the mapping ended months ago".
+        starts_later = others.filter(effective_from__gt=at).exists()
+        detail = (
+            "the earliest enrollment for it starts after the punch"
+            if starts_later
+            else "its enrollment had already ended"
+        )
         return ResolutionOutcome(
             enrollment=None,
             status=PunchEvent.AuthorizationStatus.EXPIRED_ENROLLMENT,
             reason=(
-                f"device user id {device_user_id!r} has enrollments on this "
-                "device, but none covering the punch instant"
+                f"device user id {device_user_id!r} is enrolled on this device, "
+                f"but not at the punch instant: {detail}"
             ),
         )
 

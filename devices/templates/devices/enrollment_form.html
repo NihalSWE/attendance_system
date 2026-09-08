@@ -1,0 +1,90 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    {{ title }} · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <a href="{% url 'devices:enrollment_list' %}">
+                    Enrollments
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    {% if enrollment %}Edit{% else %}New{% endif %}
+                </span>
+            </nav>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Recognition is not authorisation
+            </h2>
+        </div>
+        <div class="card__body">
+            <div class="grid grid--2">
+                <div class="stack">
+                    <span class="badge badge--info">
+                        Recognition
+                    </span>
+                    <p class="t-muted">
+                        The device user number below is how this terminal identifies the
+                        person. Creating it means the device knows who they are — it
+                        does not mean their punches count towards attendance.
+                    </p>
+                </div>
+                <div class="stack">
+                    <span class="badge badge--warning">
+                        Authorisation
+                    </span>
+                    <p class="t-muted">
+                        Whether a punch counts is decided by the company's device scope.
+                        <strong>
+                            Attendance enabled
+                        </strong>
+                        is a master switch that denies the punch under every scope.
+                        <strong>
+                            Authorised for assigned-devices mode
+                        </strong>
+                        is an extra grant that only matters in that one mode.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" class="card" novalidate>
+        {% csrf_token %}
+        <div class="card__head">
+            <h2>
+                Enrollment
+            </h2>
+        </div>
+        <div class="card__body">
+            <div class="grid grid--2">
+                {% include "devices/includes/form_fields.html" %}
+            </div>
+        </div>
+        <div class="card__foot">
+            <button class="btn btn--primary" type="submit">
+                {{ submit_label }}
+            </button>
+            <a class="btn btn--ghost" href="{% url 'devices:enrollment_list' %}">
+                Cancel
+            </a>
+        </div>
+    </form>
+{% endblock %}

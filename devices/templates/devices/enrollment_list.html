@@ -1,0 +1,184 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    Enrollments · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Enrollments
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Enrollments
+            </h1>
+            <p class="page__sub">
+                Which employee each device user number identifies, and whether their punches count.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'devices:enrollment_create' %}">
+                Enroll an employee
+            </a>
+        </div>
+    </div>
+    <div class="card">
+        <form class="toolbar" method="get">
+            <div class="toolbar__grow">
+                <label class="sr-only" for="q">
+                    Search enrollments
+                </label>
+                <div class="input-group">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="m20 20-3.5-3.5"/>
+                    </svg>
+                    <input class="input" id="q" name="q" value="{{ search }}" placeholder="Employee, device or user number">
+                </div>
+            </div>
+            <label class="sr-only" for="device">
+                Device
+            </label>
+            <select class="input select" id="device" name="device" style="width:auto">
+                <option value="">
+                    All devices
+                </option>
+                {% for d in devices %}
+                    <option value="{{ d.pk }}" {% if device == d.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ d.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--primary" type="submit">
+                Apply
+            </button>
+            <a class="btn btn--ghost" href="{% url 'devices:enrollment_list' %}">
+                Clear
+            </a>
+        </form>
+        <div class="card__head">
+            <h2>
+                All enrollments
+            </h2>
+            <span class="badge badge--neutral">
+                {{ total_count }}
+            </span>
+        </div>
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Device
+                            </th>
+                            <th>
+                                User number
+                            </th>
+                            <th>
+                                Attendance
+                            </th>
+                            <th>
+                                Assigned-mode grant
+                            </th>
+                            <th>
+                                Period
+                            </th>
+                            <th class="no-sort">
+                                <span class="sr-only">
+                                    Actions
+                                </span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for enrollment in page.object_list %}
+                            <tr>
+                                <td>
+                                    {{ enrollment.employee.full_name }}
+                                </td>
+                                <td>
+                                    {{ enrollment.device.name }}
+                                </td>
+                                <td>
+                                    {{ enrollment.device_user_id }}
+                                </td>
+                                <td>
+                                    {% if enrollment.attendance_enabled %}
+                                        <span class="badge badge--success">
+                                            Enabled
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--danger">
+                                            Disabled
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if enrollment.assigned_device_authorized %}
+                                        <span class="badge badge--success">
+                                            Granted
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral" title="Recognition only. Punches still count in department, branch and company modes.">
+                                            Recognition only
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ enrollment.effective_from|date:"j M Y" }}
+                                    {% if enrollment.effective_to %}
+                                        – {{ enrollment.effective_to|date:"j M Y" }}
+                                    {% else %}
+                                        – open
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:enrollment_edit' enrollment.pk %}">
+                                        Edit
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="t-faint" data-filter-note hidden>
+                The filter box searches the rows on this page. The count and pager above cover every matching enrollment.
+            </p>
+            {% include "devices/includes/pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    {% if search or device %}
+                        No enrollments match
+                    {% else %}
+                        No enrollments yet
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    {% if search or device %}
+                        Try clearing the filters.
+                    {% else %}
+                        Map an employee to the user number stored on the device, so its punches can be identified.
+                    {% endif %}
+                </div>
+                {% if not search and not device %}
+                    <a class="btn btn--primary" href="{% url 'devices:enrollment_create' %}">
+                        Enroll an employee
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

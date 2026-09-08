@@ -120,7 +120,7 @@ def resend_new_stamp(anchor, serial, device_user_id="1"):
         expectation=(
             "Two DeviceMessages and four PunchEvents. The second pair is kept as "
             "evidence, marked confirmed_duplicate, linked to the original and "
-            "excluded — so the attendance effect is not doubled."
+            "excluded, so the attendance effect is not doubled."
         ),
     )
 
@@ -142,7 +142,7 @@ def rapid_repeat(anchor, serial, device_user_id="1"):
             )
         ],
         expectation=(
-            "Both punches kept. The second is probable_duplicate for review — "
+            "Both punches kept. The second is probable_duplicate for review: "
             "closeness in time is not proof of duplication."
         ),
     )

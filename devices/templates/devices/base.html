@@ -1,0 +1,14 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% comment %}
+    Shared chrome for the device screens. It only adds DataTables on top of the
+    project shell — no new colours, no parallel component set. Tables are
+    server-rendered and paginated first; DataTables enhances them where the
+    script loads, matching the pattern already used by the platform screens.
+{% endcomment %}
+{% block extra_js %}
+    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
+    </script>
+    <script defer src="{% static 'devices/js/devices.js' %}">
+    </script>
+{% endblock %}

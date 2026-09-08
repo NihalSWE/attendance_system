@@ -1,0 +1,190 @@
+{% extends "devices/base.html" %}
+{% load tz %}
+{% block title %}
+    Unresolved queue · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Unresolved
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Unresolved queue
+            </h1>
+            <p class="page__sub">
+                Punches that need a person before they can count. Nothing here has been discarded.
+            </p>
+        </div>
+    </div>
+
+    <div class="grid grid--4">
+        <a class="card metric" href="{% querystring reason='unknown_employee' page=1 %}">
+            <span class="metric__label">
+                Unknown user number
+            </span>
+            <span class="t-metric">
+                {{ counts.unknown_employee }}
+            </span>
+            <span class="metric__note">
+                Nobody is enrolled under that number
+            </span>
+        </a>
+        <a class="card metric" href="{% querystring reason='expired_enrollment' page=1 %}">
+            <span class="metric__label">
+                Expired enrollment
+            </span>
+            <span class="t-metric">
+                {{ counts.expired_enrollment }}
+            </span>
+            <span class="metric__note">
+                Enrolled, but not on the date of the punch
+            </span>
+        </a>
+        <a class="card metric" href="{% querystring reason='policy_unresolved' page=1 %}">
+            <span class="metric__label">
+                Policy unresolved
+            </span>
+            <span class="t-metric">
+                {{ counts.policy_unresolved }}
+            </span>
+            <span class="metric__note">
+                Historical policy could not be established
+            </span>
+        </a>
+        <a class="card metric" href="{% querystring reason='probable_duplicate' page=1 %}">
+            <span class="metric__label">
+                Probable duplicate
+            </span>
+            <span class="t-metric">
+                {{ counts.probable_duplicate }}
+            </span>
+            <span class="metric__note">
+                Close to another scan, not proof of a repeat
+            </span>
+        </a>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                {% if reason %}
+                    Filtered: {{ reason }}
+                {% else %}
+                    Everything awaiting review
+                {% endif %}
+            </h2>
+            <span class="badge badge--neutral">
+                {{ total_count }}
+            </span>
+        </div>
+        {% if reason %}
+            <div class="card__body">
+                <a class="btn btn--ghost btn--sm" href="{% url 'devices:unresolved_queue' %}">
+                    Show all reasons
+                </a>
+            </div>
+        {% endif %}
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Punched
+                            </th>
+                            <th>
+                                Identity
+                            </th>
+                            <th>
+                                Device
+                            </th>
+                            <th>
+                                Reason
+                            </th>
+                            <th>
+                                What to do
+                            </th>
+                            <th class="no-sort">
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for punch in page.object_list %}
+                            <tr>
+                                <td>
+                                    {% timezone punch.display_timezone %}
+                                        {{ punch.punched_at_device|date:"j M Y, H:i:s" }}
+                                    {% endtimezone %}
+                                </td>
+                                <td>
+                                    {% if punch.employee %}
+                                        {{ punch.employee.full_name }}
+                                    {% else %}
+                                        user {{ punch.device_user_id }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ punch.device.name }}
+                                </td>
+                                <td>
+                                    {% if punch.dedupe_status == 'probable_duplicate' %}
+                                        <span class="badge badge--warning">
+                                            Probable duplicate
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--warning">
+                                            {{ punch.get_authorization_status_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if punch.authorization_status == 'unknown_employee' %}
+                                        Enroll user {{ punch.device_user_id }} on this device, covering the punch date.
+                                    {% elif punch.authorization_status == 'expired_enrollment' %}
+                                        The enrollment does not cover this date. Adjust its start or end so it does.
+                                    {% elif punch.authorization_status == 'policy_unresolved' %}
+                                        A policy record changed after this punch without an audit trail. Confirm what applied then.
+                                    {% else %}
+                                        Decide whether this is a genuine second scan or a repeat.
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:punch_detail' punch.pk %}">
+                                        Detail
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="t-faint" data-filter-note hidden>
+                The filter box searches the rows on this page. The count and pager above cover every matching punch.
+            </p>
+            {% include "devices/includes/pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M20 6 9 17l-5-5"/>
+                    </svg>
+                </div>
+                <div class="empty__title">
+                    Nothing to review
+                </div>
+                <div class="empty__text">
+                    Every punch received so far has resolved to an employee and a policy.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

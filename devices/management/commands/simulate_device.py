@@ -56,7 +56,7 @@ class Command(BaseCommand):
         if device is None:
             raise CommandError(
                 f"No device registered with serial {serial!r}. Register it in the "
-                "browser first — the simulator does not create devices."
+                "browser first; the simulator does not create devices."
             )
 
         kwargs = {}

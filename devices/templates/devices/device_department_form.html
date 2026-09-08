@@ -1,0 +1,59 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    {{ title }} · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <a href="{% url 'devices:device_detail' device.public_id %}">
+                    {{ device.name }}
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Department mapping
+                </span>
+            </nav>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                Only departments in {{ device.branch.name }} can be mapped, because a device serves the branch it sits in.
+            </p>
+        </div>
+    </div>
+    <form method="post" class="card" novalidate>
+        {% csrf_token %}
+        <div class="card__head">
+            <h2>
+                Mapping
+            </h2>
+        </div>
+        <div class="card__body stack">
+            <p class="t-muted">
+                This restricts the device in department-devices mode only. While the
+                device has no active mapping it serves the whole branch in that mode,
+                and mappings never restrict branch-devices or company-devices.
+            </p>
+            <div class="grid grid--2">
+                {% include "devices/includes/form_fields.html" %}
+            </div>
+        </div>
+        <div class="card__foot">
+            <button class="btn btn--primary" type="submit">
+                {{ submit_label }}
+            </button>
+            <a class="btn btn--ghost" href="{% url 'devices:device_detail' device.public_id %}">
+                Cancel
+            </a>
+        </div>
+    </form>
+{% endblock %}

@@ -36,16 +36,19 @@ def dt(year, month, day, hour=0, minute=0, second=0):
 class DevicesModelTests(TestCase):
     def setUp(self):
         # Global reference data — not tenant-owned.
-        self.vendor = DeviceVendor.objects.create(
-            code="zkteco", name="ZKTeco", adapter_key="zkteco_adms_push"
-        )
-        self.device_model = DeviceModel.objects.create(
+        self.vendor = DeviceVendor.objects.get_or_create(
+            code="zkteco",
+            defaults={"name": "ZKTeco", "adapter_key": "zkteco_adms_push"},
+        )[0]
+        self.device_model = DeviceModel.objects.get_or_create(
             vendor=self.vendor,
             model_code="senseface-2a",
-            name="SenseFace 2A",
-            protocol=DeviceModel.Protocol.ADMS_PUSH,
-            capabilities={"push": True, "face": True, "fingerprint": True},
-        )
+            defaults={
+                "name": "SenseFace 2A",
+                "protocol": DeviceModel.Protocol.ADMS_PUSH,
+                "capabilities": {"push": True, "face": True, "fingerprint": True},
+            },
+        )[0]
 
         self.company_a = Company.objects.create(code="A", slug="a", name="Company A")
         self.company_b = Company.objects.create(code="B", slug="b", name="Company B")
