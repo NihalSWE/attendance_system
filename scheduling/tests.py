@@ -8,7 +8,7 @@ from django.test import TestCase
 
 from common.tenant import use_company
 from employees.models import Employee
-from organization.models import Branch, Department
+from organization.models import Branch, CompanyDepartment, Department
 from scheduling.models import (
     CompanyAttendanceSettings,
     DepartmentShift,
@@ -27,13 +27,14 @@ def dt(y, m, d):
 
 class SchedulingTests(TestCase):
     def setUp(self):
+        software_entry = Department.objects.create(code="SW", name="Software")
         self.company = Company.objects.create(code="A", slug="a", name="Company A")
         with use_company(self.company):
             self.branch = Branch.objects.create(
                 code="HQ", name="Head Office", is_default=True
             )
-            self.department = Department.objects.create(
-                branch=self.branch, code="SW", name="Software"
+            self.department = CompanyDepartment.objects.create(
+                branch=self.branch, department=software_entry
             )
             self.employee = Employee.objects.create(first_name="Alice")
             self.day_shift = Shift.objects.create(

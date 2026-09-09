@@ -9,7 +9,13 @@ from django.test import TestCase
 
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
-from organization.models import Branch, Department, Designation
+from organization.models import (
+    Branch,
+    CompanyDepartment,
+    CompanyDesignation,
+    Department,
+    Designation,
+)
 from tenants.models import Company
 
 
@@ -19,16 +25,22 @@ def dt(year, month, day):
 
 class EmployeeStructureTests(TestCase):
     def setUp(self):
+        # Root-owned catalogue.
+        self.software = Department.objects.create(code="SW", name="Software")
+        self.dev_entry = Designation.objects.create(
+            department=self.software, code="DEV", name="Developer"
+        )
+
         self.company = Company.objects.create(code="A", slug="a", name="Company A")
         with use_company(self.company):
             self.branch = Branch.objects.create(
                 code="HQ", name="Head Office", is_default=True
             )
-            self.department = Department.objects.create(
-                branch=self.branch, code="SW", name="Software"
+            self.department = CompanyDepartment.objects.create(
+                branch=self.branch, department=self.software
             )
-            self.designation = Designation.objects.create(
-                department=self.department, code="DEV", name="Developer"
+            self.designation = CompanyDesignation.objects.create(
+                company_department=self.department, designation=self.dev_entry
             )
             self.alice = Employee.objects.create(first_name="Alice", last_name="Ahmed")
             self.bob = Employee.objects.create(first_name="Bob", last_name="Barua")
@@ -102,9 +114,10 @@ class EmployeeStructureTests(TestCase):
                 a.full_clean()
 
     def test_designation_must_belong_to_department(self):
+        hr = Department.objects.create(code="HR", name="Human Resources")
         with use_company(self.company):
-            other_dept = Department.objects.create(
-                branch=self.branch, code="HR", name="Human Resources"
+            other_dept = CompanyDepartment.objects.create(
+                branch=self.branch, department=hr
             )
             a = EmployeeAssignment(
                 employee=self.alice, employee_code="E1", branch=self.branch,

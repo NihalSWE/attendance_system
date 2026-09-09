@@ -1,6 +1,6 @@
 # Complete attendance database schema — every field
 
-This is the field-level schema for the proposed attendance project: **83 domain models, 5 implicit M2M junctions, 1615 columns, and 453 foreign-key relationships**. No database or Django application is generated.
+This is the field-level schema for the proposed attendance project: **83 domain models, 5 implicit M2M junctions, 1639 columns, and 465 foreign-key relationships**. No database or Django application is generated.
 
 - [Interactive diagram](ATTENDANCE_SCHEMA.html): search a table, zoom, and highlight its relationships.
 - [Full SVG diagram](ATTENDANCE_SCHEMA.svg): all table boxes contain all physical fields, types, key markers, and referenced targets.
@@ -101,7 +101,7 @@ Physical table: `accounts_company_membership_allowed_departments`. Implicit M2M 
 |---|---|---|---|---|
 | `id` | `bigint` | PK | No | — |
 | `companymembership_id` | `bigint` | FK | No | `accounts_company_membership.id` |
-| `department_id` | `bigint` | FK | No | `organization_department.id` |
+| `companydepartment_id` | `bigint` | FK | No | `organization_company_department.id` |
 
 Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id.
 
@@ -210,7 +210,38 @@ Physical table: `organization_branch`. Direct tenant owner: `company_id`.
 Constraints: unique `(company, code)`; one active default branch per company.
 ### Department
 
-Physical table: `organization_department`. Direct tenant owner: `company_id`.
+Physical table: `organization_department`. Global/platform table; see company field if present.
+
+| Column | PostgreSQL type | Key | Nullable | References |
+|---|---|---|---|---|
+| `id` | `bigint` | PK | No | — |
+| `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
+| `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
+| `code` | `varchar` | UQ | No | — |
+| `name` | `varchar` | UQ | No | — |
+| `description` | `text` | — | No | — |
+| `status` | `varchar` | — | No | — |
+
+Relations: Designation, CompanyDepartment.
+### Designation
+
+Physical table: `organization_designation`. Global/platform table; see company field if present.
+
+| Column | PostgreSQL type | Key | Nullable | References |
+|---|---|---|---|---|
+| `id` | `bigint` | PK | No | — |
+| `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
+| `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
+| `department_id` | `bigint` | FK | No | `organization_department.id` |
+| `code` | `varchar` | — | No | — |
+| `name` | `varchar` | — | No | — |
+| `description` | `text` | — | No | — |
+| `status` | `varchar` | — | No | — |
+
+Constraints: unique `(department, code)`; unique `(department, name)`.
+### CompanyDepartment
+
+Physical table: `organization_company_department`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -221,17 +252,17 @@ Physical table: `organization_department`. Direct tenant owner: `company_id`.
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `branch_id` | `bigint` | FK | No | `organization_branch.id` |
-| `code` | `varchar` | — | No | — |
-| `name` | `varchar` | — | No | — |
+| `department_id` | `bigint` | FK | No | `organization_department.id` |
+| `head_id` | `bigint` | FK | Yes | `employees_employee.id` |
 | `description` | `text` | — | No | — |
 | `status` | `varchar` | — | No | — |
 | `opened_on` | `date` | — | Yes | — |
 | `closed_on` | `date` | — | Yes | — |
 
-Relations: Designation, EmployeeAssignment, DepartmentShift, DeviceDepartment. Unique `(branch, code)` and normally `(branch, name)`.
-### Designation
+Constraints: unique `(branch, department)` — a branch adopts each catalogue department at most once; the branch must belong to the same company.
+### CompanyDesignation
 
-Physical table: `organization_designation`. Direct tenant owner: `company_id`.
+Physical table: `organization_company_designation`. Direct tenant owner: `company_id`.
 
 | Column | PostgreSQL type | Key | Nullable | References |
 |---|---|---|---|---|
@@ -241,15 +272,11 @@ Physical table: `organization_designation`. Direct tenant owner: `company_id`.
 | `updated_at` | `timestamptz` | — | No | — |
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
-| `department_id` | `bigint` | FK | No | `organization_department.id` |
-| `parent_id` | `bigint` | FK | Yes | `organization_designation.id` |
-| `code` | `varchar` | — | No | — |
-| `name` | `varchar` | — | No | — |
-| `hierarchy_level` | `integer` | — | No | — |
-| `description` | `text` | — | No | — |
+| `company_department_id` | `bigint` | FK | No | `organization_company_department.id` |
+| `designation_id` | `bigint` | FK | No | `organization_designation.id` |
 | `status` | `varchar` | — | No | — |
 
-Constraints: unique `(department, code)`; parent must be in the same department/company; prevent self-parent and hierarchy cycles.
+Constraints: unique `(company_department, designation)`; the catalogue title's department must match the adoption row's catalogue department.
 
 ## employees
 
@@ -307,8 +334,8 @@ Physical table: `employees_employee_assignment`. Direct tenant owner: `company_i
 | `employee_id` | `bigint` | FK | No | `employees_employee.id` |
 | `employee_code` | `varchar` | — | No | — |
 | `branch_id` | `bigint` | FK | No | `organization_branch.id` |
-| `department_id` | `bigint` | FK | No | `organization_department.id` |
-| `designation_id` | `bigint` | FK | No | `organization_designation.id` |
+| `department_id` | `bigint` | FK | No | `organization_company_department.id` |
+| `designation_id` | `bigint` | FK | No | `organization_company_designation.id` |
 | `manager_id` | `bigint` | FK | Yes | `employees_employee.id` |
 | `effective_from` | `timestamptz` | — | No | — |
 | `effective_to` | `timestamptz` | — | Yes | — |
@@ -316,7 +343,7 @@ Physical table: `employees_employee_assignment`. Direct tenant owner: `company_i
 | `status` | `varchar` | — | No | — |
 | `device_attendance_scope_override` | `varchar` | — | Yes | — |
 
-Constraints: department belongs to branch; designation belongs to department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends.
+Constraints: the adopted department belongs to the assignment's branch; the adopted designation belongs to that department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends.
 ### EmployeeCompensation
 
 Physical table: `employees_employee_compensation`. Direct tenant owner: `company_id`.
@@ -371,7 +398,7 @@ Physical table: `access_control_designation_permission`. Direct tenant owner: `c
 | `updated_at` | `timestamptz` | — | No | — |
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
-| `designation_id` | `bigint` | FK | No | `organization_designation.id` |
+| `designation_id` | `bigint` | FK | No | `organization_company_designation.id` |
 | `permission_id` | `bigint` | FK | No | `access_control_access_permission.id` |
 | `access_level` | `varchar` | — | No | — |
 | `can_delegate` | `boolean` | — | No | — |
@@ -379,7 +406,7 @@ Physical table: `access_control_designation_permission`. Direct tenant owner: `c
 | `effective_to` | `timestamptz` | — | Yes | — |
 | `reason` | `text` | — | No | — |
 
-Constraints: unique effective rule per designation/permission; a child designation cannot exceed its allowed parent ceiling unless a company administrator explicitly changes the hierarchy policy.
+Constraints: unique effective rule per designation/permission at any instant; a title may not be ALLOWED what its own department DENIES through DepartmentPermission (86). That department ceiling replaced the old designation parent-chain walk.
 ### EmployeePermissionOverride
 
 Physical table: `access_control_employee_permission_override`. Direct tenant owner: `company_id`.
@@ -401,7 +428,28 @@ Physical table: `access_control_employee_permission_override`. Direct tenant own
 | `reason` | `text` | — | No | — |
 | `status` | `varchar` | — | No | — |
 
-Constraints: grant must be allowed by designation and grantor authority; selected departments belong to selected branches/company.
+Constraints: a GRANT may not exceed what the employee's current department DENIES — this is what makes delegating to a department head safe, since the head cannot widen the boundary they administer inside; selected departments belong to selected branches/company.
+### DepartmentPermission
+
+Physical table: `access_control_department_permission`. Direct tenant owner: `company_id`.
+
+| Column | PostgreSQL type | Key | Nullable | References |
+|---|---|---|---|---|
+| `id` | `bigint` | PK | No | — |
+| `company_id` | `bigint` | FK | No | `tenants_company.id` |
+| `created_at` | `timestamptz` | — | No | — |
+| `updated_at` | `timestamptz` | — | No | — |
+| `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
+| `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
+| `company_department_id` | `bigint` | FK | No | `organization_company_department.id` |
+| `permission_id` | `bigint` | FK | No | `access_control_access_permission.id` |
+| `access_level` | `varchar` | — | No | — |
+| `can_delegate` | `boolean` | — | No | — |
+| `effective_from` | `timestamptz` | — | Yes | — |
+| `effective_to` | `timestamptz` | — | Yes | — |
+| `reason` | `text` | — | No | — |
+
+Constraints: one effective rule per department/permission at any instant; end after start.
 ### EmployeePermissionOverride_allowed_branches
 
 Physical table: `access_control_employee_permission_override_allowed_branches`. Implicit M2M junction.
@@ -421,7 +469,7 @@ Physical table: `access_control_employee_permission_override_allowed_departments
 |---|---|---|---|---|
 | `id` | `bigint` | PK | No | — |
 | `employeepermissionoverride_id` | `bigint` | FK | No | `access_control_employee_permission_override.id` |
-| `department_id` | `bigint` | FK | No | `organization_department.id` |
+| `companydepartment_id` | `bigint` | FK | No | `organization_company_department.id` |
 
 Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id.
 
@@ -469,7 +517,7 @@ Physical table: `scheduling_department_shift`. Direct tenant owner: `company_id`
 | `updated_at` | `timestamptz` | — | No | — |
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
-| `department_id` | `bigint` | FK | No | `organization_department.id` |
+| `department_id` | `bigint` | FK | No | `organization_company_department.id` |
 | `shift_id` | `bigint` | FK | No | `scheduling_shift.id` |
 | `is_default` | `boolean` | — | No | — |
 | `effective_from` | `date` | — | No | — |
@@ -675,7 +723,7 @@ Physical table: `devices_device_department`. Direct tenant owner: `company_id`.
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `device_id` | `bigint` | FK | No | `devices_biometric_device.id` |
-| `department_id` | `bigint` | FK | No | `organization_department.id` |
+| `department_id` | `bigint` | FK | No | `organization_company_department.id` |
 | `effective_from` | `timestamptz` | — | No | — |
 | `effective_to` | `timestamptz` | — | Yes | — |
 | `status` | `varchar` | — | No | — |

@@ -24,7 +24,13 @@ from access_control.models import AccessPermission, DesignationPermission
 from common.tenant import use_company
 from employees.models import Employee
 from employees.services import hire_employee, terminate_employee, transfer_employee
-from organization.models import Branch, Department, Designation
+from organization.models import (
+    Branch,
+    CompanyDepartment,
+    CompanyDesignation,
+    Department,
+    Designation,
+)
 from scheduling.models import Holiday, Shift, WeeklyOffRule
 from tenants.models import Company, CompanyFeature, Feature
 from tenants.services import onboard_company
@@ -32,6 +38,33 @@ from tenants.services import onboard_company
 
 def dt(y, m, d):
     return datetime(y, m, d, tzinfo=dt_timezone.utc)
+
+
+def adopt_department(branch, code, name):
+    """Adopt a catalogue department into a branch, creating the entry if new.
+
+    In production the root operator curates the catalogue and companies only
+    pick from it. The seed plays both parts, so it creates the catalogue row on
+    first use and reuses it for every later company — which is exactly the point
+    of the catalogue: two tenants naming a department "Sales" end up sharing one
+    entry rather than inventing two.
+    """
+    catalogue, _ = Department.objects.get_or_create(
+        name=name, defaults={"code": code}
+    )
+    return CompanyDepartment.objects.create(branch=branch, department=catalogue)
+
+
+def adopt_designation(company_department, code, name):
+    """Adopt a catalogue job title into one of the company own departments."""
+    catalogue, _ = Designation.objects.get_or_create(
+        department_id=company_department.department_id,
+        name=name,
+        defaults={"code": code},
+    )
+    return CompanyDesignation.objects.create(
+        company_department=company_department, designation=catalogue
+    )
 
 
 FEATURES = [
@@ -192,27 +225,16 @@ class Command(BaseCommand):
                 country_code="BD",
             )
 
-            software = Department.objects.create(branch=hq, code="SW", name="Software")
-            hr = Department.objects.create(branch=hq, code="HR", name="Human Resources")
-            sales = Department.objects.create(branch=unit, code="SL", name="Sales")
+            # The catalogue is root-owned and shared; the company only adopts.
+            software = adopt_department(hq, "SW", "Software")
+            hr = adopt_department(hq, "HR", "Human Resources")
+            sales = adopt_department(unit, "SL", "Sales")
 
-            # Designation hierarchy: assistants report to managers.
-            hr_manager = Designation.objects.create(
-                department=hr, code="HRM", name="HR Manager"
-            )
-            hr_assistant = Designation.objects.create(
-                department=hr, code="AHR", name="Assistant HR", parent=hr_manager
-            )
-            senior_dev = Designation.objects.create(
-                department=software, code="SDV", name="Senior Developer"
-            )
-            junior_dev = Designation.objects.create(
-                department=software, code="JDV", name="Junior Developer",
-                parent=senior_dev,
-            )
-            sales_rep = Designation.objects.create(
-                department=sales, code="REP", name="Sales Representative"
-            )
+            hr_manager = adopt_designation(hr, "HRM", "HR Manager")
+            hr_assistant = adopt_designation(hr, "AHR", "Assistant HR")
+            senior_dev = adopt_designation(software, "SDV", "Senior Developer")
+            junior_dev = adopt_designation(software, "JDV", "Junior Developer")
+            sales_rep = adopt_designation(sales, "REP", "Sales Representative")
 
             day = Shift.objects.create(
                 code="DAY", name="Day shift", start_time=time(9), end_time=time(18),
@@ -355,12 +377,8 @@ class Command(BaseCommand):
 
         with use_company(company):
             depot = Branch.objects.get(is_default=True)
-            ops = Department.objects.create(
-                branch=depot, code="OPS", name="Operations"
-            )
-            supervisor = Designation.objects.create(
-                department=ops, code="SUP", name="Supervisor"
-            )
+            ops = adopt_department(depot, "OPS", "Operations")
+            supervisor = adopt_designation(ops, "SUP", "Supervisor")
             Shift.objects.create(
                 code="DAY", name="Day shift", start_time=time(8), end_time=time(17),
                 scheduled_minutes=480, default_break_minutes=60,

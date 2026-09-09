@@ -1,6 +1,6 @@
 # Device attendance scope and punches across devices
 
-This is part of the separate attendance project's approved planning handoff. It adds configuration to existing models; the inventory stays at **83 domain models and 88 domain tables including implicit M2M junctions**.
+This is part of the separate attendance project's approved planning handoff. It adds configuration to existing models; the inventory stays at **86 domain models and 91 domain tables including implicit M2M junctions**.
 
 ## Required behavior
 

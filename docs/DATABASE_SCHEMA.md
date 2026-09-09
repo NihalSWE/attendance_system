@@ -19,7 +19,7 @@ For the **whole schema with every field inside every table**, open [the interact
 - The design contains **83 Django domain models in 12 apps**.
 - The project also includes the model-free **base_template** UI app, so there are **13 Django apps in total**. It has no database table and is intentionally absent from the ER diagrams. See PROJECT_SETUP.md for the complete app list.
 - Django's default table naming is assumed: `<app_label>_<model_name>`, lowercased; explicit `db_table` names may be chosen later but must be applied consistently.
-- Five domain M2M fields currently use implicit junction tables. Therefore, this proposal creates **88 attendance-domain tables**: 83 model tables plus 5 implicit M2M tables.
+- Five domain M2M fields currently use implicit junction tables. Therefore, this proposal creates **91 attendance-domain tables**: 86 model tables plus 5 implicit M2M tables.
 - Django infrastructure tables such as migrations, content types, permissions, groups, sessions, and any built-in User M2M tables are additional and are not included in the 88 count.
 - A custom `accounts.User` must be configured before the first migration. Business permissions use the `access_control` models; Django's built-in permissions may still control platform administration.
 - The class must be named exactly `User`, with `AUTH_USER_MODEL = "accounts.User"` and runtime `User = get_user_model()`. Every User FK targets `accounts_user`; do not add CustomUser or use the concrete default auth.User. Model relation declarations use settings.AUTH_USER_MODEL and data migrations use historical model lookup.
@@ -229,20 +229,23 @@ The list below is the compact database relationship schema. Scalar columns are d
 ### organization
 
 6. `organization_branch` — tenant; unique branch code inside company; exactly one default branch per active company; nullable device_attendance_scope_override for employees assigned here.
-7. `organization_department` — tenant; FK `branch_id`; unique department code inside branch.
-8. `organization_designation` — tenant; FK `department_id`, nullable self-FK `parent_id`; hierarchy must be acyclic.
+7. `organization_department` — **global root catalogue**; globally unique code and name; no company or branch column. Companies never write here.
+8. `organization_designation` — **global root catalogue**; FK `department_id`; unique code and name inside the catalogue department. No parent hierarchy.
+84. `organization_company_department` — tenant; FKs `branch_id`, `department_id` (catalogue), nullable `head_id` -> Employee; unique `(branch, department)`. Every company-specific reference to "a department" points here, never at row 7.
+85. `organization_company_designation` — tenant; FKs `company_department_id`, `designation_id` (catalogue); unique `(company_department, designation)`; the catalogue title must belong to the adopted catalogue department.
 
 ### employees
 
 9. `employees_employee` — tenant; nullable FK `user_id`; permanent employee UUID/identity independent of reusable business codes.
-10. `employees_employeeassignment` — tenant; FKs `employee_id`, `branch_id`, `department_id`, `designation_id`, nullable `manager_id`; effective-dated employee-code, organization, and employee device-scope override history.
+10. `employees_employeeassignment` — tenant; FKs `employee_id`, `branch_id`, `department_id` -> `organization_company_department`, `designation_id` -> `organization_company_designation`, nullable `manager_id`; effective-dated employee-code, organization, and employee device-scope override history.
 11. `employees_employeecompensation` — tenant; FK `employee_id`; effective-dated monthly/daily/hourly base rate history.
 
 ### access_control
 
 12. `access_control_accesspermission` — global permission catalogue; FK `feature_id`; globally unique code. Tenant grants reference this shared catalogue.
-13. `access_control_designationpermission` — tenant; FKs `designation_id`, `permission_id`; effective-dated allow/ceiling/delegation rule.
-14. `access_control_employeepermissionoverride` — tenant; FKs `employee_id`, `permission_id`, `granted_by_id`; M2M branch/department scopes; effective-dated allow/deny.
+13. `access_control_designationpermission` — tenant; FKs `designation_id` -> `organization_company_designation`, `permission_id`; effective-dated allow/deny rule, capped by row 86.
+14. `access_control_employeepermissionoverride` — tenant; FKs `employee_id`, `permission_id`, `granted_by_id`; M2M branch/company-department scopes; effective-dated allow/deny, capped by row 86.
+86. `access_control_department_permission` — tenant; FKs `company_department_id`, `permission_id`; effective-dated ceiling and floor for the whole department; one effective rule per department/permission.
 
 ### scheduling
 
@@ -336,7 +339,7 @@ The list below is the compact database relationship schema. Scalar columns are d
 
 ## 9. Implicit M2M junction tables
 
-These five tables exist physically even though they are not separate Django model classes in the 83-model catalogue:
+These five tables exist physically even though they are not separate Django model classes in the 86-model catalogue:
 
 1. `accounts_companymembership_allowed_branches` — FKs membership and branch; unique pair.
 2. `accounts_companymembership_allowed_departments` — FKs membership and department; unique pair.
@@ -386,7 +389,7 @@ Use layered keys because no one vendor field is universally reliable:
 2. `PunchEvent`: prefer vendor event/transaction ID scoped to device. Fallback fingerprint should include stable device identity, device user code, device-local timestamp with precision, punch type/status if meaningful, and payload discriminator. Do not merge merely because two punches occur within a broad time window.
 3. Preserve duplicates with `duplicate_of_id` and resolution state when auditability matters; exclude confirmed duplicates from PunchAllocation.
 4. PayrollRun, payments, adjustments, recoveries, repayments, remittances, leave balance postings, and device commands/messages each need a company-scoped idempotency key or stable external reference.
-5. Enqueue downstream processing only after the source transaction commits. A transactional outbox may be added later if database-to-broker delivery guarantees require it; it is not currently one of the 83 models.
+5. Enqueue downstream processing only after the source transaction commits. A transactional outbox may be added later if database-to-broker delivery guarantees require it; it is not currently one of the 86 models.
 
 ## 12. Recommended indexes
 
@@ -424,6 +427,42 @@ Large append-only tables should use BRIN indexes on time columns only after volu
 The platform/root administrator is represented by `User.is_superuser` and controls Company, Feature, Package, CompanySubscription, and explicit CompanyFeature grants. No direct `root_admin_id` is required on Company because actor fields plus AuditLog record who created, activated, suspended, subscribed, or granted access.
 
 Company users require CompanyMembership and business permission evaluation. A root admin bypass, if implemented, must be explicit, audited, and limited to platform support duties; it must not accidentally become the normal tenant-query path.
+
+### What root owns, and why
+
+The dividing line is: **root owns what the platform defines; a company owns what
+describes its own operation.**
+
+| Root-owned (global, no `company_id`) | Company-owned (tenant) |
+|---|---|
+| `tenants_feature` — one product module list | `tenants_companyfeature` — this company's grant |
+| `access_control_accesspermission` — one action catalogue | the rules that grant it |
+| `devices_devicevendor`, `devices_devicemodel` | `devices_biometricdevice` |
+| `subscriptions_package` | `subscriptions_companysubscription` |
+| `organization_department`, `organization_designation` | `organization_company_department`, `organization_company_designation` |
+
+Department and Designation sit on the root side by explicit decision: the client
+requires one curated vocabulary so that ten companies cannot each invent their
+own spelling of "Human Resources", and so cross-company reporting compares like
+with like.
+
+The cost of that decision is that a catalogue row cannot carry anything
+company-specific — not a branch, not a head, not an open date, not a permission
+rule — because it is one row shared by every tenant. That is what the two
+adoption tables are for. **The rule that follows from it, and the one most
+likely to be got wrong: any new foreign key meaning "a department" must point at
+`organization_company_department`, never at `organization_department`.** Pointing
+at the catalogue would let one company's configuration leak into every other
+company using the same department name.
+
+### Delegation inside a department
+
+`organization_company_department.head_id` names the employee who administers
+access for the people in that department. This is only safe because
+`access_control_department_permission` caps what the head can hand out: a DENIED
+rule there cannot be lifted by a title rule (13) or an individual grant (14).
+Delegation without that ceiling would be a privilege-escalation path, since the
+head could simply grant themselves whatever they liked.
 
 ## 15. Implementation status
 

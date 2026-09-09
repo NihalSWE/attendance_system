@@ -761,3 +761,79 @@ A sequence reserves distinct numbers under concurrency; it does not promise gapl
 Tenant context must cover form creation and rendering, not just the main queryset. The default admin's Shift choice field caused the settings edit crash despite the settings list working. The shared root-only admin adapter scopes all these steps and restores context; tests cover GET, valid POST and a cross-company submitted shift.
 
 The earlier compressed HTML and left-aligned forms hindered review and use. Four-space markup and separate rows/cells now expose structure. Browser checks cover actual create/admin/feature workflows, aligned numeric columns, centered forms, and compact desktop/mobile detail layouts. Full PostgreSQL suite passed 131 tests; strengthened focused tests passed seven. No new environment variables. Next remains company setup and scoped permissions, then employee writes.
+## Lesson 16 — Shared catalogues, and the data migration your test suite never runs
+
+**The term.** A *catalogue* (or reference table) is data the platform defines
+once for everybody: one ZKTeco, one `leave.approve` action, one "Human
+Resources". An *adoption row* (link table, junction) is how one tenant says "I
+use that entry, here, like this". The split matters because a shared row cannot
+hold anything tenant-specific — the moment you add a branch or a head or a
+permission rule to it, ten companies are sharing one answer.
+
+**The problem in this project.** The client requires one curated list of
+departments and designations so ten tenants cannot invent ten spellings of the
+same thing, and so cross-company reporting compares like with like. But
+`Department` carried `branch`, `Designation` carried `parent`, and five other
+models pointed at both. Moving them under root ownership was therefore not a
+flag but a restructuring: the tenant half had to go somewhere, and every FK that
+meant "a department" had to be repointed at that somewhere. **A useful test for
+any "should this be global?" question: list the row's columns. If any of them
+only make sense for one tenant, the answer is two tables, not one.**
+
+**Ordering a multi-app schema move.** Six migrations across five apps, and the
+order is the whole design. `organization.0002` only adds — it creates the
+adoption rows and fills them from the existing tenant-owned data. Then each
+dependant app repoints its FK, using add / backfill / drop / rename rather than
+`AlterField`, because the new rows have different primary keys. Only then does
+`organization.0003` strip `company` and `branch` off the catalogue. Reversing
+that order destroys the only record of who adopted what. The general rule:
+**additive first, destructive last, with the readers moved in between.**
+
+**The gap the ordinary suite leaves.** Lesson 6 established that the test suite
+building a fresh database is your migration test. That is true for the *schema*
+steps and false for the *data* steps: a fresh database has no rows, so every
+`RunPython` body runs against empty tables and proves nothing. Those bodies are
+the only thing standing between a working development database and a mangled
+one.
+
+So `organization/tests_migrations.py` uses `MigrationExecutor` to rewind to the
+tenant-owned world, write the awkward case by hand — two companies that each
+created their own "Software" department containing their own "Manager" — and
+roll forward. It failed immediately, twice:
+
+1. `ProtectedError` on `Designation.parent`. The parent link is `PROTECT`, so a
+   merged-away title could not be deleted while another title still named it as
+   a parent. The chain is being dropped two operations later anyway; the fix is
+   to null it before collapsing.
+2. `cannot ALTER TABLE ... because it has pending trigger events`. Django creates
+   foreign keys as `DEFERRABLE INITIALLY DEFERRED`, so the updates and deletes
+   leave trigger events queued, and PostgreSQL will not alter a table in that
+   state inside the same transaction. The fix is
+   `schema_editor.execute("SET CONSTRAINTS ALL IMMEDIATE")` after the data work
+   and before the column drops.
+
+Neither would have appeared before the user ran `migrate` on real data. **Write
+the data-migration test with the ugliest input you can think of, and write it
+before you hand anyone the migrate command.**
+
+**Ceilings versus chains.** The old access rule walked `Designation.parent` and
+refused to ALLOW a child what an ancestor DENIED. Replacing it with a rule on
+the department is not just simpler to query — one hop instead of a walk — it is
+the only version that survives a shared catalogue, because a title hierarchy
+correct for one company is wrong for the next. The ceiling is also what makes
+`CompanyDepartment.head` safe to delegate to: a head distributes access inside a
+boundary they cannot widen. Delegation without an enforced ceiling is a
+privilege-escalation path, not a feature — so the check lives in `clean()` on
+both the title rule and the individual override, not only in the UI.
+
+**Responsibilities.** The lead decides what is platform vocabulary and what is
+tenant configuration, and states the FK rule that follows ("anything meaning *a
+department* points at the adoption row"). The implementer writes the migrations
+in dependency order and the data-migration test with duplicate input. The
+reviewer checks the reverse path, the constraint drops around any collapse, and
+that no new FK points at a catalogue row.
+
+**Verified.** 164 tests on PostgreSQL, including 6 that migrate backwards and
+forwards over seeded duplicates; `makemigrations --check` reports no drift;
+schema artifacts regenerated and `verify_schema.cjs` passes. Applying the
+migrations to the development database is the user's own step.

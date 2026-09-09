@@ -133,7 +133,9 @@ class CompanyMembership(TenantOwned, ActorTracked):
         "organization.Branch", blank=True, related_name="scoped_memberships"
     )
     allowed_departments = models.ManyToManyField(
-        "organization.Department", blank=True, related_name="scoped_memberships"
+        "organization.CompanyDepartment",
+        blank=True,
+        related_name="scoped_memberships",
     )
     last_access_at = models.DateTimeField(null=True, blank=True)
 

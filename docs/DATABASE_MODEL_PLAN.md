@@ -12,7 +12,7 @@
 - Draft architecture for discussion; not final Django models or migrations.
 - Proposed stack: modular Django monolith with PostgreSQL, Celery and Redis as needed; user-selected FastAPI for API modules when required, including future ERP endpoints.
 - Django should own the ORM and migrations. FastAPI should use the same service and data layer rather than maintaining a duplicate set of SQLAlchemy models.
-- Current proposed model count: **83 models across 12 domain apps**. The additional model-free **base_template** app brings the Django app inventory to **13**. It owns shared layout/templates/styles; see PROJECT_SETUP.md.
+- Current proposed model count: **86 models across 12 domain apps**. The additional model-free **base_template** app brings the Django app inventory to **13**. It owns shared layout/templates/styles; see PROJECT_SETUP.md.
 
 ## Agreed foundations
 
@@ -97,15 +97,27 @@ Branches, departments, and positions inside a company.
 
 #### 7. `Department`
 
-- **Purpose:** Stores an organizational team such as Software, Sales, or HR within a branch. It groups employees for shifts, device access, and reporting.
-- **Related models:** Belongs to Branch and Company; connects to Designation, DepartmentShift, DeviceDepartment, and EmployeeAssignment.
-- **Example:** Dhaka Sales and Chattogram Sales are separate department records, so their shifts and employee lists can differ.
+- **Purpose:** The platform-wide list of department names, maintained by the root operator. No company can add to it or edit it. One "Human Resources" exists for everybody, so reporting across companies compares like with like instead of nine spellings of the same thing.
+- **Related models:** Owns Designation. Companies reach it only through CompanyDepartment.
+- **Example:** Root adds "Sales" once. Every company that has a sales team adopts that one entry.
 
 #### 8. `Designation`
 
-- **Purpose:** Stores a job position and its place in the department's access hierarchy. A parent designation identifies the position immediately above it.
-- **Related models:** Belongs to Department; references another Designation as its optional parent, EmployeeAssignment for holders, and DesignationPermission for access.
-- **Example:** HR Manager can be the parent of Assistant HR. The hierarchy describes positions; the named employee's manager is recorded in EmployeeAssignment.
+- **Purpose:** The platform-wide list of job titles, also root-owned. Each title belongs to one catalogue department, so "HR Manager" cannot be filed under Software.
+- **Related models:** Belongs to Department. Companies reach it only through CompanyDesignation.
+- **Example:** Root adds "HR Manager" under Human Resources. There is deliberately no parent title: access limits come from the department (see DepartmentPermission), because a chain of titles that is right for one company is wrong for the next.
+
+#### 84. `CompanyDepartment`
+
+- **Purpose:** Records that one company uses a catalogue department, inside one of its branches. This is the row everything company-specific attaches to — employees, shifts, permission rules, access scopes — so nothing one company sets can reach another. It also names the department head, the person who administers access for everyone inside it.
+- **Related models:** Links Company and Branch to a catalogue Department; connects to CompanyDesignation, EmployeeAssignment, DepartmentShift, DeviceDepartment and DepartmentPermission.
+- **Example:** Northwind adopts "Sales" in Dhaka and again in Chattogram. Two rows, two heads, two shift patterns, one catalogue entry. Sunrise adopting the same "Sales" entry sees none of it.
+
+#### 85. `CompanyDesignation`
+
+- **Purpose:** Records that one company uses a catalogue job title inside one of its own departments. Employee assignments and title-level permission rules point here, never at the shared catalogue.
+- **Related models:** Links CompanyDepartment to a catalogue Designation; used by EmployeeAssignment and DesignationPermission.
+- **Example:** Northwind's Dhaka Sales adopts "Sales Representative". Giving that title leave-approval rights inside Northwind changes nothing for any other company using the same title.
 
 
 ### 4. `employees` — 3 models
@@ -121,7 +133,7 @@ The employee's permanent identity and the history of where they worked and what 
 #### 10. `EmployeeAssignment`
 
 - **Purpose:** Stores an employee's business code, branch, department, designation, and manager for a particular date range. End the old assignment and create a new one when these details change.
-- **Related models:** Links Employee to Branch, Department, Designation, and optional manager Employee. Historical attendance and payroll segments reference the applicable assignment.
+- **Related models:** Links Employee to Branch, CompanyDepartment, CompanyDesignation, and optional manager Employee. Historical attendance and payroll segments reference the applicable assignment.
 - **Example:** Employee A holds SW-001 in Software until March, then HR-015 in HR from April. Employee B may use SW-001 from April, with a different assignment and permanent identity.
 
 #### 11. `EmployeeCompensation`
@@ -164,8 +176,14 @@ Which actions a person can perform after their company has access to the feature
 #### 13. `DesignationPermission`
 
 - **Purpose:** Defines which actions holders of a designation receive automatically, which may be granted individually, and which are denied. It supplies the normal access and upper limit for that position.
-- **Related models:** Connects Designation to AccessPermission; parent-designation restrictions and company feature access also apply.
-- **Example:** Assistant HR may receive employee-list access by default and be eligible for leave approval, but cannot receive payroll access if the hierarchy disallows it.
+- **Related models:** Connects CompanyDesignation to AccessPermission; the department ceiling (DepartmentPermission) and company feature access also apply.
+- **Example:** Assistant HR may receive employee-list access by default and be eligible for leave approval, but cannot receive payroll access if the department is denied it.
+
+#### 86. `DepartmentPermission`
+
+- **Purpose:** Defines what a whole department may do. It is both a ceiling and a floor: an action the department is denied cannot be granted to anyone inside it by any other means, and an action the department is allowed is what everyone in it gets unless individually revoked. This is what makes it safe to let a department head administer their own people — they distribute access inside a boundary they cannot widen.
+- **Related models:** Connects CompanyDepartment to AccessPermission; DesignationPermission and EmployeePermissionOverride are both capped by it.
+- **Example:** Payroll access is denied to the Sales department. The head of Sales can still hand out leave approval to their team, but no grant they make can reach payroll.
 
 #### 14. `EmployeePermissionOverride`
 
@@ -188,7 +206,7 @@ Expected working hours, weekly holidays, and special working-day decisions.
 #### 16. `DepartmentShift`
 
 - **Purpose:** Lists the shifts available to a department and identifies its default where applicable. Several rows let a department operate more than one shift.
-- **Related models:** Connects Department to Shift; employee assignments select the applicable shift when more than one is available.
+- **Related models:** Connects CompanyDepartment to Shift; employee assignments select the applicable shift when more than one is available.
 - **Example:** A Support department has morning and evening shifts. Its employees must be explicitly assigned to one of them.
 
 #### 17. `EmployeeShiftAssignment`
@@ -247,7 +265,7 @@ Physical devices, authorized employees, saved biometric templates, and incoming 
 #### 25. `DeviceDepartment`
 
 - **Purpose:** Records which departments a device serves. These links filter department_devices mode; no active links means a shared device within its branch. They do not impose an extra restriction in branch_devices/company_devices mode or on an explicit assigned-device grant.
-- **Related models:** Connects BiometricDevice to Department within the same company and branch.
+- **Related models:** Connects BiometricDevice to CompanyDepartment within the same company and branch.
 - **Example:** The entrance device serves Software and Accounting. A separate Sales device serves only Sales.
 
 #### 26. `DeviceEnrollment`
@@ -700,7 +718,7 @@ Company subscription and features
 
 ## Scope change log
 
-- Explanation revision: all 83 models now have purpose, relationship, and example notes grouped by app. Model names, count, and the agreed basic-operation scope are unchanged.
+- Explanation revision: all 86 models now have purpose, relationship, and example notes grouped by app. Model names, count, and the agreed basic-operation scope are unchanged.
 
 - LFA addition: one optional LeaveFareAssistanceClaim under leaves increases the total from 82 to 83 (leaves 15, payroll still 26). Existing policy, approval, attachment, and payroll models receive optional fields; the basic workflow remains available.
 

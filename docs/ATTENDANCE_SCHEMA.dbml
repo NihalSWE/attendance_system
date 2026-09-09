@@ -127,36 +127,55 @@ Table organization_branch {
 
 Table organization_department {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
-  company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
-  created_at timestamptz [not null, note: "Inherited timestamp."]
-  updated_at timestamptz [not null, note: "Inherited timestamp."]
   created_by_id bigint [null, note: "Inherited ActorTracked field."]
   updated_by_id bigint [null, note: "Inherited ActorTracked field."]
-  branch_id bigint [not null, note: "FK -> Branch, PROTECT."]
+  code varchar [not null, unique, note: "CharField, globally unique."]
+  name varchar [not null, unique, note: "CharField, globally unique."]
+  description text [not null, note: "TextField, blank."]
+  status varchar [not null, note: "active/inactive."]
+  Note: "Department | Global/platform scope; AuditLog company is optional. Relations: Designation, CompanyDepartment."
+}
+
+Table organization_designation {
+  id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
+  created_by_id bigint [null, note: "Inherited ActorTracked field."]
+  updated_by_id bigint [null, note: "Inherited ActorTracked field."]
+  department_id bigint [not null, note: "FK -> Department, PROTECT."]
   code varchar [not null, note: "CharField."]
   name varchar [not null, note: "CharField."]
   description text [not null, note: "TextField, blank."]
   status varchar [not null, note: "active/inactive."]
-  opened_on date [null, note: "nullable DateField."]
-  closed_on date [null, note: "nullable DateField."]
-  Note: "Department | Direct company ownership. Relations: Designation, EmployeeAssignment, DepartmentShift, DeviceDepartment. Unique `(branch, code)` and normally `(branch, name)`."
+  Note: "Designation | Global/platform scope; AuditLog company is optional. Constraints: unique `(department, code)`; unique `(department, name)`."
 }
 
-Table organization_designation {
+Table organization_company_department {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
   created_at timestamptz [not null, note: "Inherited timestamp."]
   updated_at timestamptz [not null, note: "Inherited timestamp."]
   created_by_id bigint [null, note: "Inherited ActorTracked field."]
   updated_by_id bigint [null, note: "Inherited ActorTracked field."]
-  department_id bigint [not null, note: "FK -> Department, PROTECT."]
-  parent_id bigint [null, note: "nullable FK -> self, PROTECT, related_name=`children`."]
-  code varchar [not null, note: "CharField."]
-  name varchar [not null, note: "CharField."]
-  hierarchy_level integer [not null, note: "PositiveIntegerField, maintained/validated from hierarchy."]
+  branch_id bigint [not null, note: "FK -> Branch, PROTECT."]
+  department_id bigint [not null, note: "FK -> Department (catalogue), PROTECT."]
+  head_id bigint [null, note: "nullable FK -> Employee, PROTECT. The employee who administers permissions for everyone in this department."]
   description text [not null, note: "TextField, blank."]
   status varchar [not null, note: "active/inactive."]
-  Note: "Designation | Direct company ownership. Constraints: unique `(department, code)`; parent must be in the same department/company; prevent self-parent and hierarchy cycles."
+  opened_on date [null, note: "nullable DateField."]
+  closed_on date [null, note: "nullable DateField."]
+  Note: "CompanyDepartment | Direct company ownership. Constraints: unique `(branch, department)` — a branch adopts each catalogue department at most once; the branch must belong to the same company."
+}
+
+Table organization_company_designation {
+  id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
+  company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
+  created_at timestamptz [not null, note: "Inherited timestamp."]
+  updated_at timestamptz [not null, note: "Inherited timestamp."]
+  created_by_id bigint [null, note: "Inherited ActorTracked field."]
+  updated_by_id bigint [null, note: "Inherited ActorTracked field."]
+  company_department_id bigint [not null, note: "FK -> CompanyDepartment, PROTECT."]
+  designation_id bigint [not null, note: "FK -> Designation (catalogue), PROTECT."]
+  status varchar [not null, note: "active/inactive."]
+  Note: "CompanyDesignation | Direct company ownership. Constraints: unique `(company_department, designation)`; the catalogue title's department must match the adoption row's catalogue department."
 }
 
 Table employees_employee {
@@ -204,15 +223,15 @@ Table employees_employee_assignment {
   employee_id bigint [not null, note: "FK -> Employee, PROTECT."]
   employee_code varchar [not null, note: "CharField; manually entered reusable business code."]
   branch_id bigint [not null, note: "FK -> Branch, PROTECT."]
-  department_id bigint [not null, note: "FK -> Department, PROTECT."]
-  designation_id bigint [not null, note: "FK -> Designation, PROTECT."]
+  department_id bigint [not null, note: "FK -> CompanyDepartment, PROTECT. The company's adoption row, never the catalogue row."]
+  designation_id bigint [not null, note: "FK -> CompanyDesignation, PROTECT."]
   manager_id bigint [null, note: "nullable FK -> Employee, PROTECT."]
   effective_from timestamptz [not null, note: "DateTimeField."]
   effective_to timestamptz [null, note: "nullable DateTimeField."]
   change_reason text [not null, note: "TextField."]
   status varchar [not null, note: "active/ended/cancelled."]
   device_attendance_scope_override varchar [null, note: "nullable CharField: assigned_devices, department_devices, branch_devices, company_devices; null inherits the assigned branch/company policy. This employee-level override lives on dated assignment history; changing it closes the old interval and creates its successor."]
-  Note: "EmployeeAssignment | Direct company ownership. Constraints: department belongs to branch; designation belongs to department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
+  Note: "EmployeeAssignment | Direct company ownership. Constraints: the adopted department belongs to the assignment's branch; the adopted designation belongs to that department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
 }
 
 Table employees_employee_compensation {
@@ -255,14 +274,14 @@ Table access_control_designation_permission {
   updated_at timestamptz [not null, note: "Inherited timestamp."]
   created_by_id bigint [null, note: "Inherited ActorTracked field."]
   updated_by_id bigint [null, note: "Inherited ActorTracked field."]
-  designation_id bigint [not null, note: "FK -> Designation, PROTECT."]
+  designation_id bigint [not null, note: "FK -> CompanyDesignation, PROTECT."]
   permission_id bigint [not null, note: "FK -> AccessPermission, PROTECT."]
   access_level varchar [not null, note: "default, allowed, denied."]
   can_delegate boolean [not null, note: "BooleanField."]
   effective_from timestamptz [null, note: "nullable DateTimeField."]
   effective_to timestamptz [null, note: "nullable DateTimeField."]
   reason text [not null, note: "TextField."]
-  Note: "DesignationPermission | Direct company ownership. Constraints: unique effective rule per designation/permission; a child designation cannot exceed its allowed parent ceiling unless a company administrator explicitly changes the hierarchy policy."
+  Note: "DesignationPermission | Direct company ownership. Constraints: unique effective rule per designation/permission at any instant; a title may not be ALLOWED what its own department DENIES through DepartmentPermission (86). That department ceiling replaced the old designation parent-chain walk."
 }
 
 Table access_control_employee_permission_override {
@@ -280,7 +299,24 @@ Table access_control_employee_permission_override {
   granted_by_id bigint [not null, note: "FK -> User, PROTECT."]
   reason text [not null, note: "TextField."]
   status varchar [not null, note: "active/revoked/expired."]
-  Note: "EmployeePermissionOverride | Direct company ownership. Constraints: grant must be allowed by designation and grantor authority; selected departments belong to selected branches/company."
+  Note: "EmployeePermissionOverride | Direct company ownership. Constraints: a GRANT may not exceed what the employee's current department DENIES — this is what makes delegating to a department head safe, since the head cannot widen the boundary they administer inside; selected departments belong to selected branches/company."
+}
+
+Table access_control_department_permission {
+  id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
+  company_id bigint [not null, note: "TenantOwned.company; mandatory tenant ownership."]
+  created_at timestamptz [not null, note: "Inherited timestamp."]
+  updated_at timestamptz [not null, note: "Inherited timestamp."]
+  created_by_id bigint [null, note: "Inherited ActorTracked field."]
+  updated_by_id bigint [null, note: "Inherited ActorTracked field."]
+  company_department_id bigint [not null, note: "FK -> CompanyDepartment, PROTECT."]
+  permission_id bigint [not null, note: "FK -> AccessPermission, PROTECT."]
+  access_level varchar [not null, note: "default, allowed, denied."]
+  can_delegate boolean [not null, note: "BooleanField; whether the department head may pass this on."]
+  effective_from timestamptz [null, note: "nullable DateTimeField."]
+  effective_to timestamptz [null, note: "nullable DateTimeField."]
+  reason text [not null, note: "TextField."]
+  Note: "DepartmentPermission | Direct company ownership. Constraints: one effective rule per department/permission at any instant; end after start."
 }
 
 Table scheduling_shift {
@@ -316,7 +352,7 @@ Table scheduling_department_shift {
   updated_at timestamptz [not null, note: "Inherited timestamp."]
   created_by_id bigint [null, note: "Inherited ActorTracked field."]
   updated_by_id bigint [null, note: "Inherited ActorTracked field."]
-  department_id bigint [not null, note: "FK -> Department, PROTECT."]
+  department_id bigint [not null, note: "FK -> CompanyDepartment, PROTECT."]
   shift_id bigint [not null, note: "FK -> Shift, PROTECT."]
   is_default boolean [not null, note: "BooleanField."]
   effective_from date [not null, note: "DateField."]
@@ -483,7 +519,7 @@ Table devices_device_department {
   created_by_id bigint [null, note: "Inherited ActorTracked field."]
   updated_by_id bigint [null, note: "Inherited ActorTracked field."]
   device_id bigint [not null, note: "FK -> BiometricDevice, PROTECT."]
-  department_id bigint [not null, note: "FK -> Department, PROTECT."]
+  department_id bigint [not null, note: "FK -> CompanyDepartment, PROTECT. Not the catalogue row: a device belongs to one company's department in one branch."]
   effective_from timestamptz [not null, note: "DateTimeField."]
   effective_to timestamptz [null, note: "nullable DateTimeField."]
   status varchar [not null, note: "active/ended."]
@@ -1951,9 +1987,9 @@ Table accounts_company_membership_allowed_branches {
 Table accounts_company_membership_allowed_departments {
   id bigint [pk, increment, not null]
   companymembership_id bigint [not null]
-  department_id bigint [not null]
+  companydepartment_id bigint [not null]
   indexes {
-    (companymembership_id, department_id) [unique]
+    (companymembership_id, companydepartment_id) [unique]
   }
   Note: "CompanyMembership_allowed_departments | Parent-owned junction. Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id."
 }
@@ -1971,9 +2007,9 @@ Table access_control_employee_permission_override_allowed_branches {
 Table access_control_employee_permission_override_allowed_departments {
   id bigint [pk, increment, not null]
   employeepermissionoverride_id bigint [not null]
-  department_id bigint [not null]
+  companydepartment_id bigint [not null]
   indexes {
-    (employeepermissionoverride_id, department_id) [unique]
+    (employeepermissionoverride_id, companydepartment_id) [unique]
   }
   Note: "EmployeePermissionOverride_allowed_departments | Parent-owned junction. Unique pair; both rows must belong to the same company. Tenant ownership is inherited from the source parent; this implicit junction has no company_id."
 }
@@ -2002,15 +2038,22 @@ Ref: tenants_company_feature.granted_by_id > accounts_user.id
 Ref: organization_branch.company_id > tenants_company.id
 Ref: organization_branch.created_by_id > accounts_user.id
 Ref: organization_branch.updated_by_id > accounts_user.id
-Ref: organization_department.company_id > tenants_company.id
 Ref: organization_department.created_by_id > accounts_user.id
 Ref: organization_department.updated_by_id > accounts_user.id
-Ref: organization_department.branch_id > organization_branch.id
-Ref: organization_designation.company_id > tenants_company.id
 Ref: organization_designation.created_by_id > accounts_user.id
 Ref: organization_designation.updated_by_id > accounts_user.id
 Ref: organization_designation.department_id > organization_department.id
-Ref: organization_designation.parent_id > organization_designation.id
+Ref: organization_company_department.company_id > tenants_company.id
+Ref: organization_company_department.created_by_id > accounts_user.id
+Ref: organization_company_department.updated_by_id > accounts_user.id
+Ref: organization_company_department.branch_id > organization_branch.id
+Ref: organization_company_department.department_id > organization_department.id
+Ref: organization_company_department.head_id > employees_employee.id
+Ref: organization_company_designation.company_id > tenants_company.id
+Ref: organization_company_designation.created_by_id > accounts_user.id
+Ref: organization_company_designation.updated_by_id > accounts_user.id
+Ref: organization_company_designation.company_department_id > organization_company_department.id
+Ref: organization_company_designation.designation_id > organization_designation.id
 Ref: employees_employee.company_id > tenants_company.id
 Ref: employees_employee.created_by_id > accounts_user.id
 Ref: employees_employee.updated_by_id > accounts_user.id
@@ -2020,8 +2063,8 @@ Ref: employees_employee_assignment.created_by_id > accounts_user.id
 Ref: employees_employee_assignment.updated_by_id > accounts_user.id
 Ref: employees_employee_assignment.employee_id > employees_employee.id
 Ref: employees_employee_assignment.branch_id > organization_branch.id
-Ref: employees_employee_assignment.department_id > organization_department.id
-Ref: employees_employee_assignment.designation_id > organization_designation.id
+Ref: employees_employee_assignment.department_id > organization_company_department.id
+Ref: employees_employee_assignment.designation_id > organization_company_designation.id
 Ref: employees_employee_assignment.manager_id > employees_employee.id
 Ref: employees_employee_compensation.company_id > tenants_company.id
 Ref: employees_employee_compensation.created_by_id > accounts_user.id
@@ -2031,7 +2074,7 @@ Ref: access_control_access_permission.feature_id > tenants_feature.id
 Ref: access_control_designation_permission.company_id > tenants_company.id
 Ref: access_control_designation_permission.created_by_id > accounts_user.id
 Ref: access_control_designation_permission.updated_by_id > accounts_user.id
-Ref: access_control_designation_permission.designation_id > organization_designation.id
+Ref: access_control_designation_permission.designation_id > organization_company_designation.id
 Ref: access_control_designation_permission.permission_id > access_control_access_permission.id
 Ref: access_control_employee_permission_override.company_id > tenants_company.id
 Ref: access_control_employee_permission_override.created_by_id > accounts_user.id
@@ -2039,13 +2082,18 @@ Ref: access_control_employee_permission_override.updated_by_id > accounts_user.i
 Ref: access_control_employee_permission_override.employee_id > employees_employee.id
 Ref: access_control_employee_permission_override.permission_id > access_control_access_permission.id
 Ref: access_control_employee_permission_override.granted_by_id > accounts_user.id
+Ref: access_control_department_permission.company_id > tenants_company.id
+Ref: access_control_department_permission.created_by_id > accounts_user.id
+Ref: access_control_department_permission.updated_by_id > accounts_user.id
+Ref: access_control_department_permission.company_department_id > organization_company_department.id
+Ref: access_control_department_permission.permission_id > access_control_access_permission.id
 Ref: scheduling_shift.company_id > tenants_company.id
 Ref: scheduling_shift.created_by_id > accounts_user.id
 Ref: scheduling_shift.updated_by_id > accounts_user.id
 Ref: scheduling_department_shift.company_id > tenants_company.id
 Ref: scheduling_department_shift.created_by_id > accounts_user.id
 Ref: scheduling_department_shift.updated_by_id > accounts_user.id
-Ref: scheduling_department_shift.department_id > organization_department.id
+Ref: scheduling_department_shift.department_id > organization_company_department.id
 Ref: scheduling_department_shift.shift_id > scheduling_shift.id
 Ref: scheduling_employee_shift_assignment.company_id > tenants_company.id
 Ref: scheduling_employee_shift_assignment.created_by_id > accounts_user.id
@@ -2084,7 +2132,7 @@ Ref: devices_device_department.company_id > tenants_company.id
 Ref: devices_device_department.created_by_id > accounts_user.id
 Ref: devices_device_department.updated_by_id > accounts_user.id
 Ref: devices_device_department.device_id > devices_biometric_device.id
-Ref: devices_device_department.department_id > organization_department.id
+Ref: devices_device_department.department_id > organization_company_department.id
 Ref: devices_device_enrollment.company_id > tenants_company.id
 Ref: devices_device_enrollment.created_by_id > accounts_user.id
 Ref: devices_device_enrollment.updated_by_id > accounts_user.id
@@ -2434,11 +2482,11 @@ Ref: auditlog_audit_log.actor_membership_id > accounts_company_membership.id
 Ref: accounts_company_membership_allowed_branches.companymembership_id > accounts_company_membership.id
 Ref: accounts_company_membership_allowed_branches.branch_id > organization_branch.id
 Ref: accounts_company_membership_allowed_departments.companymembership_id > accounts_company_membership.id
-Ref: accounts_company_membership_allowed_departments.department_id > organization_department.id
+Ref: accounts_company_membership_allowed_departments.companydepartment_id > organization_company_department.id
 Ref: access_control_employee_permission_override_allowed_branches.employeepermissionoverride_id > access_control_employee_permission_override.id
 Ref: access_control_employee_permission_override_allowed_branches.branch_id > organization_branch.id
 Ref: access_control_employee_permission_override_allowed_departments.employeepermissionoverride_id > access_control_employee_permission_override.id
-Ref: access_control_employee_permission_override_allowed_departments.department_id > organization_department.id
+Ref: access_control_employee_permission_override_allowed_departments.companydepartment_id > organization_company_department.id
 Ref: payroll_daily_line_leave_days.payrolldailyline_id > payroll_daily_line.id
 Ref: payroll_daily_line_leave_days.leaveday_id > payroll_leave_day.id
 
@@ -2459,6 +2507,8 @@ TableGroup organization {
   organization_branch
   organization_department
   organization_designation
+  organization_company_department
+  organization_company_designation
 }
 
 TableGroup employees {
@@ -2471,6 +2521,7 @@ TableGroup access_control {
   access_control_access_permission
   access_control_designation_permission
   access_control_employee_permission_override
+  access_control_department_permission
   access_control_employee_permission_override_allowed_branches
   access_control_employee_permission_override_allowed_departments
 }

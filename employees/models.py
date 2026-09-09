@@ -134,11 +134,17 @@ class EmployeeAssignment(TenantOwned, ActorTracked):
     branch = models.ForeignKey(
         "organization.Branch", on_delete=models.PROTECT, related_name="assignments"
     )
+    # The company's adoption rows, never the root catalogue rows: a placement
+    # is always inside one company's own branch and department.
     department = models.ForeignKey(
-        "organization.Department", on_delete=models.PROTECT, related_name="assignments"
+        "organization.CompanyDepartment",
+        on_delete=models.PROTECT,
+        related_name="assignments",
     )
     designation = models.ForeignKey(
-        "organization.Designation", on_delete=models.PROTECT, related_name="assignments"
+        "organization.CompanyDesignation",
+        on_delete=models.PROTECT,
+        related_name="assignments",
     )
     manager = models.ForeignKey(
         Employee,
@@ -208,7 +214,7 @@ class EmployeeAssignment(TenantOwned, ActorTracked):
             if self.department.branch_id != self.branch_id:
                 errors["department"] = "Department does not belong to this branch."
         if self.department_id and self.designation_id:
-            if self.designation.department_id != self.department_id:
+            if self.designation.company_department_id != self.department_id:
                 errors["designation"] = (
                     "Designation does not belong to this department."
                 )

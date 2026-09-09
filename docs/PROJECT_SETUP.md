@@ -44,7 +44,7 @@ This is the intended destination layout, not a claim that the new application fo
 
 ## App inventory
 
-Create **13 Django apps**: 12 domain apps plus the model-free `base_template` presentation app. The database design remains 83 domain models and 88 domain tables including implicit M2M tables. `base_template` adds no model/table and therefore does not appear as a table in the ER diagrams.
+Create **13 Django apps**: 12 domain apps plus the model-free `base_template` presentation app. The database design remains 86 domain models and 91 domain tables including implicit M2M tables. `base_template` adds no model/table and therefore does not appear as a table in the ER diagrams.
 
 With Django installed in the active environment, run these from the new attendance project's directory containing manage.py. Skip any app already created.
 

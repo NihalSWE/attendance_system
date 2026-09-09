@@ -5,7 +5,7 @@
 
 > This is documentation for the separate attendance project. It defines proposed Django fields and relationships; it is not executable model code.
 
-Read [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) first and [DATABASE_MODEL_PLAN.md](DATABASE_MODEL_PLAN.md) for plain-language model purposes. This document is the proposed field contract for the 83 models.
+Read [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md) first and [DATABASE_MODEL_PLAN.md](DATABASE_MODEL_PLAN.md) for plain-language model purposes. This document is the proposed field contract for the 86 models.
 
 These models belong to 12 domain apps. The user will also create the model-free base_template app for shared UI, making 13 Django apps in total without adding database tables. See [PROJECT_SETUP.md](PROJECT_SETUP.md) for commands, template ownership and the user-selected FastAPI API direction.
 
@@ -24,7 +24,7 @@ Django relation notation:
 - Files are private storage references. Do not expose raw storage paths publicly.
 - Choice fields below are examples of controlled enums; store stable codes, not display labels.
 
-These conceptual abstract bases are not database tables and are not part of the 83-model count:
+These conceptual abstract bases are not database tables and are not part of the 86-model count:
 
 ```text
 TimeStamped:
@@ -68,8 +68,14 @@ Rules:
 - When the snake_case name already begins with `payroll_`, it is NOT prefixed
   again: `PayrollRun` becomes `payroll_run`, never `payroll_payroll_run`.
 - Implicit M2M junction tables inherit their parent's prefix automatically.
-- Table names verified collision-free across all 88 tables after this rule was
+- Table names verified collision-free across all 91 tables after this rule was
   applied.
+- Tables created before this rule was written do not follow the snake_case part
+  of it: `scheduling_departmentshift`, `access_control_designationpermission`
+  and `employees_employeeassignment` run the words together. They keep their
+  names until somebody decides an `AlterModelTable` migration is worth it. New
+  multi-word tables do follow the rule: `organization_company_department`,
+  `organization_company_designation`, `access_control_department_permission`.
 
 **Client-facing table names.** Some table names exist to match the client's
 vocabulary, not ours. `Feature` uses `db_table = "module"` because the client
@@ -121,7 +127,7 @@ Common fields: TenantOwned plus actor tracking.
 - `joined_at`, `ended_at` — nullable DateTimeField.
 - `invited_by` — nullable FK -> User, SET_NULL.
 - `allowed_branches` — M2M -> Branch, blank; empty means unrestricted at branch level for an eligible role.
-- `allowed_departments` — M2M -> Department, blank; empty means unrestricted within allowed branches.
+- `allowed_departments` — M2M -> CompanyDepartment, blank; empty means unrestricted within allowed branches.
 - `last_access_at` — nullable DateTimeField.
 
 Constraints: unique `(company, user)`; departments selected in scope must belong to a selected/allowed branch and the same company. The two M2M fields create implicit junction tables unless later replaced by an explicit scope model.
@@ -197,28 +203,64 @@ Constraints: unique `(company, code)`; one active default branch per company.
 
 ### 7. Department
 
+**Root-owned catalogue. Not TenantOwned — no company column, and no company may write to it.** One "Human Resources" exists for the whole platform; a company adopts it through CompanyDepartment (84) rather than creating its own spelling of it.
+
+Common fields: timestamps plus actor tracking.
+
+- `code` — CharField, globally unique.
+- `name` — CharField, globally unique.
+- `description` — TextField, blank.
+- `status` — active/inactive.
+
+Nothing company-specific lives here: no branch, no head, no open/close dates. Those belong to the adoption row.
+
+Relations: Designation, CompanyDepartment.
+
+### 8. Designation
+
+**Root-owned catalogue, same rule as Department.** A job title belongs to exactly one catalogue department, so "HR Manager" cannot be filed under Software.
+
+Common fields: timestamps plus actor tracking.
+
+- `department` — FK -> Department, PROTECT.
+- `code`, `name` — CharField.
+- `description` — TextField, blank.
+- `status` — active/inactive.
+
+Constraints: unique `(department, code)`; unique `(department, name)`.
+
+There is deliberately **no parent/child hierarchy**. Access ceilings are carried by the department through DepartmentPermission (86), not by walking a chain of titles: a chain that is correct for one company is wrong for the next, and a global catalogue cannot be both.
+
+### 84. CompanyDepartment
+
+One company's use of a catalogue department, inside one of its branches. **This is the row every company-specific fact points at** — employees, shifts, permission rules, membership scopes — so nothing set by one company can reach another.
+
 Common fields: TenantOwned plus actor tracking.
 
 - `branch` — FK -> Branch, PROTECT.
-- `code`, `name` — CharField.
+- `department` — FK -> Department (catalogue), PROTECT.
+- `head` — nullable FK -> Employee, PROTECT. The employee who administers permissions for everyone in this department.
 - `description` — TextField, blank.
 - `status` — active/inactive.
 - `opened_on`, `closed_on` — nullable DateField.
 
-Relations: Designation, EmployeeAssignment, DepartmentShift, DeviceDepartment. Unique `(branch, code)` and normally `(branch, name)`.
+`code` and `name` are read through to the catalogue and are **not stored locally**: a local copy could drift, which is the duplication the catalogue exists to prevent.
 
-### 8. Designation
+Constraints: unique `(branch, department)` — a branch adopts each catalogue department at most once; the branch must belong to the same company.
+
+### 85. CompanyDesignation
+
+One company's use of a catalogue job title, inside one of its own departments.
 
 Common fields: TenantOwned plus actor tracking.
 
-- `department` — FK -> Department, PROTECT.
-- `parent` — nullable FK -> self, PROTECT, related_name=`children`.
-- `code`, `name` — CharField.
-- `hierarchy_level` — PositiveIntegerField, maintained/validated from hierarchy.
-- `description` — TextField, blank.
+- `company_department` — FK -> CompanyDepartment, PROTECT.
+- `designation` — FK -> Designation (catalogue), PROTECT.
 - `status` — active/inactive.
 
-Constraints: unique `(department, code)`; parent must be in the same department/company; prevent self-parent and hierarchy cycles.
+`code`, `name` and `branch` are read through, as with CompanyDepartment.
+
+Constraints: unique `(company_department, designation)`; the catalogue title's department must match the adoption row's catalogue department.
 
 ## 4. employees
 
@@ -248,8 +290,8 @@ Common fields: TenantOwned plus actor tracking.
 - `employee` — FK -> Employee, PROTECT.
 - `employee_code` — CharField; manually entered reusable business code.
 - `branch` — FK -> Branch, PROTECT.
-- `department` — FK -> Department, PROTECT.
-- `designation` — FK -> Designation, PROTECT.
+- `department` — FK -> CompanyDepartment, PROTECT. The company's adoption row, never the catalogue row.
+- `designation` — FK -> CompanyDesignation, PROTECT.
 - `manager` — nullable FK -> Employee, PROTECT.
 - `effective_from` — DateTimeField.
 - `effective_to` — nullable DateTimeField.
@@ -257,7 +299,7 @@ Common fields: TenantOwned plus actor tracking.
 - `status` — active/ended/cancelled.
 - `device_attendance_scope_override` — nullable CharField: assigned_devices, department_devices, branch_devices, company_devices; null inherits the assigned branch/company policy. This employee-level override lives on dated assignment history; changing it closes the old interval and creates its successor.
 
-Constraints: department belongs to branch; designation belongs to department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends.
+Constraints: the adopted department belongs to the assignment's branch; the adopted designation belongs to that department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends.
 
 ### 11. EmployeeCompensation
 
@@ -294,14 +336,14 @@ Global permission catalogue; no company FK.
 
 Common fields: TenantOwned plus actor tracking.
 
-- `designation` — FK -> Designation, PROTECT.
+- `designation` — FK -> CompanyDesignation, PROTECT.
 - `permission` — FK -> AccessPermission, PROTECT.
 - `access_level` — default, allowed, denied.
 - `can_delegate` — BooleanField.
 - `effective_from`, `effective_to` — nullable DateTimeField.
 - `reason` — TextField.
 
-Constraints: unique effective rule per designation/permission; a child designation cannot exceed its allowed parent ceiling unless a company administrator explicitly changes the hierarchy policy.
+Constraints: unique effective rule per designation/permission at any instant; a title may not be ALLOWED what its own department DENIES through DepartmentPermission (86). That department ceiling replaced the old designation parent-chain walk.
 
 ### 14. EmployeePermissionOverride
 
@@ -311,13 +353,30 @@ Common fields: TenantOwned plus actor tracking.
 - `permission` — FK -> AccessPermission, PROTECT.
 - `effect` — grant/revoke.
 - `allowed_branches` — M2M -> Branch, blank; empty inherits membership/designation scope.
-- `allowed_departments` — M2M -> Department, blank.
+- `allowed_departments` — M2M -> CompanyDepartment, blank.
 - `effective_from`, `effective_to` — nullable DateTimeField.
 - `granted_by` — FK -> User, PROTECT.
 - `reason` — TextField.
 - `status` — active/revoked/expired.
 
-Constraints: grant must be allowed by designation and grantor authority; selected departments belong to selected branches/company.
+Constraints: a GRANT may not exceed what the employee's current department DENIES — this is what makes delegating to a department head safe, since the head cannot widen the boundary they administer inside; selected departments belong to selected branches/company.
+
+### 86. DepartmentPermission
+
+What a whole department may do, on a dated interval. **The department is the unit of delegation**, so this layer is both the ceiling and the floor for everyone in it.
+
+Common fields: TenantOwned plus actor tracking.
+
+- `company_department` — FK -> CompanyDepartment, PROTECT.
+- `permission` — FK -> AccessPermission, PROTECT.
+- `access_level` — default, allowed, denied.
+- `can_delegate` — BooleanField; whether the department head may pass this on.
+- `effective_from`, `effective_to` — nullable DateTimeField.
+- `reason` — TextField.
+
+A DENIED rule is a hard ceiling: neither a job title (13) nor an individual grant (14) can lift it. An ALLOWED rule is the floor everyone in the department gets unless something below revokes it individually.
+
+Constraints: one effective rule per department/permission at any instant; end after start.
 
 ## 6. scheduling
 
@@ -343,7 +402,7 @@ Constraints: unique `(company, code)`; timing and minute thresholds must be inte
 
 Common fields: TenantOwned plus actor tracking.
 
-- `department` — FK -> Department, PROTECT.
+- `department` — FK -> CompanyDepartment, PROTECT.
 - `shift` — FK -> Shift, PROTECT.
 - `is_default` — BooleanField.
 - `effective_from` — DateField.
@@ -482,7 +541,7 @@ Constraints: unique `(company, serial_number)`; device branch belongs to company
 Common fields: TenantOwned plus actor tracking.
 
 - `device` — FK -> BiometricDevice, PROTECT.
-- `department` — FK -> Department, PROTECT.
+- `department` — FK -> CompanyDepartment, PROTECT. Not the catalogue row: a device belongs to one company's department in one branch.
 - `effective_from` — DateTimeField.
 - `effective_to` — nullable DateTimeField.
 - `status` — active/ended.

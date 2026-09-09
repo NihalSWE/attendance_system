@@ -11,7 +11,13 @@ from access_control.services import has_permission
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from employees.services import hire_employee, terminate_employee
-from organization.models import Branch, Department, Designation
+from organization.models import (
+    Branch,
+    CompanyDepartment,
+    CompanyDesignation,
+    Department,
+    Designation,
+)
 from tenants.models import Company
 from tenants.services import onboard_company
 
@@ -22,14 +28,18 @@ def dt(y, m, d):
 
 class TerminationTests(TestCase):
     def setUp(self):
+        software_entry = Department.objects.create(code="SW", name="Software")
+        dev_entry = Designation.objects.create(
+            department=software_entry, code="DEV", name="Developer"
+        )
         self.company = onboard_company(code="ACME", slug="acme", name="Acme Ltd")
         with use_company(self.company):
             self.branch = Branch.objects.get()
-            self.dept = Department.objects.create(
-                branch=self.branch, code="SW", name="Software"
+            self.dept = CompanyDepartment.objects.create(
+                branch=self.branch, department=software_entry
             )
-            self.title = Designation.objects.create(
-                department=self.dept, code="DEV", name="Developer"
+            self.title = CompanyDesignation.objects.create(
+                company_department=self.dept, designation=dev_entry
             )
 
     def _hire(self, name, code, start=dt(2023, 1, 1)):

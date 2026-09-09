@@ -17,7 +17,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.services import ACTIVE_COMPANY_SESSION_KEY, get_active_memberships
 from employees.models import Employee
-from organization.models import Branch, Department
+from organization.models import Branch, CompanyDepartment
 
 
 def company_admin_required(view):
@@ -60,7 +60,7 @@ def dashboard(request):
         "probation_count": by_status["probation"],
         "resigned_count": by_status["resigned"],
         "branch_count": Branch.objects.count(),
-        "department_count": Department.objects.count(),
+        "department_count": CompanyDepartment.objects.count(),
         "recent": recent,
     })
 
@@ -127,7 +127,8 @@ def department_list(request):
     if not request.company_id:
         return _no_company(request)
     departments = (
-        Department.objects.select_related("branch").order_by("branch__name", "name")
+        CompanyDepartment.objects.select_related("branch", "department", "head")
+        .order_by("branch__name", "department__name")
     )
     return render(request, "base_template/department_list.html",
                   {"departments": departments})

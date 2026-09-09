@@ -958,33 +958,81 @@
           "note": "Primary key; BigAutoField."
         },
         {
-          "name": "company",
-          "column": "company_id",
+          "name": "created_by",
+          "column": "created_by_id",
+          "type": "bigint",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "target": "User",
+          "deletion": "SET_NULL",
+          "note": "Inherited ActorTracked field."
+        },
+        {
+          "name": "updated_by",
+          "column": "updated_by_id",
+          "type": "bigint",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "target": "User",
+          "deletion": "SET_NULL",
+          "note": "Inherited ActorTracked field."
+        },
+        {
+          "name": "code",
+          "column": "code",
+          "type": "varchar",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "note": "CharField, globally unique."
+        },
+        {
+          "name": "name",
+          "column": "name",
+          "type": "varchar",
+          "nullable": false,
+          "pk": false,
+          "unique": true,
+          "note": "CharField, globally unique."
+        },
+        {
+          "name": "description",
+          "column": "description",
+          "type": "text",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "TextField, blank."
+        },
+        {
+          "name": "status",
+          "column": "status",
+          "type": "varchar",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "active/inactive."
+        }
+      ],
+      "table": "organization_department",
+      "tenant": false,
+      "constraints": "Relations: Designation, CompanyDepartment."
+    },
+    {
+      "number": 8,
+      "app": "organization",
+      "name": "Designation",
+      "fields": [
+        {
+          "name": "id",
+          "column": "id",
           "type": "bigint",
           "nullable": false,
-          "pk": false,
+          "pk": true,
           "unique": false,
-          "target": "Company",
-          "deletion": "PROTECT",
-          "note": "TenantOwned.company; mandatory tenant ownership."
-        },
-        {
-          "name": "created_at",
-          "column": "created_at",
-          "type": "timestamptz",
-          "nullable": false,
-          "pk": false,
-          "unique": false,
-          "note": "Inherited timestamp."
-        },
-        {
-          "name": "updated_at",
-          "column": "updated_at",
-          "type": "timestamptz",
-          "nullable": false,
-          "pk": false,
-          "unique": false,
-          "note": "Inherited timestamp."
+          "note": "Primary key; BigAutoField."
         },
         {
           "name": "created_by",
@@ -1009,14 +1057,14 @@
           "note": "Inherited ActorTracked field."
         },
         {
-          "name": "branch",
-          "column": "branch_id",
+          "name": "department",
+          "column": "department_id",
           "type": "bigint",
           "nullable": false,
           "pk": false,
           "unique": false,
-          "note": "FK -> Branch, PROTECT.",
-          "target": "Branch",
+          "note": "FK -> Department, PROTECT.",
+          "target": "Department",
           "deletion": "PROTECT"
         },
         {
@@ -1054,34 +1102,16 @@
           "pk": false,
           "unique": false,
           "note": "active/inactive."
-        },
-        {
-          "name": "opened_on",
-          "column": "opened_on",
-          "type": "date",
-          "nullable": true,
-          "pk": false,
-          "unique": false,
-          "note": "nullable DateField."
-        },
-        {
-          "name": "closed_on",
-          "column": "closed_on",
-          "type": "date",
-          "nullable": true,
-          "pk": false,
-          "unique": false,
-          "note": "nullable DateField."
         }
       ],
-      "table": "organization_department",
-      "tenant": true,
-      "constraints": "Relations: Designation, EmployeeAssignment, DepartmentShift, DeviceDepartment. Unique `(branch, code)` and normally `(branch, name)`."
+      "table": "organization_designation",
+      "tenant": false,
+      "constraints": "Constraints: unique `(department, code)`; unique `(department, name)`."
     },
     {
-      "number": 8,
+      "number": 84,
       "app": "organization",
-      "name": "Designation",
+      "name": "CompanyDepartment",
       "fields": [
         {
           "name": "id",
@@ -1144,53 +1174,37 @@
           "note": "Inherited ActorTracked field."
         },
         {
+          "name": "branch",
+          "column": "branch_id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "FK -> Branch, PROTECT.",
+          "target": "Branch",
+          "deletion": "PROTECT"
+        },
+        {
           "name": "department",
           "column": "department_id",
           "type": "bigint",
           "nullable": false,
           "pk": false,
           "unique": false,
-          "note": "FK -> Department, PROTECT.",
+          "note": "FK -> Department (catalogue), PROTECT.",
           "target": "Department",
           "deletion": "PROTECT"
         },
         {
-          "name": "parent",
-          "column": "parent_id",
+          "name": "head",
+          "column": "head_id",
           "type": "bigint",
           "nullable": true,
           "pk": false,
           "unique": false,
-          "note": "nullable FK -> self, PROTECT, related_name=`children`.",
-          "target": "Designation",
+          "note": "nullable FK -> Employee, PROTECT. The employee who administers permissions for everyone in this department.",
+          "target": "Employee",
           "deletion": "PROTECT"
-        },
-        {
-          "name": "code",
-          "column": "code",
-          "type": "varchar",
-          "nullable": false,
-          "pk": false,
-          "unique": false,
-          "note": "CharField."
-        },
-        {
-          "name": "name",
-          "column": "name",
-          "type": "varchar",
-          "nullable": false,
-          "pk": false,
-          "unique": false,
-          "note": "CharField."
-        },
-        {
-          "name": "hierarchy_level",
-          "column": "hierarchy_level",
-          "type": "integer",
-          "nullable": false,
-          "pk": false,
-          "unique": false,
-          "note": "PositiveIntegerField, maintained/validated from hierarchy."
         },
         {
           "name": "description",
@@ -1209,11 +1223,130 @@
           "pk": false,
           "unique": false,
           "note": "active/inactive."
+        },
+        {
+          "name": "opened_on",
+          "column": "opened_on",
+          "type": "date",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "note": "nullable DateField."
+        },
+        {
+          "name": "closed_on",
+          "column": "closed_on",
+          "type": "date",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "note": "nullable DateField."
         }
       ],
-      "table": "organization_designation",
+      "table": "organization_company_department",
       "tenant": true,
-      "constraints": "Constraints: unique `(department, code)`; parent must be in the same department/company; prevent self-parent and hierarchy cycles."
+      "constraints": "Constraints: unique `(branch, department)` — a branch adopts each catalogue department at most once; the branch must belong to the same company."
+    },
+    {
+      "number": 85,
+      "app": "organization",
+      "name": "CompanyDesignation",
+      "fields": [
+        {
+          "name": "id",
+          "column": "id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "note": "Primary key; BigAutoField."
+        },
+        {
+          "name": "company",
+          "column": "company_id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "target": "Company",
+          "deletion": "PROTECT",
+          "note": "TenantOwned.company; mandatory tenant ownership."
+        },
+        {
+          "name": "created_at",
+          "column": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "Inherited timestamp."
+        },
+        {
+          "name": "updated_at",
+          "column": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "Inherited timestamp."
+        },
+        {
+          "name": "created_by",
+          "column": "created_by_id",
+          "type": "bigint",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "target": "User",
+          "deletion": "SET_NULL",
+          "note": "Inherited ActorTracked field."
+        },
+        {
+          "name": "updated_by",
+          "column": "updated_by_id",
+          "type": "bigint",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "target": "User",
+          "deletion": "SET_NULL",
+          "note": "Inherited ActorTracked field."
+        },
+        {
+          "name": "company_department",
+          "column": "company_department_id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "FK -> CompanyDepartment, PROTECT.",
+          "target": "CompanyDepartment",
+          "deletion": "PROTECT"
+        },
+        {
+          "name": "designation",
+          "column": "designation_id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "FK -> Designation (catalogue), PROTECT.",
+          "target": "Designation",
+          "deletion": "PROTECT"
+        },
+        {
+          "name": "status",
+          "column": "status",
+          "type": "varchar",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "active/inactive."
+        }
+      ],
+      "table": "organization_company_designation",
+      "tenant": true,
+      "constraints": "Constraints: unique `(company_department, designation)`; the catalogue title's department must match the adoption row's catalogue department."
     },
     {
       "number": 9,
@@ -1615,8 +1748,8 @@
           "nullable": false,
           "pk": false,
           "unique": false,
-          "note": "FK -> Department, PROTECT.",
-          "target": "Department",
+          "note": "FK -> CompanyDepartment, PROTECT. The company's adoption row, never the catalogue row.",
+          "target": "CompanyDepartment",
           "deletion": "PROTECT"
         },
         {
@@ -1626,8 +1759,8 @@
           "nullable": false,
           "pk": false,
           "unique": false,
-          "note": "FK -> Designation, PROTECT.",
-          "target": "Designation",
+          "note": "FK -> CompanyDesignation, PROTECT.",
+          "target": "CompanyDesignation",
           "deletion": "PROTECT"
         },
         {
@@ -1689,7 +1822,7 @@
       ],
       "table": "employees_employee_assignment",
       "tenant": true,
-      "constraints": "Constraints: department belongs to branch; designation belongs to department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
+      "constraints": "Constraints: the adopted department belongs to the assignment's branch; the adopted designation belongs to that department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
     },
     {
       "number": 11,
@@ -2018,8 +2151,8 @@
           "nullable": false,
           "pk": false,
           "unique": false,
-          "note": "FK -> Designation, PROTECT.",
-          "target": "Designation",
+          "note": "FK -> CompanyDesignation, PROTECT.",
+          "target": "CompanyDesignation",
           "deletion": "PROTECT"
         },
         {
@@ -2081,7 +2214,7 @@
       ],
       "table": "access_control_designation_permission",
       "tenant": true,
-      "constraints": "Constraints: unique effective rule per designation/permission; a child designation cannot exceed its allowed parent ceiling unless a company administrator explicitly changes the hierarchy policy."
+      "constraints": "Constraints: unique effective rule per designation/permission at any instant; a title may not be ALLOWED what its own department DENIES through DepartmentPermission (86). That department ceiling replaced the old designation parent-chain walk."
     },
     {
       "number": 14,
@@ -2229,7 +2362,144 @@
       ],
       "table": "access_control_employee_permission_override",
       "tenant": true,
-      "constraints": "Constraints: grant must be allowed by designation and grantor authority; selected departments belong to selected branches/company."
+      "constraints": "Constraints: a GRANT may not exceed what the employee's current department DENIES — this is what makes delegating to a department head safe, since the head cannot widen the boundary they administer inside; selected departments belong to selected branches/company."
+    },
+    {
+      "number": 86,
+      "app": "access_control",
+      "name": "DepartmentPermission",
+      "fields": [
+        {
+          "name": "id",
+          "column": "id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": true,
+          "unique": false,
+          "note": "Primary key; BigAutoField."
+        },
+        {
+          "name": "company",
+          "column": "company_id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "target": "Company",
+          "deletion": "PROTECT",
+          "note": "TenantOwned.company; mandatory tenant ownership."
+        },
+        {
+          "name": "created_at",
+          "column": "created_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "Inherited timestamp."
+        },
+        {
+          "name": "updated_at",
+          "column": "updated_at",
+          "type": "timestamptz",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "Inherited timestamp."
+        },
+        {
+          "name": "created_by",
+          "column": "created_by_id",
+          "type": "bigint",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "target": "User",
+          "deletion": "SET_NULL",
+          "note": "Inherited ActorTracked field."
+        },
+        {
+          "name": "updated_by",
+          "column": "updated_by_id",
+          "type": "bigint",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "target": "User",
+          "deletion": "SET_NULL",
+          "note": "Inherited ActorTracked field."
+        },
+        {
+          "name": "company_department",
+          "column": "company_department_id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "FK -> CompanyDepartment, PROTECT.",
+          "target": "CompanyDepartment",
+          "deletion": "PROTECT"
+        },
+        {
+          "name": "permission",
+          "column": "permission_id",
+          "type": "bigint",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "FK -> AccessPermission, PROTECT.",
+          "target": "AccessPermission",
+          "deletion": "PROTECT"
+        },
+        {
+          "name": "access_level",
+          "column": "access_level",
+          "type": "varchar",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "default, allowed, denied."
+        },
+        {
+          "name": "can_delegate",
+          "column": "can_delegate",
+          "type": "boolean",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "BooleanField; whether the department head may pass this on."
+        },
+        {
+          "name": "effective_from",
+          "column": "effective_from",
+          "type": "timestamptz",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "note": "nullable DateTimeField."
+        },
+        {
+          "name": "effective_to",
+          "column": "effective_to",
+          "type": "timestamptz",
+          "nullable": true,
+          "pk": false,
+          "unique": false,
+          "note": "nullable DateTimeField."
+        },
+        {
+          "name": "reason",
+          "column": "reason",
+          "type": "text",
+          "nullable": false,
+          "pk": false,
+          "unique": false,
+          "note": "TextField."
+        }
+      ],
+      "table": "access_control_department_permission",
+      "tenant": true,
+      "constraints": "Constraints: one effective rule per department/permission at any instant; end after start."
     },
     {
       "number": 15,
@@ -2517,8 +2787,8 @@
           "nullable": false,
           "pk": false,
           "unique": false,
-          "note": "FK -> Department, PROTECT.",
-          "target": "Department",
+          "note": "FK -> CompanyDepartment, PROTECT.",
+          "target": "CompanyDepartment",
           "deletion": "PROTECT"
         },
         {
@@ -3864,8 +4134,8 @@
           "nullable": false,
           "pk": false,
           "unique": false,
-          "note": "FK -> Department, PROTECT.",
-          "target": "Department",
+          "note": "FK -> CompanyDepartment, PROTECT. Not the catalogue row: a device belongs to one company's department in one branch.",
+          "target": "CompanyDepartment",
           "deletion": "PROTECT"
         },
         {
@@ -16183,13 +16453,13 @@
           "deletion": "CASCADE"
         },
         {
-          "name": "department",
-          "column": "department_id",
+          "name": "companydepartment",
+          "column": "companydepartment_id",
           "type": "bigint",
           "nullable": false,
           "pk": false,
           "unique": false,
-          "target": "Department",
+          "target": "CompanyDepartment",
           "deletion": "CASCADE"
         }
       ]
@@ -16261,13 +16531,13 @@
           "deletion": "CASCADE"
         },
         {
-          "name": "department",
-          "column": "department_id",
+          "name": "companydepartment",
+          "column": "companydepartment_id",
           "type": "bigint",
           "nullable": false,
           "pk": false,
           "unique": false,
-          "target": "Department",
+          "target": "CompanyDepartment",
           "deletion": "CASCADE"
         }
       ]
@@ -16427,14 +16697,6 @@
     },
     {
       "from": "Department",
-      "field": "company_id",
-      "to": "Company",
-      "unique": false,
-      "nullable": false,
-      "shared": true
-    },
-    {
-      "from": "Department",
       "field": "created_by_id",
       "to": "User",
       "unique": false,
@@ -16447,22 +16709,6 @@
       "to": "User",
       "unique": false,
       "nullable": true,
-      "shared": true
-    },
-    {
-      "from": "Department",
-      "field": "branch_id",
-      "to": "Branch",
-      "unique": false,
-      "nullable": false,
-      "shared": false
-    },
-    {
-      "from": "Designation",
-      "field": "company_id",
-      "to": "Company",
-      "unique": false,
-      "nullable": false,
       "shared": true
     },
     {
@@ -16490,11 +16736,91 @@
       "shared": false
     },
     {
-      "from": "Designation",
-      "field": "parent_id",
-      "to": "Designation",
+      "from": "CompanyDepartment",
+      "field": "company_id",
+      "to": "Company",
+      "unique": false,
+      "nullable": false,
+      "shared": true
+    },
+    {
+      "from": "CompanyDepartment",
+      "field": "created_by_id",
+      "to": "User",
       "unique": false,
       "nullable": true,
+      "shared": true
+    },
+    {
+      "from": "CompanyDepartment",
+      "field": "updated_by_id",
+      "to": "User",
+      "unique": false,
+      "nullable": true,
+      "shared": true
+    },
+    {
+      "from": "CompanyDepartment",
+      "field": "branch_id",
+      "to": "Branch",
+      "unique": false,
+      "nullable": false,
+      "shared": false
+    },
+    {
+      "from": "CompanyDepartment",
+      "field": "department_id",
+      "to": "Department",
+      "unique": false,
+      "nullable": false,
+      "shared": false
+    },
+    {
+      "from": "CompanyDepartment",
+      "field": "head_id",
+      "to": "Employee",
+      "unique": false,
+      "nullable": true,
+      "shared": false
+    },
+    {
+      "from": "CompanyDesignation",
+      "field": "company_id",
+      "to": "Company",
+      "unique": false,
+      "nullable": false,
+      "shared": true
+    },
+    {
+      "from": "CompanyDesignation",
+      "field": "created_by_id",
+      "to": "User",
+      "unique": false,
+      "nullable": true,
+      "shared": true
+    },
+    {
+      "from": "CompanyDesignation",
+      "field": "updated_by_id",
+      "to": "User",
+      "unique": false,
+      "nullable": true,
+      "shared": true
+    },
+    {
+      "from": "CompanyDesignation",
+      "field": "company_department_id",
+      "to": "CompanyDepartment",
+      "unique": false,
+      "nullable": false,
+      "shared": false
+    },
+    {
+      "from": "CompanyDesignation",
+      "field": "designation_id",
+      "to": "Designation",
+      "unique": false,
+      "nullable": false,
       "shared": false
     },
     {
@@ -16572,7 +16898,7 @@
     {
       "from": "EmployeeAssignment",
       "field": "department_id",
-      "to": "Department",
+      "to": "CompanyDepartment",
       "unique": false,
       "nullable": false,
       "shared": false
@@ -16580,7 +16906,7 @@
     {
       "from": "EmployeeAssignment",
       "field": "designation_id",
-      "to": "Designation",
+      "to": "CompanyDesignation",
       "unique": false,
       "nullable": false,
       "shared": false
@@ -16660,7 +16986,7 @@
     {
       "from": "DesignationPermission",
       "field": "designation_id",
-      "to": "Designation",
+      "to": "CompanyDesignation",
       "unique": false,
       "nullable": false,
       "shared": false
@@ -16722,6 +17048,46 @@
       "shared": false
     },
     {
+      "from": "DepartmentPermission",
+      "field": "company_id",
+      "to": "Company",
+      "unique": false,
+      "nullable": false,
+      "shared": true
+    },
+    {
+      "from": "DepartmentPermission",
+      "field": "created_by_id",
+      "to": "User",
+      "unique": false,
+      "nullable": true,
+      "shared": true
+    },
+    {
+      "from": "DepartmentPermission",
+      "field": "updated_by_id",
+      "to": "User",
+      "unique": false,
+      "nullable": true,
+      "shared": true
+    },
+    {
+      "from": "DepartmentPermission",
+      "field": "company_department_id",
+      "to": "CompanyDepartment",
+      "unique": false,
+      "nullable": false,
+      "shared": false
+    },
+    {
+      "from": "DepartmentPermission",
+      "field": "permission_id",
+      "to": "AccessPermission",
+      "unique": false,
+      "nullable": false,
+      "shared": false
+    },
+    {
       "from": "Shift",
       "field": "company_id",
       "to": "Company",
@@ -16772,7 +17138,7 @@
     {
       "from": "DepartmentShift",
       "field": "department_id",
-      "to": "Department",
+      "to": "CompanyDepartment",
       "unique": false,
       "nullable": false,
       "shared": false
@@ -17084,7 +17450,7 @@
     {
       "from": "DeviceDepartment",
       "field": "department_id",
-      "to": "Department",
+      "to": "CompanyDepartment",
       "unique": false,
       "nullable": false,
       "shared": false
@@ -19883,8 +20249,8 @@
     },
     {
       "from": "CompanyMembership_allowed_departments",
-      "field": "department_id",
-      "to": "Department",
+      "field": "companydepartment_id",
+      "to": "CompanyDepartment",
       "unique": false,
       "nullable": false,
       "shared": false
@@ -19915,8 +20281,8 @@
     },
     {
       "from": "EmployeePermissionOverride_allowed_departments",
-      "field": "department_id",
-      "to": "Department",
+      "field": "companydepartment_id",
+      "to": "CompanyDepartment",
       "unique": false,
       "nullable": false,
       "shared": false

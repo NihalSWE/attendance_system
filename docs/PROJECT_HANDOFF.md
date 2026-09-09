@@ -21,11 +21,11 @@ Recommended first-release scope includes full/half/hourly paid/unpaid/partial le
 
 Latest setup instruction: the user will create the Django project and all app skeletons themselves. The next chat should inspect and preserve that setup, skip startproject/startapp, and implement the unfinished P0 custom-user/configuration/tenancy foundation before advancing. The custom User must be configured before the first migrations; do not delete existing migration history/data if the user has already migrated.
 
-Explicit custom-user contract: define class **User** in **accounts**, not CustomUser or another name, and set `AUTH_USER_MODEL = "accounts.User"`. Runtime code imports get_user_model from django.contrib.auth and assigns `User = get_user_model()`. Never use the concrete default django.contrib.auth.models.User. Relations use settings.AUTH_USER_MODEL; data migrations use the historical apps registry. AbstractUser may be the superclass; the concrete model remains accounts.User. Every User reference in the existing 83-model design denotes this custom model.
+Explicit custom-user contract: define class **User** in **accounts**, not CustomUser or another name, and set `AUTH_USER_MODEL = "accounts.User"`. Runtime code imports get_user_model from django.contrib.auth and assigns `User = get_user_model()`. Never use the concrete default django.contrib.auth.models.User. Relations use settings.AUTH_USER_MODEL; data migrations use the historical apps registry. AbstractUser may be the superclass; the concrete model remains accounts.User. Every User reference in the existing 86-model design denotes this custom model.
 
 Architecture is a modular Django monolith with reusable business services and separately scalable workers as needed. The user's latest choice is FastAPI for future API modules; the earlier DRF recommendation is superseded. FastAPI can be introduced around the Django-owned domain when APIs are needed, without an immediate microservice split. Explicitly integrate ORM transactions, authentication/permissions and tenant context; do not duplicate persistence models, migrations or payroll rules.
 
-The user will create base_template alongside the 12 domain apps (13 apps total). It holds shared base templates, navbar/footer, optional group-specific sidebar includes and common styles/scripts, with no domain models. Feature pages stay in their owning apps; menu visibility derives from effective permissions/features and does not replace backend authorization. PROJECT_SETUP.md contains the commands and layout. Database inventory remains 83 domain models and 88 domain tables.
+The user will create base_template alongside the 12 domain apps (13 apps total). It holds shared base templates, navbar/footer, optional group-specific sidebar includes and common styles/scripts, with no domain models. Feature pages stay in their owning apps; menu visibility derives from effective permissions/features and does not replace backend authorization. PROJECT_SETUP.md contains the commands and layout. Database inventory remains 86 domain models and 91 domain tables.
 
 ## Why push-based attendance is essential
 
@@ -120,11 +120,11 @@ These points are not new approved models. If a necessary structural change emerg
 - IMPLEMENTATION_ROADMAP.md now defines P0–P7 plus the conditional D1 real-device lane, the first-release feature boundary and measurable completion criteria. NEXT_CHAT_START_HERE.md provides the exact starting task and copyable prompt; PHASE_STATUS.md records that implementation has not started.
 
 - `FULL_DATABASE_SCHEMA.md`, `ATTENDANCE_SCHEMA.dbml`, `ATTENDANCE_SCHEMA.svg`, and `ATTENDANCE_SCHEMA.html` now show the entire proposed schema with every physical field expanded, including inherited fields and implicit junction tables. The local HTML viewer supports search, zoom, and selecting a table's FK connections. Twelve app diagrams are in `schema_diagrams/`.
-- These field-level outputs come from one documentation renderer, `scripts/build_schema.cjs`; its resolved schema is also saved in `schema_diagrams/SCHEMA_DATA.json`. They contain 88 tables, 1,615 columns, and 453 FKs after the device-scope additions. Type/nullability clarifications and constraints not expressible in basic DBML are documented in `FULL_DATABASE_SCHEMA.md`.
+- These field-level outputs come from one documentation renderer, `scripts/build_schema.cjs`; its resolved schema is also saved in `schema_diagrams/SCHEMA_DATA.json`. They contain 91 tables, 1,639 columns, and 465 FKs after the device-scope additions. Type/nullability clarifications and constraints not expressible in basic DBML are documented in `FULL_DATABASE_SCHEMA.md`.
 
-- `MODEL_FIELD_DICTIONARY.md` now defines proposed fields and relations for all 83 models. It is the field-level contract, not executable Django code.
+- `MODEL_FIELD_DICTIONARY.md` now defines proposed fields and relations for all 86 models. It is the field-level contract, not executable Django code.
 - `DATABASE_SCHEMA.md` now maps the proposed PostgreSQL relationships, ER views, ownership paths, physical M2M junctions, constraints, indexes, idempotency, retention, and scaling considerations.
-- The 83 Django model classes imply 88 attendance-domain tables because five currently proposed M2M fields use implicit junction tables. Django framework/auth tables are additional.
+- The 86 Django model classes imply 91 attendance-domain tables because five currently proposed M2M fields use implicit junction tables. Django framework/auth tables are additional.
 - No project, app, model class, migration, SQL DDL, service, or UI has been created.
 
 ## Intended future implementation deliverables

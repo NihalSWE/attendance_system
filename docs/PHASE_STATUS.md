@@ -77,6 +77,85 @@ enforcement is in place for when more roles gain structure rights.
 147 tests pass on PostgreSQL (16 new), `check` clean, no migration drift, no new
 migrations, no new environment variables.
 
+## Root-owned department/designation catalogue — 2026-09-09
+
+Ownership decision, taken by the user: **Department and Designation move under
+root control. No company may write to those tables.** DeviceVendor stays root-
+owned as already planned.
+
+Why this needed more than a flag. Both models carried company-specific columns —
+`Department.branch`, `Designation.department`, `Designation.parent` — and five
+other models pointed at them (`EmployeeAssignment.department/designation`,
+`DepartmentShift.department`, `DesignationPermission.designation`,
+`EmployeePermissionOverride.allowed_departments`,
+`CompanyMembership.allowed_departments`). A single global row cannot hold one
+company's branch or one company's shift pattern, so the catalogue could not
+simply lose its `company_id`; the company-specific half had to move somewhere.
+
+Shape now built:
+
+- `organization.Department` / `organization.Designation` — root-owned global
+  catalogues, no `company` column, globally unique names.
+- `organization.CompanyDepartment` — tenant; branch + catalogue department +
+  nullable `head` (an Employee). Unique `(branch, department)`.
+- `organization.CompanyDesignation` — tenant; company department + catalogue
+  title. Unique `(company_department, designation)`.
+- All five FKs above now point at the adoption rows. `code`/`name` are read
+  through to the catalogue and are NOT stored on the adoption row, so they
+  cannot drift.
+
+Access model changed with it, at the user's instruction ("i don't need the
+designation hierarchy"):
+
+- `Designation.parent` and `hierarchy_level` removed, and with them the
+  parent-chain ceiling walk in `DesignationPermission.clean()`.
+- New `access_control.DepartmentPermission` — the department is now the unit of
+  delegation. A DENIED rule there is a hard ceiling that neither a title rule
+  nor an individual grant can lift; an ALLOWED rule is the floor everyone in the
+  department gets. `has_permission()` resolution is now
+  feature -> department ceiling -> employee override -> designation ->
+  department floor -> deny.
+- `EmployeePermissionOverride.clean()` gained the same ceiling check, because
+  `CompanyDepartment.head` is meant to administer their own people — without it,
+  a head could grant themselves anything.
+
+Migrations, in the order they must run: `organization.0002` creates the adoption
+rows and fills them from existing data; `employees.0002`, `scheduling.0002`,
+`access_control.0002` and `accounts.0005` repoint their FKs (add / backfill /
+drop / rename, because the new rows have different primary keys);
+`organization.0003` collapses duplicate catalogue rows across companies and
+strips `company`/`branch`/`parent`/`hierarchy_level`. `0003` runs last on
+purpose: the old columns are the only source of truth for who adopted what.
+
+Two bugs the migration test caught that the ordinary suite could not. The suite
+builds an empty database, so it exercises every schema step and none of the
+`RunPython` bodies. `organization/tests_migrations.py` rewinds to the
+tenant-owned world, writes two companies that each created their own "Software"
+department containing their own "Manager", and rolls forward. It failed twice:
+`Designation.parent` is PROTECT, so merged-away titles could not be deleted
+while another title still named them as a parent; and PostgreSQL refuses to
+ALTER a table with pending deferred FK trigger events, which the deletes queue.
+Fixes: null the parent chain before collapsing, and `SET CONSTRAINTS ALL
+IMMEDIATE` before the schema operations in the same transaction.
+
+Also: new multi-word tables follow the documented snake_case rule
+(`organization_company_department`, `organization_company_designation`,
+`access_control_department_permission`). Pre-existing run-together names
+(`scheduling_departmentshift`, `access_control_designationpermission`,
+`employees_employeeassignment`) were left alone and the exception is now written
+down in MODEL_FIELD_DICTIONARY.md rather than left as an undocumented
+inconsistency.
+
+Inventory moves from 83 models / 88 tables to **86 models / 91 tables /
+1,639 columns / 465 FKs**. Schema artifacts regenerated with
+`node docs/scripts/build_schema.cjs`; `verify_schema.cjs` passes. The previous
+schema documents are frozen under `docs/schema_backup/`.
+
+164 tests pass on PostgreSQL (17 new: 11 organization/access_control behaviour,
+6 migration), `check` clean, `makemigrations --check` reports no drift, no new
+environment variables. **Not yet applied to the development database** — the
+user runs `migrate`.
+
 ## Current checkpoint
 
 - **Current deliverable:** P1 platform onboarding implemented; company setup and employee write workflows remain next. See [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md) for files/functions and the UI workflow.
@@ -84,10 +163,10 @@ migrations, no new environment variables.
 - **Platform UI:** root routes to /platform/companies/ without membership; generated company identifiers, company create/edit/status, one master administrator with editable credentials/status, dated feature access and recent audit history work through forms.
 - **Company UI:** existing lists remain read-only. Company-wide access is now restricted to unrestricted owner/company_admin; other roles/scopes fail closed until proper scoped views ship. Unimplemented Add/Export controls are explicitly disabled with reasons.
 - **Design:** Warm Paper / Ink tokens and Sora; new platform tables use real DataTables with server-side paging/search/sorting, and database-backed selects use real Select2 while fixed choices use styled native selects. Responsive browser verification is required. Remaining component groups are not claimed complete.
-- **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. AuditLog is part of the existing 83-model design, so planned inventory remains 83 models / 88 tables / 1,615 columns / 453 FKs.
+- **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps and moves the inventory to 86 models / 91 tables / 1,639 columns / 465 FKs.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action:** company organization/schedule write flows with action + branch/department scope enforcement; then employee lifecycle forms and full P1 acceptance. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action:** apply the six new migrations to the development database, then root catalogue screens (department/designation) followed by the company adoption screens; then employee lifecycle forms and full P1 acceptance. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 

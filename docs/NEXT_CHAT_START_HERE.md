@@ -23,7 +23,7 @@ Latest instruction: the user will create the Django project and all app skeleton
 
 The selected architecture is a modular Django monolith with PostgreSQL and independently scalable background workers where needed. Django owns the business models, migrations, authorization and transactions. Module service functions own writes/calculations; views, jobs and future API endpoints call those functions.
 
-The user explicitly prefers **FastAPI for future API modules instead of Django REST Framework**. This supersedes the earlier DRF recommendation. Keep FastAPI integration possible through reusable business services. Add routers/application wiring when APIs are needed; there is no need to build all ERP endpoints during the initial leave/payroll phases. Define public contracts as business operations, not automatic CRUD access to all 83 models. Introduce versioned endpoints, authenticated tenant-scoped integration identities, permissions, pagination, stable public identifiers and idempotent writes when the integration is implemented. Outbound webhooks and external-ID mappings require their own delivery/ownership design.
+The user explicitly prefers **FastAPI for future API modules instead of Django REST Framework**. This supersedes the earlier DRF recommendation. Keep FastAPI integration possible through reusable business services. Add routers/application wiring when APIs are needed; there is no need to build all ERP endpoints during the initial leave/payroll phases. Define public contracts as business operations, not automatic CRUD access to all 86 models. Introduce versioned endpoints, authenticated tenant-scoped integration identities, permissions, pagination, stable public identifiers and idempotent writes when the integration is implemented. Outbound webhooks and external-ID mappings require their own delivery/ownership design.
 
 FastAPI can be an API layer around the Django-owned domain; it does not have to be a separate microservice. Its integration must explicitly handle ASGI routing, Django initialization, ORM transaction/sync-async boundaries and authentication/tenant context. Reuse business authorization instead of assuming Django page middleware secures FastAPI. Do not duplicate persistence models, migrations or payroll rules. Keep public ERP APIs and vendor device protocols as distinct contracts. Do not introduce DRF as a temporary API layer.
 
@@ -38,13 +38,13 @@ Before the first application migrations, implement the custom accounts.User and 
 1. [PHASE_STATUS.md](PHASE_STATUS.md): exact current implementation status and next action.
 2. [IMPLEMENTATION_ROADMAP.md](IMPLEMENTATION_ROADMAP.md): release scope, phase dependencies, deliverables and acceptance gates.
 3. [PROJECT_HANDOFF.md](PROJECT_HANDOFF.md): business context, agreed rules and known engineering gaps.
-4. [DATABASE_MODEL_PLAN.md](DATABASE_MODEL_PLAN.md): purpose and relationships of the 83 proposed models.
+4. [DATABASE_MODEL_PLAN.md](DATABASE_MODEL_PLAN.md): purpose and relationships of the 86 proposed models.
 5. [MODEL_FIELD_DICTIONARY.md](MODEL_FIELD_DICTIONARY.md): authoritative current proposed column/relation names.
 6. [DEVICE_ATTENDANCE_POLICY.md](DEVICE_ATTENDANCE_POLICY.md): exact authorization and pairing semantics, including offline history.
 7. [LEAVE_AND_SALARY_MANAGEMENT.md](LEAVE_AND_SALARY_MANAGEMENT.md): deeper domain rules. Some older field aliases are conceptual; use the field dictionary for actual names and posting direction.
 8. [FULL_DATABASE_SCHEMA.md](FULL_DATABASE_SCHEMA.md) and [DATABASE_SCHEMA.md](DATABASE_SCHEMA.md): all-field and architecture views. SVG/HTML/DBML are companion artifacts, not evidence of an implemented database.
 
-The latest explicit user instruction wins. The roadmap controls release timing/scope; the field dictionary controls current proposed fields; the device policy controls device scope. Document and resolve discrepancies instead of silently copying an older alias or formula. The expanded 83-model design is a broader target, not a claim all advanced workflows must be exposed immediately.
+The latest explicit user instruction wins. The roadmap controls release timing/scope; the field dictionary controls current proposed fields; the device policy controls device scope. Document and resolve discrepancies instead of silently copying an older alias or formula. The expanded 86-model design is a broader target, not a claim all advanced workflows must be exposed immediately.
 
 Read the core handoff/phase documents first and relevant domain details before working on that phase. Generated Markdown/DBML/SVG/HTML schema files are alternate representations of the same design; do not load every representation or repeatedly re-read unchanged documents merely to consume context. Use the field dictionary as the primary field reference and inspect generated views only where helpful.
 

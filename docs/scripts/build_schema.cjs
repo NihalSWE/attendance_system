@@ -15,7 +15,7 @@ for (const line of source.split(/\r?\n/)) {
   if (m) { current = {number: +m[1], app, name:m[2], lines:[], fields:[]}; models.push(current); }
   else if (current && !line.startsWith('## Relationship')) current.lines.push(line);
 }
-assert.equal(models.length, 83);
+assert.equal(models.length, 86);
 const byName = Object.fromEntries(models.map(m => [m.name,m]));
 const apps = [...new Set(models.map(m => m.app))];
 function field(name,type,opts={}) { return {name,column:name,type,nullable:false,pk:false,unique:false,...opts}; }
