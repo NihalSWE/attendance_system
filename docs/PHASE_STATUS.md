@@ -149,7 +149,8 @@ inconsistency.
 Inventory moves from 83 models / 88 tables to **86 models / 91 tables /
 1,639 columns / 465 FKs**. Schema artifacts regenerated with
 `node docs/scripts/build_schema.cjs`; `verify_schema.cjs` passes. The previous
-schema documents are frozen under `docs/schema_backup/`.
+schema documents, and the whole project as it stood before this change, are on
+the `department_designation_relation_companywise` branch at commit a5f59f9.
 
 164 tests pass on PostgreSQL (17 new: 11 organization/access_control behaviour,
 6 migration), `check` clean, `makemigrations --check` reports no drift, no new
