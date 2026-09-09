@@ -41,9 +41,25 @@
     </div>
     {% if unmapped_count %}
         <div class="alert alert--warning">
-            {{ unmapped_count }} user{{ unmapped_count|pluralize }} on this device
-            {{ unmapped_count|pluralize:"is,are" }} not mapped to an employee. Their scans are
-            stored, but they resolve to nobody and cannot count towards attendance until mapped.
+            <p>
+                {{ unmapped_count }} user{{ unmapped_count|pluralize }} on this device
+                {{ unmapped_count|pluralize:"is,are" }} not mapped to an employee. Their scans are
+                stored, but they resolve to nobody and cannot count towards attendance until mapped.
+            </p>
+            <form method="post" action="{% url 'devices:device_users_sync' device.public_id %}"
+                  onsubmit="return confirm('Create {{ unmapped_count }} draft employee record(s) from this device? They will be recognition-only until you authorise them.')">
+                {% csrf_token %}
+                <button class="btn btn--secondary" type="submit">
+                    Create employees for the unmapped users
+                </button>
+            </form>
+            <p class="t-faint">
+                This creates a draft employee per unmapped device user and maps it, so their punches
+                resolve straight away. Drafts are <strong>recognition only</strong> — their punches
+                are kept and marked, and start counting once you authorise the enrollment. A user
+                with no name on the device gets a clearly-labelled placeholder for HR to complete,
+                never an invented name.
+            </p>
         </div>
     {% endif %}
     <div class="card">

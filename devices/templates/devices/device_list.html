@@ -182,6 +182,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:device_users' device.public_id %}">
+                                        Users
+                                    </a>
                                     <a class="btn btn--quiet btn--sm" href="{% url 'devices:device_detail' device.public_id %}">
                                         Manage
                                     </a>

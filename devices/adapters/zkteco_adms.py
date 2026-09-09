@@ -41,6 +41,24 @@ VERIFY_MODES = {
     "15": PunchEvent.VerificationMethod.FACE,
 }
 
+# rtlog reports verification differently from ATTLOG. These codes are the ones
+# the SenseFace 2A (ZAM70-NF24HA-Ver3.0.15) actually emits, confirmed from
+# captured traffic rather than taken from documentation:
+#   1   -> fingerprint (35 captures, cardno always 0)
+#   4   -> card        (the only capture carrying a real cardno, 196793,
+#                       which matches that user's card in the device's own
+#                       user table)
+#   15  -> face        (149 captures, cardno always 0)
+#   200 -> door/system event; those rows carry pin=0 and are never punches
+# An unlisted code stays 'unknown' and keeps its raw value in raw_record,
+# rather than being guessed into a method that was never verified.
+RTLOG_VERIFY_MODES = {
+    "0": PunchEvent.VerificationMethod.PIN,
+    "1": PunchEvent.VerificationMethod.FINGERPRINT,
+    "4": PunchEvent.VerificationMethod.CARD,
+    "15": PunchEvent.VerificationMethod.FACE,
+}
+
 # ZKTeco punch-state codes. Informational only: the vendor's IN/OUT flag is
 # never trusted to decide pairing (DEVICE_ATTENDANCE_POLICY.md).
 PUNCH_STATES = {
@@ -254,7 +272,7 @@ class ZKTecoAdmsAdapter(DeviceAdapter):
                     device_user_id=device_user_id,
                     punched_at_device_raw=raw_timestamp,
                     punched_at_device=punched_at_device,
-                    verification_method=VERIFY_MODES.get(
+                    verification_method=RTLOG_VERIFY_MODES.get(
                         (fields.get("verifytype") or "").strip(),
                         PunchEvent.VerificationMethod.UNKNOWN,
                     ),

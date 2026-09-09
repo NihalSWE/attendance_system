@@ -24,6 +24,12 @@
             </p>
         </div>
         <div class="page__actions">
+            <a class="btn btn--secondary" href="{% url 'devices:device_users' device.public_id %}">
+                Users
+            </a>
+            <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
+                Punches
+            </a>
             <a class="btn btn--ghost" href="{% url 'devices:device_edit' device.public_id %}">
                 Edit
             </a>
@@ -172,6 +178,76 @@
                             </button>
                         </form>
                     {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Change device settings
+                </h2>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    These are written to the device on its next check-in. The server address and
+                    comm key are not here on purpose: a wrong value there makes the device
+                    unreachable, and fixing it means walking to the terminal.
+                </p>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>
+                                    Setting
+                                </th>
+                                <th>
+                                    Current
+                                </th>
+                                <th>
+                                    New value
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for opt in writable_options %}
+                                <tr>
+                                    <td>
+                                        {{ opt.key }}
+                                        <div class="t-faint">
+                                            {{ opt.help }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if opt.current != "" %}
+                                            {{ opt.current }}
+                                        {% else %}
+                                            <span class="t-faint">
+                                                device default
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <form method="post"
+                                              action="{% url 'devices:device_set_option' device.public_id %}"
+                                              class="toolbar">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="option" value="{{ opt.key }}">
+                                            <label class="sr-only" for="value-{{ opt.key }}">
+                                                {{ opt.key }}
+                                            </label>
+                                            <input class="input" type="number" id="value-{{ opt.key }}"
+                                                   name="value" value="{{ opt.current }}">
+                                            <button class="btn btn--secondary" type="submit"
+                                                    {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
+                                                Queue
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

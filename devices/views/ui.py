@@ -38,10 +38,13 @@ from devices.services import setup_instructions
 from devices.services.commands import (
     COMMAND_LABELS,
     SAFE_COMMANDS,
+    WRITABLE_OPTIONS,
     pending_summary,
     queue_command,
+    queue_set_option,
 )
 from devices.services.device_roster import build_roster
+from devices.services.user_sync import SyncNotPossible, sync_device_users
 
 # Punch states that need a human before they can feed attendance.
 UNRESOLVED_STATUSES = (
@@ -236,6 +239,14 @@ def device_detail(request, public_id):
         .order_by("-effective_from"),
         "enrollment_count": DeviceEnrollment.objects.filter(device=device).count(),
         "command_options": [(k, COMMAND_LABELS[k]) for k in SAFE_COMMANDS],
+        "writable_options": [
+            {
+                "key": key,
+                "help": spec[2],
+                "current": (device.settings or {}).get(key, ""),
+            }
+            for key, spec in WRITABLE_OPTIONS.items()
+        ],
         "pending_commands": pending_summary(device),
     })
 
@@ -515,9 +526,14 @@ def message_detail(request, public_id):
 @login_required
 @company_user_required
 def punch_list(request):
+    # Newest arrival first. Ordering on the device's own timestamp looks more
+    # natural but is not trustworthy for a troubleshooting log: this firmware
+    # reports 1970/1971 timestamps until its clock syncs, and fixture rows can
+    # carry future dates — either buries the punch that just came in.
+    # received_at is our clock, so the latest entry is always on top.
     queryset = (
         PunchEvent.objects.select_related("device", "employee", "device_message")
-        .order_by("-punched_at_utc")
+        .order_by("-received_at", "-id")
     )
 
     device = request.GET.get("device", "").strip()
@@ -717,4 +733,92 @@ def device_command(request, public_id):
             f"“{label}” queued. The device collects it on its next check-in "
             "(usually within a minute); it is not sent immediately.",
         )
+    return redirect("devices:device_detail", public_id=device.public_id)
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_users_sync(request, public_id):
+    """Create draft employees for device users nobody has mapped yet.
+
+    Deliberately conservative: the drafts are recognition-only, so a synced
+    person's punches are preserved and marked rather than silently starting to
+    count before anyone has checked who they are.
+    """
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    pins = request.POST.getlist("pin") or None
+
+    try:
+        created, skipped, errors = sync_device_users(
+            device=device, actor=request.user, pins=pins
+        )
+    except SyncNotPossible as exc:
+        messages.error(request, str(exc))
+        return redirect("devices:device_users", public_id=device.public_id)
+
+    if created:
+        for entry in created:
+            _audit(
+                request, "device_enrollment.synced_from_device", entry["employee"],
+                after={
+                    "device_user_id": entry["pin"],
+                    "device": device.serial_number,
+                    "assigned_device_authorized": False,
+                },
+            )
+        messages.success(
+            request,
+            f"Created {len(created)} draft employee record"
+            f"{'' if len(created) == 1 else 's'} and mapped them. "
+            "They are recognition-only: open each enrollment to authorise "
+            "attendance, and complete the employee details in Employees.",
+        )
+    if skipped:
+        messages.info(
+            request, f"{len(skipped)} user(s) were already mapped and left alone."
+        )
+    for err in errors:
+        messages.error(
+            request, f"Device user {err['pin']} could not be synced: {err['error']}"
+        )
+    if not created and not skipped and not errors:
+        messages.info(request, "Every device user is already mapped.")
+
+    return redirect("devices:device_users", public_id=device.public_id)
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_set_option(request, public_id):
+    """Queue a configuration change for the device.
+
+    Only allowlisted options with validated values are accepted, and the change
+    is audited before it leaves: a device setting that alters when punches are
+    reported has to be reconstructable later.
+    """
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    option_key = request.POST.get("option", "")
+    value = request.POST.get("value", "")
+
+    before = dict(device.settings or {})
+    entry, error = queue_set_option(
+        device=device, option_key=option_key, value=value, requested_by=request.user
+    )
+    if error:
+        messages.error(request, error)
+        return redirect("devices:device_detail", public_id=device.public_id)
+
+    device.refresh_from_db()
+    _audit(
+        request, "device.option_queued", device,
+        before={"settings": before},
+        after={"settings": device.settings, "command": entry["body"]},
+    )
+    messages.success(
+        request,
+        f"Queued “{entry['body']}”. The device applies it on its next "
+        "check-in; it is not changed immediately.",
+    )
     return redirect("devices:device_detail", public_id=device.public_id)

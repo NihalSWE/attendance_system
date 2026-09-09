@@ -48,6 +48,46 @@ COMMAND_LABELS = {
     "query_options": "Refresh device settings",
 }
 
+# Settings we are willing to write back to the device. The key is what the UI
+# may send; the value is (device option name, validator, help text). Anything
+# not listed here cannot be set, so a crafted request can never reach the
+# device's configuration.
+#
+# Deliberately excluded: network/server address and comm key. Getting those
+# wrong makes the device unreachable, and recovering means physically walking
+# to the terminal — so they stay a manual, on-device action.
+WRITABLE_OPTIONS = {
+    "push_interval_seconds": (
+        "Delay",
+        lambda v: 1 <= int(v) <= 3600,
+        "How often the device contacts the server, in seconds.",
+    ),
+    "error_delay_seconds": (
+        "ErrorDelay",
+        lambda v: 1 <= int(v) <= 3600,
+        "How long the device waits before retrying after a failure, in seconds.",
+    ),
+    "device_utc_offset_hours": (
+        "TimeZone",
+        lambda v: -12 <= int(v) <= 14,
+        "The device's UTC offset in hours.",
+    ),
+    "realtime": (
+        "Realtime",
+        lambda v: int(v) in (0, 1),
+        "1 sends each punch immediately; 0 batches them.",
+    ),
+    "lock_open_seconds": (
+        "LockOn",
+        lambda v: 0 <= int(v) <= 254,
+        "How long the door relay stays open, in seconds.",
+    ),
+}
+
+# Mutating commands are separated from queries so the UI can require an
+# explicit confirmation and so an audit entry is always written for them.
+MUTATING_COMMAND_KEYS = {"set_option"}
+
 # A device that has been offline for a long time should not receive a pile of
 # stale refresh requests the moment it reconnects.
 MAX_PENDING = 10
@@ -98,6 +138,62 @@ def queue_command(*, device, command_key, requested_by=None):
         state.version = (state.version or 0) + 1
         state.save(update_fields=["state_data", "version", "updated_at"])
         return entry
+
+
+def queue_set_option(*, device, option_key, value, requested_by=None):
+    """Queue a device-configuration change.
+
+    Returns (entry, error). The option must be on the allowlist and its value
+    must pass that option's validator, so neither an unknown option name nor an
+    out-of-range value can reach the device.
+
+    The new value is also written to ``BiometricDevice.settings`` so our
+    handshake keeps announcing the same figure — otherwise the next
+    registration would quietly reset the device to the old one.
+    """
+    spec = WRITABLE_OPTIONS.get(option_key)
+    if spec is None:
+        return None, "That setting cannot be changed from here."
+    option_name, validator, _ = spec
+
+    try:
+        if not validator(value):
+            return None, f"{value!r} is out of range for this setting."
+        clean_value = int(value)
+    except (TypeError, ValueError):
+        return None, f"{value!r} is not a whole number."
+
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(
+            pk=_sync_state(device).pk
+        )
+        data = dict(state.state_data or {})
+        pending = list(data.get("pending_commands") or [])
+        if len(pending) >= MAX_PENDING:
+            return None, "Too many commands are already queued for this device."
+
+        next_id = int(data.get("last_command_id") or 0) + 1
+        entry = {
+            "id": next_id,
+            "key": f"set_option:{option_key}",
+            "body": f"SET OPTION {option_name}={clean_value}",
+            "queued_at": timezone.now().isoformat(),
+            "requested_by": getattr(requested_by, "email", "") or "",
+        }
+        # A later SET for the same option supersedes an earlier one.
+        pending = [e for e in pending if e.get("key") != entry["key"]]
+        pending.append(entry)
+        data["pending_commands"] = pending
+        data["last_command_id"] = next_id
+        state.state_data = data
+        state.version = (state.version or 0) + 1
+        state.save(update_fields=["state_data", "version", "updated_at"])
+
+        settings = dict(device.settings or {})
+        settings[option_key] = clean_value
+        type(device).all_objects.filter(pk=device.pk).update(settings=settings)
+
+    return entry, ""
 
 
 def take_pending_commands(device):

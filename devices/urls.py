@@ -36,9 +36,19 @@ ui_urlpatterns = [
     path("devices/<uuid:public_id>/edit/", ui.device_edit, name="device_edit"),
     path("devices/<uuid:public_id>/users/", ui.device_users, name="device_users"),
     path(
+        "devices/<uuid:public_id>/users/sync/",
+        ui.device_users_sync,
+        name="device_users_sync",
+    ),
+    path(
         "devices/<uuid:public_id>/command/",
         ui.device_command,
         name="device_command",
+    ),
+    path(
+        "devices/<uuid:public_id>/settings/",
+        ui.device_set_option,
+        name="device_set_option",
     ),
     path("devices/<uuid:public_id>/retire/", ui.device_retire, name="device_retire"),
     path(
