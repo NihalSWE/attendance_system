@@ -18,6 +18,11 @@ ingestion_urlpatterns = [
     path("iclock/cdata", ingestion.cdata, name="iclock_cdata"),
     path("iclock/getrequest", ingestion.getrequest, name="iclock_getrequest"),
     path("iclock/devicecmd", ingestion.devicecmd, name="iclock_devicecmd"),
+    # PushSDK 3.x registration handshake. Without these a 3.x device registers
+    # in a loop and never transmits (observed on SenseFace 2A firmware
+    # ZAM70-NF24HA-Ver3.0.15).
+    path("iclock/registry", ingestion.registry, name="iclock_registry"),
+    path("iclock/push", ingestion.push, name="iclock_push"),
     # Last: anything else the firmware sends is captured verbatim instead of
     # 404ing, so commissioning a real device shows us what it actually does.
     re_path(r"^iclock/(?P<tail>.*)$", ingestion.capture, name="iclock_capture"),
@@ -29,6 +34,12 @@ ui_urlpatterns = [
     path("devices/register/", ui.device_register, name="device_register"),
     path("devices/<uuid:public_id>/", ui.device_detail, name="device_detail"),
     path("devices/<uuid:public_id>/edit/", ui.device_edit, name="device_edit"),
+    path("devices/<uuid:public_id>/users/", ui.device_users, name="device_users"),
+    path(
+        "devices/<uuid:public_id>/command/",
+        ui.device_command,
+        name="device_command",
+    ),
     path("devices/<uuid:public_id>/retire/", ui.device_retire, name="device_retire"),
     path(
         "devices/<uuid:public_id>/departments/add/",

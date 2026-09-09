@@ -20,6 +20,7 @@ from django.views.decorators.http import require_http_methods
 from devices.adapters import UnknownAdapterError, get_adapter
 from devices.adapters.base import ParsedMessage
 from devices.models import BiometricDevice, DeviceMessage
+from devices.services.commands import take_pending_commands
 from devices.services.ingestion import (
     DeviceAuthenticationError,
     authenticate_device,
@@ -81,7 +82,13 @@ def cdata(request):
         # Registration/handshake: the device asks how to behave. No message is
         # stored for this; it carries no evidence.
         stamp = request.GET.get("Stamp", "0")
-        return _text(adapter.handshake_response(device=device, stamp=stamp))
+        return _text(
+            adapter.handshake_response(
+                device=device,
+                stamp=stamp,
+                pushver=request.GET.get("pushver", ""),
+            )
+        )
 
     raw_body, encoding = _body_text(request)
     parsed = adapter.parse(
@@ -115,8 +122,10 @@ def cdata(request):
 def getrequest(request):
     """The device polling for queued commands.
 
-    We do not push commands yet, so this always answers ``OK``. It is still a
-    useful liveness signal, so the device's last-seen time is updated.
+    This is the only channel back to a push-mode device: it asks, we answer.
+    Any commands an administrator queued are handed over here, one per line;
+    with nothing queued the device gets ``OK`` and does nothing. Either way the
+    poll is a liveness signal, so last-seen is updated.
     """
     try:
         device = _resolve_device(request)
@@ -127,7 +136,116 @@ def getrequest(request):
     BiometricDevice.all_objects.filter(pk=device.pk).update(
         last_seen_at=timezone.now(), ip_address_last_seen=_client_ip(request)
     )
+
+    body, issued = take_pending_commands(device)
+    if issued:
+        logger.info(
+            "Issued %d command(s) to device %s: %s",
+            len(issued), device.serial_number, [e["key"] for e in issued],
+        )
+        return _text(body)
     return _text("OK")
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def registry(request):
+    """PushSDK 3.x registration.
+
+    A 3.x device posts its full capability block here and waits for a
+    ``RegistryCode``. Until it gets one it repeats the POST indefinitely and
+    never begins transmitting attendance data, so this endpoint is a
+    precondition for any punch arriving at all.
+
+    The posted block is durable evidence (firmware version, capacities, network
+    configuration), so it is stored before the reply is sent.
+    """
+    try:
+        device = _resolve_device(request)
+    except DeviceAuthenticationError as exc:
+        logger.warning("Rejected device registration: %s", exc)
+        return _unauthorized()
+
+    try:
+        adapter = get_adapter(device.device_model.vendor.adapter_key)
+    except UnknownAdapterError as exc:
+        logger.error("Device %s: %s", device.pk, exc)
+        return _text("Server configuration error", status=500)
+
+    raw_body, encoding = _body_text(request)
+    parsed = adapter.parse(
+        path_name="registry",
+        query=request.GET,
+        body_text=raw_body,
+        serial_number=device.serial_number,
+    )
+    ingest(
+        device=device,
+        parsed=parsed,
+        raw_body=raw_body,
+        source_ip=_client_ip(request),
+        headers=request.headers,
+        content_type=request.content_type or "",
+        encoding=encoding,
+    )
+    _record_device_info(device, parsed)
+    return _text(adapter.registry_response(device=device))
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def push(request):
+    """PushSDK 3.x transmission-parameter request, sent after registration."""
+    try:
+        device = _resolve_device(request)
+    except DeviceAuthenticationError as exc:
+        logger.warning("Rejected device push-options request: %s", exc)
+        return _unauthorized()
+
+    try:
+        adapter = get_adapter(device.device_model.vendor.adapter_key)
+    except UnknownAdapterError as exc:
+        logger.error("Device %s: %s", device.pk, exc)
+        return _text("Server configuration error", status=500)
+
+    BiometricDevice.all_objects.filter(pk=device.pk).update(
+        last_seen_at=timezone.now(), ip_address_last_seen=_client_ip(request)
+    )
+    return _text(
+        adapter.push_response(device=device, stamp=request.GET.get("Stamp", "0"))
+    )
+
+
+def _record_device_info(device, parsed):
+    """Persist firmware facts the device reported, for the sync-health screen.
+
+    Only diagnostic fields are written. Nothing here changes identity,
+    authorization or any evidence row.
+    """
+    info = (parsed.payload_json or {}).get("device_info") or {}
+    if not info:
+        return
+    firmware = info.get("FirmVer", "")[:64]
+    settings = dict(device.settings or {})
+    settings.update(
+        {
+            "device_name": info.get("~DeviceName", ""),
+            "firmware_version": info.get("FirmVer", ""),
+            "push_version": info.get("PushVersion", ""),
+            "device_type": info.get("DeviceType", ""),
+            "max_att_log_count": info.get("~MaxAttLogCount", ""),
+            "max_user_count": info.get("~MaxUserCount", ""),
+            "face_supported": info.get("FaceFunOn", ""),
+            "fingerprint_supported": info.get("FingerFunOn", ""),
+            "comm_type": info.get("CommType", ""),
+            "device_ip": info.get("IPAddress", ""),
+        }
+    )
+    BiometricDevice.all_objects.filter(pk=device.pk).update(
+        firmware_version=firmware or device.firmware_version,
+        settings=settings,
+        last_seen_at=timezone.now(),
+    )
 
 
 @csrf_exempt
