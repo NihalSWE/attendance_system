@@ -22,15 +22,10 @@ from django.db import transaction
 
 from access_control.models import AccessPermission, DesignationPermission
 from common.tenant import use_company
+from organization.catalogue import adopt_department, adopt_designation
 from employees.models import Employee
 from employees.services import hire_employee, terminate_employee, transfer_employee
-from organization.models import (
-    Branch,
-    CompanyDepartment,
-    CompanyDesignation,
-    Department,
-    Designation,
-)
+from organization.models import Branch
 from scheduling.models import Holiday, Shift, WeeklyOffRule
 from tenants.models import Company, CompanyFeature, Feature
 from tenants.services import onboard_company
@@ -38,33 +33,6 @@ from tenants.services import onboard_company
 
 def dt(y, m, d):
     return datetime(y, m, d, tzinfo=dt_timezone.utc)
-
-
-def adopt_department(branch, code, name):
-    """Adopt a catalogue department into a branch, creating the entry if new.
-
-    In production the root operator curates the catalogue and companies only
-    pick from it. The seed plays both parts, so it creates the catalogue row on
-    first use and reuses it for every later company — which is exactly the point
-    of the catalogue: two tenants naming a department "Sales" end up sharing one
-    entry rather than inventing two.
-    """
-    catalogue, _ = Department.objects.get_or_create(
-        name=name, defaults={"code": code}
-    )
-    return CompanyDepartment.objects.create(branch=branch, department=catalogue)
-
-
-def adopt_designation(company_department, code, name):
-    """Adopt a catalogue job title into one of the company own departments."""
-    catalogue, _ = Designation.objects.get_or_create(
-        department_id=company_department.department_id,
-        name=name,
-        defaults={"code": code},
-    )
-    return CompanyDesignation.objects.create(
-        company_department=company_department, designation=catalogue
-    )
 
 
 FEATURES = [

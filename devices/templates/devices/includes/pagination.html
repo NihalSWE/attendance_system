@@ -1,0 +1,64 @@
+{% comment %}
+    Real result count and real pagination, driven by the server's Paginator.
+    {% querystring %} keeps whatever filters are active while changing only the
+    page or page size, so paging never silently drops a filter.
+{% endcomment %}
+<div class="pagination">
+    <span class="pagination__info">
+        Showing {{ page.start_index }}–{{ page.end_index }} of {{ paginator.count }}
+    </span>
+    <span class="pagination__size">
+        <label class="sr-only" for="per_page">
+            Rows per page
+        </label>
+        <select id="per_page" onchange="location.search=this.value">
+            <option value="{% querystring per_page=25 page=1 %}" {% if per_page == 25 %}selected{% endif %}>
+                25
+            </option>
+            <option value="{% querystring per_page=50 page=1 %}" {% if per_page == 50 %}selected{% endif %}>
+                50
+            </option>
+            <option value="{% querystring per_page=100 page=1 %}" {% if per_page == 100 %}selected{% endif %}>
+                100
+            </option>
+        </select>
+        <span>
+            per page
+        </span>
+    </span>
+    <span class="pagination__pages">
+        {% if page.has_previous %}
+            <a class="pagination__page" href="{% querystring page=page.previous_page_number %}">
+                Prev
+            </a>
+        {% else %}
+            <button class="pagination__page" disabled title="You are on the first page">
+                Prev
+            </button>
+        {% endif %}
+        {% for n in page.adjusted_elided_pages %}
+            {% if n == page.number %}
+                <button class="pagination__page is-on" aria-current="page">
+                    {{ n }}
+                </button>
+            {% elif n == "…" %}
+                <span class="pagination__dots">
+                    …
+                </span>
+            {% else %}
+                <a class="pagination__page" href="{% querystring page=n %}">
+                    {{ n }}
+                </a>
+            {% endif %}
+        {% endfor %}
+        {% if page.has_next %}
+            <a class="pagination__page" href="{% querystring page=page.next_page_number %}">
+                Next
+            </a>
+        {% else %}
+            <button class="pagination__page" disabled title="You are on the last page">
+                Next
+            </button>
+        {% endif %}
+    </span>
+</div>

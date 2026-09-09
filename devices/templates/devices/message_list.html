@@ -1,0 +1,162 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    Message log · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Message log
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Raw message log
+            </h1>
+            <p class="page__sub">
+                Every message a device has sent, exactly as received. These records are append-only and are never edited or deleted.
+            </p>
+        </div>
+    </div>
+    <div class="card">
+        <form class="toolbar" method="get">
+            <label class="sr-only" for="device">
+                Device
+            </label>
+            <select class="input select" id="device" name="device" style="width:auto">
+                <option value="">
+                    All devices
+                </option>
+                {% for d in devices %}
+                    <option value="{{ d.pk }}" {% if device == d.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ d.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="status">
+                Processing status
+            </label>
+            <select class="input select" id="status" name="status" style="width:auto">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if value == status %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <div class="toolbar__grow">
+            </div>
+            <button class="btn btn--primary" type="submit">
+                Apply
+            </button>
+            <a class="btn btn--ghost" href="{% url 'devices:message_list' %}">
+                Clear
+            </a>
+        </form>
+        <div class="card__head">
+            <h2>
+                Messages
+            </h2>
+            <span class="badge badge--neutral">
+                {{ total_count }}
+            </span>
+        </div>
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Received
+                            </th>
+                            <th>
+                                Device
+                            </th>
+                            <th>
+                                Type
+                            </th>
+                            <th class="numeric">
+                                Records
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="no-sort">
+                                <span class="sr-only">
+                                    Actions
+                                </span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for message in page.object_list %}
+                            <tr>
+                                <td>
+                                    {{ message.received_at|date:"j M Y, H:i:s" }}
+                                </td>
+                                <td>
+                                    {{ message.device.name }}
+                                </td>
+                                <td>
+                                    {{ message.get_message_type_display }}
+                                </td>
+                                <td class="numeric">
+                                    {{ message.record_count|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if message.processing_status == 'parsed' %}
+                                        <span class="badge badge--success">
+                                            Parsed
+                                        </span>
+                                    {% elif message.processing_status == 'partially_failed' %}
+                                        <span class="badge badge--warning">
+                                            Partially failed
+                                        </span>
+                                    {% elif message.processing_status == 'failed' %}
+                                        <span class="badge badge--danger">
+                                            Failed
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            {{ message.get_processing_status_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:message_detail' message.public_id %}">
+                                        Inspect
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="t-faint" data-filter-note hidden>
+                The filter box searches the rows on this page. The count and pager above cover every matching message.
+            </p>
+            {% include "devices/includes/pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No messages
+                </div>
+                <div class="empty__text">
+                    {% if device or status %}
+                        Try clearing the filters.
+                    {% else %}
+                        Nothing has been received yet. Check the device's server settings.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

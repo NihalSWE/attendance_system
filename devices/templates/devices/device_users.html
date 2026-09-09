@@ -1,0 +1,295 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    Device users · {{ device.name }}
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <a href="{% url 'devices:device_detail' device.public_id %}">
+                    {{ device.name }}
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Users
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Users on this device
+            </h1>
+            <p class="page__sub">
+                What the terminal itself reports, next to the employee each one maps to.
+                Being on this list means the device recognises the person — it does not mean their punches count.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
+                View punches
+            </a>
+            <a class="btn btn--primary" href="{% url 'devices:enrollment_create' %}?device={{ device.pk }}">
+                Map a user
+            </a>
+        </div>
+    </div>
+    {% if unmapped_count %}
+        <div class="alert alert--warning">
+            <p>
+                {{ unmapped_count }} user{{ unmapped_count|pluralize }} on this device
+                {{ unmapped_count|pluralize:"is,are" }} not mapped to an employee. Their scans are
+                stored, but they resolve to nobody and cannot count towards attendance until mapped.
+            </p>
+            <form method="post" action="{% url 'devices:device_users_sync' device.public_id %}"
+                  onsubmit="return confirm('Create {{ unmapped_count }} draft employee record(s) from this device? They will be recognition-only until you authorise them.')">
+                {% csrf_token %}
+                <button class="btn btn--secondary" type="submit">
+                    Create employees for the unmapped users
+                </button>
+            </form>
+            <p class="t-faint">
+                This creates a draft employee per unmapped device user and maps it, so their punches
+                resolve straight away. Drafts are <strong>recognition only</strong> — their punches
+                are kept and marked, and start counting once you authorise the enrollment. A user
+                with no name on the device gets a clearly-labelled placeholder for HR to complete,
+                never an invented name.
+            </p>
+        </div>
+    {% endif %}
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Device roster
+            </h2>
+            <span class="badge badge--neutral">
+                {{ total_count }} user{{ total_count|pluralize }}
+            </span>
+        </div>
+        <form class="toolbar" method="get">
+            <div class="toolbar__grow">
+                <label class="sr-only" for="q">
+                    Search users
+                </label>
+                <input class="input" type="search" id="q" name="q" value="{{ search }}"
+                       placeholder="Search by user ID, device name or employee">
+            </div>
+            <div class="toolbar__control">
+                <label class="sr-only" for="mapping">
+                    Mapping
+                </label>
+                <select class="select" id="mapping" name="mapping">
+                    <option value="">
+                        All users
+                    </option>
+                    <option value="mapped" {% if mapping == 'mapped' %}selected{% endif %}>
+                        Mapped to an employee
+                    </option>
+                    <option value="unmapped" {% if mapping == 'unmapped' %}selected{% endif %}>
+                        Not mapped
+                    </option>
+                </select>
+            </div>
+            <button class="btn btn--secondary" type="submit">
+                Apply
+            </button>
+        </form>
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table" data-datatable data-datatable-paging="false">
+                    <thead>
+                        <tr>
+                            <th>
+                                User ID
+                            </th>
+                            <th>
+                                Name on device
+                            </th>
+                            <th>
+                                Role
+                            </th>
+                            <th class="numeric">
+                                Fingerprint
+                            </th>
+                            <th class="numeric">
+                                Face
+                            </th>
+                            <th>
+                                Card
+                            </th>
+                            <th>
+                                Password
+                            </th>
+                            <th>
+                                Photo
+                            </th>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Write to device
+                            </th>
+                            <th>
+                                Counts for attendance
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in page.object_list %}
+                            <tr>
+                                <td>
+                                    <span class="mono">
+                                        {{ row.pin }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if row.name %}
+                                        {{ row.name }}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            (no name set)
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ row.privilege_label|default:"—" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ row.fingerprint_count }}
+                                </td>
+                                <td class="numeric">
+                                    {{ row.face_count }}
+                                </td>
+                                <td>
+                                    {% if row.card_number and row.card_number != "0" %}
+                                        <span class="mono">
+                                            {{ row.card_number }}
+                                        </span>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.has_password %}
+                                        Set
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.has_photo %}
+                                        Yes
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.employee %}
+                                        {{ row.employee.full_name }}
+                                    {% else %}
+                                        <span class="badge badge--warning">
+                                            Not mapped
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.enrollment %}
+                                        <form method="post"
+                                              action="{% url 'devices:device_user_push' device.public_id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="enrollment" value="{{ row.enrollment.pk }}">
+                                            <button class="btn btn--quiet btn--sm" type="submit"
+                                                    {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
+                                                Push to device
+                                            </button>
+                                        </form>
+                                        <form method="post"
+                                              action="{% url 'devices:device_user_delete' device.public_id %}"
+                                              onsubmit="return confirm('Remove device user {{ row.pin }} from {{ device.name|escapejs }}?\n\nThis destroys their face and fingerprint on this terminal. Those cannot be restored from the software — the person must be enrolled again in person. Punch history is kept.')">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="device_user_id" value="{{ row.pin }}">
+                                            <button class="btn btn--quiet btn--sm" type="submit"
+                                                    {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
+                                                Remove
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not row.is_mapped %}
+                                        <span class="badge badge--neutral">
+                                            No — unknown employee
+                                        </span>
+                                    {% elif not row.attendance_enabled %}
+                                        <span class="badge badge--danger">
+                                            No — enrollment disabled
+                                        </span>
+                                    {% elif row.assigned_device_authorized %}
+                                        <span class="badge badge--success">
+                                            Yes — authorised
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--info">
+                                            Recognition only
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ paginator.count }}
+                </span>
+                <div class="pagination__links">
+                    {% if page.has_previous %}
+                        <a class="btn btn--ghost btn--sm"
+                           href="?page={{ page.previous_page_number }}&q={{ search }}&mapping={{ mapping }}">
+                            Previous
+                        </a>
+                    {% endif %}
+                    {% if page.has_next %}
+                        <a class="btn btn--ghost btn--sm"
+                           href="?page={{ page.next_page_number }}&q={{ search }}&mapping={{ mapping }}">
+                            Next
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No users reported yet
+                </div>
+                <div class="empty__text">
+                    This device has not uploaded its user table. It sends one automatically after
+                    it connects; if the device is online and this stays empty, check the raw
+                    <a href="{% url 'devices:message_list' %}?device={{ device.pk }}">message log</a>.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+    {% if last_sync %}
+        <p class="t-faint">
+            User table last received {{ last_sync }} (UTC).
+            This is the device's own report, not a live query — we never poll the device.
+        </p>
+    {% endif %}
+{% endblock %}

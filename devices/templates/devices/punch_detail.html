@@ -1,0 +1,269 @@
+{% extends "devices/base.html" %}
+{% load tz %}
+{% block title %}
+    Punch detail · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <a href="{% url 'devices:punch_list' %}">
+                    Punches
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    {% timezone punch.display_timezone %}
+                        {{ punch.punched_at_device|date:"j M Y, H:i:s" }}
+                    {% endtimezone %}
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Why this punch was {% if punch.authorization_status == 'authorized' %}accepted{% else %}not counted{% endif %}
+            </h1>
+            <p class="page__sub">
+                Append-only evidence. The decision below is a frozen snapshot of what applied when the punch happened.
+            </p>
+        </div>
+    </div>
+
+    {% if punch.authorization_snapshot.decision_reason %}
+        <div class="alert {% if punch.authorization_status == 'authorized' %}alert--success{% elif punch.authorization_status == 'policy_unresolved' %}alert--warning{% else %}alert--danger{% endif %}" role="status">
+            <div>
+                <strong>
+                    {{ punch.get_authorization_status_display }}
+                </strong>
+                <p>
+                    {{ punch.authorization_snapshot.decision_reason }}
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    What the device reported
+                </h2>
+            </div>
+            <div class="card__body">
+                <div class="table-wrap">
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <td>
+                                    Device
+                                </td>
+                                <td>
+                                    {{ punch.device.name }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Device user number
+                                </td>
+                                <td>
+                                    {{ punch.device_user_id }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Raw timestamp
+                                </td>
+                                <td>
+                                    {{ punch.punched_at_device_raw }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Interpreted (device time)
+                                </td>
+                                <td>
+                                    {% timezone punch.display_timezone %}
+                                        {{ punch.punched_at_device|date:"j M Y, H:i:s" }}
+                                    {% endtimezone %}
+                                    ({{ punch.device_timezone }})
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Interpreted (UTC)
+                                </td>
+                                <td>
+                                    {{ punch.punched_at_utc|date:"j M Y, H:i:s" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Verification method
+                                </td>
+                                <td>
+                                    {{ punch.get_verification_method_display }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Reported direction
+                                </td>
+                                <td>
+                                    {{ punch.reported_direction|default:"—" }}
+                                    <div class="t-faint">
+                                        Informational only. Pairing never trusts the device's own in/out flag.
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Source branch
+                                </td>
+                                <td>
+                                    {{ punch.branch.name }}
+                                    <div class="t-faint">
+                                        Where the device sits, which is not necessarily the employee's branch.
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Received
+                                </td>
+                                <td>
+                                    {{ punch.received_at|date:"j M Y, H:i:s" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Source message
+                                </td>
+                                <td>
+                                    <a href="{% url 'devices:message_detail' punch.device_message.public_id %}">
+                                        row {{ punch.source_record_index }} of that upload
+                                    </a>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    How it was judged
+                </h2>
+            </div>
+            <div class="card__body">
+                <div class="table-wrap">
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <td>
+                                    Employee
+                                </td>
+                                <td>
+                                    {% if punch.employee %}
+                                        {{ punch.employee.full_name }}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            Not resolved
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Effective scope
+                                </td>
+                                <td>
+                                    {{ punch.authorization_snapshot.effective_scope|default:"—" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Winning policy level
+                                </td>
+                                <td>
+                                    {{ punch.authorization_snapshot.winning_policy_level|default:"—" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Employee's branch at that time
+                                </td>
+                                <td>
+                                    {{ employee_branch|default:"—" }}
+                                    <div class="t-faint">
+                                        Their assignment's branch, which decides the policy — not the device's.
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Attendance enabled then
+                                </td>
+                                <td>
+                                    {{ punch.authorization_snapshot.attendance_enabled|default_if_none:"—" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Assigned-mode grant then
+                                </td>
+                                <td>
+                                    {{ punch.authorization_snapshot.assigned_device_authorized|default_if_none:"—" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Duplicate status
+                                </td>
+                                <td>
+                                    {{ punch.get_dedupe_status_display }}
+                                    {% if punch.duplicate_of_id %}
+                                        <div class="t-faint">
+                                            <a href="{% url 'devices:punch_detail' punch.duplicate_of_id %}">
+                                                Compared against punch #{{ punch.duplicate_of_id }}
+                                            </a>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Processing status
+                                </td>
+                                <td>
+                                    {{ punch.get_processing_status_display }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Evaluated at
+                                </td>
+                                <td>
+                                    {{ punch.resolved_at|date:"j M Y, H:i:s"|default:"—" }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% if punch.device_enrollment_id %}
+                <div class="card__foot">
+                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:enrollment_edit' punch.device_enrollment_id %}">
+                        Open the enrollment used
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

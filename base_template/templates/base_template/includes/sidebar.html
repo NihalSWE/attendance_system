@@ -93,6 +93,16 @@
             Schedules
         </span>
     </a>
+    <a class="sidebar__link {% active request 'device_list' 'device_detail' 'device_register' 'device_edit' 'enrollment_list' 'enrollment_create' 'enrollment_edit' 'message_list' 'message_detail' 'punch_list' 'punch_detail' 'unresolved_queue' %}" href="{% url 'devices:device_list' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="5" y="2.5" width="14" height="19" rx="2"/>
+            <circle cx="12" cy="10" r="3"/>
+            <path d="M8 18.5a4 4 0 0 1 8 0"/>
+        </svg>
+        <span>
+            Devices
+        </span>
+    </a>
     <div class="sidebar__foot">
         <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}

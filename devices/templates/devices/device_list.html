@@ -1,0 +1,232 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    Devices · Attendance
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'dashboard' %}">
+                    Dashboard
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Devices
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Devices
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'devices:unresolved_queue' %}">
+                Unresolved queue
+            </a>
+            <a class="btn btn--primary" href="{% url 'devices:device_register' %}">
+                Register device
+            </a>
+        </div>
+    </div>
+    <div class="card">
+        <form class="toolbar" method="get">
+            <div class="toolbar__grow">
+                <label class="sr-only" for="q">
+                    Search devices
+                </label>
+                <div class="input-group">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="m20 20-3.5-3.5"/>
+                    </svg>
+                    <input class="input" id="q" name="q" value="{{ search }}" placeholder="Name or serial number">
+                </div>
+            </div>
+            <label class="sr-only" for="status">
+                Status
+            </label>
+            <select class="input select" id="status" name="status" style="width:auto">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if value == status %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="branch">
+                Branch
+            </label>
+            <select class="input select" id="branch" name="branch" style="width:auto">
+                <option value="">
+                    All branches
+                </option>
+                {% for b in branches %}
+                    <option value="{{ b.pk }}" {% if branch == b.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ b.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--primary" type="submit">
+                Apply
+            </button>
+            <a class="btn btn--ghost" href="{% url 'devices:device_list' %}">
+                Clear
+            </a>
+        </form>
+        <div class="card__head">
+            <h2>
+                Registered devices
+            </h2>
+            <span class="badge badge--neutral">
+                {{ total_count }}
+            </span>
+        </div>
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Device
+                            </th>
+                            <th>
+                                Serial
+                            </th>
+                            <th>
+                                Branch
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th>
+                                Last seen
+                            </th>
+                            <th>
+                                Health
+                            </th>
+                            <th class="no-sort">
+                                <span class="sr-only">
+                                    Actions
+                                </span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for device in page.object_list %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'devices:device_detail' device.public_id %}">
+                                        {{ device.name }}
+                                    </a>
+                                    <div class="t-faint">
+                                        {{ device.device_model.vendor.name }} {{ device.device_model.name }}
+                                    </div>
+                                </td>
+                                <td>
+                                    {{ device.serial_number }}
+                                </td>
+                                <td>
+                                    {{ device.branch.name }}
+                                </td>
+                                <td>
+                                    {% if device.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% elif device.status == 'pending' %}
+                                        <span class="badge badge--warning">
+                                            Pending first contact
+                                        </span>
+                                    {% elif device.status == 'offline' %}
+                                        <span class="badge badge--warning">
+                                            Offline
+                                        </span>
+                                    {% elif device.status == 'retired' %}
+                                        <span class="badge badge--neutral">
+                                            Retired
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--danger">
+                                            Suspended
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if device.last_seen_at %}
+                                        {{ device.last_seen_at|date:"j M Y, H:i" }}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            Never
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if device.sync_state.consecutive_error_count %}
+                                        <span class="badge badge--danger">
+                                            {{ device.sync_state.consecutive_error_count }} errors
+                                        </span>
+                                    {% elif device.sync_state.last_punch_received_at %}
+                                        <span class="badge badge--success">
+                                            OK
+                                        </span>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            No punches yet
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:device_users' device.public_id %}">
+                                        Users
+                                    </a>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:device_detail' device.public_id %}">
+                                        Manage
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="t-faint" data-filter-note hidden>
+                The filter box searches the rows on this page. The count and pager above cover every matching device.
+            </p>
+            {% include "devices/includes/pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="4" y="2.5" width="16" height="19" rx="2"/>
+                        <circle cx="12" cy="10" r="3"/>
+                        <path d="M7.5 18.5a4.5 4.5 0 0 1 9 0"/>
+                    </svg>
+                </div>
+                <div class="empty__title">
+                    {% if search or status or branch %}
+                        No devices match
+                    {% else %}
+                        No devices registered
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    {% if search or status or branch %}
+                        Try clearing the filters.
+                    {% else %}
+                        Register your first device to get its setup instructions.
+                    {% endif %}
+                </div>
+                {% if not search and not status and not branch %}
+                    <a class="btn btn--primary" href="{% url 'devices:device_register' %}">
+                        Register device
+                    </a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

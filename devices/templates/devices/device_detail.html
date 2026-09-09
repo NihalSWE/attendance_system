@@ -1,0 +1,554 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    {{ device.name }} · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    {{ device.name }}
+                </span>
+            </nav>
+            <h1 class="page__title">
+                {{ device.name }}
+            </h1>
+            <p class="page__sub">
+                {{ device.device_model.vendor.name }} {{ device.device_model.name }} · serial {{ device.serial_number }} · {{ device.branch.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--secondary" href="{% url 'devices:device_users' device.public_id %}">
+                Users
+            </a>
+            <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
+                Punches
+            </a>
+            <a class="btn btn--ghost" href="{% url 'devices:device_edit' device.public_id %}">
+                Edit
+            </a>
+            {% if device.status != 'retired' %}
+                <form method="post" action="{% url 'devices:device_retire' device.public_id %}"
+                      onsubmit="return confirm('Retire {{ device.name|escapejs }}? It will stop accepting data. Its punch history is kept.')">
+                    {% csrf_token %}
+                    <button class="btn btn--danger-soft" type="submit">
+                        Retire device
+                    </button>
+                </form>
+            {% else %}
+                <button class="btn btn--danger-soft" type="button" disabled title="This device is already retired">
+                    Retired
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if comm_key %}
+        <div class="alert alert--warning" role="alert">
+            <div>
+                <strong>
+                    Communication key: {{ comm_key }}
+                </strong>
+                <p>
+                    Copy it into the device now. It is stored only as a hash, so this
+                    is the only time it can be shown. If it is lost, edit the device
+                    to issue a new one.
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if host_unreachable %}
+        <div class="alert alert--info" role="status">
+            <div>
+                <strong>
+                    This address is not reachable from the device.
+                </strong>
+                <p>
+                    You are viewing the panel on localhost. The device pushes inbound
+                    to the server, so it needs a hostname it can reach — start a
+                    tunnel and open this page on that hostname to see the values to
+                    type in.
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Enter these on the device
+                </h2>
+            </div>
+            <div class="card__body stack">
+                <p class="t-muted">
+                    Walk to the terminal and set each of these in its menu. The
+                    device builds the full URL itself from the address and port.
+                </p>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>
+                                    Device menu setting
+                                </th>
+                                <th>
+                                    Value
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for line in setup_lines %}
+                                <tr>
+                                    <td>
+                                        {{ line.device_menu_label }}
+                                    </td>
+                                    <td>
+                                        <strong>
+                                            {{ line.value }}
+                                        </strong>
+                                        {% if line.note %}
+                                            <div class="t-faint">
+                                                {{ line.note }}
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="field">
+                    <span class="field__label">
+                        Full endpoint (for testing from a browser or curl)
+                    </span>
+                    <input class="input" value="{{ endpoint_url }}" readonly onclick="this.select()">
+                    <div class="field__help">
+                        The device appends its own query string. You do not type this
+                        whole URL into the terminal — only the address and port above.
+                    </div>
+                </div>
+                <p class="t-faint">
+                    Menu labels follow ZKTeco ADMS firmware and have not yet been
+                    confirmed against this SenseFace 2A. They will be corrected once
+                    the physical device has been walked through.
+                </p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Fetch from device
+                </h2>
+                <a class="btn btn--ghost btn--sm" href="{% url 'devices:device_users' device.public_id %}">
+                    View users
+                </a>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    The device sends its users, settings and punches on its own. Use these to ask for a
+                    fresh copy — for example after someone was added at the terminal. Nothing is sent
+                    now: a push-mode device is not reachable from the server, so the request waits until
+                    the device next checks in (about every 15 seconds).
+                </p>
+                {% if pending_commands %}
+                    <div class="alert alert--info">
+                        Waiting for the device's next check-in:
+                        {% for entry in pending_commands %}
+                            {{ entry.key }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div class="toolbar">
+                    {% for key, label in command_options %}
+                        <form method="post" action="{% url 'devices:device_command' device.public_id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="{{ key }}">
+                            <button class="btn btn--secondary" type="submit"
+                                    {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
+                                {{ label }}
+                            </button>
+                        </form>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Change device settings
+                </h2>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    These are written to the device on its next check-in. The server address and
+                    comm key are not here on purpose: a wrong value there makes the device
+                    unreachable, and fixing it means walking to the terminal.
+                </p>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>
+                                    Setting
+                                </th>
+                                <th>
+                                    Current
+                                </th>
+                                <th>
+                                    New value
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for opt in writable_options %}
+                                <tr>
+                                    <td>
+                                        {{ opt.key }}
+                                        <div class="t-faint">
+                                            {{ opt.help }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if opt.current != "" %}
+                                            {{ opt.current }}
+                                        {% else %}
+                                            <span class="t-faint">
+                                                device default
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <form method="post"
+                                              action="{% url 'devices:device_set_option' device.public_id %}"
+                                              class="toolbar">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="option" value="{{ opt.key }}">
+                                            <label class="sr-only" for="value-{{ opt.key }}">
+                                                {{ opt.key }}
+                                            </label>
+                                            <input class="input" type="number" id="value-{{ opt.key }}"
+                                                   name="value" value="{{ opt.current }}">
+                                            <button class="btn btn--secondary" type="submit"
+                                                    {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
+                                                Queue
+                                            </button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Sync health
+                </h2>
+                {% if device.status == 'active' %}
+                    <span class="badge badge--success">
+                        Active
+                    </span>
+                {% elif device.status == 'pending' %}
+                    <span class="badge badge--warning">
+                        Pending first contact
+                    </span>
+                {% elif device.status == 'retired' %}
+                    <span class="badge badge--neutral">
+                        Retired
+                    </span>
+                {% else %}
+                    <span class="badge badge--warning">
+                        {{ device.get_status_display }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body">
+                <div class="table-wrap">
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <td>
+                                    Last punch received
+                                </td>
+                                <td>
+                                    {% if sync_state.last_punch_received_at %}
+                                        {{ sync_state.last_punch_received_at|date:"j M Y, H:i" }}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            None yet
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Last message received
+                                </td>
+                                <td>
+                                    {% if sync_state.last_message_received_at %}
+                                        {{ sync_state.last_message_received_at|date:"j M Y, H:i" }}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            None yet
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Consecutive errors
+                                </td>
+                                <td class="numeric">
+                                    {% if sync_state.consecutive_error_count %}
+                                        <span class="badge badge--danger">
+                                            {{ sync_state.consecutive_error_count }}
+                                        </span>
+                                    {% else %}
+                                        0
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Estimated backlog
+                                </td>
+                                <td class="numeric">
+                                    {{ sync_state.estimated_backlog_count|default:"0" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Clock offset
+                                </td>
+                                <td>
+                                    {% if sync_state.clock_offset_seconds != None %}
+                                        {{ sync_state.clock_offset_seconds }}s
+                                    {% else %}
+                                        <span class="t-faint">
+                                            Not measured
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Last error
+                                </td>
+                                <td>
+                                    {% if sync_state.last_error_message %}
+                                        {{ sync_state.last_error_message }}
+                                        <div class="t-faint">
+                                            {{ sync_state.last_error_at|date:"j M Y, H:i" }}
+                                        </div>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            None
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card__foot">
+                <a class="btn btn--quiet btn--sm" href="{% url 'devices:message_list' %}?device={{ device.pk }}">
+                    Raw message log
+                </a>
+                <a class="btn btn--quiet btn--sm" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
+                    Punches ({{ punch_counts.total }})
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Departments served
+                </h2>
+                <a class="btn btn--quiet btn--sm" href="{% url 'devices:device_department_add' device.public_id %}">
+                    Add mapping
+                </a>
+            </div>
+            <div class="card__body">
+                <p class="t-muted">
+                    Only used in department-devices mode. A device with no active
+                    mapping serves its whole branch in that mode; mappings never
+                    restrict branch-devices or company-devices.
+                </p>
+                {% if department_links %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Department
+                                    </th>
+                                    <th>
+                                        From
+                                    </th>
+                                    <th>
+                                        To
+                                    </th>
+                                    <th>
+                                        <span class="sr-only">
+                                            Actions
+                                        </span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for link in department_links %}
+                                    <tr>
+                                        <td>
+                                            {{ link.department.name }}
+                                        </td>
+                                        <td>
+                                            {{ link.effective_from|date:"j M Y" }}
+                                        </td>
+                                        <td>
+                                            {% if link.effective_to %}
+                                                {{ link.effective_to|date:"j M Y" }}
+                                            {% else %}
+                                                <span class="badge badge--success">
+                                                    Open
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if link.status != 'ended' %}
+                                                <form method="post" action="{% url 'devices:device_department_end' link.pk %}">
+                                                    {% csrf_token %}
+                                                    <button class="btn btn--quiet btn--sm" type="submit">
+                                                        End
+                                                    </button>
+                                                </form>
+                                            {% else %}
+                                                <span class="t-faint">
+                                                    Ended
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty">
+                        <div class="empty__title">
+                            No department mappings
+                        </div>
+                        <div class="empty__text">
+                            This device serves its whole branch in department-devices mode.
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Recent messages
+                </h2>
+                <span class="badge badge--neutral">
+                    {{ enrollment_count }} enrolled
+                </span>
+            </div>
+            <div class="card__body">
+                {% if recent_messages %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Received
+                                    </th>
+                                    <th>
+                                        Type
+                                    </th>
+                                    <th class="numeric">
+                                        Records
+                                    </th>
+                                    <th>
+                                        Status
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for message in recent_messages %}
+                                    <tr>
+                                        <td>
+                                            <a href="{% url 'devices:message_detail' message.public_id %}">
+                                                {{ message.received_at|date:"j M, H:i:s" }}
+                                            </a>
+                                        </td>
+                                        <td>
+                                            {{ message.get_message_type_display }}
+                                        </td>
+                                        <td class="numeric">
+                                            {{ message.record_count|default:"—" }}
+                                        </td>
+                                        <td>
+                                            {% if message.processing_status == 'parsed' %}
+                                                <span class="badge badge--success">
+                                                    Parsed
+                                                </span>
+                                            {% elif message.processing_status == 'partially_failed' %}
+                                                <span class="badge badge--warning">
+                                                    Partial
+                                                </span>
+                                            {% elif message.processing_status == 'failed' %}
+                                                <span class="badge badge--danger">
+                                                    Failed
+                                                </span>
+                                            {% else %}
+                                                <span class="badge badge--neutral">
+                                                    {{ message.get_processing_status_display }}
+                                                </span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty">
+                        <div class="empty__title">
+                            Nothing received yet
+                        </div>
+                        <div class="empty__text">
+                            Once the device is configured with the settings on the left,
+                            its messages appear here.
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="card__foot">
+                <a class="btn btn--quiet btn--sm" href="{% url 'devices:enrollment_list' %}?device={{ device.pk }}">
+                    Enrollments
+                </a>
+                <a class="btn btn--quiet btn--sm" href="{% url 'devices:enrollment_create' %}">
+                    Enroll an employee
+                </a>
+            </div>
+        </div>
+    </div>
+{% endblock %}

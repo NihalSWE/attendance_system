@@ -1,0 +1,260 @@
+{% extends "devices/base.html" %}
+{% block title %}
+    Message · Devices
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <a href="{% url 'devices:message_list' %}">
+                    Message log
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    {{ message.received_at|date:"j M Y, H:i:s" }}
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Message from {{ message.device.name }}
+            </h1>
+            <p class="page__sub">
+                Append-only evidence. Nothing on this page can be edited or deleted.
+            </p>
+        </div>
+    </div>
+
+    {% if message.processing_error %}
+        <div class="alert alert--warning" role="alert">
+            <div>
+                <strong>
+                    Processing note
+                </strong>
+                <p>
+                    {{ message.processing_error }}
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Envelope
+                </h2>
+            </div>
+            <div class="card__body">
+                <div class="table-wrap">
+                    <table class="table">
+                        <tbody>
+                            <tr>
+                                <td>
+                                    Received
+                                </td>
+                                <td>
+                                    {{ message.received_at|date:"j M Y, H:i:s" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Type
+                                </td>
+                                <td>
+                                    {{ message.get_message_type_display }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Branch at receipt
+                                </td>
+                                <td>
+                                    {{ message.branch.name }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Records reported
+                                </td>
+                                <td class="numeric">
+                                    {{ message.record_count|default:"—" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Processing status
+                                </td>
+                                <td>
+                                    {{ message.get_processing_status_display }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Vendor sequence / stamp
+                                </td>
+                                <td>
+                                    {{ message.vendor_sequence|default:"—" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Idempotency key
+                                </td>
+                                <td>
+                                    {{ message.idempotency_key|default:"—" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Source IP
+                                </td>
+                                <td>
+                                    {{ message.source_ip|default:"—" }}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    Payload hash
+                                </td>
+                                <td>
+                                    {{ message.payload_hash|truncatechars:24 }}
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Raw payload
+                </h2>
+            </div>
+            <div class="card__body">
+                <p class="t-muted">
+                    Exactly the bytes the device sent, kept verbatim so a record that
+                    could not be interpreted is never lost.
+                </p>
+                <textarea class="textarea" rows="14" readonly>{{ message.raw_payload_text|default:"(binary payload)" }}</textarea>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Punches extracted from this message
+            </h2>
+            <span class="badge badge--neutral">
+                {{ punches|length }}
+            </span>
+        </div>
+        {% if punches %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th class="numeric">
+                                Row
+                            </th>
+                            <th>
+                                User number
+                            </th>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Device time
+                            </th>
+                            <th>
+                                Authorisation
+                            </th>
+                            <th>
+                                Duplicate
+                            </th>
+                            <th>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for punch in punches %}
+                            <tr>
+                                <td class="numeric">
+                                    {{ punch.source_record_index }}
+                                </td>
+                                <td>
+                                    {{ punch.device_user_id }}
+                                </td>
+                                <td>
+                                    {% if punch.employee %}
+                                        {{ punch.employee.full_name }}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            Unresolved
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ punch.punched_at_device_raw }}
+                                </td>
+                                <td>
+                                    {% if punch.authorization_status == 'authorized' %}
+                                        <span class="badge badge--success">
+                                            Authorised
+                                        </span>
+                                    {% elif punch.authorization_status == 'policy_unresolved' %}
+                                        <span class="badge badge--warning">
+                                            Needs review
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--danger">
+                                            {{ punch.get_authorization_status_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if punch.dedupe_status == 'unique' %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% elif punch.dedupe_status == 'probable_duplicate' %}
+                                        <span class="badge badge--warning">
+                                            Probable
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Confirmed
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:punch_detail' punch.pk %}">
+                                        Why
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No punches from this message
+                </div>
+                <div class="empty__text">
+                    Heartbeats and command results carry no attendance records.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
