@@ -22,7 +22,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # holds real secrets; .env.example documents every key. See docs Lesson 3.
 env = environ.Env(
     DEBUG=(bool, False),
-    ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
+    ALLOWED_HOSTS=(list, [
+        'localhost',
+        '127.0.0.1',
+        'asyllabic-ernestine-detectable.ngrok-free.dev',
+    ]),
     DB_CONN_MAX_AGE=(int, 60),
     # Origins allowed to submit browser forms. A biometric device reaches this
     # server through a tunnel hostname during development; the *device*
