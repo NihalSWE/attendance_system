@@ -88,6 +88,14 @@ WRITABLE_OPTIONS = {
 # explicit confirmation and so an audit entry is always written for them.
 MUTATING_COMMAND_KEYS = {"set_option"}
 
+# Writing users TO the device is intentionally absent. Probing the real
+# SenseFace 2A showed "DATA UPDATE user pin=..." is *accepted*
+# (Return=0) but creates a user with an empty pin and name - the field
+# names it echoes on upload are not the ones it accepts on write, and
+# "DATA DELETE user uid=N" likewise returns 0 without deleting. Until the
+# correct field mapping is established, shipping this would silently fill
+# a customer's terminal with unusable rows.
+
 # A device that has been offline for a long time should not receive a pile of
 # stale refresh requests the moment it reconnects.
 MAX_PENDING = 10
