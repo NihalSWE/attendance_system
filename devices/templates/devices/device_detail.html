@@ -140,6 +140,45 @@
         <div class="card">
             <div class="card__head">
                 <h2>
+                    Fetch from device
+                </h2>
+                <a class="btn btn--ghost btn--sm" href="{% url 'devices:device_users' device.public_id %}">
+                    View users
+                </a>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    The device sends its users, settings and punches on its own. Use these to ask for a
+                    fresh copy — for example after someone was added at the terminal. Nothing is sent
+                    now: a push-mode device is not reachable from the server, so the request waits until
+                    the device next checks in (about every 15 seconds).
+                </p>
+                {% if pending_commands %}
+                    <div class="alert alert--info">
+                        Waiting for the device's next check-in:
+                        {% for entry in pending_commands %}
+                            {{ entry.key }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div class="toolbar">
+                    {% for key, label in command_options %}
+                        <form method="post" action="{% url 'devices:device_command' device.public_id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="command" value="{{ key }}">
+                            <button class="btn btn--secondary" type="submit"
+                                    {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
+                                {{ label }}
+                            </button>
+                        </form>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
                     Sync health
                 </h2>
                 {% if device.status == 'active' %}

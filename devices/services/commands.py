@@ -1,0 +1,131 @@
+"""Server-to-device commands over the TA Push channel.
+
+The device is always the initiator: it polls ``GET /iclock/getrequest`` and we
+reply with any queued commands. This is the *only* way to ask a push-mode
+device for something, and it is emphatically not polling — we never open a
+connection to the device, never touch port 4370, and a device that is offline
+simply collects its commands on its next poll
+(DEVICE_INTEGRATION_HANDOFF.md section 1).
+
+Queue storage is ``DeviceSyncState.state_data``, the field the dictionary
+already reserves for "adapter-specific cursors" (MODEL_FIELD_DICTIONARY.md
+section 29). A queued command is transient operational state, not evidence, so
+it belongs there rather than in a new table — evidence of what a device
+actually did stays in DeviceMessage/PunchEvent.
+
+Only read-only queries are exposed here. Commands that mutate the device
+(deleting users, clearing logs, rebooting, rewriting options) are deliberately
+not implemented yet: they need an explicit operator confirmation path and an
+audit trail before anyone can fire them from a web page.
+"""
+
+from django.db import transaction
+from django.utils import timezone
+
+from devices.models import DeviceSyncState
+
+# Commands an administrator may trigger. The value is the ZKTeco command body;
+# the key is what the UI sends, so an arbitrary string from a request can never
+# become a command.
+#
+# Syntax note, established against the real hardware: an access-control
+# (``DeviceType=acc``) device rejects the time-attendance form
+# ``DATA QUERY USERINFO`` with ``Return=-629``. It accepts the table form
+# below, answering ``Return=<row count>`` and re-uploading the table.
+# Verified on SenseFace 2A ZAM70-NF24HA-Ver3.0.15 (query_users -> Return=4).
+SAFE_COMMANDS = {
+    # Re-send the whole user table (id, name, card, privilege).
+    "query_users": "DATA QUERY tablename=user,fielddesc=*,filter=*",
+    # Re-send the fingerprint/face template inventory.
+    "query_biodata": "DATA QUERY tablename=biodata,fielddesc=*,filter=*",
+    # Re-send the device's own options/capability block.
+    "query_options": "DATA QUERY tablename=options,fielddesc=*,filter=*",
+}
+
+COMMAND_LABELS = {
+    "query_users": "Refresh user list",
+    "query_biodata": "Refresh biometric inventory",
+    "query_options": "Refresh device settings",
+}
+
+# A device that has been offline for a long time should not receive a pile of
+# stale refresh requests the moment it reconnects.
+MAX_PENDING = 10
+
+
+def _sync_state(device):
+    state, _ = DeviceSyncState.all_objects.get_or_create(
+        device=device, defaults={"company_id": device.company_id}
+    )
+    return state
+
+
+def queue_command(*, device, command_key, requested_by=None):
+    """Queue one safe command for the device's next poll.
+
+    Returns the queued entry, or None when the key is not recognised. Queuing
+    the same command twice while one is still pending is a no-op: the device
+    would answer both with identical data.
+    """
+    body = SAFE_COMMANDS.get(command_key)
+    if body is None:
+        return None
+
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        data = dict(state.state_data or {})
+        pending = list(data.get("pending_commands") or [])
+
+        if any(entry.get("key") == command_key for entry in pending):
+            return None
+        if len(pending) >= MAX_PENDING:
+            return None
+
+        # The id is echoed back by the device in its devicecmd result, which is
+        # how a result is matched to the request that caused it.
+        next_id = int(data.get("last_command_id") or 0) + 1
+        entry = {
+            "id": next_id,
+            "key": command_key,
+            "body": body,
+            "queued_at": timezone.now().isoformat(),
+            "requested_by": getattr(requested_by, "email", "") or "",
+        }
+        pending.append(entry)
+        data["pending_commands"] = pending
+        data["last_command_id"] = next_id
+        state.state_data = data
+        state.version = (state.version or 0) + 1
+        state.save(update_fields=["state_data", "version", "updated_at"])
+        return entry
+
+
+def take_pending_commands(device):
+    """Pop every queued command and format it for the getrequest reply.
+
+    ZKTeco expects one command per line as ``C:<id>:<body>``. Commands are
+    removed as they are handed over: the device acknowledges by acting, and a
+    command left queued would be re-issued on every poll, 4 times a minute.
+    """
+    state = _sync_state(device)
+    data = dict(state.state_data or {})
+    pending = list(data.get("pending_commands") or [])
+    if not pending:
+        return "", []
+
+    lines = [f"C:{entry['id']}:{entry['body']}" for entry in pending]
+    data["pending_commands"] = []
+    # Kept so a returned result can be described in the UI after the fact.
+    data["in_flight_commands"] = pending
+    state.state_data = data
+    state.version = (state.version or 0) + 1
+    state.save(update_fields=["state_data", "version", "updated_at"])
+    return "\n".join(lines) + "\n", pending
+
+
+def pending_summary(device):
+    """Commands still waiting for the device's next poll, for the UI."""
+    state = DeviceSyncState.all_objects.filter(device=device).first()
+    if not state:
+        return []
+    return list((state.state_data or {}).get("pending_commands") or [])

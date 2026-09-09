@@ -35,6 +35,13 @@ from devices.models import (
     PunchEvent,
 )
 from devices.services import setup_instructions
+from devices.services.commands import (
+    COMMAND_LABELS,
+    SAFE_COMMANDS,
+    pending_summary,
+    queue_command,
+)
+from devices.services.device_roster import build_roster
 
 # Punch states that need a human before they can feed attendance.
 UNRESOLVED_STATUSES = (
@@ -228,6 +235,8 @@ def device_detail(request, public_id):
         .select_related("department")
         .order_by("-effective_from"),
         "enrollment_count": DeviceEnrollment.objects.filter(device=device).count(),
+        "command_options": [(k, COMMAND_LABELS[k]) for k in SAFE_COMMANDS],
+        "pending_commands": pending_summary(device),
     })
 
 
@@ -621,3 +630,91 @@ def unresolved_queue(request):
         "counts": counts,
         "total_count": paginator.count,
     })
+
+
+@login_required
+@company_user_required
+def device_users(request, public_id):
+    """The device's own user roster, reconciled against our enrollments.
+
+    Answers the question an administrator actually asks when commissioning a
+    terminal: *who does this device recognise, and do their punches count?*
+    The left half of each row is what the device reports; the right half is
+    our mapping. A user the device knows but we have not mapped is shown
+    explicitly, because that is the state that silently loses attendance.
+    """
+    device = get_object_or_404(
+        BiometricDevice.objects.select_related("branch"), public_id=public_id
+    )
+    roster = build_roster(device)
+
+    search = request.GET.get("q", "").strip()
+    if search:
+        needle = search.lower()
+        roster = [
+            r for r in roster
+            if needle in r["pin"].lower()
+            or needle in r["name"].lower()
+            or (r["employee"] and needle in r["employee"].full_name.lower())
+        ]
+
+    mapping = request.GET.get("mapping", "").strip()
+    if mapping == "mapped":
+        roster = [r for r in roster if r["is_mapped"]]
+    elif mapping == "unmapped":
+        roster = [r for r in roster if not r["is_mapped"]]
+
+    paginator, page, per_page = _paginate(request, roster, default_per_page=25)
+
+    return render(request, "devices/device_users.html", {
+        "device": device,
+        "page": page,
+        "paginator": paginator,
+        "per_page": per_page,
+        "search": search,
+        "mapping": mapping,
+        "total_count": paginator.count,
+        "unmapped_count": sum(1 for r in build_roster(device) if not r["is_mapped"]),
+        "last_sync": (
+            DeviceMessage.objects.filter(
+                device=device,
+                message_type=DeviceMessage.MessageType.ENROLLMENT_RESULT,
+            )
+            .order_by("-received_at")
+            .values_list("received_at", flat=True)
+            .first()
+        ),
+    })
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_command(request, public_id):
+    """Queue a read-only refresh command for the device's next poll.
+
+    Nothing is sent to the device here: push-mode devices are unreachable from
+    the server, so the command waits until the device next asks for work. The
+    message tells the administrator that explicitly rather than implying an
+    instant round trip that did not happen.
+    """
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    command_key = request.POST.get("command", "")
+
+    if command_key not in SAFE_COMMANDS:
+        messages.error(request, "Unknown command.")
+        return redirect("devices:device_detail", public_id=device.public_id)
+
+    entry = queue_command(
+        device=device, command_key=command_key, requested_by=request.user
+    )
+    label = COMMAND_LABELS.get(command_key, command_key)
+    if entry is None:
+        messages.info(request, f"“{label}” is already queued for this device.")
+    else:
+        messages.success(
+            request,
+            f"“{label}” queued. The device collects it on its next check-in "
+            "(usually within a minute); it is not sent immediately.",
+        )
+    return redirect("devices:device_detail", public_id=device.public_id)
