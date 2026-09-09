@@ -132,6 +132,9 @@
                                 Employee
                             </th>
                             <th>
+                                Write to device
+                            </th>
+                            <th>
                                 Counts for attendance
                             </th>
                         </tr>
@@ -197,6 +200,33 @@
                                     {% else %}
                                         <span class="badge badge--warning">
                                             Not mapped
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.enrollment %}
+                                        <form method="post"
+                                              action="{% url 'devices:device_user_push' device.public_id %}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="enrollment" value="{{ row.enrollment.pk }}">
+                                            <button class="btn btn--quiet btn--sm" type="submit"
+                                                    {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
+                                                Push to device
+                                            </button>
+                                        </form>
+                                        <form method="post"
+                                              action="{% url 'devices:device_user_delete' device.public_id %}"
+                                              onsubmit="return confirm('Remove device user {{ row.pin }} from {{ device.name|escapejs }}?\n\nThis destroys their face and fingerprint on this terminal. Those cannot be restored from the software — the person must be enrolled again in person. Punch history is kept.')">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="device_user_id" value="{{ row.pin }}">
+                                            <button class="btn btn--quiet btn--sm" type="submit"
+                                                    {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
+                                                Remove
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
                                         </span>
                                     {% endif %}
                                 </td>

@@ -247,3 +247,85 @@ class DeviceUserSyncTests(TestCase):
             Department.objects.all().delete()
             with self.assertRaises(SyncNotPossible):
                 sync_device_users(device=self.device)
+
+
+class UserWriteCommandTests(TestCase):
+    """Write-side syntax, established by probing the physical SenseFace 2A."""
+
+    def setUp(self):
+        model = _reference_data()
+        self.company = Company.objects.create(code="A", slug="a", name="Company A")
+        with use_company(self.company):
+            branch = Branch.objects.create(code="HQ", name="HQ", is_default=True)
+            self.device = BiometricDevice.objects.create(
+                branch=branch,
+                device_model=model,
+                name="Main Entrance",
+                serial_number="NYU7251601501",
+                timezone="Asia/Dhaka",
+                status=BiometricDevice.Status.ACTIVE,
+            )
+
+    def test_write_uses_the_capitalised_field_names(self):
+        from devices.services.commands import build_user_update
+
+        body = build_user_update(
+            device_user_id="445966", name="Nihal", card_number="196793", privilege=14
+        )
+        # The lowercase spellings the device uses when *uploading* are silently
+        # ignored on write and produce a row with an empty id.
+        self.assertIn("Pin=445966", body)
+        self.assertIn("Name=Nihal", body)
+        self.assertIn("CardNo=196793", body)
+        self.assertNotIn("pin=", body)
+        self.assertNotIn("cardno=", body)
+
+    def test_delete_is_keyed_on_pin_never_uid(self):
+        from devices.services.commands import build_user_delete
+
+        body = build_user_delete(device_user_id="445966")
+        self.assertEqual(body, "DATA DELETE user Pin=445966")
+        # A uid-keyed delete wipes every user on the device, faces included.
+        self.assertNotIn("uid", body.lower())
+
+    def test_delete_refuses_a_uid_keyed_body(self):
+        from devices.services import commands
+
+        original = commands.build_user_delete
+        try:
+            commands.build_user_delete = lambda **kw: "DATA DELETE user uid=5"
+            entry, error = commands.queue_user_delete(
+                device=self.device, device_user_id="5"
+            )
+        finally:
+            commands.build_user_delete = original
+        self.assertIsNone(entry)
+        self.assertIn("could clear the device", error)
+
+    def test_non_numeric_user_id_is_refused(self):
+        from devices.services.commands import queue_user_delete, queue_user_push
+
+        for bad in ("", "abc", "44;DELETE"):
+            entry, error = queue_user_push(device=self.device, device_user_id=bad)
+            self.assertIsNone(entry, bad)
+            entry, error = queue_user_delete(device=self.device, device_user_id=bad)
+            self.assertIsNone(entry, bad)
+
+    def test_unknown_privilege_is_refused(self):
+        from devices.services.commands import queue_user_push
+
+        entry, error = queue_user_push(
+            device=self.device, device_user_id="445966", privilege=99
+        )
+        self.assertIsNone(entry)
+        self.assertIn("privilege", error)
+
+    def test_push_is_delivered_on_the_next_poll(self):
+        from devices.services.commands import queue_user_push, take_pending_commands
+
+        queue_user_push(
+            device=self.device, device_user_id="445966", name="Nihal"
+        )
+        body, issued = take_pending_commands(self.device)
+        self.assertEqual(len(issued), 1)
+        self.assertIn("DATA UPDATE user Pin=445966", body)

@@ -86,15 +86,55 @@ WRITABLE_OPTIONS = {
 
 # Mutating commands are separated from queries so the UI can require an
 # explicit confirmation and so an audit entry is always written for them.
-MUTATING_COMMAND_KEYS = {"set_option"}
+MUTATING_COMMAND_KEYS = {"set_option", "push_user", "delete_user"}
 
-# Writing users TO the device is intentionally absent. Probing the real
-# SenseFace 2A showed "DATA UPDATE user pin=..." is *accepted*
-# (Return=0) but creates a user with an empty pin and name - the field
-# names it echoes on upload are not the ones it accepts on write, and
-# "DATA DELETE user uid=N" likewise returns 0 without deleting. Until the
-# correct field mapping is established, shipping this would silently fill
-# a customer's terminal with unusable rows.
+# Write-side field names for the device's ``user`` table, established by
+# probing SenseFace 2A ZAM70-NF24HA-Ver3.0.15 directly. They are NOT the
+# lowercase names the device uses when it uploads that same table, which is
+# the trap here: a write using the upload spelling is accepted (Return=0) and
+# silently creates a row with an empty id.
+#
+#   Pin      the user id, and the upsert key      (lowercase 'pin' is ignored)
+#   Name     display name                         (lowercase 'name' is ignored)
+#   CardNo   card number                          ('Card' is ignored)
+#   Pri      privilege: 0 normal, 14 super admin
+#   Grp      access group
+#
+# Verified: re-sending an existing Pin updates that row rather than adding a
+# second one (row count stayed constant while the values changed).
+USER_WRITE_FIELDS = ("Pin", "Name", "CardNo", "Pri", "Grp")
+
+# DANGER, measured on real hardware: "DATA DELETE user uid=<n>" returns
+# Return=0 and DELETES EVERY USER ON THE DEVICE, including their enrolled
+# faces and fingerprints, which cannot be recovered from the server. The uid
+# key is not recognised, and the device appears to treat the command as an
+# unfiltered delete. Only ever delete by Pin, which was verified to remove
+# exactly one user (row count 5 -> 4, the intended row gone, others intact).
+FORBIDDEN_DELETE_KEYS = ("uid", "UID", "Uid")
+
+
+def build_user_update(*, device_user_id, name="", card_number="", privilege=0, group=1):
+    """Build the DATA UPDATE body that creates or updates one device user.
+
+    Creating a user makes the device able to *identify* that number. It does
+    not enrol a face or fingerprint: those are captured by the device's own
+    sensor and never leave it, so a pushed user can only be recognised by card
+    or password until someone enrols their biometrics at the terminal.
+    """
+    values = {
+        "Pin": str(device_user_id),
+        "Name": (name or "")[:24],
+        "CardNo": str(card_number or ""),
+        "Pri": str(int(privilege)),
+        "Grp": str(int(group)),
+    }
+    body = "\t".join(f"{field}={values[field]}" for field in USER_WRITE_FIELDS)
+    return f"DATA UPDATE user {body}"
+
+
+def build_user_delete(*, device_user_id):
+    """Build the DATA DELETE body that removes exactly one device user."""
+    return f"DATA DELETE user Pin={device_user_id}"
 
 # A device that has been offline for a long time should not receive a pile of
 # stale refresh requests the moment it reconnects.
@@ -202,6 +242,102 @@ def queue_set_option(*, device, option_key, value, requested_by=None):
         type(device).all_objects.filter(pk=device.pk).update(settings=settings)
 
     return entry, ""
+
+
+def _validated_user_id(device_user_id):
+    """Return (clean_id, error). Device user ids are digits on this firmware."""
+    value = str(device_user_id or "").strip()
+    if not value:
+        return None, "A device user number is required."
+    if not value.isdigit():
+        return None, "The device user number must be digits only."
+    if len(value) > 20:
+        return None, "That device user number is too long."
+    return value, ""
+
+
+def queue_user_push(*, device, device_user_id, name="", card_number="",
+                    privilege=0, requested_by=None):
+    """Queue creation/update of one user on the device.
+
+    Writing the person's *record* is all this does. Their face or fingerprint
+    still has to be enrolled at the terminal, because the sensor captures the
+    template and we never hold it.
+    """
+    clean_id, error = _validated_user_id(device_user_id)
+    if error:
+        return None, error
+    if int(privilege) not in (0, 2, 6, 14):
+        return None, "Unknown privilege level."
+
+    return _queue_raw(
+        device=device,
+        key=f"push_user:{clean_id}",
+        body=build_user_update(
+            device_user_id=clean_id,
+            name=name,
+            card_number=card_number,
+            privilege=privilege,
+        ),
+        requested_by=requested_by,
+    )
+
+
+def queue_user_delete(*, device, device_user_id, requested_by=None):
+    """Queue removal of exactly one user from the device.
+
+    Deleting a user destroys their enrolled face/fingerprint on the device,
+    and those templates exist nowhere else — so this is irreversible without
+    walking to the terminal and enrolling the person again.
+    """
+    clean_id, error = _validated_user_id(device_user_id)
+    if error:
+        return None, error
+
+    body = build_user_delete(device_user_id=clean_id)
+    # Belt and braces: a uid-keyed delete wipes the whole device (see
+    # FORBIDDEN_DELETE_KEYS), so refuse to emit one even if a future edit
+    # changes how the body is built.
+    for forbidden in FORBIDDEN_DELETE_KEYS:
+        if f"{forbidden}=" in body:
+            return None, "Refusing to send a delete that could clear the device."
+
+    return _queue_raw(
+        device=device,
+        key=f"delete_user:{clean_id}",
+        body=body,
+        requested_by=requested_by,
+    )
+
+
+def _queue_raw(*, device, key, body, requested_by=None):
+    """Append one already-built command. Callers validate their own input."""
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(
+            pk=_sync_state(device).pk
+        )
+        data = dict(state.state_data or {})
+        pending = list(data.get("pending_commands") or [])
+        if len(pending) >= MAX_PENDING:
+            return None, "Too many commands are already queued for this device."
+
+        next_id = int(data.get("last_command_id") or 0) + 1
+        entry = {
+            "id": next_id,
+            "key": key,
+            "body": body,
+            "queued_at": timezone.now().isoformat(),
+            "requested_by": getattr(requested_by, "email", "") or "",
+        }
+        # A later command for the same target supersedes an earlier one.
+        pending = [e for e in pending if e.get("key") != key]
+        pending.append(entry)
+        data["pending_commands"] = pending
+        data["last_command_id"] = next_id
+        state.state_data = data
+        state.version = (state.version or 0) + 1
+        state.save(update_fields=["state_data", "version", "updated_at"])
+        return entry, ""
 
 
 def take_pending_commands(device):

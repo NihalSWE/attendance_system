@@ -42,6 +42,8 @@ from devices.services.commands import (
     pending_summary,
     queue_command,
     queue_set_option,
+    queue_user_delete,
+    queue_user_push,
 )
 from devices.services.device_roster import build_roster
 from devices.services.user_sync import SyncNotPossible, sync_device_users
@@ -822,3 +824,78 @@ def device_set_option(request, public_id):
         "check-in; it is not changed immediately.",
     )
     return redirect("devices:device_detail", public_id=device.public_id)
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_user_push(request, public_id):
+    """Push one enrolled employee's user record onto the device.
+
+    This creates the id the device will report when that person is
+    recognised. It does not enrol biometrics: the face/fingerprint sensor
+    captures those at the terminal and the template never reaches us.
+    """
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    enrollment = get_object_or_404(
+        DeviceEnrollment.objects.select_related("employee"),
+        pk=request.POST.get("enrollment", ""),
+        device=device,
+    )
+
+    entry, error = queue_user_push(
+        device=device,
+        device_user_id=enrollment.device_user_id,
+        name=enrollment.employee.full_name,
+        card_number=enrollment.card_number,
+        requested_by=request.user,
+    )
+    if error:
+        messages.error(request, error)
+    else:
+        _audit(
+            request, "device.user_pushed", enrollment,
+            after={"device_user_id": enrollment.device_user_id, "command": entry["body"]},
+        )
+        messages.success(
+            request,
+            f"Queued {enrollment.employee.full_name} as device user "
+            f"{enrollment.device_user_id}. The device applies it on its next "
+            "check-in. Their face or fingerprint must still be enrolled at "
+            "the terminal — we never hold biometric templates.",
+        )
+    return redirect("devices:device_users", public_id=device.public_id)
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_user_delete(request, public_id):
+    """Remove one user from the device.
+
+    Irreversible from here: deleting the user also destroys the face and
+    fingerprint enrolled on that terminal, and those templates exist nowhere
+    else. Their punch history is untouched — that is our evidence, not the
+    device's.
+    """
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    device_user_id = request.POST.get("device_user_id", "")
+
+    entry, error = queue_user_delete(
+        device=device, device_user_id=device_user_id, requested_by=request.user
+    )
+    if error:
+        messages.error(request, error)
+    else:
+        _audit(
+            request, "device.user_deleted", device,
+            after={"device_user_id": device_user_id, "command": entry["body"]},
+        )
+        messages.warning(
+            request,
+            f"Queued removal of device user {device_user_id}. Their enrolled "
+            "face/fingerprint on this terminal will be destroyed and cannot be "
+            "restored from here — they must be enrolled again in person. "
+            "Punch history is kept.",
+        )
+    return redirect("devices:device_users", public_id=device.public_id)
