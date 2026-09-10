@@ -19,6 +19,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const jq = window.jQuery;
 
+    /* Select2 replaces the visible control and announces a pick with jQuery's
+       .trigger("change"), which does NOT reach a listener bound through
+       addEventListener. Binding through jQuery when it is present is therefore
+       the only way to hear a real user's selection; the native path stays as
+       the fallback for a page where Select2 did not load. */
+    function onChange(element, handler) {
+        if (jq) {
+            jq(element).on("change", handler);
+        } else {
+            element.addEventListener("change", handler);
+        }
+    }
+
     function fill(select, options, placeholder) {
         const previous = select.value;
         select.innerHTML = "";
@@ -57,7 +70,7 @@ document.addEventListener("DOMContentLoaded", function () {
             });
     }
 
-    branch.addEventListener("change", function () {
+    onChange(branch, function () {
         if (!branch.value) {
             fill(department, [], "Select a department");
             fill(designation, [], "Select a job title");
@@ -75,7 +88,7 @@ document.addEventListener("DOMContentLoaded", function () {
         );
     });
 
-    department.addEventListener("change", function () {
+    onChange(department, function () {
         if (!department.value) {
             fill(designation, [], "Select a job title");
             return;

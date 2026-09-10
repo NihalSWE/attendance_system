@@ -20,6 +20,17 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const jq = window.jQuery;
 
+    /* Select2 announces a pick with jQuery's .trigger("change"), which does
+       NOT reach a listener bound through addEventListener. Bind through
+       jQuery when it is present, native otherwise. */
+    function onChange(element, handler) {
+        if (jq) {
+            jq(element).on("change", handler);
+        } else {
+            element.addEventListener("change", handler);
+        }
+    }
+
     function repopulate(options) {
         const previously = new Set(
             Array.from(titles.selectedOptions).map(option => option.value)
@@ -39,7 +50,7 @@ document.addEventListener("DOMContentLoaded", function () {
         }
     }
 
-    department.addEventListener("change", function () {
+    onChange(department, function () {
         const value = department.value;
         if (!value) {
             repopulate([]);
