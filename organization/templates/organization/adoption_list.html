@@ -25,6 +25,9 @@
         </div>
         <div class="page__actions">
             {% if can_manage %}
+                <a class="btn btn--ghost" href="{% url 'organization:adoption_copy' %}">
+                    Copy to another branch
+                </a>
                 <a class="btn btn--primary" href="{% url 'organization:adoption_create' %}">
                     Adopt a department
                 </a>

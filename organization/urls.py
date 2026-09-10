@@ -17,6 +17,7 @@ urlpatterns = [
 
     path("departments/", adoption_views.adoption_list, name="adoption_list"),
     path("departments/add/", adoption_views.adoption_create, name="adoption_create"),
+    path("departments/copy/", adoption_views.adoption_copy, name="adoption_copy"),
     path(
         "departments/<int:pk>/edit/",
         adoption_views.adoption_edit,

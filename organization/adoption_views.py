@@ -16,9 +16,14 @@ from django.views.decorators.http import require_http_methods
 
 from common.choices import ActiveStatus
 from common.tenant import use_company
-from organization.adoption_forms import AdoptionStatusForm, DepartmentAdoptionForm
+from organization.adoption_forms import (
+    AdoptionStatusForm,
+    CopyAdoptionsForm,
+    DepartmentAdoptionForm,
+)
 from organization.adoption_services import (
     adopt_department,
+    copy_adoptions_between_branches,
     get_adoption_for_edit,
     set_adoption_status,
     update_adoption,
@@ -262,3 +267,59 @@ def _apply_errors(form, exc):
             form.add_error(field if field in form.fields else None, errors)
     else:
         form.add_error(None, exc)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def adoption_copy(request):
+    """Copy one branch's departments and job titles into another branch."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+
+    membership = require_structure_manager(request.user, company_id)
+
+    with use_company(company_id):
+        branches = visible_branches(membership).filter(status=ActiveStatus.ACTIVE)
+
+        if request.method == "POST":
+            form = CopyAdoptionsForm(request.POST, branches=branches)
+            if form.is_valid():
+                try:
+                    created, skipped = copy_adoptions_between_branches(
+                        actor=request.user,
+                        company_id=company_id,
+                        source_branch=form.cleaned_data["source_branch"],
+                        target_branch=form.cleaned_data["target_branch"],
+                    )
+                except ValidationError as exc:
+                    _apply_errors(form, exc)
+                else:
+                    if created:
+                        messages.success(
+                            request,
+                            f"Copied {len(created)} department"
+                            f"{'' if len(created) == 1 else 's'} into "
+                            f"{form.cleaned_data['target_branch'].name}. "
+                            "Appoint a head for each one when you are ready — "
+                            "heads are not copied.",
+                        )
+                    if skipped:
+                        messages.info(
+                            request,
+                            f"Already present, so left alone: {', '.join(skipped)}.",
+                        )
+                    if not created and not skipped:
+                        messages.info(
+                            request,
+                            "That branch has no active departments to copy.",
+                        )
+                    return redirect("organization:adoption_list")
+        else:
+            form = CopyAdoptionsForm(branches=branches)
+
+        return render(request, "organization/adoption_copy_form.html", {
+            "form": form,
+            "title": "Copy departments to another branch",
+            "submit_label": "Copy departments",
+        })

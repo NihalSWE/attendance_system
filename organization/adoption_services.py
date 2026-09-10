@@ -17,7 +17,7 @@ adoption split exists to prevent.
 """
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import models, transaction
 
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
@@ -269,3 +269,126 @@ def set_adoption_status(*, actor, company_id, adoption_id, status):
             before=before, after=adoption_snapshot(adoption),
         )
     return adoption
+
+
+@transaction.atomic
+def copy_adoptions_between_branches(*, actor, company_id, source_branch, target_branch):
+    """Copy one branch's active departments and job titles to another branch.
+
+    A department adoption is per-branch by design: it carries a head, a status
+    and dated open/close values that describe *that* branch's use of the
+    catalogue name, and device rules attach to it. So a new branch genuinely
+    starts empty. This only removes the retyping.
+
+    Two things are deliberately not copied:
+
+    - ``head``. The head administers people inside one department at one
+      branch. Copying it would appoint someone over a branch they may not even
+      work at, silently.
+    - Inactive rows. A department the source branch stopped using is not
+      something to hand a new branch.
+
+    Departments the target already has are skipped rather than failing, so the
+    action is safe to repeat after adding one more department to the source.
+    """
+    membership = require_structure_manager(actor, company_id)
+    if source_branch.pk == target_branch.pk:
+        raise ValidationError(
+            {"target_branch": "Choose a different branch to copy into."}
+        )
+
+    created, skipped = [], []
+    with use_company(company_id):
+        assert_branch_in_scope(membership, source_branch)
+        assert_branch_in_scope(membership, target_branch)
+
+        existing = set(
+            CompanyDepartment.objects.filter(branch=target_branch).values_list(
+                "department_id", flat=True
+            )
+        )
+        sources = (
+            CompanyDepartment.objects.filter(
+                branch=source_branch, status=ActiveStatus.ACTIVE
+            )
+            .select_related("department")
+            .prefetch_related("designations__designation")
+        )
+
+        for source in sources:
+            if source.department_id in existing:
+                skipped.append(source.department.name)
+                continue
+
+            adoption = create_validated(
+                CompanyDepartment,
+                company=membership.company,
+                branch=target_branch,
+                department=source.department,
+                description=source.description,
+                status=ActiveStatus.ACTIVE,
+                created_by=actor,
+                updated_by=actor,
+            )
+            for link in source.designations.all():
+                if link.status != ActiveStatus.ACTIVE:
+                    continue
+                create_validated(
+                    CompanyDesignation,
+                    company=membership.company,
+                    company_department=adoption,
+                    designation=link.designation,
+                    created_by=actor,
+                    updated_by=actor,
+                )
+            record_company_event(
+                actor=actor, membership=membership, company=membership.company,
+                action="company_department.copied", obj=adoption,
+                before={"copied_from_branch_id": source_branch.pk},
+                after=adoption_snapshot(adoption),
+            )
+            created.append(adoption)
+
+    return created, skipped
+
+
+def provision_new_branch(*, actor, company_id, branch):
+    """Give a newly created branch the company's existing department set.
+
+    The company's operating rule is that every branch offers the same
+    departments and job titles. The schema still stores one adoption row per
+    branch — it has to, because each branch carries its own head, status,
+    opening dates and device rules for a department — so "the same everywhere"
+    is achieved by provisioning the set rather than by sharing one row.
+
+    Source is the default branch when it has departments, otherwise whichever
+    branch has the most. That matters when the default branch is newer or
+    emptier than the one people actually set up.
+
+    Silent no-op when there is nothing to copy: the company's very first
+    branch has no source, and that is normal rather than an error.
+    """
+    from organization.models import Branch
+
+    with use_company(company_id):
+        candidates = (
+            Branch.objects.exclude(pk=branch.pk)
+            .filter(status=ActiveStatus.ACTIVE)
+            .annotate(
+                department_count=models.Count(
+                    "company_departments",
+                    filter=models.Q(company_departments__status=ActiveStatus.ACTIVE),
+                    distinct=True,
+                )
+            )
+            .filter(department_count__gt=0)
+            .order_by("-is_default", "-department_count", "pk")
+        )
+        source = candidates.first()
+
+    if source is None:
+        return [], []
+    return copy_adoptions_between_branches(
+        actor=actor, company_id=company_id,
+        source_branch=source, target_branch=branch,
+    )

@@ -1,0 +1,95 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'organization:adoption_list' %}">
+            Departments
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Copy
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Copy departments
+                </h2>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    A department belongs to one branch, because each branch has its own
+                    head, its own opening dates and its own device rules for it. A new
+                    branch therefore starts empty. This creates its own copies of another
+                    branch's active departments and their job titles, so you do not have
+                    to add them one at a time.
+                </p>
+                <p class="t-faint">
+                    Heads are not copied — the head of a department at one branch is
+                    rarely the right person at another, so each copy starts without one.
+                </p>
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger" role="alert">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+                <form method="post" class="stack" novalidate>
+                    {% csrf_token %}
+                    <div class="grid grid--2">
+                        {% for field in form %}
+                            <div class="field {% if field.errors %}field-invalid{% endif %}">
+                                <label class="field__label" for="{{ field.id_for_label }}">
+                                    {{ field.label }}
+                                    {% if field.field.required %}
+                                        <span class="field__req" aria-label="required">
+                                            *
+                                        </span>
+                                    {% endif %}
+                                </label>
+                                {{ field }}
+                                {% if field.help_text %}
+                                    <div class="field__help">
+                                        {{ field.help_text }}
+                                    </div>
+                                {% endif %}
+                                {% for error in field.errors %}
+                                    <p class="field__error">
+                                        {{ error }}
+                                    </p>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn--primary" type="submit">
+                            {{ submit_label }}
+                        </button>
+                        <a class="btn btn--ghost" href="{% url 'organization:adoption_list' %}">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}

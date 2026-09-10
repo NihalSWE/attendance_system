@@ -176,3 +176,42 @@ class AdoptionStatusForm(StyledFormMixin, forms.Form):
     """Activate or deactivate an adopted department. There is no delete."""
 
     status = forms.ChoiceField(choices=ActiveStatus.choices, label="Status")
+
+
+class CopyAdoptionsForm(StyledFormMixin, forms.Form):
+    """Copy one branch's departments and job titles into another branch.
+
+    A department adoption is per-branch by design, so a new branch starts
+    empty. This is a convenience over that, not a change to it: it creates
+    real adoption rows for the target branch rather than sharing the source's.
+    """
+
+    source_branch = forms.ModelChoiceField(
+        queryset=Branch.all_objects.none(),
+        label="Copy from",
+        help_text="Its active departments and their job titles are copied.",
+    )
+    target_branch = forms.ModelChoiceField(
+        queryset=Branch.all_objects.none(),
+        label="Copy into",
+        help_text=(
+            "Departments this branch already has are left untouched, so this "
+            "is safe to run again after adding one more to the source."
+        ),
+    )
+
+    def __init__(self, *args, branches=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if branches is not None:
+            self.fields["source_branch"].queryset = branches
+            self.fields["target_branch"].queryset = branches
+        self.fields["source_branch"].empty_label = "Select a branch"
+        self.fields["target_branch"].empty_label = "Select a branch"
+
+    def clean(self):
+        cleaned = super().clean()
+        source = cleaned.get("source_branch")
+        target = cleaned.get("target_branch")
+        if source and target and source.pk == target.pk:
+            self.add_error("target_branch", "Choose a different branch to copy into.")
+        return cleaned

@@ -346,3 +346,220 @@ class AdoptionScreenTests(AdoptionTestBase):
         self.assertEqual(
             self.client.get(reverse("organization:adoption_list")).status_code, 302
         )
+
+
+class CopyAdoptionsTests(AdoptionTestBase):
+    """Copying one branch's departments into another.
+
+    A department adoption is per-branch by design — each carries its own head,
+    status, dates and device rules — so a new branch legitimately starts empty.
+    These cover the convenience over that, and what it deliberately does not do.
+    """
+
+    def setUp(self):
+        super().setUp()
+        with use_company(self.company):
+            self.second_branch = Branch.objects.create(code="BR2", name="Second Branch")
+            self.head = Employee.objects.create(first_name="Ayesha", last_name="Rahman")
+        self.source = services.adopt_department(
+            actor=self.owner, company_id=self.company.pk,
+            values={"branch": self.branch, "department": self.software,
+                    "status": "active", "head": self.head,
+                    "designations": [self.developer, self.senior]},
+        )
+
+    def _copy(self, source=None, target=None):
+        return services.copy_adoptions_between_branches(
+            actor=self.owner, company_id=self.company.pk,
+            source_branch=source or self.branch,
+            target_branch=target or self.second_branch,
+        )
+
+    def test_copy_creates_the_department_and_its_titles(self):
+        created, skipped = self._copy()
+        self.assertEqual(len(created), 1)
+        self.assertEqual(skipped, [])
+        with use_company(self.company):
+            copied = CompanyDepartment.objects.get(branch=self.second_branch)
+            self.assertEqual(copied.department_id, self.software.pk)
+            self.assertEqual(
+                sorted(l.designation.name for l in copied.designations.all()),
+                ["Developer", "Senior Developer"],
+            )
+
+    def test_the_copy_is_a_separate_row_not_a_shared_one(self):
+        """Each branch owns its adoption; editing one must not touch the other."""
+        self._copy()
+        with use_company(self.company):
+            copied = CompanyDepartment.objects.get(branch=self.second_branch)
+            self.assertNotEqual(copied.pk, self.source.pk)
+            services.set_adoption_status(
+                actor=self.owner, company_id=self.company.pk,
+                adoption_id=copied.pk, status="inactive",
+            )
+            self.source.refresh_from_db()
+            self.assertEqual(self.source.status, "active")
+
+    def test_the_head_is_not_copied(self):
+        """A head administers people at one branch; copying would appoint them
+        over a branch they may not work at."""
+        self._copy()
+        with use_company(self.company):
+            copied = CompanyDepartment.objects.get(branch=self.second_branch)
+        self.assertIsNone(copied.head_id)
+        self.assertEqual(self.source.head_id, self.head.pk)
+
+    def test_inactive_departments_are_not_copied(self):
+        services.set_adoption_status(
+            actor=self.owner, company_id=self.company.pk,
+            adoption_id=self.source.pk, status="inactive",
+        )
+        created, skipped = self._copy()
+        self.assertEqual(created, [])
+        with use_company(self.company):
+            self.assertFalse(
+                CompanyDepartment.objects.filter(branch=self.second_branch).exists()
+            )
+
+    def test_inactive_job_titles_are_not_copied(self):
+        services.update_adoption(
+            actor=self.owner, company_id=self.company.pk, adoption_id=self.source.pk,
+            values={"status": "active", "designations": [self.developer]},
+        )
+        self._copy()
+        with use_company(self.company):
+            copied = CompanyDepartment.objects.get(branch=self.second_branch)
+            self.assertEqual(
+                [l.designation.name for l in copied.designations.all()], ["Developer"]
+            )
+
+    def test_running_it_twice_skips_what_is_already_there(self):
+        self._copy()
+        created, skipped = self._copy()
+        self.assertEqual(created, [])
+        self.assertEqual(skipped, ["Software"])
+        with use_company(self.company):
+            self.assertEqual(
+                CompanyDepartment.objects.filter(branch=self.second_branch).count(), 1
+            )
+
+    def test_copying_a_branch_onto_itself_is_refused(self):
+        with self.assertRaises(ValidationError):
+            self._copy(target=self.branch)
+
+    def test_copy_is_audited(self):
+        created, _ = self._copy()
+        self.assertTrue(
+            AuditLog.objects.filter(
+                action="company_department.copied", object_id=str(created[0].pk)
+            ).exists()
+        )
+
+    def test_screen_copies_through_the_form(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("organization:adoption_copy"),
+            {"source_branch": self.branch.pk, "target_branch": self.second_branch.pk},
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        with use_company(self.company):
+            self.assertTrue(
+                CompanyDepartment.objects.filter(branch=self.second_branch).exists()
+            )
+
+    def test_screen_rejects_the_same_branch_twice(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("organization:adoption_copy"),
+            {"source_branch": self.branch.pk, "target_branch": self.branch.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("target_branch", response.context["form"].errors)
+
+
+class NewBranchProvisioningTests(AdoptionTestBase):
+    """A new branch offers the same departments as the rest of the company.
+
+    The schema keeps one adoption row per branch, because each carries its own
+    head, status, dates and device rules. "Same everywhere" is therefore
+    achieved by provisioning the set into the new branch, not by sharing a row.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.adoption = services.adopt_department(
+            actor=self.owner, company_id=self.company.pk,
+            values={"branch": self.branch, "department": self.software,
+                    "status": "active", "designations": [self.developer, self.senior]},
+        )
+        self.client.force_login(self.owner)
+
+    def _create_branch(self, code="BR2", name="Second Branch"):
+        return self.client.post(
+            reverse("organization:branch_create"),
+            {"code": code, "name": name, "timezone": "Asia/Dhaka", "status": "active"},
+            follow=True,
+        )
+
+    def test_a_new_branch_inherits_the_departments_and_titles(self):
+        response = self._create_branch()
+        self.assertEqual(response.status_code, 200)
+        with use_company(self.company):
+            new_branch = Branch.objects.get(code="BR2")
+            adoptions = CompanyDepartment.objects.filter(branch=new_branch)
+            self.assertEqual(adoptions.count(), 1)
+            self.assertEqual(
+                sorted(l.designation.name for l in adoptions.first().designations.all()),
+                ["Developer", "Senior Developer"],
+            )
+
+    def test_the_inherited_rows_belong_to_the_new_branch(self):
+        """Not shared: deactivating one branch's copy leaves the other alone."""
+        self._create_branch()
+        with use_company(self.company):
+            new_branch = Branch.objects.get(code="BR2")
+            copied = CompanyDepartment.objects.get(branch=new_branch)
+            services.set_adoption_status(
+                actor=self.owner, company_id=self.company.pk,
+                adoption_id=copied.pk, status="inactive",
+            )
+            self.adoption.refresh_from_db()
+        self.assertEqual(self.adoption.status, "active")
+
+    def test_the_first_branch_of_a_company_has_nothing_to_inherit(self):
+        """Onboarding creates the first branch; there is no source yet."""
+        company = Company.objects.create(code="C", slug="c", name="Company C")
+        owner = User.objects.create_user(email="owner-c@example.test", password="pw-12345678")
+        CompanyMembership.all_objects.create(
+            company=company, user=owner, role="company_admin", status="active"
+        )
+        with use_company(company):
+            first = Branch.objects.create(code="HQ", name="C HQ", is_default=True)
+        created, skipped = services.provision_new_branch(
+            actor=owner, company_id=company.pk, branch=first
+        )
+        self.assertEqual(created, [])
+        self.assertEqual(skipped, [])
+
+    def test_inactive_departments_are_not_inherited(self):
+        services.set_adoption_status(
+            actor=self.owner, company_id=self.company.pk,
+            adoption_id=self.adoption.pk, status="inactive",
+        )
+        self._create_branch()
+        with use_company(self.company):
+            new_branch = Branch.objects.get(code="BR2")
+            self.assertFalse(
+                CompanyDepartment.objects.filter(branch=new_branch).exists()
+            )
+
+    def test_a_third_branch_inherits_too(self):
+        self._create_branch()
+        self._create_branch(code="BR3", name="Third Branch")
+        with use_company(self.company):
+            for code in ("BR2", "BR3"):
+                branch = Branch.objects.get(code=code)
+                self.assertEqual(
+                    CompanyDepartment.objects.filter(branch=branch).count(), 1, code
+                )
