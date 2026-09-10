@@ -22,11 +22,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # holds real secrets; .env.example documents every key. See docs Lesson 3.
 env = environ.Env(
     DEBUG=(bool, False),
-    ALLOWED_HOSTS=(list, [
-        'localhost',
-        '127.0.0.1',
-        'asyllabic-ernestine-detectable.ngrok-free.dev',
-    ]),
+    # Only the loopback names belong in a shared default. A developer's own
+    # tunnel hostname is personal to their machine and goes in their .env,
+    # so a teammate never inherits someone else's address.
+    ALLOWED_HOSTS=(list, ['localhost', '127.0.0.1']),
     DB_CONN_MAX_AGE=(int, 60),
     # Origins allowed to submit browser forms. A biometric device reaches this
     # server through a tunnel hostname during development; the *device*
