@@ -1,4 +1,8 @@
-"""Company organization routes. Feature pages live in their domain app."""
+"""Company organization routes. Feature pages live in their domain app.
+
+Root-only catalogue routes live in organization/catalogue_urls.py under their
+own namespace, because they belong to the platform operator, not a tenant.
+"""
 from django.urls import path
 
 from organization import views

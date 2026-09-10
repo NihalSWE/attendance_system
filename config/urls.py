@@ -9,6 +9,9 @@ from base_template import views
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("platform/", include("tenants.urls")),
+    # Root-only catalogue screens. They sit under /platform/ with the other
+    # root screens, but the views live in organization/ with their models.
+    path("platform/catalogue/", include("organization.catalogue_urls")),
     path("organization/", include("organization.urls")),
     # Device integration. Mounted at the root because the /iclock/ paths are
     # built by the ZKTeco firmware itself and cannot be prefixed.

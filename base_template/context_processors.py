@@ -12,7 +12,7 @@ def shell(request):
     user = getattr(request, "user", None)
     if user is None or not user.is_authenticated:
         return {"memberships": [], "active_company": None}
-    if user.is_superuser and getattr(request.resolver_match, "namespace", "") == "platform":
+    if user.is_superuser and getattr(request.resolver_match, "namespace", "") in ("platform", "catalogue"):
         return {"memberships": [], "active_company": None, "platform_surface": True}
 
     memberships = list(

@@ -5,10 +5,11 @@ re-validates every submitted value and re-checks row scope before writing.
 """
 
 from django import forms
+from django.db.models import Q
 
 from common.choices import ActiveStatus
 from common.forms import BangladeshPhoneInput, StyledFormMixin
-from organization.models import Branch
+from organization.models import Branch, Department, Designation
 
 
 class BranchForm(StyledFormMixin, forms.ModelForm):
@@ -84,3 +85,73 @@ class BranchStatusForm(forms.Form):
         required=False,
         help_text="Recorded in the audit trail.",
     )
+
+
+class CatalogueDepartmentForm(StyledFormMixin, forms.ModelForm):
+    """Root-only: a department name in the platform-wide catalogue.
+
+    No branch, no company, no dates — those describe one company's *use* of a
+    department and live on CompanyDepartment. Putting any of them here would
+    make one tenant's fact visible to every other tenant sharing the name.
+    """
+
+    class Meta:
+        model = Department
+        fields = ("code", "name", "description", "status")
+        widgets = {"description": forms.TextInput()}
+        help_texts = {
+            "code": "Short identifier, unique across the whole platform.",
+            "name": "The canonical name every company will see. Unique platform-wide.",
+        }
+
+    def clean_code(self):
+        # Stored uppercase so "hr" and "HR" collide as the same catalogue row
+        # instead of creating two entries that read identically in a list.
+        return (self.cleaned_data.get("code") or "").strip().upper()
+
+    def clean_name(self):
+        return (self.cleaned_data.get("name") or "").strip()
+
+
+class CatalogueDesignationForm(StyledFormMixin, forms.ModelForm):
+    """Root-only: a job title, filed under exactly one catalogue department.
+
+    A title belongs to one department by design, so root creates "Manager"
+    once per department — "HR Manager" under Human Resources, "Sales Manager"
+    under Sales. The department field is deliberately first and required so
+    the filing is explicit at the point of creation.
+    """
+
+    class Meta:
+        model = Designation
+        fields = ("department", "code", "name", "description", "status")
+        widgets = {"description": forms.TextInput()}
+        help_texts = {
+            "department": "The catalogue department this title belongs to.",
+            "code": "Short identifier, unique within this department.",
+            "name": "Unique within this department.",
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Only active catalogue departments can take new titles; an existing
+        # row keeps its own department visible even if that was deactivated.
+        queryset = Department.objects.filter(status=ActiveStatus.ACTIVE)
+        if self.instance.pk and self.instance.department_id:
+            queryset = Department.objects.filter(
+                Q(status=ActiveStatus.ACTIVE) | Q(pk=self.instance.department_id)
+            )
+        self.fields["department"].queryset = queryset.order_by("name")
+        self.fields["department"].empty_label = "Select a department"
+
+    def clean_code(self):
+        return (self.cleaned_data.get("code") or "").strip().upper()
+
+    def clean_name(self):
+        return (self.cleaned_data.get("name") or "").strip()
+
+
+class CatalogueStatusForm(StyledFormMixin, forms.Form):
+    """Activate or deactivate a catalogue row. There is no delete."""
+
+    status = forms.ChoiceField(choices=ActiveStatus.choices, label="Status")
