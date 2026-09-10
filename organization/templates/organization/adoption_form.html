@@ -1,0 +1,191 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'organization:adoption_list' %}">
+            Departments
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ title }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Department details
+                </h2>
+            </div>
+            <div class="card__body">
+                {% if explanation %}
+                    <p class="t-faint">
+                        {{ explanation }}
+                    </p>
+                {% endif %}
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger" role="alert">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="stack" novalidate
+                      data-titles-url="{% url 'organization:department_titles' %}">
+                    {% csrf_token %}
+
+                    <div class="grid grid--2">
+                        {% for field in form %}
+                            {% if field.name != 'designations' and field.name != 'description' %}
+                                <div class="field {% if field.errors %}field-invalid{% endif %}">
+                                    <label class="field__label" for="{{ field.id_for_label }}">
+                                        {{ field.label }}
+                                        {% if field.field.required %}
+                                            <span class="field__req" aria-label="required">
+                                                *
+                                            </span>
+                                        {% endif %}
+                                    </label>
+                                    {{ field }}
+                                    {% if field.help_text %}
+                                        <div class="field__help">
+                                            {{ field.help_text }}
+                                        </div>
+                                    {% endif %}
+                                    {% for error in field.errors %}
+                                        <p class="field__error">
+                                            {{ error }}
+                                        </p>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    <div class="field {% if form.description.errors %}field-invalid{% endif %}">
+                        <label class="field__label" for="{{ form.description.id_for_label }}">
+                            {{ form.description.label }}
+                        </label>
+                        {{ form.description }}
+                        {% for error in form.description.errors %}
+                            <p class="field__error">
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    </div>
+
+                    <div class="field {% if form.designations.errors %}field-invalid{% endif %}"
+                         data-titles-field>
+                        <label class="field__label" for="{{ form.designations.id_for_label }}">
+                            {{ form.designations.label }}
+                        </label>
+                        {{ form.designations }}
+                        <div class="field__help">
+                            {{ form.designations.help_text }}
+                        </div>
+                        {% for error in form.designations.errors %}
+                            <p class="field__error">
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn--primary" type="submit">
+                            {{ submit_label }}
+                        </button>
+                        <a class="btn btn--ghost" href="{% url 'organization:adoption_list' %}">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if adoption %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        Current job titles
+                    </h2>
+                </div>
+                <div class="card__body">
+                    {% if adoption.designations.all %}
+                        <div class="table-wrap">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>
+                                            Job title
+                                        </th>
+                                        <th>
+                                            Status
+                                        </th>
+                                        <th class="numeric">
+                                            Employees
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for link in adoption.designations.all %}
+                                        <tr>
+                                            <td>
+                                                {{ link.designation.name }}
+                                            </td>
+                                            <td>
+                                                {% if link.status == 'active' %}
+                                                    <span class="badge badge--success">
+                                                        Active
+                                                    </span>
+                                                {% else %}
+                                                    <span class="badge badge--neutral">
+                                                        Inactive
+                                                    </span>
+                                                {% endif %}
+                                            </td>
+                                            <td class="numeric">
+                                                {{ link.assignments.count }}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% else %}
+                        <div class="empty">
+                            <div class="empty__title">
+                                No job titles yet
+                            </div>
+                            <div class="empty__text">
+                                Tick the titles this department uses above.
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'organization/js/adoption.js' %}">
+    </script>
+{% endblock %}
