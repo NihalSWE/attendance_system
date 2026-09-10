@@ -30,5 +30,6 @@ urlpatterns = [
         ),
         name="login",
     ),
-    path("logout/", auth_views.LogoutView.as_view(next_page="login"), name="logout"),
+    # POST logs out; GET asks rather than returning a bare 405.
+    path("logout/", views.ConfirmingLogoutView.as_view(next_page="login"), name="logout"),
 ]

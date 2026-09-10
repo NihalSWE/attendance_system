@@ -10,6 +10,7 @@ from functools import wraps
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import LogoutView
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import redirect, render
@@ -153,3 +154,25 @@ def switch_company(request):
     else:
         messages.warning(request, "You do not have access to that company.")
     return redirect("dashboard")
+
+
+class ConfirmingLogoutView(LogoutView):
+    """Log out on POST; on GET, ask instead of refusing.
+
+    Django's LogoutView is POST-only, and rightly so: allowing GET means any
+    page could log a user out with `<img src="/logout/">`, which needs no CSRF
+    token. Both sidebars already POST, so the button works either way.
+
+    What the plain view gives someone who *reaches the URL another way* -
+    typing it, a bookmark, a browser prefetch, or refreshing after logging out
+    - is a bare 405 Method Not Allowed page. That reads as a broken site.
+    This renders a confirmation with a real POST button instead, so the URL is
+    never a dead end and the CSRF protection is untouched.
+    """
+
+    http_method_names = ["get", "post", "options"]
+
+    def get(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect("login")
+        return render(request, "base_template/logout_confirm.html")

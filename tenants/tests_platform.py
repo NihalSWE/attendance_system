@@ -234,6 +234,15 @@ class PlatformTests(TestCase):
             services.set_company_feature(actor=self.root, company_id=company.pk, feature_id=feature.pk, effect="disable", reason="Cannot erase scheduled history")
 
     def test_signout_is_post_and_clears_session(self):
-        self.assertEqual(self.client.get(reverse("logout")).status_code, 405)
+        # A GET must never end the session — otherwise any page could sign a
+        # user out with <img src="/logout/">, which carries no CSRF token.
+        # It now answers with a confirmation page rather than a bare 405, so
+        # the guarantee is asserted on the session itself rather than on a
+        # status code that says nothing about who is still signed in.
+        self.client.get(reverse("logout"))
+        self.assertIn("_auth_user_id", self.client.session)
+        self.assertEqual(self.client.get(reverse("platform:company_list")).status_code, 200)
+
         self.client.post(reverse("logout"))
+        self.assertNotIn("_auth_user_id", self.client.session)
         self.assertEqual(self.client.get(reverse("platform:company_list")).status_code, 302)

@@ -1,0 +1,32 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Sign out · Attendance
+{% endblock %}
+{% block page %}
+    <div class="form-page">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Sign out
+                </h2>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    You are signed in as {{ request.user.email }}. Signing out ends this
+                    session on this device only.
+                </p>
+                <form method="post" action="{% url 'logout' %}" class="stack">
+                    {% csrf_token %}
+                    <div class="form-actions">
+                        <button class="btn btn--primary" type="submit">
+                            Sign out
+                        </button>
+                        <a class="btn btn--ghost" href="{% url 'dashboard' %}">
+                            Stay signed in
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}
