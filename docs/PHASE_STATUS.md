@@ -774,3 +774,131 @@ Exact next task:
     Acceptance is the cold-start test: drop into an EMPTY database and reach a
     working employee list using only the browser, with seed_demo never run.
 ```
+
+## 2026-09-10 — organisation catalogue UI (Nihal, device workstream)
+
+Phases 0, 0.5, 1, 2 and 3 of the organisation-side brief. Ajay away; no
+collision risk, but see the branch note below before merging.
+
+### What was actually run
+
+```
+manage.py test                     347 tests, OK   (283 at Phase 0, +64 added)
+manage.py check                    clean
+makemigrations --check --dry-run   No changes detected
+```
+
+No schema change was needed in any phase; every table already existed.
+
+Cold start verified end to end on an empty database, browser POSTs only,
+`seed_demo` never run: root created "Software" and "Developer" in the
+catalogue, a company adopted Software into Head Office with the Developer
+title, and Nadia Khan was hired into Head Office / Software / Developer with
+code E-1.
+
+Screens checked at 1440, 768 and 375 px: no horizontal overflow, tables
+scroll inside their own container, the two-column form grid collapses to one.
+
+### Phase 0 — merged code and database rebuild
+
+Rebuilt from an empty PostgreSQL database: 25 migrations, seed_demo, 283
+tests green.
+
+**Discrepancy worth correcting.** The brief said to take the merged code from
+`origin/main`. `main` is still at `4eb6615` and contains **neither**
+workstream — `devices/models.py` is a 3-line stub there and `CompanyDepartment`
+does not exist. The merge is real but lives on
+`origin/feature/company-org-setup` (`3015f13`, "Merge the device integration
+and move it onto the company adoption rows"), which contains all 14 device
+commits. Work continued from that commit. `main` was deliberately **not**
+fast-forwarded: publishing Ajay's feature branch as trunk while he is away is
+his call, not mine. It is a clean fast-forward whenever he wants it.
+
+Also moved a personal ngrok hostname out of the shared `ALLOWED_HOSTS`
+default into `.env`.
+
+### Phase 0.5 — finishing the schema move
+
+**One stale reference found in the whole project**, the known one:
+`organization/views.py:50` counted `Count("departments")`, the reverse
+accessor of the tenant-owned Department the catalogue replaced. Every request
+to the branch list raised FieldError. Now counts `company_departments`.
+
+Swept `Count(`/`Sum(`/`annotate(`/`select_related(`/`prefetch_related(`/
+`order_by(`/`values(`/`values_list(` across every app's `.py`, plus
+department/designation references in `.html`. Nothing else was broken. The
+templates that looked wrong are correct: `CompanyDepartment` and
+`CompanyDesignation` expose read-through `code`/`name` properties, so
+`{{ d.name }}` resolves to the catalogue value.
+
+**Why it survived a green suite:** `organization/` and `base_template/` had
+zero view tests — nothing ever executed the query. Added
+`organization/tests_views.py` (12 tests): every organisation and shell page
+now gets a logged-in request asserting 200 **and** a real value read off the
+response. Verified the regression test earns its place by reintroducing the
+old accessor — it fails with the original FieldError and passes once reverted.
+
+### Phase 1 — root catalogue screens
+
+Eight screens under `/platform/catalogue/`: list, create, edit and
+activate/deactivate for departments and job titles, linked from the root
+sidebar. `is_superuser` only; a company administrator gets 403 on all eight,
+asserted rather than assumed. No superuser is given a CompanyMembership.
+
+Never hard-deletes: the edit and status screens list which companies use a
+row so the consequence is visible, and deactivation stops new adoptions while
+existing ones keep working. Uniqueness collisions are field errors, not 500s.
+An already-adopted title cannot be moved to another department.
+
+**Judgement call:** the catalogue got its own `catalogue` URL namespace
+rather than reusing `organization`. Two includes of one namespace raises
+`urls.W005` and broke the company sidebar's `branch_list` reverse.
+`base_template`'s shell treats that namespace as a platform surface.
+
+### Phase 2 — company adopts a department
+
+One screen: pick a branch and a catalogue department, then the job titles
+that branch uses. Adoption plus titles are written in one transaction with
+the audit row, and the audit snapshot includes the title list.
+
+Three refusals carry the rules: a title from another department (and the
+multiselect never offers it), a second adoption of the same department into
+one branch (reported on the department field, not page-level), and removing a
+title employees hold (a readable field error, not a ProtectedError page).
+Unticking deactivates; re-ticking reactivates the same row. Branch and
+department are fixed once adopted.
+
+### Phase 3 — hire an employee
+
+Calls `employees.services.hire_employee`; no domain logic reimplemented.
+Branch, department and job title are dependent Select2 fields, each narrowing
+the next, with the chain re-checked server-side. Start date is stored
+timezone-aware in the company's zone.
+
+`employee_code` reuse is enforced by the exclusion constraint. Django
+validates constraints inside `full_clean()`, so the failure arrives named
+after the constraint; it is translated into a readable field error. A code
+**is** reusable once the previous placement closes — covered by a test that
+hires, ends the placement, then hires someone else on the same code.
+
+The employee list's "Add employee (coming next)" button is now a working
+"Hire employee" link, and the company sidebar's Departments entry points at
+the new adoption screen instead of the old read-only page.
+
+### Known limitations / still open
+
+- `main` has neither workstream; needs Ajay's decision (see Phase 0).
+- The old read-only `/departments/` page still exists and is no longer linked
+  from the sidebar. Left in place rather than removed unilaterally.
+- Transfer, revise-salary and terminate flows remain unbuilt; their services
+  exist and are tested.
+- Device work: the offline/backlog test on the SenseFace 2A is still not run,
+  and writing users to the device is limited to what was verified on the
+  hardware.
+
+### Exact next task
+
+Employee lifecycle writes on top of Phase 3: transfer (`transfer_employee`),
+revise compensation (`revise_compensation`) and terminate
+(`terminate_employee`). All three services exist and are tested; the missing
+piece is forms and POST handlers, exactly as the hire flow was.

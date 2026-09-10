@@ -5,7 +5,7 @@ own namespace, because they belong to the platform operator, not a tenant.
 """
 from django.urls import path
 
-from organization import adoption_views, views
+from organization import adoption_views, hire_views, views
 
 app_name = "organization"
 
@@ -32,5 +32,18 @@ urlpatterns = [
         "departments/titles/",
         adoption_views.department_titles,
         name="department_titles",
+    ),
+
+    path("hire/", hire_views.hire, name="hire"),
+    # Feed the dependent branch -> department -> job title selects.
+    path(
+        "hire/departments/",
+        hire_views.branch_departments,
+        name="hire_branch_departments",
+    ),
+    path(
+        "hire/titles/",
+        hire_views.department_job_titles,
+        name="hire_department_titles",
     ),
 ]
