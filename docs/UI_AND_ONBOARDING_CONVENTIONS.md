@@ -57,6 +57,10 @@ uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
 - **Overlays that move their list to `<body>`** (the custom select, Select2)
   sit outside their parent in the DOM. Anything that closes on an outside
   click, like the calendar, must treat those lists as inside.
+- **Filter toolbars size their dropdowns to their content.** Form controls fill
+  their field (`width: 100%`); inside `.toolbar` the custom select and Select2
+  are set back to their own width, so a month/year/status filter row stays on
+  one line instead of each filter taking a full row.
 - **Outside-click checks use the click's recorded path** (`composedPath()`),
   not `contains(target)`: a control that redraws on click removes its own
   target before the check runs.

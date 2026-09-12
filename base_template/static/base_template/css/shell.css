@@ -266,6 +266,20 @@ Page furniture
     flex: 1 1 220px;
     min-width: 0;
 }
+/* Filters size to their content. In a form a select fills its field
+   (width: 100%), which inside a wrapping toolbar gave every filter a whole row
+   of its own. The custom select and Select2 are direct children here because
+   each wraps the <select> where it stood; Select2 writes its width inline,
+   hence !important. */
+.toolbar > .cs,
+.toolbar > .select2-container {
+    flex: 0 0 auto;
+    width: auto !important;
+    min-width: 150px;
+}
+.toolbar > .select2-container {
+    min-width: 220px;
+}
 /* Empty state — sunken well, never a bare white void. */
 .empty {
     padding: var(--s8) var(--s5);
