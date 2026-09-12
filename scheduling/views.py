@@ -24,8 +24,10 @@ from organization.services import (
 )
 from organization.views import _company_or_redirect
 from scheduling import services
+from organization.models import CompanyDepartment
 from scheduling.forms import (
     AttendanceSettingsForm,
+    DepartmentShiftForm,
     EndWeeklyOffForm,
     HolidayForm,
     ShiftForm,
@@ -85,10 +87,28 @@ def schedule_overview(request):
             status=Holiday.Status.ACTIVE, holiday_date__year=today.year
         ).count()
 
-    ready = bool(
-        settings
-        and settings.shift_mode == CompanyAttendanceSettings.ShiftMode.COMPANY_SINGLE_SHIFT
-        and settings.company_shift_id
+        by_department = (
+            settings is not None
+            and settings.shift_mode == CompanyAttendanceSettings.ShiftMode.DEPARTMENT_SHIFTS
+        )
+        current = services.current_department_shifts(company_id, today)
+        department_rows = [
+            {
+                "department": adoption,
+                "link": current.get(adoption.pk),
+            }
+            for adoption in CompanyDepartment.objects.select_related("branch", "department")
+            .filter(status=ActiveStatus.ACTIVE)
+            .order_by("branch__name", "department__name")
+        ]
+
+    company_shift = settings.company_shift if settings else None
+    uncovered = [
+        row["department"] for row in department_rows
+        if row["link"] is None and company_shift is None
+    ] if by_department else []
+    ready = bool(company_shift) if not by_department else not uncovered and (
+        bool(company_shift) or any(row["link"] for row in department_rows)
     )
     return render(request, "scheduling/overview.html", {
         "settings": settings,
@@ -98,6 +118,9 @@ def schedule_overview(request):
         "upcoming": upcoming,
         "holiday_count": holiday_count,
         "year": today.year,
+        "by_department": by_department,
+        "department_rows": department_rows,
+        "uncovered": uncovered,
         "can_manage": membership.role in STRUCTURE_ROLES,
     })
 
@@ -126,8 +149,9 @@ def attendance_settings_edit(request):
             submit_label="Save settings",
             success="Attendance settings saved.",
             explanation=(
-                "Every employee is measured against the company shift. Separate "
-                "shifts per department are not available yet."
+                "Shifts per department: each employee works their department's "
+                "shift, and the company shift covers departments without one. "
+                "One shift for the company: everyone works the company shift."
             ),
             action=lambda data: services.update_attendance_settings(
                 actor=request.user, company_id=company_id, values=data
@@ -212,6 +236,43 @@ def shift_status(request, pk):
             status=data["status"],
         ),
     )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def department_shift_set(request):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership = require_structure_manager(request.user, company_id)
+    preset = request.GET.get("department", "").strip()
+    with use_company(company_id):
+        branches = visible_branches(membership)
+        form = DepartmentShiftForm(
+            request.POST or None,
+            departments=CompanyDepartment.objects.select_related("branch", "department")
+            .filter(status=ActiveStatus.ACTIVE, branch__in=branches)
+            .order_by("branch__name", "department__name"),
+            shifts=Shift.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
+            initial={
+                "effective_from": timezone.localdate(),
+                **({"department": preset} if preset.isdigit() else {}),
+            },
+        )
+        return _form_page(
+            request,
+            form=form,
+            title="Set department shift",
+            submit_label="Save department shift",
+            success="Department shift saved.",
+            explanation=(
+                "Everyone in the department works this shift from the date you "
+                "choose. Earlier days keep the shift they were worked on."
+            ),
+            action=lambda data: services.set_department_shift(
+                actor=request.user, company_id=company_id, values=data
+            ),
+        )
 
 
 # --------------------------------------------------------------------------

@@ -30,8 +30,17 @@
 
     {% if not ready %}
         <div class="alert alert--warning">
-            Attendance cannot be calculated yet. Add a shift, then choose it as the
-            company shift in attendance settings.
+            {% if by_department and uncovered %}
+                Some departments have no shift and there is no company shift to fall
+                back on: {% for department in uncovered %}{{ department.name }} ({{ department.branch.name }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+                Set their shifts below, or choose a company shift.
+            {% elif by_department %}
+                Attendance cannot be calculated yet. Add a shift, then set it for
+                your departments below.
+            {% else %}
+                Attendance cannot be calculated yet. Add a shift, then choose it as
+                the company shift in attendance settings.
+            {% endif %}
         </div>
     {% endif %}
 
@@ -49,10 +58,20 @@
         <div class="card__body">
             <dl class="facts">
                 <dt>
+                    Shifts
+                </dt>
+                <dd>
+                    {% if by_department %}
+                        Per department — each employee works their department's shift
+                    {% else %}
+                        One shift for the whole company
+                    {% endif %}
+                </dd>
+                <dt>
                     Company shift
                 </dt>
                 <dd>
-                    {% if ready %}
+                    {% if settings.company_shift %}
                         {{ settings.company_shift.name }}
                         <span class="t-faint">
                             {{ settings.company_shift.start_time|time:"H:i" }}–{{ settings.company_shift.end_time|time:"H:i" }}
@@ -198,6 +217,114 @@
                 </div>
                 <div class="empty__text">
                     Add the company's working hours, for example Day shift 09:00–18:00.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Department shifts
+            </h2>
+            <span class="badge badge--neutral">
+                {{ department_rows|length }}
+            </span>
+            {% if can_manage %}
+                <a class="btn btn--primary btn--sm" href="{% url 'scheduling:department_shift_set' %}">
+                    Set department shift
+                </a>
+            {% endif %}
+        </div>
+        {% if not by_department %}
+            <div class="card__body">
+                <p class="field__help">
+                    The company is set to one shift for everyone, so these are not
+                    used. Switch to shifts per department in attendance settings to
+                    use them.
+                </p>
+            </div>
+        {% endif %}
+        {% if department_rows %}
+            <div class="table-wrap">
+                <table class="table">
+                    <colgroup>
+                        <col style="width: 26%">
+                        <col style="width: 22%">
+                        <col style="width: 24%">
+                        <col style="width: 14%">
+                        <col style="width: 14%">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>
+                                Department
+                            </th>
+                            <th>
+                                Branch
+                            </th>
+                            <th>
+                                Shift today
+                            </th>
+                            <th class="numeric">
+                                Since
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in department_rows %}
+                            <tr>
+                                <td>
+                                    {{ row.department.name }}
+                                </td>
+                                <td>
+                                    {{ row.department.branch.name }}
+                                </td>
+                                <td>
+                                    {% if row.link %}
+                                        {{ row.link.shift.name }}
+                                        <span class="t-faint">
+                                            {{ row.link.shift.start_time|time:"H:i" }}–{{ row.link.shift.end_time|time:"H:i" }}
+                                        </span>
+                                    {% elif settings.company_shift %}
+                                        <span class="t-faint">
+                                            Company shift ({{ settings.company_shift.name }})
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--warning">
+                                            No shift
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ row.link.effective_from|date:"d M Y"|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if can_manage %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'scheduling:department_shift_set' %}?department={{ row.department.pk }}">
+                                            Set shift
+                                        </a>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No departments yet
+                </div>
+                <div class="empty__text">
+                    Add departments to your branches first, then give each one a shift.
                 </div>
             </div>
         {% endif %}

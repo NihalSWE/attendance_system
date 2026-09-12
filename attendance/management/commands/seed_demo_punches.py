@@ -85,10 +85,10 @@ class Command(BaseCommand):
         last = min(last, today)
 
         calendar = WorkCalendar(company.pk, first, last)
-        shift = calendar.shift
-        if shift is None:
+        if not calendar.has_any_shift:
             raise CommandError(
-                "This company has no company shift. Choose one under Schedules first."
+                "This company has no shifts set up. Add department shifts or a "
+                "company shift under Schedules first."
             )
 
         with use_company(company):
@@ -125,6 +125,12 @@ class Command(BaseCommand):
                         "assigned_device_authorized": True,
                     },
                 )
+            # Each employee punches to their own department's shift.
+            department_of = {}
+            for assignment in (
+                EmployeeAssignment.objects.exclude(status="cancelled").order_by("effective_from")
+            ):
+                department_of[assignment.employee_id] = assignment.department_id
             on_leave = set(
                 LeaveDay.objects.filter(
                     work_date__gte=first, work_date__lte=last,
@@ -143,7 +149,8 @@ class Command(BaseCommand):
                 if calendar.day(branch.pk, day).kind != WORKING or (employee.pk, day) in on_leave:
                     continue
                 pattern = day_pattern(index, day_index)
-                if pattern is None:
+                shift = calendar.shift_for(department_of.get(employee.pk), day)
+                if pattern is None or shift is None:
                     continue
                 start = datetime.datetime.combine(day, shift.start_time)
                 in_after, out_after = pattern

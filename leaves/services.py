@@ -146,7 +146,7 @@ def _covered_interval(shift, on, tz):
 def _assignment_on(employee, at):
     """The placement in force at an instant, or None."""
     return (
-        EmployeeAssignment.objects.select_related("branch", "company")
+        EmployeeAssignment.objects.select_related("branch", "company", "department__department")
         .filter(employee=employee, effective_from__lte=at)
         .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=at))
         .exclude(status=EmployeeAssignment.Status.CANCELLED)
@@ -177,11 +177,10 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
         })
 
     calendar = WorkCalendar(company_id, start_date, end_date)
-    shift = calendar.shift
-    if shift is None:
+    if not calendar.has_any_shift:
         raise ValidationError(
-            "Choose a company shift under Schedules first. Leave is measured "
-            "against the working day, so it needs a shift."
+            "Set up shifts under Schedules first. Leave is measured against the "
+            "working day, so it needs a shift."
         )
 
     try:
@@ -192,15 +191,23 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
     days, skipped = [], []
     with use_company(company_id):
         for on in _dates(start_date, end_date):
-            # Find the placement at the shift start in the company's timezone,
-            # then use the branch's own timezone for the real working window.
-            probe, _ = _covered_interval(shift, on, company_tz)
+            # Midday in the company's timezone decides the placement; the shift
+            # comes from its department, the working window from its branch.
+            probe = datetime.datetime.combine(on, datetime.time(12), tzinfo=company_tz)
             assignment = _assignment_on(employee, probe)
             if assignment is None:
                 raise ValidationError({
                     "start_date": (
                         f"{employee.full_name} has no placement on {on:%d %b %Y}. "
                         "Leave can only fall inside their employment."
+                    )
+                })
+            shift = calendar.shift_for(assignment.department_id, on)
+            if shift is None:
+                raise ValidationError({
+                    "start_date": (
+                        f"{assignment.department.name} has no shift on {on:%d %b %Y}. "
+                        "Set one under Schedules."
                     )
                 })
             tz = _tz(assignment)

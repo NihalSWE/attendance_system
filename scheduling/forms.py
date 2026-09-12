@@ -5,7 +5,7 @@ from django import forms
 
 from common.choices import ActiveStatus
 from common.forms import StyledFormMixin
-from organization.models import Branch
+from organization.models import Branch, CompanyDepartment
 from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
 from scheduling.services import scheduled_minutes_between
 
@@ -106,14 +106,21 @@ class AttendanceSettingsForm(StyledFormMixin, forms.ModelForm):
     # would raise at import time. The view passes the company's own shifts.
     company_shift = forms.ModelChoiceField(
         queryset=Shift.all_objects.none(),
+        required=False,
         label="Company shift",
-        help_text="Every employee's attendance is measured against this shift.",
+        help_text=(
+            "One shift for the company: everyone works this shift. Shifts per "
+            "department: used for any department that has no shift of its own."
+        ),
     )
 
     class Meta:
         model = CompanyAttendanceSettings
-        fields = ("company_shift", "missing_punch_policy")
-        labels = {"missing_punch_policy": "When a punch is missing"}
+        fields = ("shift_mode", "company_shift", "missing_punch_policy")
+        labels = {
+            "shift_mode": "How shifts are assigned",
+            "missing_punch_policy": "When a punch is missing",
+        }
         help_texts = {
             "missing_punch_policy": (
                 "A day with an IN but no OUT. Review required marks it for "
@@ -125,7 +132,42 @@ class AttendanceSettingsForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         if shifts is not None:
             self.fields["company_shift"].queryset = shifts
-        self.fields["company_shift"].empty_label = "Select a shift"
+        self.fields["company_shift"].empty_label = "No company shift"
+
+    def clean(self):
+        cleaned = super().clean()
+        if (
+            cleaned.get("shift_mode") == CompanyAttendanceSettings.ShiftMode.COMPANY_SINGLE_SHIFT
+            and not cleaned.get("company_shift")
+        ):
+            self.add_error("company_shift", "One shift for the company needs that shift chosen.")
+        return cleaned
+
+
+class DepartmentShiftForm(StyledFormMixin, forms.Form):
+    """Give one department its shift from a date."""
+
+    department = forms.ModelChoiceField(
+        queryset=CompanyDepartment.all_objects.none(), label="Department"
+    )
+    shift = forms.ModelChoiceField(queryset=Shift.all_objects.none(), label="Shift")
+    effective_from = forms.DateField(
+        label="From",
+        help_text="Everyone in the department works this shift from this date.",
+        widget=_date_widget("Select start date"),
+    )
+
+    def __init__(self, *args, departments=None, shifts=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if departments is not None:
+            self.fields["department"].queryset = departments
+        if shifts is not None:
+            self.fields["shift"].queryset = shifts
+        self.fields["department"].empty_label = "Select a department"
+        self.fields["shift"].empty_label = "Select a shift"
+        self.fields["department"].label_from_instance = (
+            lambda adoption: f"{adoption.department.name} ({adoption.branch.name})"
+        )
 
 
 # Saturday first: the Bangladeshi working week starts on Saturday, so the row

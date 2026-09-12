@@ -111,10 +111,10 @@ def calculate_attendance(*, actor, company_id, year, month):
     last = min(last, today)
 
     calendar = WorkCalendar(company_id, first, last)
-    shift = calendar.shift
-    if shift is None:
+    if not calendar.has_any_shift:
         raise ValidationError(
-            "Choose a company shift under Schedules first; attendance is measured against it."
+            "Set up shifts under Schedules first: a shift for each department, or a "
+            "company shift. Attendance is measured against the shift."
         )
 
     with use_company(company_id):
@@ -170,9 +170,18 @@ def calculate_attendance(*, actor, company_id, year, month):
                 ):
                     day += datetime.timedelta(days=1)
                     continue
-                probe, _ = _window(shift, day, company_tz)
+                # Midday decides which placement applies; the shift then
+                # comes from that placement's department.
+                probe = datetime.datetime.combine(day, datetime.time(12), tzinfo=company_tz)
                 assignment = _assignment_on(assignments, probe)
                 if assignment is None:
+                    day += datetime.timedelta(days=1)
+                    continue
+                shift = calendar.shift_for(assignment.department_id, day)
+                if shift is None:
+                    # Department mode with neither a department nor a company
+                    # shift: nothing to measure against, so no record.
+                    written["no_shift"] += 1
                     day += datetime.timedelta(days=1)
                     continue
                 tz = _zone(assignment.branch.timezone or membership.company.timezone)

@@ -402,6 +402,30 @@ parser and `ingest()` pipeline. DEBUG only unless `--force`.
 punches → attendance → salary end to end. The full suite was not run, at
 Ajay's instruction, until salary works; it is the gate before `main`.
 
+### Department shifts (added 2026-09-12, at Ajay's direction)
+
+The fast-track had put every employee on one company shift. Ajay's flow is that
+**a shift is assigned to a department and every employee in it gets that shift
+automatically**; only the employee-level override waits.
+
+- Attendance settings offer **Shifts per department** or **One shift for the
+  company** again (saving no longer forces single-shift mode). In department
+  mode the company shift is optional and covers any department without its own.
+- **Set department shift** (Schedules): department, shift, from a date. A change
+  closes the department's previous shift the day the new one starts — nothing
+  deleted, so past months keep the shift they were worked on. The same start
+  date replaces; a date before an existing later change is refused.
+- The Schedules page lists every department with the shift it works today, or
+  "Company shift" / "No shift", and warns when a department has nothing to be
+  measured against.
+- `WorkCalendar.shift_for(department, date)` is the single place that decides
+  the shift. Attendance, leave and the demo punches all use it, so an employee
+  is measured against their own department's shift for each day.
+
+Felna Tech is still in single-shift mode (set earlier today so its attendance
+could be calculated); switching it to per-department is a settings change in
+the UI.
+
 ### Skipped today — must be built and connected to salary
 
 This is the authoritative list. Nothing on it is dropped; each item says how it
@@ -418,7 +442,7 @@ connects back.
 | Breaks and multiple IN/OUT sessions (`AttendanceSession`, `PunchAllocation`) | Only first IN and last OUT count | Worked minutes |
 | Late, absence and repeated-lateness penalty rules | Late minutes recorded, not deducted | Payroll deduction lines |
 | Overtime review, approval and pay | Not paid | Payroll earning lines |
-| Department shifts, employee shift overrides, rotating shifts | Everyone uses the company shift | Which shift a day is measured against |
+| Employee-level shift override, rotating shifts | Everyone works their department's shift (or the company shift) | Which shift a day is measured against |
 | Holiday / weekly-off work assignments (`HolidayWorkAssignment`) | Working a holiday is not paid extra | Payroll earning lines |
 | Shift fields not on the form: break minutes, paid break, grace-out, overtime-after, effective dates | Defaults (0 / unpaid) | Worked minutes, overtime |
 | Attendance settings not on the form: punch pairing, duplicate-punch window, attendance windows, rounding, overtime approval | Defaults | Punch interpretation |

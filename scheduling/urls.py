@@ -14,6 +14,7 @@ urlpatterns = [
     path("shifts/add/", views.shift_create, name="shift_create"),
     path("shifts/<int:pk>/edit/", views.shift_edit, name="shift_edit"),
     path("shifts/<int:pk>/status/", views.shift_status, name="shift_status"),
+    path("department-shifts/set/", views.department_shift_set, name="department_shift_set"),
 
     path("weekly-offs/add/", views.weekly_off_create, name="weekly_off_create"),
     path("weekly-offs/<int:pk>/stop/", views.weekly_off_end, name="weekly_off_end"),

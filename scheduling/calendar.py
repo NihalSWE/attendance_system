@@ -1,7 +1,8 @@
-"""What kind of day a date is, for one branch of one company.
+"""What kind of day a date is, and which shift applies, for one company.
 
-Leave and attendance both need the same answer — is this a working day, a
-weekly off, or a holiday — so it lives in one place. ``WorkCalendar`` loads the
+Leave and attendance both need the same answers — is this a working day, a
+weekly off, or a holiday, and which shift is the person measured against — so
+they live in one place. ``WorkCalendar`` loads the
 rules for a date range once and then answers per day without further queries,
 which matters when a month is calculated for every employee.
 
@@ -15,7 +16,12 @@ from dataclasses import dataclass
 from django.db.models import Q
 
 from common.tenant import use_company
-from scheduling.models import CompanyAttendanceSettings, Holiday, WeeklyOffRule
+from scheduling.models import (
+    CompanyAttendanceSettings,
+    DepartmentShift,
+    Holiday,
+    WeeklyOffRule,
+)
 
 WORKING = "working"
 WEEKLY_OFF = "weekly_off"
@@ -50,7 +56,42 @@ class WorkCalendar:
             settings = (
                 CompanyAttendanceSettings.objects.select_related("company_shift").first()
             )
+            # Matched by dates, like weekly offs: a replaced department shift
+            # still applies to the days before its replacement started.
+            self.department_shifts = list(
+                DepartmentShift.objects.select_related("shift")
+                .filter(is_default=True, effective_from__lte=end)
+                .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=start))
+            )
+        self.settings = settings
+        # The company shift: used by everyone in single-shift mode, and by any
+        # department without its own shift in department mode.
         self.shift = settings.company_shift if settings else None
+        self.by_department = (
+            settings is not None
+            and settings.shift_mode == CompanyAttendanceSettings.ShiftMode.DEPARTMENT_SHIFTS
+        )
+
+    @property
+    def has_any_shift(self):
+        return self.shift is not None or (self.by_department and bool(self.department_shifts))
+
+    def shift_for(self, department_id, on):
+        """The shift a person in this company department works on a date.
+
+        Department mode: the department's shift in force that day, else the
+        company shift. Single-shift mode: always the company shift. An
+        employee-level override is not built yet.
+        """
+        if self.by_department:
+            for link in self.department_shifts:
+                if (
+                    link.department_id == department_id
+                    and link.effective_from <= on
+                    and (link.effective_to is None or on < link.effective_to)
+                ):
+                    return link.shift
+        return self.shift
 
     def day(self, branch_id, on):
         """Classify one date. A holiday wins over a weekly off on the same day."""

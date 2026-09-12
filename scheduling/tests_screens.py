@@ -139,11 +139,12 @@ class AttendanceSettingsTests(CalendarBase):
         settings = services.get_attendance_settings(self.company.pk)
         self.assertIsNone(settings.company_shift_id)
 
-    def test_choosing_a_company_shift_switches_to_single_shift_mode(self):
+    def test_choosing_single_shift_mode_with_a_company_shift(self):
         shift = self._shift()
         settings = services.update_attendance_settings(
             actor=self.admin, company_id=self.company.pk,
-            values={"company_shift": shift, "missing_punch_policy": "auto_absent"},
+            values={"shift_mode": "company_single_shift", "company_shift": shift,
+                    "missing_punch_policy": "auto_absent"},
         )
         self.assertEqual(settings.company_shift_id, shift.pk)
         self.assertEqual(
@@ -399,3 +400,74 @@ class CalendarScreenTests(CalendarBase):
         self.client.force_login(self.admin)
         response = self.client.get(reverse("scheduling:holiday_list") + "?year=2026")
         self.assertNotContains(response, "Their holiday")
+
+
+class DepartmentShiftTests(CalendarBase):
+    def setUp(self):
+        super().setUp()
+        from organization.catalogue import adopt_department
+        with use_company(self.company):
+            self.sales = adopt_department(self.hq, "SL", "Sales")
+        self.day = self._shift()
+        self.early = self._shift(
+            code="EARLY", name="Early", start_time=time(6), end_time=time(14),
+            minimum_full_day_minutes=420, minimum_half_day_minutes=210,
+        )
+
+    def _set(self, shift, starts):
+        return services.set_department_shift(
+            actor=self.admin, company_id=self.company.pk,
+            values={"department": self.sales, "shift": shift, "effective_from": starts},
+        )
+
+    def test_single_shift_mode_needs_a_company_shift(self):
+        with self.assertRaises(ValidationError):
+            services.update_attendance_settings(
+                actor=self.admin, company_id=self.company.pk,
+                values={"shift_mode": "company_single_shift", "company_shift": None,
+                        "missing_punch_policy": "review_required"},
+            )
+
+    def test_department_mode_resolves_the_department_shift_then_the_company_shift(self):
+        from scheduling.calendar import WorkCalendar
+        services.update_attendance_settings(
+            actor=self.admin, company_id=self.company.pk,
+            values={"shift_mode": "department_shifts", "company_shift": self.day,
+                    "missing_punch_policy": "review_required"},
+        )
+        self._set(self.early, date(2026, 9, 1))
+        calendar = WorkCalendar(self.company.pk, date(2026, 9, 1), date(2026, 9, 30))
+        self.assertEqual(calendar.shift_for(self.sales.pk, date(2026, 9, 10)), self.early)
+        # A department with no shift of its own falls back to the company shift.
+        self.assertEqual(calendar.shift_for(None, date(2026, 9, 10)), self.day)
+        # Before the department shift started, the company shift applied.
+        self.assertEqual(calendar.shift_for(self.sales.pk, date(2026, 8, 31)), self.day)
+
+    def test_changing_the_shift_closes_the_previous_one(self):
+        first = self._set(self.day, date(2026, 9, 1))
+        second = self._set(self.early, date(2026, 9, 15))
+        first.refresh_from_db()
+        self.assertEqual(first.effective_to, date(2026, 9, 15))
+        self.assertEqual(second.effective_from, date(2026, 9, 15))
+
+    def test_same_start_date_replaces_the_shift(self):
+        first = self._set(self.day, date(2026, 9, 1))
+        again = self._set(self.early, date(2026, 9, 1))
+        self.assertEqual(first.pk, again.pk)
+        self.assertEqual(again.shift, self.early)
+
+    def test_a_date_before_a_later_change_is_refused(self):
+        self._set(self.day, date(2026, 9, 1))
+        self._set(self.early, date(2026, 9, 15))
+        with self.assertRaises(ValidationError):
+            self._set(self.day, date(2026, 9, 10))
+
+    def test_set_shift_page_and_overview_render(self):
+        self._set(self.early, date(2026, 9, 1))
+        self.client.force_login(self.admin)
+        self.assertEqual(
+            self.client.get(reverse("scheduling:department_shift_set")).status_code, 200
+        )
+        overview = self.client.get(reverse("scheduling:schedule_overview"))
+        self.assertContains(overview, "Department shifts")
+        self.assertContains(overview, "Sales")

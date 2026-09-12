@@ -23,6 +23,7 @@ import datetime
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from auditlog.services import record_company_event
@@ -30,7 +31,13 @@ from common.choices import ActiveStatus
 from common.services import create_validated
 from common.tenant import use_company
 from organization.services import assert_branch_in_scope, require_structure_manager
-from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
+from scheduling.models import (
+    CompanyAttendanceSettings,
+    DepartmentShift,
+    Holiday,
+    Shift,
+    WeeklyOffRule,
+)
 
 SHIFT_FIELDS = (
     "code",
@@ -42,7 +49,8 @@ SHIFT_FIELDS = (
     "minimum_full_day_minutes",
     "minimum_half_day_minutes",
 )
-SETTINGS_FIELDS = ("company_shift", "missing_punch_policy")
+SETTINGS_FIELDS = ("shift_mode", "company_shift", "missing_punch_policy")
+DEPARTMENT_SHIFT_FIELDS = ("department", "shift", "effective_from")
 WEEKLY_OFF_FIELDS = ("branch", "weekdays", "is_paid", "effective_from")
 # What a single stored rule records, for its audit snapshot.
 WEEKLY_OFF_RULE_FIELDS = ("branch", "weekday", "is_paid", "effective_from")
@@ -129,25 +137,28 @@ def get_attendance_settings(company_id):
 
 @transaction.atomic
 def update_attendance_settings(*, actor, company_id, values):
-    """Choose the company shift and what a missing punch means.
+    """Choose how shifts are assigned, the company shift, and the missing-punch rule.
 
-    Saving a company shift puts the company in single-shift mode: every
-    employee is measured against that one shift. Per-department shifts are
-    not offered yet, so single-shift is the only mode this screen sets.
+    - One shift for the company: everyone is measured against the company shift.
+    - Shifts per department: each employee is measured against their
+      department's shift; the company shift, if set, covers any department
+      without one.
     """
     membership = require_structure_manager(actor, company_id)
     values = _writable(values, SETTINGS_FIELDS)
     with use_company(company_id):
         settings = CompanyAttendanceSettings.objects.select_for_update().get()
-        before = _snapshot(settings, SETTINGS_FIELDS + ("shift_mode",))
-        shift = values.get("company_shift")
+        before = _snapshot(settings, SETTINGS_FIELDS)
+        shift = values.get("company_shift", settings.company_shift)
+        mode = values.get("shift_mode", settings.shift_mode)
         if shift is not None and shift.status != ActiveStatus.ACTIVE:
-            raise ValidationError(
-                {"company_shift": "Choose an active shift."}
-            )
+            raise ValidationError({"company_shift": "Choose an active shift."})
+        if mode == CompanyAttendanceSettings.ShiftMode.COMPANY_SINGLE_SHIFT and shift is None:
+            raise ValidationError({
+                "company_shift": "One shift for the company needs that shift chosen."
+            })
         for field, value in values.items():
             setattr(settings, field, value)
-        settings.shift_mode = CompanyAttendanceSettings.ShiftMode.COMPANY_SINGLE_SHIFT
         settings.settings_version += 1
         settings.updated_by = actor
         settings.full_clean()
@@ -155,9 +166,92 @@ def update_attendance_settings(*, actor, company_id, values):
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="attendance_settings.updated", obj=settings,
-            before=before, after=_snapshot(settings, SETTINGS_FIELDS + ("shift_mode",)),
+            before=before, after=_snapshot(settings, SETTINGS_FIELDS),
         )
     return settings
+
+
+def current_department_shifts(company_id, on):
+    """{company_department_id: DepartmentShift} in force on a date."""
+    with use_company(company_id):
+        return {
+            link.department_id: link
+            for link in DepartmentShift.objects.select_related("shift")
+            .filter(is_default=True, effective_from__lte=on)
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=on))
+        }
+
+
+@transaction.atomic
+def set_department_shift(*, actor, company_id, values):
+    """Give a department a shift from a date. Everyone in it works that shift.
+
+    The department's previous shift is closed the day the new one starts, not
+    deleted, so a past month is still measured against the shift it was
+    actually worked on. Setting it again for the same start date replaces it.
+    """
+    membership = require_structure_manager(actor, company_id)
+    values = _writable(values, DEPARTMENT_SHIFT_FIELDS)
+    department = values["department"]
+    shift = values["shift"]
+    starts = values["effective_from"]
+    with use_company(company_id):
+        assert_branch_in_scope(membership, department.branch)
+        if shift.status != ActiveStatus.ACTIVE:
+            raise ValidationError({"shift": "Choose an active shift."})
+        links = DepartmentShift.objects.select_for_update().filter(
+            department=department, is_default=True
+        )
+        later = links.filter(effective_from__gt=starts).order_by("effective_from").first()
+        if later is not None:
+            raise ValidationError({
+                "effective_from": (
+                    f"{department.name} already changes shift on "
+                    f"{later.effective_from:%d %b %Y}. Pick a date after that."
+                )
+            })
+        current = links.filter(effective_from__lte=starts).filter(
+            Q(effective_to__isnull=True) | Q(effective_to__gt=starts)
+        ).first()
+        before = (
+            {"shift_id": current.shift_id, "effective_from": current.effective_from.isoformat()}
+            if current else {}
+        )
+        if current is not None and current.effective_from == starts:
+            current.shift = shift
+            current.updated_by = actor
+            current.full_clean()
+            current.save()
+            link = current
+        else:
+            if current is not None:
+                if current.shift_id == shift.pk:
+                    raise ValidationError({
+                        "shift": f"{department.name} is already on {shift.name}."
+                    })
+                current.effective_to = starts
+                current.status = DepartmentShift.Status.ENDED
+                current.updated_by = actor
+                current.full_clean()
+                current.save()
+            link = create_validated(
+                DepartmentShift,
+                company=membership.company,
+                department=department,
+                shift=shift,
+                is_default=True,
+                effective_from=starts,
+                status=DepartmentShift.Status.ACTIVE,
+                created_by=actor,
+                updated_by=actor,
+            )
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="department_shift.set", obj=link, before=before,
+            after={"department_id": department.pk, "shift_id": shift.pk,
+                   "effective_from": starts.isoformat()},
+        )
+    return link
 
 
 # --------------------------------------------------------------------------
