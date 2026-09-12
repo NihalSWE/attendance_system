@@ -176,3 +176,23 @@ class ConfirmingLogoutView(LogoutView):
         if not request.user.is_authenticated:
             return redirect("login")
         return render(request, "base_template/logout_confirm.html")
+
+
+def csrf_failure(request, reason=""):
+    """Friendly page for a rejected CSRF token.
+
+    Django's default is a bare "Forbidden (403) CSRF verification failed",
+    which reads as a broken site. The usual cause is harmless and common: a
+    tab left open from before signing in still carries the pre-login token,
+    because Django rotates it on login. Signing out from that stale tab then
+    fails, and the raw page gives no hint that reloading fixes it.
+
+    The protection itself is untouched — the request is still refused with 403.
+    Only the explanation changes.
+    """
+    return render(
+        request,
+        "base_template/csrf_failure.html",
+        {"reason": reason, "next_url": request.path},
+        status=403,
+    )

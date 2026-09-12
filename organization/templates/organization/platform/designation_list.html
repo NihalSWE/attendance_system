@@ -1,6 +1,6 @@
 {% extends "tenants/platform/base.html" %}
 {% block title %}
-    Job titles · Platform
+    Designations · Platform
 {% endblock %}
 {% block page %}
     <div class="crumbs">
@@ -8,12 +8,12 @@
         <span aria-hidden="true">
             /
         </span>
-        Job titles
+        Designations
     </div>
     <div class="page__head">
         <div>
             <h1 class="page__title">
-                Job title catalogue
+                Designation catalogue
             </h1>
             <p class="page__sub">
                 Every title belongs to one department, so the same word is filed
@@ -23,14 +23,14 @@
         </div>
         <div class="page__actions">
             <a class="btn btn--primary" href="{% url 'catalogue:designation_create' %}{% if department %}?department={{ department }}{% endif %}">
-                Add job title
+                Add designation
             </a>
         </div>
     </div>
     <div class="card">
         <div class="card__head">
             <h2>
-                Job titles
+                Designations
             </h2>
             <span class="spacer">
             </span>
@@ -47,10 +47,10 @@
         </div>
         <form method="get" class="toolbar">
             <label for="designation-search">
-                Search job titles
+                Search designations
             </label>
             <input class="input toolbar__grow" id="designation-search" name="q" value="{{ query }}" type="search"
-                   placeholder="Search by title, code or department">
+                   placeholder="Search by designation, code or department">
             <label class="sr-only" for="designation-department">
                 Department
             </label>
@@ -93,7 +93,7 @@
                                 Code
                             </th>
                             <th>
-                                Job title
+                                Designation
                             </th>
                             <th>
                                 Status
@@ -168,14 +168,14 @@
                     {% if query or status or department %}
                         Nothing matches that filter
                     {% else %}
-                        No job titles yet
+                        No designations yet
                     {% endif %}
                 </div>
                 <div class="empty__text">
                     {% if query or status or department %}
                         Clear the filters to see the whole catalogue.
                     {% else %}
-                        Add a department first, then file job titles under it.
+                        Add a department first, then file designations under it.
                     {% endif %}
                 </div>
             </div>

@@ -1,0 +1,37 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Session expired · Attendance
+{% endblock %}
+{% block page %}
+    <div class="form-page">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    That page had gone stale
+                </h2>
+            </div>
+            <div class="card__body">
+                <p>
+                    The form you submitted was loaded a while ago and its security token
+                    is no longer valid, so it was not accepted. Nothing was changed.
+                </p>
+                <p class="t-faint">
+                    This normally happens when a tab has been left open — signing in
+                    issues a fresh token, and any page opened before that still carries
+                    the old one. Reloading the page fixes it.
+                </p>
+                <div class="form-actions">
+                    <a class="btn btn--primary" href="{{ next_url }}">
+                        Reload this page
+                    </a>
+                    <a class="btn btn--ghost" href="{% url 'dashboard' %}">
+                        Go to dashboard
+                    </a>
+                    <a class="btn btn--ghost" href="{% url 'login' %}">
+                        Sign in again
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

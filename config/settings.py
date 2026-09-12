@@ -196,3 +196,10 @@ MAILERS = {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
+
+
+# A rejected CSRF token is usually a stale tab, not an attack: Django
+# rotates the token on login, so a page opened beforehand still carries the
+# old one. The request is still refused; this only replaces the bare
+# "Forbidden (403)" wall with a page that says how to recover.
+CSRF_FAILURE_VIEW = 'base_template.views.csrf_failure'

@@ -57,3 +57,44 @@ class LogoutTests(TestCase):
         self.assertIn('method="post"', content)
         # Without the token the POST would be rejected by CSRF middleware.
         self.assertIn("csrfmiddlewaretoken", content)
+
+
+class CsrfFailureTests(TestCase):
+    """A rejected token must stay rejected, but must not look like a crash.
+
+    The common cause is a stale tab: Django rotates the CSRF token on login,
+    so a page opened before signing in still carries the old one. Clicking
+    Sign out there previously produced a bare "Forbidden (403) CSRF
+    verification failed" wall.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="member@example.test", password="pw-12345678"
+        )
+
+    def test_a_stale_token_is_still_refused(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        response = client.post(
+            reverse("logout"), {"csrfmiddlewaretoken": "stale-token-from-an-old-tab"}
+        )
+        self.assertEqual(response.status_code, 403)
+        # Refused means refused: the session must survive.
+        self.assertIn("_auth_user_id", client.session)
+
+    def test_the_refusal_explains_itself_instead_of_showing_the_raw_wall(self):
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        response = client.post(
+            reverse("logout"), {"csrfmiddlewaretoken": "stale-token-from-an-old-tab"}
+        )
+        self.assertContains(response, "had gone stale", status_code=403)
+        self.assertContains(response, "Reload this page", status_code=403)
+
+    def test_a_valid_signout_is_unaffected(self):
+        client = Client()
+        client.force_login(self.user)
+        response = client.post(reverse("logout"), follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", client.session)
