@@ -421,18 +421,34 @@ def device_department_add(request, public_id):
         link = form.save(commit=False)
         link.device = device
         link.company_id = request.company_id
-        link.save()
-        _audit(request, "device_department.created", link, after={
-            "device": device.pk,
-            "department": link.department_id,
-            "effective_from": link.effective_from.isoformat(),
-        })
-        messages.success(
-            request,
-            f"{device.name} now serves {link.department.name} in "
-            "department-devices mode.",
-        )
-        return redirect("devices:device_detail", public_id=device.public_id)
+        try:
+            # Savepointed like the enrollment writes, so a rejected insert is
+            # rolled back cleanly and the render below still has a usable
+            # connection.
+            with transaction.atomic():
+                link.save()
+        except IntegrityError:
+            # The form already checks the overlap; this catches the race
+            # between two administrators saving at once, so the loser reads a
+            # sentence instead of a 500.
+            form.add_error(
+                "department",
+                f"{device.name} was mapped to that department while you were "
+                "filling this in. Reload the device page to see the current "
+                "mappings.",
+            )
+        else:
+            _audit(request, "device_department.created", link, after={
+                "device": device.pk,
+                "department": link.department_id,
+                "effective_from": link.effective_from.isoformat(),
+            })
+            messages.success(
+                request,
+                f"{device.name} now serves {link.department.name} in "
+                "department-devices mode.",
+            )
+            return redirect("devices:device_detail", public_id=device.public_id)
 
     return render(request, "devices/device_department_form.html", {
         "form": form,

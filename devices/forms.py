@@ -40,6 +40,20 @@ TIMEZONE_CHOICES = [
 ]
 
 
+def _periods_overlap(start_a, end_a, start_b, end_b):
+    """Do two half-open [start, end) periods overlap? ``None`` end means open.
+
+    The project-wide '[)' convention: a period ending exactly when the next
+    begins does not overlap it, which is what makes "end this mapping, then
+    add the next one from the same instant" work.
+    """
+    if end_a is not None and end_a <= start_b:
+        return False
+    if end_b is not None and end_b <= start_a:
+        return False
+    return True
+
+
 def generate_comm_key():
     """A device secret the administrator types into the terminal once."""
     return secrets.token_hex(8)
@@ -358,15 +372,18 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
 
     @staticmethod
     def _overlaps(start_a, end_a, start_b, end_b):
-        if end_a is not None and end_a <= start_b:
-            return False
-        if end_b is not None and end_b <= start_a:
-            return False
-        return True
+        return _periods_overlap(start_a, end_a, start_b, end_b)
 
 
 class DeviceDepartmentForm(StyledFormMixin, forms.ModelForm):
-    """Map a device to a department for department-devices mode."""
+    """Map a device to a department for department-devices mode.
+
+    ``clean`` mirrors ``excl_devicedepartment_overlap`` so a second mapping of
+    the same device and department over the same dates reads as a sentence
+    naming the mapping already there, rather than arriving as an
+    ExclusionViolation. Every exclusion and unique constraint needs a matching
+    check here, or the database answers the administrator instead of us.
+    """
 
     department = forms.ModelChoiceField(queryset=CompanyDepartment.all_objects.none())
 
@@ -403,4 +420,32 @@ class DeviceDepartmentForm(StyledFormMixin, forms.ModelForm):
         end = data.get("effective_to")
         if start and end and end <= start:
             self.add_error("effective_to", "The end must be after the start.")
+
+        department = data.get("department")
+        if self.device and department and start:
+            # Mirrors excl_devicedepartment_overlap. Ended mappings are
+            # excluded exactly as the constraint's condition excludes them, so
+            # ending one and adding it again stays possible — ending is not
+            # deleting.
+            overlapping = DeviceDepartment.objects.filter(
+                device=self.device, department=department
+            ).exclude(status=DeviceDepartment.Status.ENDED)
+            if self.instance.pk:
+                overlapping = overlapping.exclude(pk=self.instance.pk)
+            for other in overlapping:
+                if _periods_overlap(
+                    start, end, other.effective_from, other.effective_to
+                ):
+                    until = (
+                        f" until {other.effective_to:%d %b %Y}"
+                        if other.effective_to
+                        else ""
+                    )
+                    self.add_error(
+                        "department",
+                        f"{self.device} already serves {department} from "
+                        f"{other.effective_from:%d %b %Y}{until}. End that "
+                        "mapping before adding an overlapping one.",
+                    )
+                    break
         return data
