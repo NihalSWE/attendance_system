@@ -1,0 +1,209 @@
+{% comment %}
+    Server address: what is saved, and what a change is currently doing.
+
+    The live part is driven by devices/js/server_address.js polling a small JSON
+    endpoint. Everything below is rendered server-side first, so the panel is
+    complete and accurate without the script — the poll only saves a refresh.
+{% endcomment %}
+<div class="card" data-address-panel
+     data-status-url="{% url 'devices:device_server_address_status' device.public_id %}">
+    <div class="card__head">
+        <h2>
+            Server address
+        </h2>
+        <a class="btn btn--ghost btn--sm" href="{% url 'devices:device_edit' device.public_id %}">
+            Change
+        </a>
+    </div>
+    <div class="card__body stack">
+        <div class="field">
+            <span class="field__label">
+                Saved address
+            </span>
+            <p data-address-saved>
+                {% if saved_address %}
+                    <strong>
+                        {{ saved_address.text }}
+                    </strong>
+                {% else %}
+                    <span class="t-faint">
+                        Not confirmed yet — the address was typed into the terminal by hand.
+                    </span>
+                {% endif %}
+            </p>
+            <div class="field__help">
+                Only ever written after a request has actually arrived from the
+                device at that address, so this is where the device really is.
+            </div>
+        </div>
+
+        <div data-address-live {% if not address_change %}hidden{% endif %}>
+            {% if address_change %}
+                <div class="alert {% if address_status.status == 'confirmed' %}alert--success{% elif address_status.status == 'lost' %}alert--danger{% elif address_status.status == 'unreachable' or address_status.status == 'not_applied' %}alert--warning{% else %}alert--info{% endif %}"
+                     role="status" data-address-alert>
+                    <div>
+                        <strong data-address-message>
+                            {{ address_status.message }}
+                        </strong>
+                        <p data-address-detail>
+                            {% if address_status.reason %}
+                                {{ address_status.reason }}
+                            {% else %}
+                                Changing to {{ address_status.new_address }}{% if address_status.previous_address %}, from {{ address_status.previous_address }}{% endif %}.
+                            {% endif %}
+                        </p>
+                        {% if address_status.active and address_status.next_check_in_at %}
+                            <p class="t-faint" data-address-next>
+                                The device checks in about every
+                                {{ device.settings.push_interval_seconds|default:10 }} seconds,
+                                so it should pick this up shortly.
+                            </p>
+                        {% endif %}
+                        {% if address_status.recovery %}
+                            <div class="table-wrap" data-address-recovery>
+                                <table class="table">
+                                    <tbody>
+                                        <tr>
+                                            <td>
+                                                On the device, go to
+                                            </td>
+                                            <td>
+                                                <strong>
+                                                    {{ address_status.recovery.menu_path }}
+                                                </strong>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                Set the server address back to
+                                            </td>
+                                            <td>
+                                                <strong>
+                                                    {{ address_status.recovery.address }}
+                                                </strong>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                Set the server port back to
+                                            </td>
+                                            <td>
+                                                <strong>
+                                                    {{ address_status.recovery.port }}
+                                                </strong>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                Enable domain name
+                                            </td>
+                                            <td>
+                                                <strong>
+                                                    {{ address_status.recovery.domain_name_setting }}
+                                                </strong>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% if address_status.status == 'checking' %}
+                    <form method="post"
+                          action="{% url 'devices:device_server_address_cancel' device.public_id %}">
+                        {% csrf_token %}
+                        <button class="btn btn--ghost btn--sm" type="submit">
+                            Cancel this change
+                        </button>
+                    </form>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        {% if address_history %}
+            <div class="table-wrap">
+                <table class="table">
+                    <caption class="sr-only">
+                        Previous server address changes
+                    </caption>
+                    <thead>
+                        <tr>
+                            <th>
+                                When
+                            </th>
+                            <th>
+                                Who
+                            </th>
+                            <th>
+                                From
+                            </th>
+                            <th>
+                                To
+                            </th>
+                            <th>
+                                Outcome
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for attempt in address_history %}
+                            <tr>
+                                <td>
+                                    {{ attempt.created_at|date:"j M Y, H:i" }}
+                                </td>
+                                <td>
+                                    {{ attempt.created_by.email|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if attempt.previous_host %}
+                                        {{ attempt.previous_host }}:{{ attempt.previous_port }}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            not recorded
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ attempt.new_host }}:{{ attempt.new_port }}
+                                </td>
+                                <td>
+                                    {% if attempt.status == 'confirmed' %}
+                                        <span class="badge badge--success">
+                                            Connected
+                                        </span>
+                                    {% elif attempt.status == 'lost' %}
+                                        <span class="badge badge--danger">
+                                            Device lost
+                                        </span>
+                                    {% elif attempt.status == 'not_applied' %}
+                                        <span class="badge badge--warning">
+                                            Not applied
+                                        </span>
+                                    {% elif attempt.status == 'unreachable' %}
+                                        <span class="badge badge--warning">
+                                            Not reachable
+                                        </span>
+                                    {% elif attempt.status == 'cancelled' %}
+                                        <span class="badge badge--neutral">
+                                            Cancelled
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--info">
+                                            {{ attempt.get_status_display }}
+                                        </span>
+                                    {% endif %}
+                                    {% if not attempt.was_sent_to_device %}
+                                        <div class="t-faint">
+                                            Nothing was sent to the device.
+                                        </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+</div>

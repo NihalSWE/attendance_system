@@ -23,6 +23,15 @@ ingestion_urlpatterns = [
     # ZAM70-NF24HA-Ver3.0.15).
     path("iclock/registry", ingestion.registry, name="iclock_registry"),
     path("iclock/push", ingestion.push, name="iclock_push"),
+    # Not called by the device: the server fetches this on itself, at a
+    # candidate address, before repointing a device at it. It sits under
+    # /iclock/ so the check exercises the same host, port and scheme the
+    # device will use, including anything a proxy does to that path.
+    path(
+        "iclock/serveraddress-check",
+        ingestion.address_check,
+        name="iclock_address_check",
+    ),
     # Last: anything else the firmware sends is captured verbatim instead of
     # 404ing, so commissioning a real device shows us what it actually does.
     re_path(r"^iclock/(?P<tail>.*)$", ingestion.capture, name="iclock_capture"),
@@ -59,6 +68,16 @@ ui_urlpatterns = [
         "devices/<uuid:public_id>/settings/",
         ui.device_set_option,
         name="device_set_option",
+    ),
+    path(
+        "devices/<uuid:public_id>/server-address/status/",
+        ui.device_server_address_status,
+        name="device_server_address_status",
+    ),
+    path(
+        "devices/<uuid:public_id>/server-address/cancel/",
+        ui.device_server_address_cancel,
+        name="device_server_address_cancel",
     ),
     path("devices/<uuid:public_id>/retire/", ui.device_retire, name="device_retire"),
     path(

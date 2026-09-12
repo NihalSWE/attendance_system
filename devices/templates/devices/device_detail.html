@@ -182,6 +182,8 @@
             </div>
         </div>
 
+        {% include "devices/includes/server_address_panel.html" %}
+
         <div class="card">
             <div class="card__head">
                 <h2>
@@ -190,9 +192,11 @@
             </div>
             <div class="card__body">
                 <p class="t-faint">
-                    These are written to the device on its next check-in. The server address and
-                    comm key are not here on purpose: a wrong value there makes the device
-                    unreachable, and fixing it means walking to the terminal.
+                    These are written to the device on its next check-in. The server address is
+                    not in this table on purpose: it is the one setting that can put the device
+                    out of reach, so it is changed on the edit form, where the address is proved
+                    to work before the device is told anything. The comm key stays a manual,
+                    on-device value.
                 </p>
                 <div class="table-wrap">
                     <table class="table">

@@ -1207,3 +1207,63 @@ Employee lifecycle writes on top of Phase 3: transfer (`transfer_employee`),
 revise compensation (`revise_compensation`) and terminate
 (`terminate_employee`). All three services exist and are tested; the missing
 piece is forms and POST handlers, exactly as the hire flow was.
+
+## 2026-09-12 — device server address from the software (Nihal, device workstream)
+
+Branch `feature/device-server-address`, on top of `main`.
+
+An administrator can now change a device's server address from the device edit
+form. The rule that kept it out of `WRITABLE_OPTIONS` has not been relaxed —
+a wrong address still strands the hardware, and the software still cannot
+revert a device it can no longer reach. What changed is the order of
+operations: **the address is proved to reach this server before the device is
+told anything.**
+
+The server fetches its own `/iclock/serveraddress-check` endpoint at the
+candidate address with a one-time token and requires a reply signed with this
+deployment's `SECRET_KEY`, so "reachable" means "reaches *us*", not "something
+answered". Only then is the change queued. The new address is saved as current
+only when a request actually arrives from the device on that hostname — never
+on the device's own `Return=0`, which it sends before it tries. If it never
+arrives, the two failures are told apart and worded differently: still checking
+in at the old address (it ignored the command, nothing on the device changed)
+versus gone silent (it switched and cannot reach us, and only the terminal can
+undo that — the page names the exact old address, port and menu path).
+
+No Celery, no worker: states advance on the device's own requests, and the
+deadline is judged whenever the status is read.
+
+New model `DeviceServerAddressChange` and three columns on `BiometricDevice`
+(`server_scheme`, `server_host`, `server_port`), in `devices/0003`.
+
+### Proved on the SenseFace 2A (ZAM70-NF24HA-Ver3.0.15, PushSDK 3.0.4S)
+
+- `IclockSvrIP` / `IclockSvrPort` are the option names. Read back empty before
+  the write and holding the hostname after it.
+- **One option per `SET OPTION` command.** A tab-separated pair answers
+  `Return=0` and is swallowed whole as the value of the first option — the same
+  trap as the lowercase `DATA UPDATE user` field names.
+- **No backup or secondary server option exists on this firmware**, and the
+  server address is not readable at all (~350 candidate names probed, plus
+  `INFO`, `CHECK` and `DATA QUERY tablename=options|config|network`). The
+  software can only observe where a request arrived from.
+- Step 1 caught every failure without touching the device: dead tunnel,
+  unresolvable host, wrong port, http-vs-https, and a hostname missing from
+  `ALLOWED_HOSTS`.
+- Live hardware also surfaced a race the tests had not: the device polls every
+  ~10s, so a check-in lands inside the probe window. It was confirming an
+  attempt that had not been sent and flipping it out of `checking` mid-probe,
+  which broke the probe's own token lookup. Only a *sent* attempt is now
+  advanced by a device request; there is a regression test for it.
+
+### Known limitations / still open
+
+- The hardware success path pointed the device at the address it was already
+  using, so every branch was safe. A change to a **different** address, and the
+  deliberate lost-device recovery, still need doing with someone at the
+  terminal.
+- The device detail page overflows horizontally by 8px at 375px, caused by the
+  pre-existing "Retire device" button in `page__actions`. Not touched here.
+- Devices whose address was typed in by hand show "not confirmed yet" until
+  their first change; there is no backfill, deliberately, because we have no
+  evidence of where they point until a request arrives.

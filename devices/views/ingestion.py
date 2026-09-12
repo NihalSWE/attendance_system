@@ -19,7 +19,8 @@ from django.views.decorators.http import require_http_methods
 
 from devices.adapters import UnknownAdapterError, get_adapter
 from devices.adapters.base import ParsedMessage
-from devices.models import BiometricDevice, DeviceMessage
+from devices.models import BiometricDevice, DeviceMessage, DeviceServerAddressChange
+from devices.services import server_address
 from devices.services.commands import take_pending_commands
 from devices.services.ingestion import (
     DeviceAuthenticationError,
@@ -47,13 +48,20 @@ def _unauthorized():
 
 
 def _resolve_device(request):
-    """Authenticate the caller, or return an HttpResponse to send back."""
+    """Authenticate the caller, or return an HttpResponse to send back.
+
+    Every authenticated device request is also the evidence that decides
+    whether a server-address change worked: the address the device dialled is
+    on this request and nowhere else. Recording it here means no endpoint can
+    forget to, and it costs a single indexed lookup when no change is running.
+    """
     serial = request.GET.get("SN", "")
     device = authenticate_device(
         serial_number=serial,
         presented_key_id=request.GET.get("key_id", ""),
         presented_secret=request.GET.get("key", ""),
     )
+    server_address.note_device_request(device=device, request=request)
     return device
 
 
@@ -329,4 +337,58 @@ def devicecmd(request):
         content_type=request.content_type or "",
         encoding=encoding,
     )
+    _note_address_command_result(device, raw_body)
     return _text("OK")
+
+
+def _note_address_command_result(device, raw_body):
+    """Pass a ``ID=n&Return=c`` result to the server-address flow.
+
+    The device answers every command in the same shape, so the id is what ties
+    a result to the attempt that queued it. A result is never treated as proof
+    the address works — the device acknowledges before it tries the new
+    address — it only makes the eventual timeout explainable.
+    """
+    fields = {}
+    for chunk in (raw_body or "").replace("\n", "&").split("&"):
+        key, _, value = chunk.strip().partition("=")
+        if key:
+            fields[key.strip()] = value.strip()
+    try:
+        command_id = int(fields.get("ID", ""))
+    except ValueError:
+        return
+    server_address.note_command_result(
+        device=device, command_id=command_id, return_code=fields.get("Return", "")
+    )
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def address_check(request):
+    """Step 1 of a server address change: prove the address reaches *us*.
+
+    Fetched by this same running software against the address an administrator
+    just typed, before the device is told anything. The device never calls it.
+
+    Answering with a signature derived from this deployment's SECRET_KEY is the
+    whole point: a reachable address is not enough, because a device pointed at
+    somebody else's working server is just as lost as one pointed at nothing.
+    Only the software holding that key can produce the expected body, so a
+    matching reply means the round trip came back here.
+
+    The token is single-use and belongs to one attempt, so this cannot be
+    replayed and is not an oracle for anything: with no live token it answers
+    404 and reveals nothing about the deployment, the device or the company.
+    """
+    token = request.GET.get("token", "")
+    if not token or len(token) > 64:
+        return _text("Not found", status=404)
+
+    attempt = DeviceServerAddressChange.all_objects.filter(
+        probe_token=token, status=DeviceServerAddressChange.Status.CHECKING
+    ).first()
+    if attempt is None:
+        return _text("Not found", status=404)
+
+    return _text(server_address.probe_body(token))

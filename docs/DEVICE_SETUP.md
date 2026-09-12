@@ -93,7 +93,117 @@ On the device page:
 A device that reaches us but whose punches do not count is usually an
 enrollment problem, not a connection problem: check the unresolved queue.
 
-## 6. Troubleshooting
+## 6. Changing the server address from the software
+
+Devices → the device → **Edit** has a **Server address** field. Changing it
+never writes the address straight to the terminal, because a wrong value there
+puts the device out of reach of every screen we have and the only fix is to
+walk to it.
+
+Instead the server proves the address first:
+
+1. **The address is checked before the device is told anything.** The server
+   fetches its own `/iclock/serveraddress-check` endpoint at the address you
+   typed, with a one-time token, and requires a reply signed with this
+   deployment's `SECRET_KEY`. That answers the question that matters — does
+   this address reach *this* software — rather than the weaker "does something
+   answer". A typo, a wrong port, http/https swapped, a tunnel that is not
+   running, or a hostname missing from `ALLOWED_HOSTS` all fail here, and the
+   device is never contacted. This is the clean revert: nothing changed.
+2. **Only then is the change queued** for the device's next check-in. The
+   saved address stays as it was.
+3. **The device picks it up** on its next poll, which depends on its push
+   interval.
+4. **The device checks in at the new address.** The new address is saved only
+   now, and only because a request actually arrived on that hostname — not
+   because the device answered `Return=0`, which it does before it tries.
+5. **If it never arrives**, the page says which of the two failures happened:
+   the device kept checking in at the old address (it ignored the command,
+   nothing on it changed), or it went silent (it switched and cannot reach us,
+   which only the terminal can undo — the page then names the exact old
+   address, port and menu path to type back in).
+
+The panel on the device page updates itself while this runs. Only one change
+per device at a time.
+
+### What this firmware actually exposes
+
+Measured against the SenseFace 2A in the office, firmware
+`ZAM70-NF24HA-Ver3.0.15`, PushSDK `Ver 3.0.4S-20240809`, `DeviceType=acc`.
+`GET OPTIONS <comma-separated names>` is answered by the device POSTing to
+`/iclock/querydata?type=options&tablename=options` with the values it
+recognises; an option it does not know, or holds empty, is simply omitted.
+
+| Option | Meaning | Verified |
+|---|---|---|
+| `IclockSvrIP` | Server address. Holds a hostname, not only an IP. | Yes — written, then read back |
+| `IclockSvrPort` | Server port | Yes — read `8081`, written `443`, read back |
+| `IclockSvrFun` | Cloud server enabled (`1`) | Read only |
+| `AutoServerFunOn` | Auto-server feature flag (`1`) | Read only |
+| `EnableProxyServer` / `ProxyServerIP` / `ProxyServerPort` | Proxy, off by default (`0` / `0.0.0.0` / `0`) | Read only |
+| `Delay` | Push interval, seconds | Read only |
+| `WebSite` | Present, value is a single space. Unused. | Read only |
+
+**There is no backup or secondary server option on this firmware.** Roughly 350
+candidate names were probed (`ServerIP`, `WebServerIP`, `AdmsIP`, `SvrAddr`,
+`IclockSvrBackupIP`, tilde-prefixed variants, and every plausible
+prefix × suffix combination) and nothing beyond the table above came back.
+`INFO` and `CHECK` return large blocks that do not include the server address
+either, and `DATA QUERY tablename=options|config|network` is refused with
+`Return=-629`. There is a proxy, which is a different thing.
+
+That shapes the recovery story: **the software cannot ask the device where it
+is pointing.** It can only observe the address an incoming request arrived on,
+which is exactly what step 4 does.
+
+### Two traps, both measured
+
+**One option per `SET OPTION` command.** Sending
+
+    SET OPTION IclockSvrIP=host\tIclockSvrPort=443
+
+answers `Return=0` and then reads back as
+
+    IclockSvrIP=host\tIclockSvrPort=443 , IclockSvrPort=8081
+
+— the whole tab-separated string became the value of the first option and the
+port never changed. This is the same shape as the lowercase `DATA UPDATE user`
+field-name trap: the firmware answers `0` and quietly does the wrong thing. The
+code sends two commands, port first, handed over in the same reply.
+
+**`Return=0` is not proof.** It means the command was accepted, not that it was
+understood or applied. Nothing in this flow treats a command result as success;
+only a request arriving at the new address does.
+
+### What was proved on the hardware, and what was not
+
+Proved, against the live device through the ngrok tunnel:
+
+- `IclockSvrIP` is the correct option name — it read back empty before the
+  write and held the hostname after it.
+- One option per command works; the tab-separated pair does not.
+- Step 1 stops a bad address without touching the device. Tested with a tunnel
+  that is not running (404), an unresolvable host, a wrong port (timeout),
+  http against an https-only tunnel (307), and a hostname resolving to the
+  server but missing from `ALLOWED_HOSTS` (400, reported as exactly that). No
+  command was queued in any of them.
+- The full success path end to end: check passes, two commands queue, the
+  device takes them, answers `Return=0`, and the address is saved when its
+  request arrives.
+
+Not proved on the hardware, and worth doing with someone standing at the
+terminal:
+
+- A change to a **different** address. The success path above pointed the
+  device at the address it was already using, so every branch was safe. It
+  exercised the plumbing and the option names, not a genuine move.
+- The deliberate *lost device* case — pointing it somewhere it cannot reach,
+  confirming the "set it back on the device" instructions, and typing the old
+  address back in by hand.
+
+---
+
+## 7. Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
@@ -103,3 +213,6 @@ enrollment problem, not a connection problem: check the unresolved queue.
 | Punches arrive but are `unauthorized_device` | The company is in assigned-devices mode and the enrollment is recognition-only. Grant it on the enrollment. |
 | Punch times are wrong by a fixed number of hours | The device timezone and the timezone recorded here disagree. |
 | The same serial is registered twice | Two companies each registered it. Ingestion refuses an ambiguous serial rather than guessing. |
+| A server address change says "not reachable" | The address does not reach this server. Nothing was sent to the device; fix the address and try again. |
+| A change ends as "did not apply the change" | The device kept checking in at the old address. Its settings are unchanged; check the firmware supports `IclockSvrIP`. |
+| A change ends as "not reachable at the new address" | The device switched and cannot reach where it was sent. No screen can fix this — use the address, port and menu path the page names, at the terminal. |

@@ -15,11 +15,11 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from accounts.services import get_active_memberships
 from auditlog.models import AuditLog
 from devices.forms import (
     BiometricDeviceForm,
@@ -34,7 +34,7 @@ from devices.models import (
     DeviceSyncState,
     PunchEvent,
 )
-from devices.services import setup_instructions
+from devices.services import panel_access, server_address, setup_instructions
 from devices.services.commands import (
     COMMAND_LABELS,
     SAFE_COMMANDS,
@@ -57,7 +57,12 @@ UNRESOLVED_STATUSES = (
 
 
 def company_user_required(view):
-    """Mirror of the panel's access rule: fail closed for restricted roles."""
+    """Fail closed for restricted roles, then hand off to the shared rule.
+
+    The rule itself lives in ``devices.services.panel_access`` so the services
+    can re-check it without depending on a view decorator having run. Only the
+    two answers that are page-shaped stay here.
+    """
 
     @wraps(view)
     def wrapped(request, *args, **kwargs):
@@ -65,19 +70,7 @@ def company_user_required(view):
             return redirect("platform:company_list")
         if not request.company_id:
             return render(request, "base_template/no_company.html", status=200)
-        member = get_active_memberships(request.user).filter(
-            company_id=request.company_id
-        ).first()
-        if (
-            not member
-            or member.role not in ("owner", "company_admin")
-            or member.allowed_branches.exists()
-            or member.allowed_departments.exists()
-        ):
-            raise PermissionDenied(
-                "Device management currently requires unrestricted company "
-                "administrator access."
-            )
+        panel_access.assert_may_manage_devices(request.user, request.company_id)
         return view(request, *args, **kwargs)
 
     return wrapped
@@ -202,6 +195,9 @@ def device_detail(request, public_id):
         public_id=public_id,
     )
     sync_state = DeviceSyncState.objects.filter(device=device).first()
+    # refresh() here as well as in the status endpoint, so a first page load
+    # never shows a change that timed out while nobody was watching.
+    address_change = server_address.refresh(server_address.latest_change(device))
 
     # Shown once, immediately after it was issued.
     comm_key = None
@@ -250,6 +246,10 @@ def device_detail(request, public_id):
             for key, spec in WRITABLE_OPTIONS.items()
         ],
         "pending_commands": pending_summary(device),
+        "address_change": address_change,
+        "address_status": server_address.status_payload(device, address_change),
+        "address_history": server_address.history(device),
+        "saved_address": server_address.current_address(device),
     })
 
 
@@ -278,6 +278,13 @@ def device_edit(request, public_id):
             request.session["issued_comm_key"] = form.issued_comm_key
             request.session["issued_comm_key_device"] = str(device.public_id)
         messages.success(request, f"{device.name} updated.")
+
+        # The address change runs after the rest of the edit is saved, so a
+        # failed check never rolls back a name or branch the administrator
+        # also changed. It never writes the address itself either: that only
+        # happens once the device has connected at the new one.
+        if form.requested_address is not None:
+            _start_address_change(request, device, form.requested_address)
         return redirect("devices:device_detail", public_id=device.public_id)
 
     return render(request, "devices/device_form.html", {
@@ -307,6 +314,93 @@ def device_retire(request, public_id):
         f"{device.name} retired. It can no longer send data; its punch history "
         "is unchanged.",
     )
+    return redirect("devices:device_detail", public_id=device.public_id)
+
+
+# --------------------------------------------------------------------------
+# Server address
+# --------------------------------------------------------------------------
+
+
+def _start_address_change(request, device, target):
+    """Run steps 1 and 2, and say what happened in words about the hardware.
+
+    Authorization is re-checked in the service rather than trusted from the
+    decorator: this is the one device write that can strand hardware, and the
+    form is a convenience layer, never the boundary.
+    """
+    try:
+        attempt = server_address.request_change(
+            device=device, actor=request.user, raw_address=target.text
+        )
+    except server_address.ServerAddressError as exc:
+        messages.error(request, str(exc))
+        return None
+
+    _audit(
+        request,
+        "device.server_address.requested",
+        attempt,
+        before={"address": server_address.previous_address_text(attempt)},
+        after={
+            "address": target.text,
+            "status": attempt.status,
+            "reason": attempt.failure_reason,
+        },
+    )
+
+    if attempt.status == attempt.Status.UNREACHABLE:
+        messages.error(
+            request,
+            f"{target.text} could not be reached, so nothing was sent to "
+            f"{device.name}. {attempt.failure_reason}",
+        )
+    else:
+        messages.success(
+            request,
+            f"{target.text} answered. The change is queued for {device.name} "
+            "and will apply on its next check-in. Its saved address stays "
+            "unchanged until the device connects at the new one.",
+        )
+    return attempt
+
+
+@login_required
+@company_user_required
+def device_server_address_status(request, public_id):
+    """JSON for the status panel, polled every few seconds.
+
+    Reading the status is also what evaluates the timeout — there is no
+    background worker — so this endpoint is the thing that eventually turns a
+    silent device into a "set it back on the terminal" instruction.
+    """
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    attempt = server_address.latest_change(device)
+    return JsonResponse(server_address.status_payload(device, attempt))
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_server_address_cancel(request, public_id):
+    """Abandon a change that has not reached the device yet."""
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    attempt = server_address.latest_change(device)
+    if attempt is None:
+        messages.error(request, "There is no server address change to cancel.")
+        return redirect("devices:device_detail", public_id=device.public_id)
+    try:
+        server_address.cancel(attempt=attempt, actor=request.user)
+    except server_address.ServerAddressError as exc:
+        messages.error(request, str(exc))
+    else:
+        _audit(
+            request, "device.server_address.cancelled", attempt,
+            after={"status": attempt.status},
+        )
+        messages.success(
+            request, "The change was cancelled before anything reached the device."
+        )
     return redirect("devices:device_detail", public_id=device.public_id)
 
 

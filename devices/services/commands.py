@@ -53,9 +53,18 @@ COMMAND_LABELS = {
 # not listed here cannot be set, so a crafted request can never reach the
 # device's configuration.
 #
-# Deliberately excluded: network/server address and comm key. Getting those
+# Deliberately excluded: the server address and the comm key. Getting either
 # wrong makes the device unreachable, and recovering means physically walking
-# to the terminal — so they stay a manual, on-device action.
+# to the terminal.
+#
+# The server address is now changeable from the software, but it must never be
+# reachable through this table. ``queue_set_option`` writes whatever it is
+# given straight to the device on the next poll, which is exactly the wrong
+# shape for a setting that can strand the hardware. It goes through
+# ``queue_server_address`` below instead, which is only called by
+# ``devices.services.server_address`` after that module has proved the new
+# address reaches this server. Adding a "server_address" key here would
+# silently bypass that proof.
 WRITABLE_OPTIONS = {
     "push_interval_seconds": (
         "Delay",
@@ -86,7 +95,13 @@ WRITABLE_OPTIONS = {
 
 # Mutating commands are separated from queries so the UI can require an
 # explicit confirmation and so an audit entry is always written for them.
-MUTATING_COMMAND_KEYS = {"set_option", "push_user", "delete_user"}
+MUTATING_COMMAND_KEYS = {
+    "set_option", "push_user", "delete_user", "set_server_address",
+}
+
+# The key used for the guarded server-address command. Named so a queued entry
+# is recognisable in the pending list and in the device's own command result.
+SERVER_ADDRESS_COMMAND_KEY = "set_server_address"
 
 # Write-side field names for the device's ``user`` table, established by
 # probing SenseFace 2A ZAM70-NF24HA-Ver3.0.15 directly. They are NOT the
@@ -340,6 +355,89 @@ def _queue_raw(*, device, key, body, requested_by=None):
         return entry, ""
 
 
+def build_server_address_updates(address):
+    """The SET OPTION bodies that repoint a device at ``address``.
+
+    Two commands, not one, and this is measured rather than assumed. Sending
+    ``SET OPTION IclockSvrIP=host\tIclockSvrPort=443`` to a SenseFace 2A
+    (ZAM70-NF24HA-Ver3.0.15) answers ``Return=0`` and then reads back as
+
+        IclockSvrIP=host\tIclockSvrPort=443 , IclockSvrPort=8081
+
+    — the whole tab-separated string became the value of the first option and
+    the port never changed. The same trap as the lowercase ``DATA UPDATE
+    user`` field names above: this firmware answers 0 and quietly does the
+    wrong thing. One option per command reads back correctly.
+
+    The port goes first so the pair is never applied as "new host, old port".
+    Both are handed over in the same getrequest reply, so the device applies
+    them before it next tries to connect.
+    """
+    from devices.services.server_address import (
+        SERVER_ADDRESS_OPTION,
+        SERVER_PORT_OPTION,
+    )
+
+    return (
+        f"SET OPTION {SERVER_PORT_OPTION}={address.port}",
+        f"SET OPTION {SERVER_ADDRESS_OPTION}={address.host}",
+    )
+
+
+def queue_server_address(*, device, address, requested_by=None):
+    """Queue the server-address change. Guarded caller only.
+
+    Returns (host_entry, port_entry, error). Deliberately not reachable
+    through ``WRITABLE_OPTIONS``: this is the one device write that can make
+    the device unreachable, so the only caller is
+    ``devices.services.server_address.request_change``, which has already
+    proved the address reaches this server. Nothing here re-validates the
+    address, because nothing here could — only the round trip can.
+
+    If the host command cannot be queued the port command is withdrawn, so the
+    device is never handed half an address.
+    """
+    port_body, host_body = build_server_address_updates(address)
+
+    port_entry, error = _queue_raw(
+        device=device,
+        key=f"{SERVER_ADDRESS_COMMAND_KEY}:port",
+        body=port_body,
+        requested_by=requested_by,
+    )
+    if port_entry is None:
+        return None, None, error
+
+    host_entry, error = _queue_raw(
+        device=device,
+        key=SERVER_ADDRESS_COMMAND_KEY,
+        body=host_body,
+        requested_by=requested_by,
+    )
+    if host_entry is None:
+        drop_pending_command(device, port_entry["id"])
+        return None, None, error
+
+    return host_entry, port_entry, ""
+
+
+def drop_pending_command(device, command_id):
+    """Withdraw a queued command that has not been handed over yet."""
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(
+            pk=_sync_state(device).pk
+        )
+        data = dict(state.state_data or {})
+        data["pending_commands"] = [
+            entry for entry in (data.get("pending_commands") or [])
+            if entry.get("id") != command_id
+        ]
+        state.state_data = data
+        state.version = (state.version or 0) + 1
+        state.save(update_fields=["state_data", "version", "updated_at"])
+
+
+
 def take_pending_commands(device):
     """Pop every queued command and format it for the getrequest reply.
 
@@ -360,6 +458,19 @@ def take_pending_commands(device):
     state.state_data = data
     state.version = (state.version or 0) + 1
     state.save(update_fields=["state_data", "version", "updated_at"])
+
+    # Handing the command over is step 3 of an address change: it is the only
+    # moment we know the device has actually taken it.
+    if any(
+        str(e.get("key", "")).startswith(SERVER_ADDRESS_COMMAND_KEY)
+        for e in pending
+    ):
+        from devices.services import server_address
+
+        server_address.note_command_delivered(
+            device=device, command_ids={e["id"] for e in pending}
+        )
+
     return "\n".join(lines) + "\n", pending
 
 
