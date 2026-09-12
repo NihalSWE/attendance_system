@@ -238,6 +238,96 @@ and that file is removed.
 Schema artifacts regenerated: 86 models / 91 tables / **1,638 columns / 464
 FKs** (one column and one foreign key fewer). `verify_schema.cjs` passes.
 
+## Salary fast-track — 2026-09-12
+
+**Decision (Ajay):** salary generation is needed today. The original flow is
+**reordered, not cut** — in Ajay's words, *"nothing will be removed from the
+original flow; we will implement all these that we are skipping today"*.
+
+A thin slice of four phases is built first, in this order, each on the real
+dictionary models so later work extends them additively rather than replacing
+them:
+
+| Step | What | Status |
+|---|---|---|
+| 1 | Schedules: shifts, company attendance settings (single company shift), weekly off days, holidays | **Done** — see below |
+| 2 | Leave, thin slice: paid/unpaid leave types; company admin records approved full-day leave | Next |
+| 3 | Attendance calculation from device punches: present / half day / absent / weekly off / holiday / paid leave / unpaid leave; monthly calculate + review list | After 2 |
+| 4 | Payroll: period, run, record per employee, earning/deduction lines, manual adjustment, draft → finalise → payslip | After 3 |
+
+**Formula agreed (defaults, 2026-09-12):**
+
+- Monthly staff: base − (absent days + unpaid-leave days) × base ÷ 30. Weekly
+  offs, holidays and paid leave are not deducted.
+- Daily staff: rate × days present; a half day counts as 0.5. Weekly offs and
+  holidays are not paid.
+- Hourly staff: rate × hours worked.
+- Days before the employee's joining date are not counted at all.
+
+**Keep payroll runs as draft** until full leave and the payroll correction path
+exist. A finalised run is immutable by design, and today's rules are
+deliberately incomplete.
+
+### Step 1 — Schedules (done 2026-09-12)
+
+The scheduling tables already existed from P1; this adds the screens and
+services. New: `scheduling/services.py`, `forms.py`, `views.py`, `urls.py` and
+`templates/scheduling/` (overview, shared form, holiday list, holiday cancel),
+mounted at `/schedules/`. The sidebar "Schedules" link, previously a dead `#`,
+now points there.
+
+- **Shifts:** code, name, start/end (24-hour text `HH:MM` — no native time
+  control), night-shift tick, "late after" grace, full-day and half-day minimum
+  minutes. Shift length is **derived** from start and end, never typed.
+  Deactivate, never delete; the company shift cannot be deactivated.
+- **Attendance settings:** choose the company shift and what a missing punch
+  means. Saving switches the company to single-shift mode — onboarding leaves
+  it in department mode because no shift exists yet — and bumps
+  `settings_version`. The overview warns *"Attendance cannot be calculated
+  yet"* until a company shift is chosen.
+- **Weekly off days:** company-wide or per branch, paid or unpaid, from a date.
+  Stopped with an end date, never deleted, so past months keep them.
+- **Holidays:** full-date, company-wide or per branch, paid or unpaid; list by
+  year with pagination; cancel keeps the record.
+- Every write: owner/company-admin only, field whitelist, branch scope
+  re-checked, one transaction with an audit row. Duplicate weekday or holiday
+  date gives a readable field error instead of a constraint name.
+
+Two existing bugs in `Shift.clean()` fixed (no migration — `clean()` only):
+it compared start and end times without checking they existed, and it blamed
+the break field for a zero or negative shift length. Either made any form that
+rejected a time crash with a 500 instead of showing the field error.
+
+31 new tests (`scheduling/tests_screens.py`), including a real request to every
+page. Full suite: **407 tests pass** on PostgreSQL; `check` clean; no migration
+drift; no new environment variables. Browser check at 1440/768/375 is still pending — it needs a signed-in
+company administrator.
+
+### Skipped today — must be built and connected to salary
+
+This is the authoritative list. Nothing on it is dropped; each item says how it
+connects back.
+
+| Skipped | Effect on today's salary until built | Connects back into |
+|---|---|---|
+| **Full leave (P2):** employee requests, approval step, half-day and hourly leave, balances/entitlements, attachments, withdrawal, cancellation and amendment | Only admin-recorded, pre-approved full-day leave counts | Attendance day status → payroll deductions |
+| Attendance corrections (manual fixes to a day) | A missed punch stays absent / half day | Attendance record → payroll |
+| Breaks and multiple IN/OUT sessions (`AttendanceSession`, `PunchAllocation`) | Only first IN and last OUT count | Worked minutes |
+| Late, absence and repeated-lateness penalty rules | Late minutes recorded, not deducted | Payroll deduction lines |
+| Overtime review, approval and pay | Not paid | Payroll earning lines |
+| Department shifts, employee shift overrides, rotating shifts | Everyone uses the company shift | Which shift a day is measured against |
+| Holiday / weekly-off work assignments (`HolidayWorkAssignment`) | Working a holiday is not paid extra | Payroll earning lines |
+| Shift fields not on the form: break minutes, paid break, grace-out, overtime-after, effective dates | Defaults (0 / unpaid) | Worked minutes, overtime |
+| Attendance settings not on the form: punch pairing, duplicate-punch window, attendance windows, rounding, overtime approval | Defaults | Punch interpretation |
+| Mid-month salary change (compensation segments / proration) | The rate in force at month end is used for the whole month | Payroll record |
+| Joining or leaving mid-month (proration rules) | Only days on the payroll are counted | Payroll record |
+| Salary structure: allowances and components | Base rate only | Payroll lines |
+| Payroll approval steps; correction/reversal after finalising | One-step finalise, no reversal | Payroll run |
+| Payments, part-payments, dues, advances, loans (P5) | Payslip shows the amount; paying it is not recorded | Salary management |
+| Employee detail, edit, history, transfer, salary revision, terminate screens | Services exist, no screens | Employee records used by payroll |
+| Access: department heads, permissions, employee logins; branch-administrator decision | Company admin only | Leave approval |
+| A proper time-picker component | Plain `HH:MM` text box | Shift form |
+
 ## Current checkpoint
 
 - **Current deliverable:** P1 platform onboarding implemented; company setup and employee write workflows remain next. See [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md) for files/functions and the UI workflow.
@@ -248,7 +338,7 @@ FKs** (one column and one foreign key fewer). `verify_schema.cjs` passes.
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action:** apply the six new migrations to the development database, then root catalogue screens (department/designation) followed by the company adoption screens; then employee lifecycle forms and full P1 acceptance. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action:** salary fast-track (2026-09-12) — step 2, the thin leave slice, then attendance calculation, then payroll. Then build everything in the "Skipped today" table and connect it back. Employee lifecycle screens and full P1 acceptance follow. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 

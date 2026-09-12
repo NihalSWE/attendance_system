@@ -84,7 +84,7 @@
             Departments
         </span>
     </a>
-    <a class="sidebar__link" href="#" aria-disabled="true">
+    <a class="sidebar__link {% active request 'schedule_overview' 'attendance_settings_edit' 'shift_create' 'shift_edit' 'shift_status' 'weekly_off_create' 'weekly_off_end' 'holiday_list' 'holiday_create' 'holiday_edit' 'holiday_cancel' %}" href="{% url 'scheduling:schedule_overview' %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="9"/>
             <path d="M12 7v5l3 2"/>

@@ -1,0 +1,359 @@
+"""Working-calendar screens: shifts, attendance settings, weekly offs, holidays.
+
+Services are tested for authorization, validation and audit; views are tested
+by making the request, because a query string such as an ordering or a related
+name only fails when the page actually runs.
+"""
+
+from datetime import date, time
+
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.test import TestCase
+from django.urls import reverse
+
+from accounts.models import CompanyMembership, User
+from auditlog.models import AuditLog
+from common.tenant import use_company
+from organization.models import Branch
+from scheduling import services
+from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
+from tenants.services import onboard_company
+
+DAY_SHIFT = {
+    "code": "DAY",
+    "name": "Day shift",
+    "start_time": time(9, 0),
+    "end_time": time(18, 0),
+    "spans_next_day": False,
+    "grace_in_minutes": 10,
+    "minimum_full_day_minutes": 480,
+    "minimum_half_day_minutes": 240,
+}
+
+
+class CalendarBase(TestCase):
+    def setUp(self):
+        self.company = onboard_company(code="ACME", slug="acme", name="Acme Ltd")
+        self.other = onboard_company(code="OTHER", slug="other", name="Other Ltd")
+        self.admin = User.objects.create_user(email="admin@acme.test", password="pw")
+        self.hr = User.objects.create_user(email="hr@acme.test", password="pw")
+        self.outsider = User.objects.create_user(email="admin@other.test", password="pw")
+        CompanyMembership.all_objects.create(
+            company=self.company, user=self.admin,
+            role=CompanyMembership.Role.COMPANY_ADMIN,
+            status=CompanyMembership.Status.ACTIVE,
+        )
+        CompanyMembership.all_objects.create(
+            company=self.company, user=self.hr,
+            role=CompanyMembership.Role.HR,
+            status=CompanyMembership.Status.ACTIVE,
+        )
+        CompanyMembership.all_objects.create(
+            company=self.other, user=self.outsider,
+            role=CompanyMembership.Role.COMPANY_ADMIN,
+            status=CompanyMembership.Status.ACTIVE,
+        )
+        with use_company(self.company):
+            self.hq = Branch.objects.get(is_default=True)
+
+    def _shift(self, **overrides):
+        return services.create_shift(
+            actor=self.admin, company_id=self.company.pk,
+            values={**DAY_SHIFT, **overrides},
+        )
+
+
+class ShiftServiceTests(CalendarBase):
+    def test_shift_length_is_derived_from_start_and_end(self):
+        shift = self._shift()
+        self.assertEqual(shift.scheduled_minutes, 540)
+
+    def test_night_shift_length_crosses_midnight(self):
+        shift = self._shift(
+            code="NGT", name="Night", start_time=time(22, 0), end_time=time(6, 0),
+            spans_next_day=True, minimum_full_day_minutes=420,
+            minimum_half_day_minutes=210,
+        )
+        self.assertEqual(shift.scheduled_minutes, 480)
+
+    def test_full_day_cannot_exceed_the_shift_length(self):
+        with self.assertRaises(ValidationError) as caught:
+            self._shift(minimum_full_day_minutes=600)
+        self.assertIn("minimum_full_day_minutes", caught.exception.error_dict)
+
+    def test_half_day_cannot_exceed_full_day(self):
+        with self.assertRaises(ValidationError) as caught:
+            self._shift(minimum_half_day_minutes=500)
+        self.assertIn("minimum_half_day_minutes", caught.exception.error_dict)
+
+    def test_hr_cannot_create_a_shift(self):
+        with self.assertRaises(PermissionDenied):
+            services.create_shift(
+                actor=self.hr, company_id=self.company.pk, values=DAY_SHIFT
+            )
+
+    def test_another_company_cannot_create_here(self):
+        with self.assertRaises(PermissionDenied):
+            services.create_shift(
+                actor=self.outsider, company_id=self.company.pk, values=DAY_SHIFT
+            )
+
+    def test_unexposed_field_is_rejected(self):
+        with self.assertRaises(ValidationError):
+            services.create_shift(
+                actor=self.admin, company_id=self.company.pk,
+                values={**DAY_SHIFT, "company": self.other},
+            )
+
+    def test_shift_creation_is_audited(self):
+        shift = self._shift()
+        self.assertTrue(
+            AuditLog.objects.filter(action="shift.created", object_id=str(shift.pk)).exists()
+        )
+
+    def test_the_company_shift_cannot_be_deactivated(self):
+        shift = self._shift()
+        services.update_attendance_settings(
+            actor=self.admin, company_id=self.company.pk,
+            values={"company_shift": shift, "missing_punch_policy": "review_required"},
+        )
+        with self.assertRaises(ValidationError):
+            services.set_shift_status(
+                actor=self.admin, company_id=self.company.pk, shift_id=shift.pk,
+                status="inactive",
+            )
+
+    def test_another_companys_shift_is_not_found(self):
+        foreign = services.create_shift(
+            actor=self.outsider, company_id=self.other.pk, values=DAY_SHIFT
+        )
+        with self.assertRaises(PermissionDenied):
+            services.update_shift(
+                actor=self.admin, company_id=self.company.pk, shift_id=foreign.pk,
+                values={"name": "Stolen"},
+            )
+
+
+class AttendanceSettingsTests(CalendarBase):
+    def test_onboarding_leaves_the_company_without_a_shift(self):
+        settings = services.get_attendance_settings(self.company.pk)
+        self.assertIsNone(settings.company_shift_id)
+
+    def test_choosing_a_company_shift_switches_to_single_shift_mode(self):
+        shift = self._shift()
+        settings = services.update_attendance_settings(
+            actor=self.admin, company_id=self.company.pk,
+            values={"company_shift": shift, "missing_punch_policy": "auto_absent"},
+        )
+        self.assertEqual(settings.company_shift_id, shift.pk)
+        self.assertEqual(
+            settings.shift_mode, CompanyAttendanceSettings.ShiftMode.COMPANY_SINGLE_SHIFT
+        )
+        self.assertEqual(settings.missing_punch_policy, "auto_absent")
+        self.assertEqual(settings.settings_version, 2)
+
+    def test_an_inactive_shift_cannot_become_the_company_shift(self):
+        shift = self._shift()
+        services.set_shift_status(
+            actor=self.admin, company_id=self.company.pk, shift_id=shift.pk,
+            status="inactive",
+        )
+        shift.refresh_from_db()
+        with self.assertRaises(ValidationError):
+            services.update_attendance_settings(
+                actor=self.admin, company_id=self.company.pk,
+                values={"company_shift": shift, "missing_punch_policy": "review_required"},
+            )
+
+
+class WeeklyOffTests(CalendarBase):
+    def _add(self, **overrides):
+        values = {"weekday": 4, "branch": None, "is_paid": True,
+                  "effective_from": date(2026, 1, 1)}
+        values.update(overrides)
+        return services.add_weekly_off(
+            actor=self.admin, company_id=self.company.pk, values=values
+        )
+
+    def test_company_wide_weekly_off(self):
+        rule = self._add()
+        self.assertIsNone(rule.branch_id)
+        self.assertEqual(rule.get_weekday_display(), "Friday")
+
+    def test_same_day_twice_is_a_readable_error(self):
+        self._add()
+        with self.assertRaises(ValidationError) as caught:
+            self._add()
+        self.assertIn("weekday", caught.exception.error_dict)
+
+    def test_the_same_day_can_be_off_for_one_branch_and_company_wide(self):
+        self._add()
+        rule = self._add(branch=self.hq)
+        self.assertEqual(rule.branch_id, self.hq.pk)
+
+    def test_stopping_keeps_the_rule_with_an_end_date(self):
+        rule = self._add()
+        services.end_weekly_off(
+            actor=self.admin, company_id=self.company.pk, rule_id=rule.pk,
+            effective_to=date(2026, 7, 1),
+        )
+        rule.refresh_from_db()
+        self.assertEqual(rule.status, WeeklyOffRule.Status.ENDED)
+        self.assertEqual(rule.effective_to, date(2026, 7, 1))
+
+    def test_stop_date_must_be_after_the_start(self):
+        rule = self._add()
+        with self.assertRaises(ValidationError):
+            services.end_weekly_off(
+                actor=self.admin, company_id=self.company.pk, rule_id=rule.pk,
+                effective_to=date(2025, 12, 1),
+            )
+
+
+class HolidayTests(CalendarBase):
+    def _add(self, **overrides):
+        values = {"holiday_date": date(2026, 12, 16), "name": "Victory Day",
+                  "branch": None, "is_paid": True, "description": ""}
+        values.update(overrides)
+        return services.create_holiday(
+            actor=self.admin, company_id=self.company.pk, values=values
+        )
+
+    def test_add_a_holiday(self):
+        holiday = self._add()
+        self.assertEqual(holiday.status, Holiday.Status.ACTIVE)
+
+    def test_duplicate_date_is_a_readable_error(self):
+        self._add()
+        with self.assertRaises(ValidationError) as caught:
+            self._add(name="Something else")
+        self.assertIn("holiday_date", caught.exception.error_dict)
+
+    def test_cancel_keeps_the_record(self):
+        holiday = self._add()
+        services.cancel_holiday(
+            actor=self.admin, company_id=self.company.pk, holiday_id=holiday.pk
+        )
+        holiday.refresh_from_db()
+        self.assertEqual(holiday.status, Holiday.Status.CANCELLED)
+        self.assertEqual(holiday.cancelled_by, self.admin)
+
+    def test_a_cancelled_date_can_be_used_again(self):
+        holiday = self._add()
+        services.cancel_holiday(
+            actor=self.admin, company_id=self.company.pk, holiday_id=holiday.pk
+        )
+        again = self._add(name="Victory Day (moved)")
+        self.assertEqual(again.status, Holiday.Status.ACTIVE)
+
+    def test_edit_does_not_collide_with_itself(self):
+        holiday = self._add()
+        services.update_holiday(
+            actor=self.admin, company_id=self.company.pk, holiday_id=holiday.pk,
+            values={"name": "Bijoy Dibos"},
+        )
+        holiday.refresh_from_db()
+        self.assertEqual(holiday.name, "Bijoy Dibos")
+
+
+class CalendarScreenTests(CalendarBase):
+    def test_overview_renders_and_warns_until_a_shift_is_chosen(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("scheduling:schedule_overview"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Attendance cannot be calculated yet")
+
+    def test_overview_shows_the_chosen_company_shift(self):
+        shift = self._shift()
+        services.update_attendance_settings(
+            actor=self.admin, company_id=self.company.pk,
+            values={"company_shift": shift, "missing_punch_policy": "review_required"},
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("scheduling:schedule_overview"))
+        self.assertNotContains(response, "Attendance cannot be calculated yet")
+        self.assertContains(response, "Day shift")
+        self.assertContains(response, "540")
+
+    def test_every_form_page_renders(self):
+        shift = self._shift()
+        rule = services.add_weekly_off(
+            actor=self.admin, company_id=self.company.pk,
+            values={"weekday": 4, "branch": None, "is_paid": True,
+                    "effective_from": date(2026, 1, 1)},
+        )
+        holiday = services.create_holiday(
+            actor=self.admin, company_id=self.company.pk,
+            values={"holiday_date": date(2026, 12, 16), "name": "Victory Day",
+                    "branch": None, "is_paid": True, "description": ""},
+        )
+        self.client.force_login(self.admin)
+        for url in (
+            reverse("scheduling:attendance_settings_edit"),
+            reverse("scheduling:shift_create"),
+            reverse("scheduling:shift_edit", args=[shift.pk]),
+            reverse("scheduling:shift_status", args=[shift.pk]),
+            reverse("scheduling:weekly_off_create"),
+            reverse("scheduling:weekly_off_end", args=[rule.pk]),
+            reverse("scheduling:holiday_list"),
+            reverse("scheduling:holiday_create"),
+            reverse("scheduling:holiday_edit", args=[holiday.pk]),
+            reverse("scheduling:holiday_cancel", args=[holiday.pk]),
+        ):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 200)
+
+    def test_creating_a_shift_through_the_form(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("scheduling:shift_create"), {
+            "code": "day", "name": "Day shift", "start_time": "09:00",
+            "end_time": "18:00", "grace_in_minutes": "10",
+            "minimum_full_day_minutes": "480", "minimum_half_day_minutes": "240",
+        })
+        self.assertRedirects(response, reverse("scheduling:schedule_overview"))
+        with use_company(self.company):
+            shift = Shift.objects.get()
+        self.assertEqual(shift.code, "DAY")
+        self.assertEqual(shift.scheduled_minutes, 540)
+
+    def test_end_before_start_without_night_tick_is_a_field_error(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("scheduling:shift_create"), {
+            "code": "X", "name": "X", "start_time": "22:00", "end_time": "06:00",
+            "grace_in_minutes": "0", "minimum_full_day_minutes": "0",
+            "minimum_half_day_minutes": "0",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Ends on the next day")
+
+    def test_duplicate_holiday_shows_on_the_date_field(self):
+        services.create_holiday(
+            actor=self.admin, company_id=self.company.pk,
+            values={"holiday_date": date(2026, 12, 16), "name": "Victory Day",
+                    "branch": None, "is_paid": True, "description": ""},
+        )
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("scheduling:holiday_create"), {
+            "holiday_date": "2026-12-16", "name": "Again", "is_paid": "on",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "is already a holiday on this date")
+
+    def test_hr_sees_the_overview_but_cannot_open_a_form(self):
+        self.client.force_login(self.hr)
+        overview = self.client.get(reverse("scheduling:schedule_overview"))
+        self.assertEqual(overview.status_code, 200)
+        self.assertNotContains(overview, "Add shift")
+        self.assertEqual(
+            self.client.get(reverse("scheduling:shift_create")).status_code, 403
+        )
+
+    def test_holidays_do_not_leak_between_companies(self):
+        services.create_holiday(
+            actor=self.outsider, company_id=self.other.pk,
+            values={"holiday_date": date(2026, 12, 16), "name": "Their holiday",
+                    "branch": None, "is_paid": True, "description": ""},
+        )
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("scheduling:holiday_list") + "?year=2026")
+        self.assertNotContains(response, "Their holiday")

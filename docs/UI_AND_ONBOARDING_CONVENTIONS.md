@@ -38,6 +38,20 @@ is renamed anyway, so it is not copied back into the UI.
 When a word is not in the table, use the one the rest of the project already
 uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
 
+## Time and button conventions (2026-09-12)
+
+- **Time of day** is a plain text input, `HH:MM` in 24-hour form, parsed and
+  validated server-side. Not `<input type="time">`: the browser draws its own
+  clock control there, which the design does not allow. A proper time-picker
+  component is on the skipped list.
+- **Derived values are never typed.** A shift's length comes from its start
+  and end times.
+- Button variants that exist: `btn--primary`, `btn--ghost`, `btn--quiet`,
+  `btn--danger`, plus `btn--sm`. **`btn--secondary` does not exist** in the
+  stylesheets, although some device and department list templates use it —
+  those render as a plain `.btn`. Use `btn--ghost` for a secondary action.
+- Form actions sit in a `.row`, primary button first, then the ghost Cancel.
+
 ## Database clarification and Django admin
 
 Creating a company also creates Head Office and CompanyAttendanceSettings in the onboarding transaction. Attendance settings define shift mode, punch interpretation/windows, device scope and missing-punch handling. The current company field is an inherited FK with a unique constraint: at most one settings row per company, equivalent to one-to-one cardinality, not M2M. This does not create shifts or attendance records.

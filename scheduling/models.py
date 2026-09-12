@@ -78,12 +78,25 @@ class Shift(TenantOwned, ActorTracked):
     def clean(self):
         super().clean()
         errors = {}
-        if not self.spans_next_day and self.end_time <= self.start_time:
+        # Either time may be missing when a form has already rejected it; the
+        # field error is reported there, so do not crash comparing None here.
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and not self.spans_next_day
+            and self.end_time <= self.start_time
+        ):
             errors["end_time"] = (
                 "End time must be after start time unless the shift spans midnight."
             )
-        if self.break_is_paid is False and self.default_break_minutes >= (
-            self.scheduled_minutes or 0
+        # Only meaningful for a real shift length. A zero or negative length is
+        # a start/end problem, reported against those fields and refused by the
+        # scheduled_minutes check constraint, not a break problem.
+        if (
+            self.scheduled_minutes
+            and self.scheduled_minutes > 0
+            and self.break_is_paid is False
+            and self.default_break_minutes >= self.scheduled_minutes
         ):
             errors["default_break_minutes"] = (
                 "Unpaid break cannot consume the whole scheduled time."

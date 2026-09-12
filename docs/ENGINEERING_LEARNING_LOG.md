@@ -867,3 +867,22 @@ core rule against the original words. Here the backup branch's own name —
 "job title", "adopt" and "catalogue": borrowed or internal words the users do not
 use. The fix is a written vocabulary table (UI conventions doc) rather than
 correcting words one screen at a time.
+
+## Lesson 18 — A model's clean() runs on half-valid data
+
+**What happened.** `Shift.clean()` compared `end_time <= start_time` and checked
+the break against `scheduled_minutes`. Both looked right, and every existing
+test passed, because every test built a complete, valid shift. The first form
+that rejected a bad end time crashed with a 500. When a form rejects a field,
+Django drops it from `cleaned_data`, but still runs the model's `clean()`, so the
+model sees `None` where the time should be.
+
+**The rule.** `Model.clean()` must tolerate missing or invalid values in the
+fields it reads, and report an error only against a field the problem really
+belongs to. A break rule that fires because the shift length is zero blames the
+wrong field. If that field is not on the form, Django refuses to attach the
+error at all and raises `ValueError` instead.
+
+**How to catch it.** Test the form with bad input, not only the service with
+good input. Here `test_end_before_start_without_night_tick_is_a_field_error`
+failed twice, once for each bug. The service tests never would have.

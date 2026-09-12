@@ -72,7 +72,9 @@ The monthly payroll screen should guide a user through: select month -> resolve 
 | P6 | Pilot and first-release readiness | P1–P5; D1 only for a biometric-enabled pilot | Conditional |
 | P7 | Advanced leave/salary/vendor capabilities | Stable first release and actual client need | Only hardware-specific work |
 
-Main sequence: **P0 -> P1 -> P2 -> P3 -> P4 -> P5 -> P6**. D1 starts when the hardware and P3 boundary are available; it can run alongside P4/P5 without changing their calculation services. If the device arrives earlier, document protocol/access facts and schedule the integration after P3. If it arrives later, continue the software phases.
+Main sequence: **P0 -> P1 -> P2 -> P3 -> P4 -> P5 -> P6**.
+
+**2026-09-12 reorder (salary fast-track).** To produce salary the same day, a thin slice of P1 scheduling, P2 leave, P3 attendance and P4 payroll was pulled forward ahead of the rest of P1. This changes order only: every skipped item is listed in `PHASE_STATUS.md` ("Salary fast-track") and is still built, then connected back into the same attendance and payroll calculation. D1 starts when the hardware and P3 boundary are available; it can run alongside P4/P5 without changing their calculation services. If the device arrives earlier, document protocol/access facts and schedule the integration after P3. If it arrives later, continue the software phases.
 
 Do not label each phase as a day or promise P0–P5 in the week before hardware arrival. Use completed acceptance criteria to schedule the next phase. During the wait, prioritize P0/P1, then usable leave, then the minimum attendance input/calculation contract required by payroll.
 

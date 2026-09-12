@@ -1,0 +1,394 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Schedules · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Schedules
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Schedules
+            </h1>
+            <p class="page__sub">
+                The working calendar attendance is measured against: the company
+                shift, weekly off days and holidays.
+            </p>
+        </div>
+    </div>
+
+    {% if not ready %}
+        <div class="alert alert--warning">
+            Attendance cannot be calculated yet. Add a shift, then choose it as the
+            company shift in attendance settings.
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Attendance settings
+            </h2>
+            {% if can_manage %}
+                <a class="btn btn--ghost btn--sm" href="{% url 'scheduling:attendance_settings_edit' %}">
+                    Edit
+                </a>
+            {% endif %}
+        </div>
+        <div class="card__body">
+            <dl class="facts">
+                <dt>
+                    Company shift
+                </dt>
+                <dd>
+                    {% if ready %}
+                        {{ settings.company_shift.name }}
+                        <span class="t-faint">
+                            {{ settings.company_shift.start_time|time:"H:i" }}–{{ settings.company_shift.end_time|time:"H:i" }}
+                        </span>
+                    {% else %}
+                        <span class="badge badge--warning">
+                            Not chosen
+                        </span>
+                    {% endif %}
+                </dd>
+                <dt>
+                    Missing punch
+                </dt>
+                <dd>
+                    {{ settings.get_missing_punch_policy_display|default:"—" }}
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Shifts
+            </h2>
+            <span class="badge badge--neutral">
+                {{ shifts|length }}
+            </span>
+            {% if can_manage %}
+                <a class="btn btn--primary btn--sm" href="{% url 'scheduling:shift_create' %}">
+                    Add shift
+                </a>
+            {% endif %}
+        </div>
+        {% if shifts %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Shift
+                            </th>
+                            <th class="numeric">
+                                Starts
+                            </th>
+                            <th class="numeric">
+                                Ends
+                            </th>
+                            <th class="numeric">
+                                Length (min)
+                            </th>
+                            <th class="numeric">
+                                Late after (min)
+                            </th>
+                            <th class="numeric">
+                                Full day (min)
+                            </th>
+                            <th class="numeric">
+                                Half day (min)
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for shift in shifts %}
+                            <tr>
+                                <td>
+                                    {{ shift.code }}
+                                </td>
+                                <td>
+                                    {{ shift.name }}
+                                    {% if settings.company_shift_id == shift.pk %}
+                                        <span class="badge badge--info">
+                                            Company shift
+                                        </span>
+                                    {% endif %}
+                                    {% if shift.spans_next_day %}
+                                        <span class="badge badge--neutral">
+                                            Night
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ shift.start_time|time:"H:i" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ shift.end_time|time:"H:i" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ shift.scheduled_minutes }}
+                                </td>
+                                <td class="numeric">
+                                    {{ shift.grace_in_minutes }}
+                                </td>
+                                <td class="numeric">
+                                    {{ shift.minimum_full_day_minutes }}
+                                </td>
+                                <td class="numeric">
+                                    {{ shift.minimum_half_day_minutes }}
+                                </td>
+                                <td>
+                                    {% if shift.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if can_manage %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'scheduling:shift_edit' shift.pk %}">
+                                            Edit
+                                        </a>
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'scheduling:shift_status' shift.pk %}">
+                                            Status
+                                        </a>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            View only
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No shifts yet
+                </div>
+                <div class="empty__text">
+                    Add the company's working hours, for example Day shift 09:00–18:00.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Weekly off days
+            </h2>
+            <span class="badge badge--neutral">
+                {{ weekly_offs|length }}
+            </span>
+            {% if can_manage %}
+                <a class="btn btn--primary btn--sm" href="{% url 'scheduling:weekly_off_create' %}">
+                    Add weekly off day
+                </a>
+            {% endif %}
+        </div>
+        {% if weekly_offs %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Day
+                            </th>
+                            <th>
+                                Applies to
+                            </th>
+                            <th>
+                                Paid
+                            </th>
+                            <th class="numeric">
+                                From
+                            </th>
+                            <th class="numeric">
+                                Stops from
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rule in weekly_offs %}
+                            <tr>
+                                <td>
+                                    {{ rule.get_weekday_display }}
+                                </td>
+                                <td>
+                                    {% if rule.branch %}
+                                        {{ rule.branch.name }}
+                                    {% else %}
+                                        All branches
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if rule.is_paid %}
+                                        Paid
+                                    {% else %}
+                                        Unpaid
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ rule.effective_from|date:"d M Y" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ rule.effective_to|date:"d M Y"|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if rule.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Stopped
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if can_manage and rule.status == 'active' %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'scheduling:weekly_off_end' rule.pk %}">
+                                            Stop
+                                        </a>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No weekly off days yet
+                </div>
+                <div class="empty__text">
+                    Add the company's regular days off, for example Friday.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Upcoming holidays
+            </h2>
+            <span class="badge badge--neutral">
+                {{ holiday_count }} in {{ year }}
+            </span>
+            <a class="btn btn--ghost btn--sm" href="{% url 'scheduling:holiday_list' %}">
+                All holidays
+            </a>
+            {% if can_manage %}
+                <a class="btn btn--primary btn--sm" href="{% url 'scheduling:holiday_create' %}">
+                    Add holiday
+                </a>
+            {% endif %}
+        </div>
+        {% if upcoming %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th class="numeric">
+                                Date
+                            </th>
+                            <th>
+                                Holiday
+                            </th>
+                            <th>
+                                Applies to
+                            </th>
+                            <th>
+                                Paid
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for holiday in upcoming %}
+                            <tr>
+                                <td class="numeric">
+                                    {{ holiday.holiday_date|date:"D, d M Y" }}
+                                </td>
+                                <td>
+                                    {{ holiday.name }}
+                                </td>
+                                <td>
+                                    {% if holiday.branch %}
+                                        {{ holiday.branch.name }}
+                                    {% else %}
+                                        All branches
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if holiday.is_paid %}
+                                        Paid
+                                    {% else %}
+                                        Unpaid
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No upcoming holidays
+                </div>
+                <div class="empty__text">
+                    Add public or company holidays so they are not counted as absences.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
+    </script>
+    <script defer src="{% static 'base_template/js/platform.js' %}">
+    </script>
+{% endblock %}
