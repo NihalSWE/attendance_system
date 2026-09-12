@@ -244,17 +244,32 @@
             openPanel = null;
         }
     }
+    // The month and year dropdowns are custom selects, and a custom select
+    // moves its option list to <body> so an overflow:hidden ancestor cannot
+    // clip it. That list is therefore outside the calendar panel in the DOM,
+    // but it belongs to the calendar: picking a month must not count as a
+    // click outside and close the calendar.
+    function inOwnDropdown(target) {
+        return !!(target && target.closest && target.closest(".cs__menu"));
+    }
+
     document.addEventListener("click", function (e) {
         if (openPanel && !openPanel.wrap.contains(e.target)
-            && !openPanel.panel.contains(e.target)) closeOpen();
+            && !openPanel.panel.contains(e.target)
+            && !inOwnDropdown(e.target)) closeOpen();
     });
+    // Capture phase, so this check runs before the custom select's own
+    // Escape handler closes the list, whichever script loaded first.
+    // Escape inside an open month/year list closes only that list; a second
+    // Escape closes the calendar.
     document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape" && openPanel) {
+        if (e.key === "Escape" && openPanel
+            && !document.querySelector(".cs__menu--open")) {
             var b = openPanel.btn;
             closeOpen();
             b.focus();
         }
-    });
+    }, true);
 
     function initSingle(input) {
         var shell = buildShell(input);

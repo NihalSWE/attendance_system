@@ -147,6 +147,14 @@
             control.classList.add("cs__control--open");
             control.setAttribute("aria-expanded", "true");
             open = inst;
+            // Open on the chosen option, not at the top. A long list such as
+            // the calendar's years otherwise starts 80 entries away from the
+            // current value.
+            var chosen = menu.querySelector(".cs__option--on");
+            if (chosen) {
+                menu.scrollTop = chosen.offsetTop
+                    - (menu.clientHeight - chosen.offsetHeight) / 2;
+            }
         });
 
         // Keyboard: arrows move through options, Enter/Space opens, Escape closes.
