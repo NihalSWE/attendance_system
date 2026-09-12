@@ -245,10 +245,10 @@ def weekly_off_create(request):
         return _form_page(
             request,
             form=form,
-            title="Add weekly off day",
-            submit_label="Add weekly off day",
-            success="Weekly off day added.",
-            action=lambda data: services.add_weekly_off(
+            title="Add weekly off days",
+            submit_label="Add weekly off days",
+            success="Weekly off days added.",
+            action=lambda data: services.add_weekly_offs(
                 actor=request.user, company_id=company_id, values=data
             ),
         )

@@ -51,6 +51,14 @@ uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
   stylesheets, although some device and department list templates use it —
   those render as a plain `.btn`. Use `btn--ghost` for a secondary action.
 - Form actions sit in a `.row`, primary button first, then the ghost Cancel.
+- **Several choices from a short fixed set** (for example weekdays) use the
+  `.day-picker` buttons: real checkboxes, visually hidden but focusable, with
+  the filled-ink selected state the calendar uses. Weekdays run Saturday first.
+- **Overlays that move their list to `<body>`** (the custom select, Select2)
+  sit outside their parent in the DOM. Anything that closes on an outside
+  click, like the calendar, must treat those lists as inside.
+- **After a JavaScript or CSS change**, a browser keeps the cached file until a
+  hard refresh (Ctrl+F5). Development has no cache-busting yet.
 
 ## Database clarification and Django admin
 

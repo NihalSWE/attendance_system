@@ -303,6 +303,23 @@ page. Full suite: **407 tests pass** on PostgreSQL; `check` clean; no migration
 drift; no new environment variables. Browser check at 1440/768/375 is still pending — it needs a signed-in
 company administrator.
 
+### Fixes from Ajay's review (2026-09-12)
+
+- **Every calendar closed when a month or year was picked.** The month/year
+  dropdowns are custom selects whose option list is moved to `<body>`, so the
+  calendar read a click on a month as a click outside and closed. Fixed in
+  `datepicker.js`, which every date field on the site uses. Escape inside an
+  open list now closes only the list; the check runs in the capture phase
+  because `customselect.js` loads first. Custom dropdowns also open scrolled to
+  the selected option — the year list used to open at 1946. Verified in a
+  browser.
+- **Weekly off days: several at once.** The Day dropdown became seven day
+  buttons, Saturday first (Ajay's choice). `add_weekly_offs` stores one rule per
+  selected day in one all-or-nothing transaction, and a clash names the day
+  already off. New `.day-picker` component in `components.css`: real checkboxes,
+  visually hidden but focusable, with the calendar's filled-ink selected style.
+  Checked at desktop and 375px. 36 scheduling tests pass.
+
 ### Skipped today — must be built and connected to salary
 
 This is the authoritative list. Nothing on it is dropped; each item says how it
@@ -327,6 +344,8 @@ connects back.
 | Employee detail, edit, history, transfer, salary revision, terminate screens | Services exist, no screens | Employee records used by payroll |
 | Access: department heads, permissions, employee logins; branch-administrator decision | Company admin only | Leave approval |
 | A proper time-picker component | Plain `HH:MM` text box | Shift form |
+| **Holiday year calendar** (Ajay, priority later): a larger calendar to select all of a year's holidays at once, multiple dates, with month/year navigation | Holidays are added one at a time | Holiday list |
+| Static file cache-busting for deployment (hashed file names) | After a JS/CSS change a browser keeps the old file until Ctrl+F5 | Every page |
 
 ## Current checkpoint
 

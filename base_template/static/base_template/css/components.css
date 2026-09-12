@@ -771,3 +771,64 @@ select.input:disabled {
     color: var(--faint);
     cursor: not-allowed;
 }
+
+/* ---------------------------------------------------------- day picker
+   Several weekdays chosen at once, e.g. weekly off days. Real checkboxes stay
+   in the form and post normally; each is visually hidden but still focusable,
+   and the span after it is the button face. Selected uses the same filled ink
+   as the calendar's chosen day, so the two read as one system. */
+
+.day-picker {
+    border: 0;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+}
+.day-picker > legend {
+    padding: 0;
+}
+.day-picker__row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
+.day-picker__day {
+    position: relative;
+    cursor: pointer;
+}
+.day-picker__input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+}
+.day-picker__name {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 52px;
+    height: 40px;
+    padding: 0 var(--s3);
+    border: 1px solid var(--field);
+    border-radius: var(--r);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    user-select: none;
+    transition: background var(--tr), border-color var(--tr), color var(--tr);
+}
+.day-picker__day:hover .day-picker__name {
+    background: var(--surface-sunken);
+}
+.day-picker__input:checked + .day-picker__name {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--on-accent);
+}
+.day-picker__input:focus-visible + .day-picker__name {
+    outline: none;
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}

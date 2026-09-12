@@ -47,9 +47,47 @@
                 <form method="post" class="stack" novalidate>
                     {% csrf_token %}
 
+                    {% for field in form %}
+                        {% if field.widget_type == 'checkboxselectmultiple' %}
+                            <fieldset class="field day-picker">
+                                <legend class="field__label">
+                                    {{ field.label }}
+                                    {% if field.field.required %}
+                                        <span class="field__req">
+                                            *
+                                        </span>
+                                    {% endif %}
+                                </legend>
+                                <div class="day-picker__row">
+                                    {% for option in field %}
+                                        <label class="day-picker__day" for="{{ option.id_for_label }}">
+                                            {{ option.tag }}
+                                            <span class="day-picker__name" aria-hidden="true">
+                                                {{ option.choice_label|slice:":3" }}
+                                            </span>
+                                            <span class="sr-only">
+                                                {{ option.choice_label }}
+                                            </span>
+                                        </label>
+                                    {% endfor %}
+                                </div>
+                                {% if field.help_text %}
+                                    <span class="field__help">
+                                        {{ field.help_text }}
+                                    </span>
+                                {% endif %}
+                                {% for error in field.errors %}
+                                    <span class="field__error">
+                                        {{ error }}
+                                    </span>
+                                {% endfor %}
+                            </fieldset>
+                        {% endif %}
+                    {% endfor %}
+
                     <div class="grid grid--2">
                         {% for field in form %}
-                            {% if field.widget_type != 'checkbox' %}
+                            {% if field.widget_type != 'checkbox' and field.widget_type != 'checkboxselectmultiple' %}
                                 <div class="field">
                                     <label class="field__label" for="{{ field.id_for_label }}">
                                         {{ field.label }}

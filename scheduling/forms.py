@@ -128,7 +128,22 @@ class AttendanceSettingsForm(StyledFormMixin, forms.ModelForm):
         self.fields["company_shift"].empty_label = "Select a shift"
 
 
-class WeeklyOffForm(StyledFormMixin, forms.ModelForm):
+# Saturday first: the Bangladeshi working week starts on Saturday, so the row
+# reads in the order a person thinks about their week.
+_WEEK_ORDER = (5, 6, 0, 1, 2, 3, 4)
+
+
+class WeeklyOffForm(StyledFormMixin, forms.Form):
+    """Pick several weekdays at once; one rule is stored per selected day."""
+
+    weekdays = forms.TypedMultipleChoiceField(
+        label="Days off",
+        coerce=int,
+        choices=[(day, WeeklyOffRule.Weekday(day).label) for day in _WEEK_ORDER],
+        widget=forms.CheckboxSelectMultiple(attrs={"class": "day-picker__input"}),
+        help_text="Select every day that is off each week.",
+        error_messages={"required": "Select at least one day."},
+    )
     branch = forms.ModelChoiceField(
         queryset=Branch.all_objects.none(),
         required=False,
@@ -136,21 +151,19 @@ class WeeklyOffForm(StyledFormMixin, forms.ModelForm):
         empty_label="All branches",
         help_text="Leave as All branches for a company-wide weekly off.",
     )
-
-    class Meta:
-        model = WeeklyOffRule
-        fields = ("weekday", "branch", "is_paid", "effective_from")
-        labels = {
-            "weekday": "Day",
-            "is_paid": "Paid day off",
-            "effective_from": "Starts from",
-        }
-        widgets = {"effective_from": _date_widget("Select start date")}
+    effective_from = forms.DateField(
+        label="Starts from",
+        widget=_date_widget("Select start date"),
+    )
+    is_paid = forms.BooleanField(label="Paid day off", required=False)
 
     def __init__(self, *args, branches=None, **kwargs):
         super().__init__(*args, **kwargs)
         if branches is not None:
             self.fields["branch"].queryset = branches
+        # StyledFormMixin gives every widget the text-input class; checkboxes
+        # carry their own.
+        self.fields["weekdays"].widget.attrs["class"] = "day-picker__input"
         self.fields["is_paid"].widget.attrs["class"] = ""
 
 

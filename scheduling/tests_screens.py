@@ -168,31 +168,47 @@ class AttendanceSettingsTests(CalendarBase):
 
 class WeeklyOffTests(CalendarBase):
     def _add(self, **overrides):
-        values = {"weekday": 4, "branch": None, "is_paid": True,
+        values = {"weekdays": [4], "branch": None, "is_paid": True,
                   "effective_from": date(2026, 1, 1)}
         values.update(overrides)
-        return services.add_weekly_off(
+        return services.add_weekly_offs(
             actor=self.admin, company_id=self.company.pk, values=values
         )
 
     def test_company_wide_weekly_off(self):
-        rule = self._add()
+        [rule] = self._add()
         self.assertIsNone(rule.branch_id)
         self.assertEqual(rule.get_weekday_display(), "Friday")
 
-    def test_same_day_twice_is_a_readable_error(self):
-        self._add()
+    def test_several_days_in_one_step_store_one_rule_each(self):
+        rules = self._add(weekdays=[4, 5])
+        self.assertEqual(
+            sorted(rule.get_weekday_display() for rule in rules),
+            ["Friday", "Saturday"],
+        )
+        with use_company(self.company):
+            self.assertEqual(WeeklyOffRule.objects.count(), 2)
+
+    def test_a_clash_adds_none_of_the_selected_days(self):
+        self._add(weekdays=[4])
         with self.assertRaises(ValidationError) as caught:
-            self._add()
-        self.assertIn("weekday", caught.exception.error_dict)
+            self._add(weekdays=[4, 5])
+        self.assertIn("Friday", str(caught.exception))
+        with use_company(self.company):
+            # Saturday was not added on its own: all or nothing.
+            self.assertFalse(WeeklyOffRule.objects.filter(weekday=5).exists())
+
+    def test_no_day_selected_is_refused(self):
+        with self.assertRaises(ValidationError):
+            self._add(weekdays=[])
 
     def test_the_same_day_can_be_off_for_one_branch_and_company_wide(self):
         self._add()
-        rule = self._add(branch=self.hq)
+        [rule] = self._add(branch=self.hq)
         self.assertEqual(rule.branch_id, self.hq.pk)
 
     def test_stopping_keeps_the_rule_with_an_end_date(self):
-        rule = self._add()
+        [rule] = self._add()
         services.end_weekly_off(
             actor=self.admin, company_id=self.company.pk, rule_id=rule.pk,
             effective_to=date(2026, 7, 1),
@@ -202,7 +218,7 @@ class WeeklyOffTests(CalendarBase):
         self.assertEqual(rule.effective_to, date(2026, 7, 1))
 
     def test_stop_date_must_be_after_the_start(self):
-        rule = self._add()
+        [rule] = self._add()
         with self.assertRaises(ValidationError):
             services.end_weekly_off(
                 actor=self.admin, company_id=self.company.pk, rule_id=rule.pk,
@@ -277,9 +293,9 @@ class CalendarScreenTests(CalendarBase):
 
     def test_every_form_page_renders(self):
         shift = self._shift()
-        rule = services.add_weekly_off(
+        [rule] = services.add_weekly_offs(
             actor=self.admin, company_id=self.company.pk,
-            values={"weekday": 4, "branch": None, "is_paid": True,
+            values={"weekdays": [4], "branch": None, "is_paid": True,
                     "effective_from": date(2026, 1, 1)},
         )
         holiday = services.create_holiday(
@@ -325,6 +341,32 @@ class CalendarScreenTests(CalendarBase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Ends on the next day")
+
+    def test_weekly_off_page_shows_seven_day_buttons_saturday_first(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("scheduling:weekly_off_create"))
+        body = response.content.decode()
+        self.assertEqual(body.count('class="day-picker__input"'), 7)
+        self.assertLess(body.index("Saturday"), body.index("Friday"))
+
+    def test_adding_two_days_through_the_form(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("scheduling:weekly_off_create"), {
+            "weekdays": ["4", "5"], "effective_from": "2026-01-01", "is_paid": "on",
+        })
+        self.assertRedirects(response, reverse("scheduling:schedule_overview"))
+        with use_company(self.company):
+            self.assertEqual(
+                sorted(WeeklyOffRule.objects.values_list("weekday", flat=True)), [4, 5]
+            )
+
+    def test_no_day_selected_shows_a_field_error(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("scheduling:weekly_off_create"), {
+            "effective_from": "2026-01-01",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Select at least one day.")
 
     def test_duplicate_holiday_shows_on_the_date_field(self):
         services.create_holiday(

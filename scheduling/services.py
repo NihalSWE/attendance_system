@@ -43,7 +43,9 @@ SHIFT_FIELDS = (
     "minimum_half_day_minutes",
 )
 SETTINGS_FIELDS = ("company_shift", "missing_punch_policy")
-WEEKLY_OFF_FIELDS = ("branch", "weekday", "is_paid", "effective_from")
+WEEKLY_OFF_FIELDS = ("branch", "weekdays", "is_paid", "effective_from")
+# What a single stored rule records, for its audit snapshot.
+WEEKLY_OFF_RULE_FIELDS = ("branch", "weekday", "is_paid", "effective_from")
 HOLIDAY_FIELDS = ("branch", "holiday_date", "name", "description", "is_paid")
 
 
@@ -245,37 +247,53 @@ def set_shift_status(*, actor, company_id, shift_id, status):
 # --------------------------------------------------------------------------
 
 @transaction.atomic
-def add_weekly_off(*, actor, company_id, values):
-    """Add a recurring weekly off day, company-wide or for one branch."""
+def add_weekly_offs(*, actor, company_id, values):
+    """Add one or more recurring weekly off days in a single step.
+
+    One rule is stored per selected weekday, so each can later be stopped on
+    its own date. All or nothing: if any selected day is already a weekly off
+    for the same scope, none are added and the clash is named.
+    """
     membership = require_structure_manager(actor, company_id)
     values = _writable(values, WEEKLY_OFF_FIELDS)
+    weekdays = sorted(set(int(day) for day in (values.pop("weekdays", None) or [])))
+    if not weekdays:
+        raise ValidationError({"weekdays": "Select at least one day."})
+    invalid = [day for day in weekdays if day not in WeeklyOffRule.Weekday.values]
+    if invalid:
+        raise ValidationError({"weekdays": "Unknown day selected."})
+
     with use_company(company_id):
         _check_branch(membership, values)
-        clash = WeeklyOffRule.objects.filter(
-            weekday=values.get("weekday"),
+        clashes = WeeklyOffRule.objects.filter(
+            weekday__in=weekdays,
             branch=values.get("branch"),
             status=WeeklyOffRule.Status.ACTIVE,
-        ).first()
-        if clash is not None:
+        ).order_by("weekday")
+        if clashes.exists():
+            names = ", ".join(rule.get_weekday_display() for rule in clashes)
+            scope = "for this branch" if values.get("branch") else "company-wide"
             raise ValidationError({
-                "weekday": (
-                    f"{clash.get_weekday_display()} is already a weekly off day "
-                    f"{'for this branch' if clash.branch_id else 'company-wide'}."
-                )
+                "weekdays": f"Already a weekly off {scope}: {names}. Unselect it."
             })
-        rule = create_validated(
-            WeeklyOffRule,
-            company=membership.company,
-            created_by=actor,
-            updated_by=actor,
-            **values,
-        )
-        record_company_event(
-            actor=actor, membership=membership, company=membership.company,
-            action="weekly_off.added", obj=rule,
-            after=_snapshot(rule, WEEKLY_OFF_FIELDS),
-        )
-    return rule
+
+        rules = []
+        for day in weekdays:
+            rule = create_validated(
+                WeeklyOffRule,
+                company=membership.company,
+                created_by=actor,
+                updated_by=actor,
+                weekday=day,
+                **values,
+            )
+            record_company_event(
+                actor=actor, membership=membership, company=membership.company,
+                action="weekly_off.added", obj=rule,
+                after=_snapshot(rule, WEEKLY_OFF_RULE_FIELDS),
+            )
+            rules.append(rule)
+    return rules
 
 
 def get_weekly_off_for_edit(*, actor, company_id, rule_id):
