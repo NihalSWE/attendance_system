@@ -191,14 +191,49 @@ Nihal's screens used "Hire an employee", "job title", "adopt a department" and
 says **Create employee / Edit employee**, **Designation**, **Add department /
 Assign designations**, and never "catalogue" on company screens.
 
-**Status: documents updated, code not yet.** The code on
-`feature/company-org-setup` still has `Designation.department`. Nihal is making
-the code change on `feature/organisation-catalogue-ui`: one additive migration
-`organization/0004` that removes the foreign key and merges designations that
-were only split by department, plus every form, service, view, endpoint, script
-and test built on the old rule, plus the wording. He was told not to edit
-`docs/`, so the two branches do not conflict. When his branch is pushed, Ajay's
-session pulls it, reviews it against these documents, and merges it.
+**Status: merged.** Nihal made the code change on
+`feature/organisation-catalogue-ui` (commit 2852d07) and it was merged into
+`feature/company-org-setup` after review:
+
+- `organization/0004_designation_independent_of_department` — additive and
+  reversible. Removes `Designation.department` and the per-department unique
+  constraints, merges designations that differed only by department
+  (case- and spacing-insensitive), repoints every company placement at the
+  survivor, suffixes colliding codes (`MGR`, `MGR-2`), and settles deferred
+  constraints before the ALTERs.
+- Removed everything the old rule required: `CompanyDesignation.clean()`, the
+  department filter on the company's designation multiselect, the
+  `department_titles` endpoint and `adoption.js`.
+- `tests_migrations.py` now migrates to the graph's leaf nodes and asserts the
+  final state: one "Manager" row, every company placement resolving to it,
+  globally unique codes.
+- Wording applied everywhere a person reads it, per the vocabulary table in
+  `UI_AND_ONBOARDING_CONVENTIONS.md`. The `hire_*` modules, templates, script,
+  tests and URLs became `employee_*`, and `employees.services.hire_employee`
+  became `create_employee`. Root screens moved from `/platform/catalogue/...`
+  to `/platform/departments/` and `/platform/designations/`. Internal names
+  (`CompanyDepartment`, `CompanyDesignation`, `adoption_*`, `catalogue_*`) are
+  unchanged because nobody reads them on screen.
+- The root designation usage table gained a Department column, because a
+  company using one designation under two of its departments otherwise showed
+  as two identical rows.
+
+Review found one edit to an already-applied migration
+(`access_control/0002`) — docstring wording only, no operation changed, so it
+is safe. His branch notes were written to a new repo-root `PHASE_STATUS.md`
+because he had been told not to edit `docs/`; they are folded into this entry
+and that file is removed.
+
+**Wording still open** — raised by Nihal, none blocking, for Ajay to decide:
+
+1. **"Platform lists"** as the breadcrumb on the root department/designation
+   forms — the only phrase found for "the two root lists together".
+2. **"Add a department"** means different things on the two surfaces: root
+   *creates* a name for everyone, a company *starts using* one in a branch. The
+   company one could become "Use a department here" if it reads ambiguous.
+3. **"Used by"** on the root lists counts company placements, so one company
+   using Manager under two departments counts as 2. If it should mean "how many
+   companies", the annotation needs to count distinct companies instead.
 
 Schema artifacts regenerated: 86 models / 91 tables / **1,638 columns / 464
 FKs** (one column and one foreign key fewer). `verify_schema.cjs` passes.
@@ -210,7 +245,7 @@ FKs** (one column and one foreign key fewer). `verify_schema.cjs` passes.
 - **Platform UI:** root routes to /platform/companies/ without membership; generated company identifiers, company create/edit/status, one master administrator with editable credentials/status, dated feature access and recent audit history work through forms.
 - **Company UI:** existing lists remain read-only. Company-wide access is now restricted to unrestricted owner/company_admin; other roles/scopes fail closed until proper scoped views ship. Unimplemented Add/Export controls are explicitly disabled with reasons.
 - **Design:** Warm Paper / Ink tokens and Sora; new platform tables use real DataTables with server-side paging/search/sorting, and database-backed selects use real Select2 while fixed choices use styled native selects. Responsive browser verification is required. Remaining component groups are not claimed complete.
-- **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. The code catches up when Nihal's organization/0004 merges.
+- **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
 - **Next action:** apply the six new migrations to the development database, then root catalogue screens (department/designation) followed by the company adoption screens; then employee lifecycle forms and full P1 acceptance. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
