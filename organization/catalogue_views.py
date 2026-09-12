@@ -1,4 +1,4 @@
-"""Root-only screens for the department and job-title catalogues.
+"""Root-only screens for the platform department and designation lists.
 
 HTTP adapters only: every mutation delegates to
 ``organization.catalogue_services``, which re-checks authorization and
@@ -42,7 +42,8 @@ def platform_required(view):
 
 
 def _form_page(request, *, form, title, submit_label, action, redirect_to,
-               explanation="", usage=None, usage_label=""):
+               explanation="", usage=None, usage_label="",
+               usage_shows_department=False):
     """Shared create/edit rendering.
 
     A ValidationError from the service is mapped back onto the offending
@@ -63,7 +64,7 @@ def _form_page(request, *, form, title, submit_label, action, redirect_to,
             # lands here rather than in clean().
             form.add_error(
                 None,
-                "That code or name is already used by another catalogue entry.",
+                "That code or name is already used by another entry.",
             )
         else:
             messages.success(request, "Changes saved.")
@@ -77,6 +78,9 @@ def _form_page(request, *, form, title, submit_label, action, redirect_to,
         "cancel_url": redirect_to,
         "usage": usage,
         "usage_label": usage_label,
+        # Only the designation screens need it: a company may use one
+        # designation under several of its departments.
+        "usage_shows_department": usage_shows_department,
     })
 
 
@@ -114,12 +118,12 @@ def department_create(request):
     return _form_page(
         request,
         form=CatalogueDepartmentForm(request.POST or None),
-        title="Add department to the catalogue",
+        title="Add department",
         submit_label="Add department",
         explanation=(
             "This is the platform-wide list. Every company chooses from these "
-            "names, so keep them canonical — a company adopts a department into "
-            "one of its branches rather than creating its own spelling."
+            "names, so keep them canonical — a company adds a department to one "
+            "of its branches rather than creating its own spelling."
         ),
         redirect_to="catalogue:department_list",
         action=lambda data: services.create_department(actor=request.user, values=data),
@@ -138,7 +142,7 @@ def department_edit(request, pk):
         submit_label="Save department",
         explanation=(
             "Renaming changes what every company sees, because a company "
-            "adoption reads the name through to this row rather than copying it."
+            "reads the name through to this row rather than copying it."
         ),
         redirect_to="catalogue:department_list",
         usage=usage,
@@ -161,8 +165,8 @@ def department_status(request, pk):
         title=f"Change status of {department.name}",
         submit_label="Save status",
         explanation=(
-            "Catalogue entries are never deleted. Deactivating hides this "
-            "department from new adoptions; companies already using it keep "
+            "Entries are never deleted. Deactivating hides this "
+            "department from being added; companies already using it keep "
             "working, and their history stays readable."
         ),
         redirect_to="catalogue:department_list",
@@ -186,29 +190,19 @@ def designation_list(request):
     query = request.GET.get("q", "").strip()[:200]
     if query:
         queryset = queryset.filter(
-            Q(name__icontains=query)
-            | Q(code__icontains=query)
-            | Q(department__name__icontains=query)
+            Q(name__icontains=query) | Q(code__icontains=query)
         )
-
-    department = request.GET.get("department", "").strip()
-    if department.isdigit():
-        queryset = queryset.filter(department_id=int(department))
 
     status = request.GET.get("status", "").strip()
     if status in dict(ActiveStatus.choices):
         queryset = queryset.filter(status=status)
 
-    page = Paginator(
-        queryset.order_by("department__name", "name"), 25
-    ).get_page(request.GET.get("page"))
+    page = Paginator(queryset.order_by("name"), 25).get_page(request.GET.get("page"))
     return render(request, "organization/platform/designation_list.html", {
         "page": page,
         "query": query,
         "status": status,
         "statuses": ActiveStatus.choices,
-        "department": department,
-        "departments": Department.objects.order_by("name"),
         "total": total,
         "filtered_total": queryset.count(),
     })
@@ -217,19 +211,15 @@ def designation_list(request):
 @platform_required
 @require_http_methods(["GET", "POST"])
 def designation_create(request):
-    initial = {}
-    preset = request.GET.get("department", "").strip()
-    if preset.isdigit():
-        initial["department"] = preset
     return _form_page(
         request,
-        form=CatalogueDesignationForm(request.POST or None, initial=initial),
-        title="Add job title to the catalogue",
-        submit_label="Add job title",
+        form=CatalogueDesignationForm(request.POST or None),
+        title="Add designation",
+        submit_label="Add designation",
         explanation=(
-            "A job title belongs to exactly one department, so the same word is "
-            "filed separately under each — \"HR Manager\" under Human Resources, "
-            "\"Sales Manager\" under Sales. Choose the department first."
+            "One flat list for the whole platform. Create \"Manager\" once; each "
+            "company then decides which of its own departments use it, so one "
+            "company can place it under Sales and another under Production."
         ),
         redirect_to="catalogue:designation_list",
         action=lambda data: services.create_designation(actor=request.user, values=data),
@@ -239,22 +229,21 @@ def designation_create(request):
 @platform_required
 @require_http_methods(["GET", "POST"])
 def designation_edit(request, pk):
-    designation = get_object_or_404(
-        Designation.objects.select_related("department"), pk=pk
-    )
+    designation = get_object_or_404(Designation, pk=pk)
     return _form_page(
         request,
         form=CatalogueDesignationForm(request.POST or None, instance=designation),
         title=f"Edit {designation.name}",
-        submit_label="Save job title",
+        submit_label="Save designation",
         explanation=(
-            "Filed under "
-            f"{designation.department.name}. A title already adopted by a "
-            "company cannot be moved to another department."
+            "Renaming changes what every company sees, because a company "
+            "assignment reads the name through to this row. Which departments "
+            "use it is each company's own choice and is unaffected."
         ),
         redirect_to="catalogue:designation_list",
         usage=services.designation_usage(designation),
-        usage_label="Companies using this job title",
+        usage_label="Companies using this designation",
+        usage_shows_department=True,
         action=lambda data: services.update_designation(
             actor=request.user, designation_id=designation.pk, values=data
         ),
@@ -264,9 +253,7 @@ def designation_edit(request, pk):
 @platform_required
 @require_http_methods(["GET", "POST"])
 def designation_status(request, pk):
-    designation = get_object_or_404(
-        Designation.objects.select_related("department"), pk=pk
-    )
+    designation = get_object_or_404(Designation, pk=pk)
     return _form_page(
         request,
         form=CatalogueStatusForm(
@@ -275,12 +262,13 @@ def designation_status(request, pk):
         title=f"Change status of {designation.name}",
         submit_label="Save status",
         explanation=(
-            "Catalogue entries are never deleted. Deactivating hides this title "
-            "from new adoptions; employees who already hold it keep it."
+            "Entries are never deleted. Deactivating hides this designation "
+            "from new assignments; employees who already hold it keep it."
         ),
         redirect_to="catalogue:designation_list",
         usage=services.designation_usage(designation),
-        usage_label="Companies using this job title",
+        usage_label="Companies using this designation",
+        usage_shows_department=True,
         action=lambda data: services.set_designation_status(
             actor=request.user, designation_id=designation.pk, status=data["status"]
         ),

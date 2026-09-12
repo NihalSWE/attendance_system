@@ -41,11 +41,11 @@ def _placement(device):
     """Pick the branch/department/designation a draft employee is filed under.
 
     The device's own branch is used, because that is where the person
-    physically scans. The company must already have adopted a department and a
-    job title in that branch: inventing organisation structure is HR's
-    decision, not a side-effect of plugging in a terminal. Note these are the
-    company's own adoption rows, not the shared root catalogue — a device can
-    only ever be filed against its own company's structure.
+    physically scans. The company must already have added a department in that
+    branch and assigned a designation to it: inventing organisation structure
+    is HR's decision, not a side-effect of plugging in a terminal. Note these
+    are the company's own rows, not the root lists — a device can only ever be
+    filed against its own company's structure.
     """
     from organization.models import CompanyDepartment, CompanyDesignation
 

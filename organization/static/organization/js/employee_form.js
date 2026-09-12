@@ -1,8 +1,9 @@
-/* Dependent branch -> department -> job title selects on the hire form.
+/* Dependent branch -> department -> designation selects on the create
+   employee form.
 
    Each choice narrows the next, because a department belongs to one branch and
-   a job title to one department. The server re-checks the whole chain, so this
-   is convenience rather than enforcement — but offering a combination that
+   this company decides which designations that department uses. The server
+   re-checks the whole chain, so this is convenience rather than enforcement — but offering a combination that
    cannot be saved is a worse experience than not listing it.
 
    Progressive enhancement: the fields are already narrowed server-side from
@@ -73,7 +74,7 @@ document.addEventListener("DOMContentLoaded", function () {
     onChange(branch, function () {
         if (!branch.value) {
             fill(department, [], "Select a department");
-            fill(designation, [], "Select a job title");
+            fill(designation, [], "Select a designation");
             return;
         }
         load(
@@ -81,22 +82,22 @@ document.addEventListener("DOMContentLoaded", function () {
             department,
             "Select a department",
             function () {
-                /* The department list changed, so the old title list no longer
-                   applies until a department is picked again. */
-                fill(designation, [], "Select a job title");
+                /* The department list changed, so the old designation list
+                   no longer applies until a department is picked again. */
+                fill(designation, [], "Select a designation");
             }
         );
     });
 
     onChange(department, function () {
         if (!department.value) {
-            fill(designation, [], "Select a job title");
+            fill(designation, [], "Select a designation");
             return;
         }
         load(
-            form.dataset.titlesUrl + "?department=" + encodeURIComponent(department.value),
+            form.dataset.designationsUrl + "?department=" + encodeURIComponent(department.value),
             designation,
-            "Select a job title"
+            "Select a designation"
         );
     });
 });

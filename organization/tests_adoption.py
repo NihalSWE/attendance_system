@@ -1,9 +1,10 @@
-"""Adopting a catalogue department into a branch: services and screens.
+"""Adding a root department to a branch, and assigning designations to it.
 
-The load-bearing tests here are the refusals — a title from another
-department, a second adoption of the same department into one branch, and
-removing a title employees still hold. Each of those is a data-integrity rule
-that a form alone would not enforce.
+The load-bearing tests are the refusals that remain: a second use of the same
+department in one branch, and removing a designation employees still hold.
+Cross-department refusal is deliberately absent — any designation may be
+assigned to any of the company's departments, which is the whole point of the
+relation living on CompanyDesignation.
 """
 
 from datetime import datetime, time, timezone as dt_timezone
@@ -40,9 +41,9 @@ class AdoptionTestBase(TestCase):
         # Root catalogue, curated by the platform operator.
         self.software = ensure_department("SW", "Software")
         self.hr = ensure_department("HR", "Human Resources")
-        self.developer = ensure_designation(self.software, "DEV", "Developer")
-        self.senior = ensure_designation(self.software, "SDV", "Senior Developer")
-        self.hr_manager = ensure_designation(self.hr, "HRM", "HR Manager")
+        self.developer = ensure_designation("DEV", "Developer")
+        self.senior = ensure_designation("SDV", "Senior Developer")
+        self.hr_manager = ensure_designation("HRM", "HR Manager")
 
         self.company, self.owner, self.branch = self._company("A", "owner-a@example.test")
         self.other_company, self.other_owner, self.other_branch = self._company(
@@ -110,29 +111,53 @@ class AdoptionServiceTests(AdoptionTestBase):
             )
         self.assertIn("department", ctx.exception.message_dict)
 
-    def test_a_title_from_another_department_is_refused(self):
-        with self.assertRaises(ValidationError) as ctx:
-            services.adopt_department(
-                actor=self.owner,
-                company_id=self.company.pk,
-                values={
-                    "branch": self.branch,
-                    "department": self.software,
-                    "status": "active",
-                    # HR Manager is filed under Human Resources, not Software.
-                    "designations": [self.developer, self.hr_manager],
-                },
+    def test_any_designation_may_be_assigned_to_any_department(self):
+        """Root keeps the lists apart; the company decides the pairing."""
+        adoption = services.adopt_department(
+            actor=self.owner,
+            company_id=self.company.pk,
+            values={
+                "branch": self.branch,
+                "department": self.software,
+                "status": "active",
+                # hr_manager is just another designation — nothing files it
+                # under Human Resources any more.
+                "designations": [self.developer, self.hr_manager],
+            },
+        )
+        with use_company(self.company):
+            self.assertEqual(
+                sorted(l.designation.name for l in adoption.designations.all()),
+                ["Developer", "HR Manager"],
             )
-        self.assertIn("designations", ctx.exception.message_dict)
 
-    def test_titles_and_department_are_written_in_one_transaction(self):
-        """A failed title must not leave a department with no titles behind."""
+    def test_two_departments_of_one_company_may_share_a_designation(self):
+        software = services.adopt_department(
+            actor=self.owner, company_id=self.company.pk,
+            values={"branch": self.branch, "department": self.software,
+                    "status": "active", "designations": [self.hr_manager]},
+        )
+        hr = services.adopt_department(
+            actor=self.owner, company_id=self.company.pk,
+            values={"branch": self.branch, "department": self.hr,
+                    "status": "active", "designations": [self.hr_manager]},
+        )
+        with use_company(self.company):
+            for adoption in (software, hr):
+                self.assertEqual(
+                    [l.designation_id for l in adoption.designations.all()],
+                    [self.hr_manager.pk],
+                )
+
+    def test_department_and_designations_are_written_in_one_transaction(self):
+        """A failure must not leave a half-built department behind."""
         with self.assertRaises(ValidationError):
             services.adopt_department(
                 actor=self.owner,
                 company_id=self.company.pk,
-                values={"branch": self.branch, "department": self.software,
-                        "status": "active", "designations": [self.hr_manager]},
+                # No branch: rejected before anything is written.
+                values={"department": self.software, "status": "active",
+                        "designations": [self.developer]},
             )
         with use_company(self.company):
             self.assertEqual(CompanyDepartment.objects.count(), 0)
@@ -324,22 +349,11 @@ class AdoptionScreenTests(AdoptionTestBase):
                 CompanyDepartment.objects.filter(department=self.software).count(), 1
             )
 
-    def test_form_does_not_offer_titles_from_another_department(self):
-        response = self.client.get(
-            reverse("organization:adoption_create") + f"?department={self.software.pk}"
-        )
+    def test_form_offers_every_active_designation(self):
+        """No filtering by department: the company chooses the pairing."""
+        response = self.client.get(reverse("organization:adoption_create"))
         offered = set(response.context["form"].fields["designations"].queryset)
-        self.assertEqual(offered, {self.developer, self.senior})
-        self.assertNotIn(self.hr_manager, offered)
-
-    def test_titles_endpoint_filters_by_department(self):
-        response = self.client.get(
-            reverse("organization:department_titles"),
-            {"department": self.hr.pk},
-        )
-        self.assertEqual(response.status_code, 200)
-        names = {row["text"] for row in response.json()["results"]}
-        self.assertEqual(names, {"HR Manager"})
+        self.assertEqual(offered, {self.developer, self.senior, self.hr_manager})
 
     def test_anonymous_is_redirected(self):
         self.client.logout()

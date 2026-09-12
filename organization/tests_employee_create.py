@@ -1,6 +1,6 @@
-"""Hiring an employee through the browser.
+"""Creating an employee through the browser.
 
-The domain write is ``employees.services.hire_employee``, already tested in
+The domain write is ``employees.services.create_employee``, already tested in
 employees/. These cover the screen: that the dependent selects narrow
 correctly, that a crafted combination is refused, and that the database's own
 constraint on employee-code reuse reaches the user as a readable field error
@@ -30,13 +30,13 @@ def dt(year, month, day):
     return datetime(year, month, day, tzinfo=dt_timezone.utc)
 
 
-class HireScreenTests(TestCase):
+class EmployeeCreateScreenTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.software = ensure_department("SW", "Software")
         self.hr = ensure_department("HR", "Human Resources")
-        self.developer = ensure_designation(self.software, "DEV", "Developer")
-        self.hr_manager = ensure_designation(self.hr, "HRM", "HR Manager")
+        self.developer = ensure_designation("DEV", "Developer")
+        self.hr_manager = ensure_designation("HRM", "HR Manager")
 
         self.company = Company.objects.create(code="A", slug="a", name="Company A")
         self.owner = User.objects.create_user(
@@ -96,24 +96,24 @@ class HireScreenTests(TestCase):
     # --- rendering --------------------------------------------------------
 
     def test_form_renders(self):
-        response = self.client.get(reverse("organization:hire"))
+        response = self.client.get(reverse("organization:employee_create"))
         self.assertEqual(response.status_code, 200)
 
     def test_anonymous_is_redirected(self):
         self.client.logout()
         self.assertEqual(
-            self.client.get(reverse("organization:hire")).status_code, 302
+            self.client.get(reverse("organization:employee_create")).status_code, 302
         )
 
     def test_dependent_endpoints_narrow_by_parent(self):
         response = self.client.get(
-            reverse("organization:hire_branch_departments"), {"branch": self.branch.pk}
+            reverse("organization:employee_branch_departments"), {"branch": self.branch.pk}
         )
         self.assertEqual(
             {row["text"] for row in response.json()["results"]}, {"Software"}
         )
         response = self.client.get(
-            reverse("organization:hire_department_titles"),
+            reverse("organization:employee_department_designations"),
             {"department": self.adoption.pk},
         )
         self.assertEqual(
@@ -122,9 +122,9 @@ class HireScreenTests(TestCase):
 
     # --- the happy path ---------------------------------------------------
 
-    def test_hiring_creates_employee_assignment_and_compensation(self):
+    def test_creating_makes_employee_assignment_and_compensation(self):
         response = self.client.post(
-            reverse("organization:hire"), self._payload(), follow=True
+            reverse("organization:employee_create"), self._payload(), follow=True
         )
         self.assertEqual(response.status_code, 200)
         with use_company(self.company):
@@ -139,7 +139,7 @@ class HireScreenTests(TestCase):
         self.assertEqual(compensation.currency, self.company.currency)
 
     def test_start_date_is_stored_timezone_aware(self):
-        self.client.post(reverse("organization:hire"), self._payload())
+        self.client.post(reverse("organization:employee_create"), self._payload())
         with use_company(self.company):
             assignment = EmployeeAssignment.objects.get(employee_code="E-1")
         self.assertIsNotNone(assignment.effective_from.tzinfo)
@@ -148,7 +148,7 @@ class HireScreenTests(TestCase):
 
     def test_a_department_from_another_branch_is_refused(self):
         response = self.client.post(
-            reverse("organization:hire"),
+            reverse("organization:employee_create"),
             self._payload(department=self.other_adoption.pk, designation=self.other_title.pk),
         )
         self.assertEqual(response.status_code, 200)
@@ -156,9 +156,9 @@ class HireScreenTests(TestCase):
         with use_company(self.company):
             self.assertFalse(Employee.objects.exists())
 
-    def test_a_job_title_from_another_department_is_refused(self):
+    def test_a_designation_from_another_department_is_refused(self):
         response = self.client.post(
-            reverse("organization:hire"),
+            reverse("organization:employee_create"),
             self._payload(designation=self.other_title.pk),
         )
         self.assertEqual(response.status_code, 200)
@@ -168,14 +168,14 @@ class HireScreenTests(TestCase):
 
     def test_zero_pay_is_refused(self):
         response = self.client.post(
-            reverse("organization:hire"), self._payload(base_rate="0")
+            reverse("organization:employee_create"), self._payload(base_rate="0")
         )
         self.assertIn("base_rate", response.context["form"].errors)
 
     def test_reusing_an_open_employee_code_is_a_readable_field_error(self):
-        self.client.post(reverse("organization:hire"), self._payload())
+        self.client.post(reverse("organization:employee_create"), self._payload())
         response = self.client.post(
-            reverse("organization:hire"),
+            reverse("organization:employee_create"),
             self._payload(first_name="Karim", employee_code="E-1"),
         )
         self.assertEqual(response.status_code, 200)
@@ -188,7 +188,7 @@ class HireScreenTests(TestCase):
 
     def test_a_code_is_reusable_once_the_previous_placement_ends(self):
         """The central identity rule: the code is reusable, the person is not."""
-        self.client.post(reverse("organization:hire"), self._payload())
+        self.client.post(reverse("organization:employee_create"), self._payload())
         with use_company(self.company):
             assignment = EmployeeAssignment.objects.get(employee_code="E-1")
             assignment.effective_to = dt(2026, 6, 1)
@@ -196,7 +196,7 @@ class HireScreenTests(TestCase):
             assignment.save()
 
         response = self.client.post(
-            reverse("organization:hire"),
+            reverse("organization:employee_create"),
             self._payload(
                 first_name="Karim", employee_code="E-1", effective_from="2026-07-01"
             ),
@@ -211,6 +211,6 @@ class HireScreenTests(TestCase):
                 len({a.employee_id for a in holders}), 2
             )
 
-    def test_employee_list_links_to_the_hire_form(self):
+    def test_employee_list_links_to_the_create_form(self):
         response = self.client.get(reverse("employee_list"))
-        self.assertContains(response, reverse("organization:hire"))
+        self.assertContains(response, reverse("organization:employee_create"))

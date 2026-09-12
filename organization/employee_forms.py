@@ -1,9 +1,9 @@
-"""Form for hiring an employee into a branch, department and job title.
+"""Form for creating an employee and placing them in the organisation.
 
-The domain logic lives in ``employees.services.hire_employee`` and is already
-tested; this only collects and narrows the input. Branch, department and job
-title are dependent: each narrows the next, so a combination that the model
-would reject is never offered.
+The domain logic lives in ``employees.services.create_employee`` and is already
+tested; this only collects and narrows the input. Branch, department and
+designation are dependent: each narrows the next, so a combination that the
+model would reject is never offered.
 
 ``employee_code`` is deliberately manual. It is reusable by someone else once
 the previous holder's interval ends, which an auto-generated code could not
@@ -22,7 +22,7 @@ from employees.models import Employee, EmployeeCompensation
 from organization.models import Branch, CompanyDepartment, CompanyDesignation
 
 
-class HireEmployeeForm(StyledFormMixin, forms.Form):
+class EmployeeCreateForm(StyledFormMixin, forms.Form):
     """Collect one person's identity, placement and starting pay."""
 
     first_name = forms.CharField(max_length=150, label="First name")
@@ -45,12 +45,12 @@ class HireEmployeeForm(StyledFormMixin, forms.Form):
     department = forms.ModelChoiceField(
         queryset=CompanyDepartment.all_objects.none(),
         label="Department",
-        help_text="Only departments this branch has adopted are listed.",
+        help_text="Only departments added to this branch are listed.",
     )
     designation = forms.ModelChoiceField(
         queryset=CompanyDesignation.all_objects.none(),
-        label="Job title",
-        help_text="Only job titles belonging to the chosen department are listed.",
+        label="Designation",
+        help_text="Only designations assigned to the chosen department are listed.",
     )
     manager = forms.ModelChoiceField(
         queryset=Employee.all_objects.none(), required=False, label="Manager"
@@ -84,7 +84,7 @@ class HireEmployeeForm(StyledFormMixin, forms.Form):
         self.fields["manager"].empty_label = "No manager"
         self.fields["branch"].empty_label = "Select a branch"
         self.fields["department"].empty_label = "Select a department"
-        self.fields["designation"].empty_label = "Select a job title"
+        self.fields["designation"].empty_label = "Select a designation"
 
         # Narrow the dependent fields from whatever is already chosen, so a
         # re-rendered form after an error still validates the same way.
@@ -92,7 +92,7 @@ class HireEmployeeForm(StyledFormMixin, forms.Form):
         self.fields["department"].queryset = self._departments_for(branch)
 
         department = self._chosen("department", CompanyDepartment)
-        self.fields["designation"].queryset = self._titles_for(department)
+        self.fields["designation"].queryset = self._designations_for(department)
 
     def _chosen(self, field, model):
         raw = self.data.get(self.add_prefix(field)) if self.is_bound else self.initial.get(field)
@@ -113,7 +113,7 @@ class HireEmployeeForm(StyledFormMixin, forms.Form):
         )
 
     @staticmethod
-    def _titles_for(department):
+    def _designations_for(department):
         if department is None:
             return CompanyDesignation.objects.none()
         return (
@@ -146,10 +146,10 @@ class HireEmployeeForm(StyledFormMixin, forms.Form):
         # form is a convenience, and a crafted POST reaches this method too.
         if branch and department and department.branch_id != branch.pk:
             self.add_error(
-                "department", "That department is not adopted by this branch."
+                "department", "That department is not added to this branch."
             )
         if department and designation and designation.company_department_id != department.pk:
             self.add_error(
-                "designation", "That job title does not belong to this department."
+                "designation", "That designation is not assigned to this department."
             )
         return cleaned

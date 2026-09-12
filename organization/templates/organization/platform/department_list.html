@@ -13,11 +13,11 @@
     <div class="page__head">
         <div>
             <h1 class="page__title">
-                Department catalogue
+                Departments
             </h1>
             <p class="page__sub">
-                The platform-wide list every company chooses from. A company adopts a
-                department into one of its branches rather than creating its own.
+                The platform-wide list every company chooses from. A company adds a
+                department to one of its branches rather than creating its own.
             </p>
         </div>
         <div class="page__actions">
@@ -85,10 +85,7 @@
                                 Status
                             </th>
                             <th class="numeric">
-                                Designations
-                            </th>
-                            <th class="numeric">
-                                Adopted by
+                                Used by
                             </th>
                             <th class="no-sort">
                                 Action
@@ -119,9 +116,6 @@
                                     {% endif %}
                                 </td>
                                 <td class="numeric">
-                                    {{ department.designation_count }}
-                                </td>
-                                <td class="numeric">
                                     {{ department.adoption_count }}
                                 </td>
                                 <td>
@@ -130,9 +124,6 @@
                                     </a>
                                     <a class="btn btn--quiet btn--sm" href="{% url 'catalogue:department_status' department.pk %}">
                                         Status
-                                    </a>
-                                    <a class="btn btn--quiet btn--sm" href="{% url 'catalogue:designation_list' %}?department={{ department.pk }}">
-                                        Designations
                                     </a>
                                 </td>
                             </tr>
@@ -168,9 +159,9 @@
                 </div>
                 <div class="empty__text">
                     {% if query or status %}
-                        Clear the search or status filter to see the whole catalogue.
+                        Clear the search or status filter to see every department.
                     {% else %}
-                        Add the first department. Companies cannot adopt one until it
+                        Add the first department. No company can use one until it
                         exists here.
                     {% endif %}
                 </div>

@@ -19,8 +19,8 @@
                 Departments
             </h1>
             <p class="page__sub">
-                The departments this company uses, and the job titles inside each.
-                Names come from the platform catalogue so they stay consistent.
+                The departments this company uses, and the designations inside each.
+                Names come from the platform list so they stay consistent.
             </p>
         </div>
         <div class="page__actions">
@@ -29,12 +29,12 @@
                     Copy to another branch
                 </a>
                 <a class="btn btn--primary" href="{% url 'organization:adoption_create' %}">
-                    Adopt a department
+                    Add a department
                 </a>
             {% else %}
                 <button class="btn btn--primary" type="button" disabled
-                        title="Adopting a department requires owner or company administrator access">
-                    Adopt a department
+                        title="Adding a department requires owner or company administrator access">
+                    Add a department
                 </button>
             {% endif %}
         </div>
@@ -42,7 +42,7 @@
     <div class="card">
         <div class="card__head">
             <h2>
-                Adopted departments
+                Departments
             </h2>
             <span class="badge badge--neutral">
                 {{ filtered_total }} of {{ total }}
@@ -83,7 +83,7 @@
                                 Department
                             </th>
                             <th>
-                                Job titles
+                                Designations
                             </th>
                             <th>
                                 Head
@@ -186,14 +186,14 @@
                     {% if query or status %}
                         Nothing matches that filter
                     {% else %}
-                        No departments adopted yet
+                        No departments added yet
                     {% endif %}
                 </div>
                 <div class="empty__text">
                     {% if query or status %}
                         Clear the filters to see everything this company uses.
                     {% else %}
-                        Adopt a department from the platform catalogue to start
+                        Add a department from the platform list to start
                         placing employees into it.
                     {% endif %}
                 </div>

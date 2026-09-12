@@ -36,7 +36,7 @@ ADOPTION_FIELDS = (
 
 
 def adoption_snapshot(adoption):
-    """Audit snapshot including the job titles, so a title change is visible."""
+    """Audit snapshot including the designations, so a change is visible."""
     return {
         "branch_id": adoption.branch_id,
         "department_id": adoption.department_id,
@@ -51,7 +51,7 @@ def adoption_snapshot(adoption):
 
 
 def visible_adoptions(membership):
-    """Adopted departments this membership may see, respecting branch scope."""
+    """Departments this membership may see, respecting branch scope."""
     queryset = (
         CompanyDepartment.objects.select_related("branch", "department", "head")
         .prefetch_related("designations__designation")
@@ -83,26 +83,9 @@ def _reject_unsupported(values):
         )
 
 
-def _validate_titles(department, designations):
-    """Every chosen title must belong to the chosen catalogue department.
-
-    ``CompanyDesignation.clean()`` rejects a mismatch anyway. Catching it here
-    turns it into a readable field error rather than a save-time failure, and
-    blocks a crafted POST that offers a title from another department.
-    """
-    wrong = [d for d in designations if d.department_id != department.pk]
-    if wrong:
-        raise ValidationError({
-            "designations": (
-                "These job titles belong to a different department: "
-                + ", ".join(sorted(d.name for d in wrong))
-            )
-        })
-
-
 @transaction.atomic
 def adopt_department(*, actor, company_id, values):
-    """Adopt a catalogue department into a branch, with its job titles.
+    """Add a root department to a branch, with the designations it uses.
 
     One CompanyDepartment plus one CompanyDesignation per chosen title, in a
     single transaction with the audit row, so a company never ends up with a
@@ -118,7 +101,6 @@ def adopt_department(*, actor, company_id, values):
     if branch is None or department is None:
         raise ValidationError("A branch and a department are both required.")
 
-    _validate_titles(department, designations)
 
     with use_company(company_id):
         # Inside the context: allowed_branches is a tenant-scoped relation, so
@@ -131,7 +113,7 @@ def adopt_department(*, actor, company_id, values):
         ).exists():
             raise ValidationError({
                 "department": (
-                    f"{branch.name} has already adopted {department.name}. "
+                    f"{branch.name} already has {department.name}. "
                     "Edit that entry instead of adding it a second time."
                 )
             })
@@ -162,7 +144,7 @@ def adopt_department(*, actor, company_id, values):
 
 @transaction.atomic
 def update_adoption(*, actor, company_id, adoption_id, values):
-    """Edit an adopted department; add job titles or deactivate them.
+    """Edit one of the company's departments; assign designations or drop them.
 
     Titles are never deleted. One an employee currently holds is referenced by
     a PROTECTed assignment, so a delete would raise ProtectedError; this
@@ -180,7 +162,6 @@ def update_adoption(*, actor, company_id, adoption_id, values):
     # would silently move every employee filed under this row.
     values.pop("branch", None)
     values.pop("department", None)
-    _validate_titles(adoption.department, designations)
 
     with use_company(company_id):
         before = adoption_snapshot(adoption)
@@ -225,7 +206,7 @@ def update_adoption(*, actor, company_id, adoption_id, values):
                     "designations": (
                         f"{link.designation.name} cannot be removed while "
                         "employees are assigned to it. Move them to another "
-                        "job title first."
+                        "designation first."
                     )
                 })
             link.status = ActiveStatus.INACTIVE
@@ -243,7 +224,7 @@ def update_adoption(*, actor, company_id, adoption_id, values):
 
 @transaction.atomic
 def set_adoption_status(*, actor, company_id, adoption_id, status):
-    """Activate or deactivate an adopted department. Never deletes."""
+    """Activate or deactivate one of the company's departments. Never deletes."""
     membership, adoption = get_adoption_for_edit(
         actor=actor, company_id=company_id, adoption_id=adoption_id
     )
@@ -273,7 +254,7 @@ def set_adoption_status(*, actor, company_id, adoption_id, status):
 
 @transaction.atomic
 def copy_adoptions_between_branches(*, actor, company_id, source_branch, target_branch):
-    """Copy one branch's active departments and job titles to another branch.
+    """Copy one branch's active departments and designations to another branch.
 
     A department adoption is per-branch by design: it carries a head, a status
     and dated open/close values that describe *that* branch's use of the
@@ -356,7 +337,7 @@ def provision_new_branch(*, actor, company_id, branch):
     """Give a newly created branch the company's existing department set.
 
     The company's operating rule is that every branch offers the same
-    departments and job titles. The schema still stores one adoption row per
+    departments and designations. The schema still stores one row per
     branch — it has to, because each branch carries its own head, status,
     opening dates and device rules for a department — so "the same everywhere"
     is achieved by provisioning the set rather than by sharing one row.

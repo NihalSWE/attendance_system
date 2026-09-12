@@ -1,9 +1,15 @@
-"""Root-only catalogue routes, mounted under ``/platform/catalogue/``.
+"""Root-only department and designation routes, mounted under ``/platform/``.
 
 Their own namespace rather than ``organization``: these screens are the
 platform operator's, not a tenant's, and sharing a namespace with the company
 routes would make it ambiguous which surface a reversed URL belongs to (and
 raises Django's urls.W005).
+
+Mounted alongside ``tenants.urls`` rather than under a prefix of their own,
+because the address bar is something the operator reads: /platform/departments/
+says what the page is, /platform/catalogue/departments/ says what we called the
+table. Django tries ``tenants.urls`` first and falls through to here, and
+neither defines the other's paths.
 """
 from django.urls import path
 

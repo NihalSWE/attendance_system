@@ -1,8 +1,11 @@
-"""Root catalogue: services, authorization and screens.
+"""Root department and designation lists: services, authorization and screens.
 
-The catalogue is shared by every tenant, so the tests that matter most here are
-the negative ones — a company administrator must not reach these screens, and a
+Both lists are shared by every tenant, so the tests that matter most are the
+negative ones — a company administrator must not reach these screens, and a
 crafted POST must not reach a column the form does not expose.
+
+Designations are flat: they carry no department, and which departments use
+one is each company decision on CompanyDesignation.
 """
 
 from django.contrib.auth import get_user_model
@@ -107,59 +110,42 @@ class CatalogueServiceTests(TestCase):
 
     # --- designations -----------------------------------------------------
 
-    def test_designation_name_unique_per_department_but_reusable_across_them(self):
-        hr = services.create_department(actor=self.root, values={"code": "HR", "name": "HR"})
-        sales = services.create_department(
-            actor=self.root, values={"code": "SL", "name": "Sales"}
-        )
+    def test_designation_name_is_unique_platform_wide(self):
+        """One Manager for the whole platform, not one per department."""
         services.create_designation(
-            actor=self.root, values={"department": hr, "code": "MGR", "name": "Manager"}
+            actor=self.root, values={"code": "MGR", "name": "Manager"}
         )
-        # Same title under another department is the intended design.
-        services.create_designation(
-            actor=self.root, values={"department": sales, "code": "MGR", "name": "Manager"}
-        )
-        self.assertEqual(Designation.objects.filter(name="Manager").count(), 2)
-
         with self.assertRaises(ValidationError):
             services.create_designation(
-                actor=self.root,
-                values={"department": hr, "code": "MGR2", "name": "Manager"},
+                actor=self.root, values={"code": "MGR2", "name": "Manager"}
             )
+        self.assertEqual(Designation.objects.filter(name="Manager").count(), 1)
 
-    def test_adopted_title_cannot_be_moved_to_another_department(self):
-        hr = services.create_department(actor=self.root, values={"code": "HR", "name": "HR"})
-        sales = services.create_department(
-            actor=self.root, values={"code": "SL", "name": "Sales"}
+    def test_creating_a_designation_ignores_a_department_key(self):
+        """A crafted POST must not reach a column the model no longer has."""
+        designation = services.create_designation(
+            actor=self.root,
+            values={"code": "MGR", "name": "Manager", "department": 999},
         )
-        title = services.create_designation(
-            actor=self.root, values={"department": hr, "code": "MGR", "name": "Manager"}
+        self.assertFalse(hasattr(designation, "department_id"))
+
+    def test_renaming_a_designation_keeps_every_company_placement(self):
+        """Renaming is safe: a company reads the name through this row."""
+        designation = services.create_designation(
+            actor=self.root, values={"code": "MGR", "name": "Manager"}
         )
         with use_company(self.company):
             branch = Branch.objects.create(code="HQ", name="HQ", is_default=True)
             company_department = adopt_department(branch, "HR", "HR")
             adopt_designation(company_department, "MGR", "Manager")
 
-        with self.assertRaises(ValidationError) as ctx:
-            services.update_designation(
-                actor=self.root, designation_id=title.pk, values={"department": sales},
-            )
-        self.assertIn("department", ctx.exception.message_dict)
-
-    def test_unadopted_title_can_still_be_moved(self):
-        hr = services.create_department(actor=self.root, values={"code": "HR", "name": "HR"})
-        sales = services.create_department(
-            actor=self.root, values={"code": "SL", "name": "Sales"}
-        )
-        title = services.create_designation(
-            actor=self.root, values={"department": hr, "code": "MGR", "name": "Manager"}
-        )
         services.update_designation(
-            actor=self.root, designation_id=title.pk, values={"department": sales}
+            actor=self.root, designation_id=designation.pk,
+            values={"name": "Department Manager"},
         )
-        title.refresh_from_db()
-        self.assertEqual(title.department_id, sales.pk)
-
+        with use_company(self.company):
+            link = company_department.designations.get()
+            self.assertEqual(link.name, "Department Manager")
 
 class CatalogueScreenTests(TestCase):
     def setUp(self):
@@ -178,8 +164,7 @@ class CatalogueScreenTests(TestCase):
             actor=self.root, values={"code": "SW", "name": "Software"}
         )
         self.designation = services.create_designation(
-            actor=self.root,
-            values={"department": self.department, "code": "DEV", "name": "Developer"},
+            actor=self.root, values={"code": "DEV", "name": "Developer"}
         )
 
     def _urls(self):
@@ -216,7 +201,7 @@ class CatalogueScreenTests(TestCase):
         response = self.client.get(reverse("catalogue:department_list"))
         self.assertContains(response, "Software")
         row = response.context["page"].object_list[0]
-        self.assertEqual(row.designation_count, 1)
+        # No designation count: the two lists are independent now.
         self.assertEqual(row.adoption_count, 0)
 
     def test_create_department_through_the_form(self):
@@ -241,39 +226,61 @@ class CatalogueScreenTests(TestCase):
         self.assertContains(response, "already exists")
         self.assertEqual(Department.objects.filter(name="Software").count(), 1)
 
-    def test_duplicate_title_in_one_department_is_a_form_error(self):
+    def test_duplicate_designation_name_is_a_form_error(self):
         self.client.force_login(self.root)
         response = self.client.post(
             reverse("catalogue:designation_create"),
-            {
-                "department": self.department.pk,
-                "code": "DEV2",
-                "name": "Developer",
-                "status": "active",
-            },
+            {"code": "DEV2", "name": "Developer", "status": "active"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "already exists")
-        self.assertEqual(
-            Designation.objects.filter(department=self.department, name="Developer").count(), 1
-        )
+        self.assertEqual(Designation.objects.filter(name="Developer").count(), 1)
 
-    def test_deactivated_department_is_not_offered_for_new_titles(self):
+    def test_the_create_form_has_no_department_field(self):
         self.client.force_login(self.root)
-        services.set_department_status(
-            actor=self.root, department_id=self.department.pk, status="inactive"
-        )
+        response = self.client.get(reverse("catalogue:designation_create"))
+        self.assertNotIn("department", response.context["form"].fields)
+
+    def test_a_designation_is_created_without_any_department(self):
+        self.client.force_login(self.root)
         response = self.client.post(
             reverse("catalogue:designation_create"),
-            {
-                "department": self.department.pk,
-                "code": "QA",
-                "name": "Tester",
-                "status": "active",
-            },
+            {"code": "QA", "name": "Tester", "status": "active"},
+            follow=True,
         )
         self.assertEqual(response.status_code, 200)
-        self.assertFalse(Designation.objects.filter(name="Tester").exists())
+        self.assertTrue(Designation.objects.filter(name="Tester").exists())
+
+    def test_designation_usage_names_the_department_of_each_placement(self):
+        """Company and branch alone would render two identical rows.
+
+        One company may put the same designation under several of its own
+        departments, so the department is the only thing telling the rows
+        apart. Losing it here is how the screen silently stopped being
+        readable when designations went flat.
+        """
+        self.client.force_login(self.root)
+        with use_company(self.company):
+            branch = Branch.objects.create(code="HQ", name="HQ", is_default=True)
+            sales = adopt_department(branch, "SL", "Sales")
+            production = adopt_department(branch, "PRD", "Production")
+            adopt_designation(sales, "DEV", "Developer")
+            adopt_designation(production, "DEV", "Developer")
+
+        response = self.client.get(
+            reverse("catalogue:designation_edit", args=[self.designation.pk])
+        )
+        self.assertTrue(response.context["usage_shows_department"])
+        self.assertContains(response, "Sales")
+        self.assertContains(response, "Production")
+
+    def test_department_usage_has_no_department_column(self):
+        """The same template serves both; only designations need the column."""
+        self.client.force_login(self.root)
+        response = self.client.get(
+            reverse("catalogue:department_edit", args=[self.department.pk])
+        )
+        self.assertFalse(response.context["usage_shows_department"])
 
     def test_status_screen_deactivates_without_deleting(self):
         self.client.force_login(self.root)
@@ -286,7 +293,7 @@ class CatalogueScreenTests(TestCase):
         self.assertEqual(self.department.status, "inactive")
         self.assertTrue(Department.objects.filter(pk=self.department.pk).exists())
 
-    def test_root_sidebar_links_to_both_catalogues(self):
+    def test_root_sidebar_links_to_departments_and_designations(self):
         self.client.force_login(self.root)
         response = self.client.get(reverse("catalogue:department_list"))
         self.assertContains(response, reverse("catalogue:department_list"))

@@ -29,7 +29,6 @@ from organization.adoption_services import (
     update_adoption,
     visible_adoptions,
 )
-from organization.models import Designation
 from organization.services import (
     require_company_membership,
     require_structure_manager,
@@ -91,32 +90,6 @@ def adoption_list(request):
 
 
 @login_required
-@require_http_methods(["GET"])
-def department_titles(request):
-    """Job titles for one catalogue department, for the dependent multiselect.
-
-    Read-only and catalogue-only, so it exposes nothing company-specific. It
-    still requires an active membership: an unauthenticated caller has no
-    business enumerating the catalogue.
-    """
-    company_id, bail = _company_or_redirect(request)
-    if bail:
-        return bail
-    require_company_membership(request.user, company_id)
-
-    department = request.GET.get("department", "").strip()
-    if not department.isdigit():
-        return JsonResponse({"results": []})
-
-    titles = Designation.objects.filter(
-        department_id=int(department), status=ActiveStatus.ACTIVE
-    ).order_by("name")
-    return JsonResponse({
-        "results": [{"id": t.pk, "text": t.name} for t in titles]
-    })
-
-
-@login_required
 @require_http_methods(["GET", "POST"])
 def adoption_create(request):
     company_id, bail = _company_or_redirect(request)
@@ -145,7 +118,7 @@ def adoption_create(request):
                 else:
                     messages.success(
                         request,
-                        f"{adoption.department.name} adopted into "
+                        f"{adoption.department.name} added to "
                         f"{adoption.branch.name}.",
                     )
                     return redirect("organization:adoption_list")
@@ -161,13 +134,14 @@ def adoption_create(request):
 
         return render(request, "organization/adoption_form.html", {
             "form": form,
-            "title": "Adopt a department",
-            "submit_label": "Adopt department",
+            "title": "Add a department",
+            "submit_label": "Add department",
             "explanation": (
-                "Choose a department from the platform catalogue and the branch "
-                "that uses it, then pick the job titles that branch needs. The "
-                "department name comes from the catalogue, so it stays "
-                "consistent across every company."
+                "Choose a department and the branch that uses it, then assign "
+                "the designations that branch needs. Any designation may go "
+                "under any of your departments -- that pairing is yours to "
+                "make. The department name is shared across the platform, so "
+                "it stays consistent everywhere."
             ),
             "adoption": None,
         })
@@ -215,9 +189,9 @@ def adoption_edit(request, pk):
             "title": f"Edit {adoption.department.name}",
             "submit_label": "Save department",
             "explanation": (
-                "Unticking a job title deactivates it here; it is never deleted, "
-                "and a title employees currently hold cannot be removed until "
-                "they are moved."
+                "Unticking a designation deactivates it here; it is never "
+                "deleted, and one employees currently hold cannot be removed "
+                "until they are moved."
             ),
             "adoption": adoption,
         })
@@ -272,7 +246,7 @@ def _apply_errors(form, exc):
 @login_required
 @require_http_methods(["GET", "POST"])
 def adoption_copy(request):
-    """Copy one branch's departments and job titles into another branch."""
+    """Copy one branch's departments and designations into another branch."""
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail

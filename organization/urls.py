@@ -1,11 +1,12 @@
 """Company organization routes. Feature pages live in their domain app.
 
-Root-only catalogue routes live in organization/catalogue_urls.py under their
-own namespace, because they belong to the platform operator, not a tenant.
+The root's own department and designation routes live in
+organization/catalogue_urls.py under their own namespace, because they belong
+to the platform operator, not a tenant.
 """
 from django.urls import path
 
-from organization import adoption_views, hire_views, views
+from organization import adoption_views, employee_views, views
 
 app_name = "organization"
 
@@ -28,23 +29,17 @@ urlpatterns = [
         adoption_views.adoption_status,
         name="adoption_status",
     ),
-    # Feeds the dependent job-title multiselect.
-    path(
-        "departments/titles/",
-        adoption_views.department_titles,
-        name="department_titles",
-    ),
 
-    path("hire/", hire_views.hire, name="hire"),
-    # Feed the dependent branch -> department -> job title selects.
+    path("employees/new/", employee_views.employee_create, name="employee_create"),
+    # Feed the dependent branch -> department -> designation selects.
     path(
-        "hire/departments/",
-        hire_views.branch_departments,
-        name="hire_branch_departments",
+        "employees/new/departments/",
+        employee_views.branch_departments,
+        name="employee_branch_departments",
     ),
     path(
-        "hire/titles/",
-        hire_views.department_job_titles,
-        name="hire_department_titles",
+        "employees/new/designations/",
+        employee_views.department_designations,
+        name="employee_department_designations",
     ),
 ]

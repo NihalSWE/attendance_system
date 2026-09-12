@@ -1,5 +1,4 @@
 {% extends "base_template/base.html" %}
-{% load static %}
 {% block title %}
     {{ title }} · Attendance
 {% endblock %}
@@ -49,8 +48,7 @@
                     </div>
                 {% endif %}
 
-                <form method="post" class="stack" novalidate
-                      data-titles-url="{% url 'organization:department_titles' %}">
+                <form method="post" class="stack" novalidate>
                     {% csrf_token %}
 
                     <div class="grid grid--2">
@@ -93,8 +91,7 @@
                         {% endfor %}
                     </div>
 
-                    <div class="field {% if form.designations.errors %}field-invalid{% endif %}"
-                         data-titles-field>
+                    <div class="field {% if form.designations.errors %}field-invalid{% endif %}">
                         <label class="field__label" for="{{ form.designations.id_for_label }}">
                             {{ form.designations.label }}
                         </label>
@@ -125,7 +122,7 @@
             <div class="card">
                 <div class="card__head">
                     <h2>
-                        Current job titles
+                        Current designations
                     </h2>
                 </div>
                 <div class="card__body">
@@ -135,7 +132,7 @@
                                 <thead>
                                     <tr>
                                         <th>
-                                            Job title
+                                            Designation
                                         </th>
                                         <th>
                                             Status
@@ -173,10 +170,10 @@
                     {% else %}
                         <div class="empty">
                             <div class="empty__title">
-                                No job titles yet
+                                No designations yet
                             </div>
                             <div class="empty__text">
-                                Tick the titles this department uses above.
+                                Tick the designations this department uses above.
                             </div>
                         </div>
                     {% endif %}
@@ -184,8 +181,4 @@
             </div>
         {% endif %}
     </div>
-{% endblock %}
-{% block extra_js %}
-    <script defer src="{% static 'organization/js/adoption.js' %}">
-    </script>
 {% endblock %}

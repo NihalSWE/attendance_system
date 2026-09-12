@@ -1,6 +1,6 @@
-"""Hiring an employee into a branch, department and job title.
+"""Creating an employee and placing them in a branch, department and designation.
 
-A thin adapter. The domain write is ``employees.services.hire_employee``,
+A thin adapter. The domain write is ``employees.services.create_employee``,
 which already creates the employee, their assignment and their compensation in
 one transaction and is covered by its own tests. Nothing is reimplemented
 here; this view authorizes the actor, narrows the choices, and translates the
@@ -17,8 +17,8 @@ from django.views.decorators.http import require_http_methods
 
 from common.choices import ActiveStatus
 from common.tenant import use_company
-from employees.services import hire_employee
-from organization.hire_forms import HireEmployeeForm
+from employees.services import create_employee
+from organization.employee_forms import EmployeeCreateForm
 from organization.models import Branch, CompanyDepartment, CompanyDesignation
 from organization.services import require_structure_manager, visible_branches
 from organization.views import _company_or_redirect
@@ -26,7 +26,7 @@ from organization.views import _company_or_redirect
 
 @login_required
 @require_http_methods(["GET", "POST"])
-def hire(request):
+def employee_create(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
@@ -40,7 +40,7 @@ def hire(request):
         employees = Employee.objects.order_by("first_name", "last_name")
 
         if request.method == "POST":
-            form = HireEmployeeForm(
+            form = EmployeeCreateForm(
                 request.POST,
                 company=membership.company,
                 branches=branches,
@@ -49,7 +49,7 @@ def hire(request):
             if form.is_valid():
                 data = form.cleaned_data
                 try:
-                    result = hire_employee(
+                    result = create_employee(
                         company=membership.company,
                         first_name=data["first_name"],
                         last_name=data["last_name"],
@@ -70,22 +70,22 @@ def hire(request):
                     employee = result["employee"]
                     messages.success(
                         request,
-                        f"{employee.full_name} hired as "
+                        f"{employee.full_name} created as "
                         f"{data['designation'].name} in {data['department'].name}.",
                     )
                     return redirect("employee_list")
         else:
-            form = HireEmployeeForm(
+            form = EmployeeCreateForm(
                 company=membership.company,
                 branches=branches,
                 employees=employees,
                 initial={"pay_basis": "monthly"},
             )
 
-        return render(request, "organization/hire_form.html", {
+        return render(request, "organization/employee_form.html", {
             "form": form,
-            "title": "Hire an employee",
-            "submit_label": "Hire employee",
+            "title": "Create employee",
+            "submit_label": "Create employee",
             "has_departments": CompanyDepartment.objects.filter(
                 status=ActiveStatus.ACTIVE
             ).exists(),
@@ -95,7 +95,7 @@ def hire(request):
 @login_required
 @require_http_methods(["GET"])
 def branch_departments(request):
-    """Departments a branch has adopted, for the dependent select."""
+    """Departments added to a branch, for the dependent select."""
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
@@ -120,8 +120,8 @@ def branch_departments(request):
 
 @login_required
 @require_http_methods(["GET"])
-def department_job_titles(request):
-    """Job titles adopted into one company department, for the dependent select."""
+def department_designations(request):
+    """Designations assigned to one company department, for the dependent select."""
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail

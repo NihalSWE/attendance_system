@@ -1,11 +1,12 @@
-"""Forms for adopting a catalogue department into a company branch.
+"""Forms for adding a root department to a company branch.
 
 A form here is a convenience layer, never the security boundary:
 ``organization.adoption_services`` re-validates every value and re-checks row
-scope before writing. What the form does add is *not offering* an invalid
-choice in the first place — a job title from another department would be
-rejected by ``CompanyDesignation.clean()``, and making the user discover that
-after submitting is a worse experience than never listing it.
+scope before writing.
+
+Designations are **not** filtered by department. Root keeps the two lists
+independent, and which designations a department uses is this company's own
+decision — so every active designation is offered for every department.
 """
 
 from django import forms
@@ -23,12 +24,11 @@ from organization.models import (
 
 
 class DepartmentAdoptionForm(StyledFormMixin, forms.ModelForm):
-    """Adopt a catalogue department into one branch, with its job titles.
+    """Add a root department to one branch, and assign designations to it.
 
-    ``designations`` is a multiselect narrowed to the chosen department. The
-    narrowing happens twice on purpose: on GET from the bound instance or a
-    ``?department=`` hint, and again on POST from the submitted department, so
-    validation cannot be widened by editing the page.
+    ``designations`` offers every active designation, unfiltered: the two root
+    lists are independent, so this company is free to say that Manager belongs
+    under its Sales department and under its Production department too.
     """
 
     # branch and head point at tenant-owned models. Declared explicitly with an
@@ -45,10 +45,10 @@ class DepartmentAdoptionForm(StyledFormMixin, forms.ModelForm):
     designations = forms.ModelMultipleChoiceField(
         queryset=Designation.objects.none(),
         required=False,
-        label="Job titles",
+        label="Designations",
         help_text=(
-            "Only titles filed under the chosen department are listed. Pick the "
-            "ones this branch actually uses; you can add more later."
+            "Every designation on the platform is available — you decide which "
+            "ones this department uses. You can add more later."
         ),
     )
 
@@ -57,10 +57,10 @@ class DepartmentAdoptionForm(StyledFormMixin, forms.ModelForm):
         fields = ("branch", "department", "head", "description", "status")
         widgets = {"description": forms.TextInput()}
         help_texts = {
-            "branch": "A branch adopts each department once.",
+            "branch": "A branch uses each department once.",
             "department": (
-                "Chosen from the platform catalogue. The name is read through "
-                "from there, so it cannot drift from the canonical spelling."
+                "Chosen from the platform list. The name is read through from "
+                "there, so it cannot drift from the canonical spelling."
             ),
             "head": "Optional. The employee who administers people in this department.",
         }
@@ -88,36 +88,18 @@ class DepartmentAdoptionForm(StyledFormMixin, forms.ModelForm):
             for name in ("branch", "department"):
                 self.fields[name].disabled = True
                 self.fields[name].help_text = (
-                    "Fixed once adopted. Create a separate adoption to use this "
+                    "Fixed once added. Add it separately to use this "
                     "department in another branch."
                 )
 
-        department = self._selected_department()
-        if department is not None:
-            self.fields["designations"].queryset = Designation.objects.filter(
-                department=department, status=ActiveStatus.ACTIVE
-            ).order_by("name")
+        self.fields["designations"].queryset = Designation.objects.filter(
+            status=ActiveStatus.ACTIVE
+        ).order_by("name")
         if self.instance.pk and not self.is_bound:
             self.fields["designations"].initial = Designation.objects.filter(
                 company_links__company_department=self.instance,
                 company_links__status=ActiveStatus.ACTIVE,
             )
-
-    def _selected_department(self):
-        """The department in play, whether posted, bound or hinted at."""
-        if self.is_bound:
-            raw = self.data.get(self.add_prefix("department"))
-            if self.instance.pk:
-                return self.instance.department
-            if raw:
-                return Department.objects.filter(pk=raw).first()
-            return None
-        if self.instance.pk:
-            return self.instance.department
-        initial = self.initial.get("department")
-        if initial:
-            return Department.objects.filter(pk=initial).first()
-        return None
 
     def _post_clean(self):
         """Move the repeat-adoption error onto the department field.
@@ -151,45 +133,32 @@ class DepartmentAdoptionForm(StyledFormMixin, forms.ModelForm):
             del self._errors[NON_FIELD_ERRORS]
         self.add_error(
             "department",
-            f"{branch.name} has already adopted {department.name}. Edit that "
-            "entry instead of adding it a second time.",
+            f"{branch.name} already has {department.name}. Edit that entry "
+            "instead of adding it a second time.",
         )
-
-    def clean(self):
-        cleaned = super().clean()
-        department = (
-            self.instance.department if self.instance.pk else cleaned.get("department")
-        )
-        titles = cleaned.get("designations") or []
-        if department is not None and titles:
-            wrong = [t for t in titles if t.department_id != department.pk]
-            if wrong:
-                self.add_error(
-                    "designations",
-                    "These job titles belong to a different department: "
-                    + ", ".join(sorted(t.name for t in wrong)),
-                )
-        return cleaned
 
 
 class AdoptionStatusForm(StyledFormMixin, forms.Form):
-    """Activate or deactivate an adopted department. There is no delete."""
+    """Activate or deactivate one of the company's departments.
+
+    There is no delete.
+    """
 
     status = forms.ChoiceField(choices=ActiveStatus.choices, label="Status")
 
 
 class CopyAdoptionsForm(StyledFormMixin, forms.Form):
-    """Copy one branch's departments and job titles into another branch.
+    """Copy one branch's departments and their designations into another.
 
-    A department adoption is per-branch by design, so a new branch starts
+    A department belongs to one branch by design, so a new branch starts
     empty. This is a convenience over that, not a change to it: it creates
-    real adoption rows for the target branch rather than sharing the source's.
+    real rows for the target branch rather than sharing the source's.
     """
 
     source_branch = forms.ModelChoiceField(
         queryset=Branch.all_objects.none(),
         label="Copy from",
-        help_text="Its active departments and their job titles are copied.",
+        help_text="Its active departments and their designations are copied.",
     )
     target_branch = forms.ModelChoiceField(
         queryset=Branch.all_objects.none(),

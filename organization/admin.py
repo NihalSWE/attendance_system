@@ -32,9 +32,11 @@ class DepartmentAdmin(admin.ModelAdmin):
 
 @admin.register(Designation)
 class DesignationAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "department", "status")
+    # No department column: the root list is flat, and which departments use a
+    # designation is each company's own choice on CompanyDesignation.
+    list_display = ("name", "code", "status")
     search_fields = ("name", "code")
-    list_filter = ("status", "department")
+    list_filter = ("status",)
 
 
 # ---------------------------------------------------------- company adoption

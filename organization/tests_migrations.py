@@ -1,4 +1,4 @@
-"""Does the catalogue migration survive real data?
+"""Do the organisation migrations survive real data?
 
 The rest of the suite builds an empty database and runs every migration against
 it, which proves the *schema* steps work but never touches the ``RunPython``
@@ -7,9 +7,15 @@ part: they are the only thing standing between a working dev database and a
 mangled one.
 
 So this test rewinds to the tenant-owned world, writes the awkward case by hand
-— two companies that each created their own "Software" department containing
-their own "Manager" title — and rolls forward. If the collapse mishandles the
-merge, this fails here rather than on somebody's data.
+— two companies that each created their own Software and Sales departments,
+each holding their own "Manager" — and rolls forward to the *leaf* of the
+migration graph. Two collapses have to survive that: 0003 merging the
+tenant-owned departments into one root list, and 0004 merging the
+per-department designations into one flat list.
+
+Rolling forward to the leaf rather than to a named migration matters. This
+previously stopped at 0003, which left the database on an old schema and
+stranded every test that ran afterwards the moment a 0004 appeared.
 """
 
 from django.db import connection
@@ -18,16 +24,19 @@ from django.test import TransactionTestCase
 
 
 BEFORE = [("organization", "0001_initial")]
-AFTER = [("organization", "0003_root_catalogues")]
 
 
 class CatalogueCollapseMigrationTests(TransactionTestCase):
-    """Rewind to before the catalogue existed, seed it, and roll forward."""
+    """Rewind to before the root lists existed, seed them, and roll forward."""
 
     def _executor(self):
         executor = MigrationExecutor(connection)
         executor.loader.build_graph()
         return executor
+
+    def _leaf(self):
+        """Every graph leaf, so "forward" always means fully current."""
+        return self._executor().loader.graph.leaf_nodes()
 
     def setUp(self):
         # Rewinding organization also unapplies everything that depends on it:
@@ -35,13 +44,14 @@ class CatalogueCollapseMigrationTests(TransactionTestCase):
         self._executor().migrate(BEFORE)
         old_apps = self._executor().loader.project_state(BEFORE).apps
         self._seed(old_apps)
-        self._executor().migrate(AFTER)
-        self.apps = self._executor().loader.project_state(AFTER).apps
+        leaf = self._leaf()
+        self._executor().migrate(leaf)
+        self.apps = self._executor().loader.project_state(leaf).apps
 
     def tearDown(self):
-        # Leave the database at the latest state whatever happened above, so a
+        # Leave the database fully migrated whatever happened above, so a
         # failure here does not poison every test that runs afterwards.
-        self._executor().migrate(AFTER)
+        self._executor().migrate(self._leaf())
 
     def _seed(self, old_apps):
         Company = old_apps.get_model("tenants", "Company")
@@ -58,12 +68,21 @@ class CatalogueCollapseMigrationTests(TransactionTestCase):
                 company=company, code="HQ", name=f"{name} HQ", is_default=True
             )
             # Both companies picked the same names and the same codes. Under the
-            # old model these were four unrelated rows.
+            # old model these were unrelated rows.
             software = Department.objects.create(
                 company=company, branch=branch, code="SW", name="Software"
             )
+            sales = Department.objects.create(
+                company=company, branch=branch, code="SL", name="Sales"
+            )
+            # The awkward case for 0004: the same "Manager" filed separately
+            # under two departments, in two companies. Four rows that must end
+            # as one, with all four placements still resolving.
             manager = Designation.objects.create(
                 company=company, department=software, code="MGR", name="Manager"
+            )
+            Designation.objects.create(
+                company=company, department=sales, code="MGR", name="Manager"
             )
             Designation.objects.create(
                 company=company,
@@ -75,35 +94,55 @@ class CatalogueCollapseMigrationTests(TransactionTestCase):
 
     # ------------------------------------------------------------------ tests
 
-    def test_duplicate_departments_collapse_to_one_catalogue_row(self):
+    def test_duplicate_departments_collapse_to_one_root_row(self):
         Department = self.apps.get_model("organization", "Department")
         self.assertEqual(Department.objects.filter(name="Software").count(), 1)
-        self.assertEqual(Department.objects.count(), 1)
+        self.assertEqual(Department.objects.count(), 2)  # Software and Sales
 
-    def test_each_company_keeps_its_own_adoption_row(self):
+    def test_each_company_keeps_its_own_department_rows(self):
         CompanyDepartment = self.apps.get_model("organization", "CompanyDepartment")
         adoptions = CompanyDepartment.objects.all()
-        self.assertEqual(adoptions.count(), 2)
-        # Two companies, two branches, one shared catalogue entry.
+        # Two companies x two departments.
+        self.assertEqual(adoptions.count(), 4)
         self.assertEqual(len({a.company_id for a in adoptions}), 2)
         self.assertEqual(len({a.branch_id for a in adoptions}), 2)
-        self.assertEqual(len({a.department_id for a in adoptions}), 1)
+        # Both companies share the same two root departments.
+        self.assertEqual(len({a.department_id for a in adoptions}), 2)
 
-    def test_duplicate_titles_collapse_under_the_surviving_department(self):
+    def test_manager_collapses_to_one_flat_designation(self):
+        """Four Manager rows — two departments x two companies — become one."""
         Designation = self.apps.get_model("organization", "Designation")
-        Department = self.apps.get_model("organization", "Department")
-        software = Department.objects.get(name="Software")
-        titles = Designation.objects.filter(department=software)
-        self.assertEqual(titles.count(), 2)
+        self.assertEqual(Designation.objects.filter(name="Manager").count(), 1)
         self.assertEqual(
-            sorted(titles.values_list("name", flat=True)), ["Developer", "Manager"]
+            sorted(Designation.objects.values_list("name", flat=True)),
+            ["Developer", "Manager"],
         )
 
-    def test_each_company_keeps_its_own_title_adoption_rows(self):
+    def test_every_company_placement_still_resolves_to_the_survivor(self):
+        Designation = self.apps.get_model("organization", "Designation")
+        CompanyDesignation = self.apps.get_model("organization", "CompanyDesignation")
+        manager = Designation.objects.get(name="Manager")
+        placements = CompanyDesignation.objects.filter(
+            designation=manager
+        ).select_related("company_department")
+        # Both companies, under both of their departments.
+        self.assertEqual(placements.count(), 4)
+        self.assertEqual(len({p.company_id for p in placements}), 2)
+        self.assertEqual(
+            len({p.company_department.department_id for p in placements}), 2
+        )
+
+    def test_codes_end_up_globally_unique(self):
+        """MGR existed under two departments; only one may keep the bare code."""
+        Designation = self.apps.get_model("organization", "Designation")
+        codes = list(Designation.objects.values_list("code", flat=True))
+        self.assertEqual(len(codes), len(set(codes)))
+
+    def test_each_company_keeps_its_own_designation_rows(self):
         CompanyDesignation = self.apps.get_model("organization", "CompanyDesignation")
         adoptions = CompanyDesignation.objects.all()
-        # Two companies x two titles.
-        self.assertEqual(adoptions.count(), 4)
+        # Two companies x (Manager in Software, Manager in Sales, Developer).
+        self.assertEqual(adoptions.count(), 6)
         self.assertEqual(len({a.company_id for a in adoptions}), 2)
         self.assertEqual(len({a.designation_id for a in adoptions}), 2)
 
@@ -114,7 +153,7 @@ class CatalogueCollapseMigrationTests(TransactionTestCase):
                 adoption.company_id, adoption.company_department.company_id
             )
 
-    def test_catalogue_columns_are_gone(self):
+    def test_root_list_columns_are_gone(self):
         Department = self.apps.get_model("organization", "Department")
         Designation = self.apps.get_model("organization", "Designation")
         department_fields = {f.name for f in Department._meta.get_fields()}
@@ -124,3 +163,5 @@ class CatalogueCollapseMigrationTests(TransactionTestCase):
         self.assertNotIn("company", designation_fields)
         self.assertNotIn("parent", designation_fields)
         self.assertNotIn("hierarchy_level", designation_fields)
+        # 0004: a designation no longer belongs to a department.
+        self.assertNotIn("department", designation_fields)

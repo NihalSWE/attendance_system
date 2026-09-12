@@ -6,13 +6,13 @@ Four layers decide what someone may do, evaluated by
 1. **Feature** — is the capability even enabled for this company?
 2. **DepartmentPermission** — the department's ceiling and floor (dated).
    A DENIED here cannot be overridden by anything below it.
-3. **DesignationPermission** — the default for a job title (dated).
+3. **DesignationPermission** — the default for a designation (dated).
 4. **EmployeePermissionOverride** — an individual grant/revoke (dated).
 
 The department is the unit of delegation: ``CompanyDepartment.head`` administers
 the people inside it, and the department's own rules cap what that head can hand
-out. Job titles carry no parent/child hierarchy — the ceiling comes from above,
-not from a chain of titles.
+out. Designations carry no parent/child hierarchy — the ceiling comes from
+above, not from a chain of them.
 
 Nothing is allowed by default. Enabling a company feature does NOT give every
 employee its actions — that separation is a stated product requirement.
@@ -95,7 +95,7 @@ class DepartmentPermission(TenantOwned, ActorTracked):
     """What a whole department may do, on a dated interval.
 
     The department is the unit of delegation. A DENIED rule here is a hard
-    ceiling: neither a job title nor an individual grant inside the department
+    ceiling: neither a designation nor an individual grant inside the department
     can exceed it. An ALLOWED rule is the floor everyone in the department gets
     unless something below revokes it individually.
     """
@@ -150,7 +150,7 @@ class DepartmentPermission(TenantOwned, ActorTracked):
 
 
 class DesignationPermission(TenantOwned, ActorTracked):
-    """The default access a job title carries, on a dated interval."""
+    """The default access a designation carries, on a dated interval."""
 
     class AccessLevel(models.TextChoices):
         DEFAULT = "default", "Default (no opinion)"
@@ -202,7 +202,7 @@ class DesignationPermission(TenantOwned, ActorTracked):
 
     def clean(self):
         super().clean()
-        # Department ceiling: a job title may not be ALLOWED something its own
+        # Department ceiling: a designation may not be ALLOWED something its own
         # department explicitly DENIES. This replaces the old designation
         # parent-chain walk with a single hop — the department is now the unit
         # that carries delegated authority.
@@ -219,7 +219,7 @@ class DesignationPermission(TenantOwned, ActorTracked):
             raise ValidationError(
                 {
                     "access_level": (
-                        "The department denies this permission; a job title "
+                        "The department denies this permission; a designation "
                         "inside it cannot exceed the department's ceiling."
                     )
                 }

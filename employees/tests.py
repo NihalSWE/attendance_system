@@ -28,7 +28,7 @@ class EmployeeStructureTests(TestCase):
         # Root-owned catalogue.
         self.software = Department.objects.create(code="SW", name="Software")
         self.dev_entry = Designation.objects.create(
-            department=self.software, code="DEV", name="Developer"
+            code="DEV", name="Developer"
         )
 
         self.company = Company.objects.create(code="A", slug="a", name="Company A")

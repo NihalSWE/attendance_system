@@ -114,37 +114,30 @@ class CatalogueDepartmentForm(StyledFormMixin, forms.ModelForm):
 
 
 class CatalogueDesignationForm(StyledFormMixin, forms.ModelForm):
-    """Root-only: a job title, filed under exactly one catalogue department.
+    """Root-only: one designation in the platform-wide list.
 
-    A title belongs to one department by design, so root creates "Manager"
-    once per department — "HR Manager" under Human Resources, "Sales Manager"
-    under Sales. The department field is deliberately first and required so
-    the filing is explicit at the point of creation.
+    No department field, deliberately. Root keeps designations and departments
+    as two independent lists; which designation sits under which department is
+    each company's own decision, recorded on CompanyDesignation. So "Manager"
+    is created once for the whole platform, and one company may place it under
+    Sales while another places it under Production.
     """
 
     class Meta:
         model = Designation
-        fields = ("department", "code", "name", "description", "status")
+        fields = ("code", "name", "description", "status")
         widgets = {"description": forms.TextInput()}
         help_texts = {
-            "department": "The catalogue department this title belongs to.",
-            "code": "Short identifier, unique within this department.",
-            "name": "Unique within this department.",
+            "code": "Short identifier, unique across the whole platform.",
+            "name": (
+                "The canonical name every company will see. Unique "
+                "platform-wide — companies decide which departments use it."
+            ),
         }
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Only active catalogue departments can take new titles; an existing
-        # row keeps its own department visible even if that was deactivated.
-        queryset = Department.objects.filter(status=ActiveStatus.ACTIVE)
-        if self.instance.pk and self.instance.department_id:
-            queryset = Department.objects.filter(
-                Q(status=ActiveStatus.ACTIVE) | Q(pk=self.instance.department_id)
-            )
-        self.fields["department"].queryset = queryset.order_by("name")
-        self.fields["department"].empty_label = "Select a department"
-
     def clean_code(self):
+        # Stored uppercase so "mgr" and "MGR" collide as one entry rather than
+        # creating two rows that read identically in a list.
         return (self.cleaned_data.get("code") or "").strip().upper()
 
     def clean_name(self):
@@ -152,6 +145,6 @@ class CatalogueDesignationForm(StyledFormMixin, forms.ModelForm):
 
 
 class CatalogueStatusForm(StyledFormMixin, forms.Form):
-    """Activate or deactivate a catalogue row. There is no delete."""
+    """Activate or deactivate a root list entry. There is no delete."""
 
     status = forms.ChoiceField(choices=ActiveStatus.choices, label="Status")

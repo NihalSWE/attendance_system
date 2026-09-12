@@ -109,7 +109,7 @@ def branch_create(request):
             except ValidationError as exc:
                 form.add_error(None, exc)
             else:
-                # Every branch offers the same departments and job titles, so a
+                # Every branch offers the same departments and designations, so a
                 # new one is given the company's existing set rather than
                 # starting empty and being filled in by hand. The rows are the
                 # branch's own — each still carries its own head, status and

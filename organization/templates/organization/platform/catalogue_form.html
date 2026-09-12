@@ -12,7 +12,7 @@
                 /
             </span>
             <a href="{% url cancel_url %}">
-                Catalogue
+                Platform lists
             </a>
             <span aria-hidden="true">
                 /
@@ -124,6 +124,11 @@
                                     <th>
                                         Branch
                                     </th>
+                                    {% if usage_shows_department %}
+                                        <th>
+                                            Department
+                                        </th>
+                                    {% endif %}
                                     <th>
                                         Status
                                     </th>
@@ -138,6 +143,11 @@
                                         <td>
                                             {{ row.branch.name }}
                                         </td>
+                                        {% if usage_shows_department %}
+                                            <td>
+                                                {{ row.company_department.department.name }}
+                                            </td>
+                                        {% endif %}
                                         <td>
                                             {% if row.status == 'active' %}
                                                 <span class="badge badge--success">
@@ -156,7 +166,7 @@
                     </div>
                     <p class="t-muted">
                         This entry is in use, so it cannot be deleted. Deactivate it to
-                        stop new adoptions without breaking these companies.
+                        stop companies adding it, without breaking the ones already using it.
                     </p>
                 {% else %}
                     <div class="empty">
@@ -164,7 +174,7 @@
                             Not used yet
                         </div>
                         <div class="empty__text">
-                            No company has adopted this entry.
+                            No company is using this entry.
                         </div>
                     </div>
                 {% endif %}

@@ -30,7 +30,7 @@ from organization.models import (
 )
 
 DEPARTMENT_FIELDS = ("code", "name", "description", "status")
-DESIGNATION_FIELDS = ("department", "code", "name", "description", "status")
+DESIGNATION_FIELDS = ("code", "name", "description", "status")
 
 
 def require_platform_owner(actor):
@@ -59,10 +59,13 @@ def _writable(values, allowed):
 
 
 def department_queryset():
-    """Catalogue departments with their adoption and title counts."""
+    """Root departments, with how many companies use each.
+
+    No designation count: departments and designations are independent lists
+    now, so a root department has no designations of its own to count.
+    """
     return Department.objects.annotate(
-        designation_count=Count("designations", distinct=True),
-        adoption_count=Count("company_links", distinct=True),
+        adoption_count=Count("company_links", distinct=True)
     )
 
 
@@ -132,7 +135,8 @@ def department_usage(department):
 
 
 def designation_queryset():
-    return Designation.objects.select_related("department").annotate(
+    """The flat designation list, with how many company departments use each."""
+    return Designation.objects.annotate(
         adoption_count=Count("company_links", distinct=True)
     )
 
@@ -153,34 +157,17 @@ def create_designation(*, actor, values):
 
 @transaction.atomic
 def update_designation(*, actor, designation_id, values):
-    """Update a job title.
+    """Update one designation in the flat root list.
 
-    Moving a title to a different catalogue department is refused once any
-    company has adopted it: their CompanyDesignation rows are validated
-    against the department they were filed under, and silently repointing the
-    catalogue would leave those adoptions describing a title that no longer
-    belongs to their department.
+    Nothing here depends on a department: which departments use a designation
+    is each company's decision, held on CompanyDesignation, so renaming a
+    designation never invalidates a company's placement of it.
     """
     require_platform_owner(actor)
     designation = Designation.objects.get(pk=designation_id)
     before = _snapshot(designation, DESIGNATION_FIELDS)
-    changes = _writable(values, DESIGNATION_FIELDS)
 
-    new_department = changes.get("department")
-    if (
-        new_department is not None
-        and new_department.pk != designation.department_id
-        and CompanyDesignation.all_objects.filter(designation=designation).exists()
-    ):
-        raise ValidationError({
-            "department": (
-                "This job title is already in use by a company, so it cannot be "
-                "moved to another department. Deactivate it and create a new "
-                "title under the other department instead."
-            )
-        })
-
-    for field, value in changes.items():
+    for field, value in _writable(values, DESIGNATION_FIELDS).items():
         setattr(designation, field, value)
     designation.updated_by = actor
     designation.full_clean()
@@ -211,6 +198,22 @@ def set_designation_status(*, actor, designation_id, status):
 
 
 def designation_usage(designation):
-    return CompanyDesignation.all_objects.filter(
-        designation=designation
-    ).select_related("company", "company_department__branch").order_by("company__name")
+    """Where this designation is used, one row per company department.
+
+    The department has to come back with it. One company may place the same
+    designation under several of its departments, so company and branch alone
+    would render as two identical rows the reader cannot tell apart.
+    """
+    return (
+        CompanyDesignation.all_objects.filter(designation=designation)
+        .select_related(
+            "company",
+            "company_department__branch",
+            "company_department__department",
+        )
+        .order_by(
+            "company__name",
+            "company_department__branch__name",
+            "company_department__department__name",
+        )
+    )
