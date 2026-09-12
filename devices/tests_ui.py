@@ -303,6 +303,27 @@ class DeviceScreenTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "already mapped to")
 
+    def test_enrolling_the_same_employee_twice_on_a_device_is_a_readable_error(self):
+        with use_company(self.company):
+            DeviceEnrollment.objects.create(
+                device=self.device,
+                employee=self.employee,
+                device_user_id="7",
+                effective_from=dt(2026, 9, 1),
+            )
+        # A different user number, but the same person on the same device.
+        response = self.client.post(reverse("devices:enrollment_create"), {
+            "device": self.device.pk,
+            "employee": self.employee.pk,
+            "device_user_id": "8",
+            "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
+            "attendance_enabled": "on",
+            "effective_from": "2026-09-15T00:00",
+            "effective_to": "",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "is already enrolled on")
+
     # --- department mapping ----------------------------------------------
 
     def test_department_mapping_can_be_added_and_ended(self):

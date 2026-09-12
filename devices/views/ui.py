@@ -14,6 +14,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -499,6 +500,12 @@ def enrollment_list(request):
     })
 
 
+OVERLAP_MESSAGE = (
+    "This enrollment overlaps an existing one for the same employee or user "
+    "number on this device. Edit or end the existing enrollment first."
+)
+
+
 @login_required
 @company_user_required
 def enrollment_create(request):
@@ -506,7 +513,18 @@ def enrollment_create(request):
     if request.method == "POST" and form.is_valid():
         enrollment = form.save(commit=False)
         enrollment.company_id = request.company_id
-        enrollment.save()
+        try:
+            with transaction.atomic():
+                enrollment.save()
+        except IntegrityError:
+            # The form mirrors both overlap constraints; this only catches a
+            # concurrent save that slipped between the check and the write.
+            form.add_error(None, OVERLAP_MESSAGE)
+            return render(request, "devices/enrollment_form.html", {
+                "form": form,
+                "title": "Enroll an employee on a device",
+                "submit_label": "Create enrollment",
+            })
         _audit(request, "device_enrollment.created", enrollment, after={
             "device": enrollment.device_id,
             "employee": enrollment.employee_id,
@@ -547,7 +565,17 @@ def enrollment_edit(request, pk):
     }
     form = DeviceEnrollmentForm(request.POST or None, instance=enrollment)
     if request.method == "POST" and form.is_valid():
-        enrollment = form.save()
+        try:
+            with transaction.atomic():
+                enrollment = form.save()
+        except IntegrityError:
+            form.add_error(None, OVERLAP_MESSAGE)
+            return render(request, "devices/enrollment_form.html", {
+                "form": form,
+                "enrollment": enrollment,
+                "title": f"Edit enrollment for {enrollment.employee}",
+                "submit_label": "Save changes",
+            })
         _audit(request, "device_enrollment.updated", enrollment, before=before, after={
             "attendance_enabled": enrollment.attendance_enabled,
             "assigned_device_authorized": enrollment.assigned_device_authorized,

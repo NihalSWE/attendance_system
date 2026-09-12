@@ -334,6 +334,26 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
                         "enrollment first so the history stays unambiguous.",
                     )
                     break
+
+        employee = data.get("employee")
+        if device and employee and start:
+            # The second exclusion constraint: one employee cannot hold two
+            # open enrollments on the same device at once. Without this check
+            # the database refused it with an IntegrityError page.
+            same_person = DeviceEnrollment.objects.filter(
+                device=device, employee=employee
+            ).exclude(enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED)
+            if self.instance.pk:
+                same_person = same_person.exclude(pk=self.instance.pk)
+            for other in same_person:
+                if self._overlaps(start, end, other.effective_from, other.effective_to):
+                    self.add_error(
+                        "employee",
+                        f"{employee} is already enrolled on {device} as user "
+                        f"{other.device_user_id} from {other.effective_from:%d %b %Y}. "
+                        "Edit that enrollment, or end it before adding a new one.",
+                    )
+                    break
         return data
 
     @staticmethod
