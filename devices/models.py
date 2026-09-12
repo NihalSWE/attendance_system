@@ -137,6 +137,15 @@ class BiometricDevice(TenantOwned, ActorTracked):
     firmware_version = models.CharField(max_length=64, blank=True)
     ip_address_last_seen = models.GenericIPAddressField(null=True, blank=True)
 
+    # Where this device has been told to reach us. Blank until an address has
+    # been proven: it is only written once a request has actually *arrived*
+    # from the device at that address (devices/services/server_address.py), so
+    # it always reflects where the device really is, never where we hoped it
+    # would be. Never edited directly by a form — see WRITABLE_OPTIONS.
+    server_scheme = models.CharField(max_length=8, blank=True)
+    server_host = models.CharField(max_length=255, blank=True)
+    server_port = models.PositiveIntegerField(null=True, blank=True)
+
     installed_at = models.DateTimeField(null=True, blank=True)
     decommissioned_at = models.DateTimeField(null=True, blank=True)
     last_seen_at = models.DateTimeField(null=True, blank=True)
@@ -537,6 +546,139 @@ class DeviceSyncState(TenantOwned):
         super().clean()
         if not isinstance(self.state_data, dict):
             raise ValidationError({"state_data": "Must be a JSON object."})
+
+
+class DeviceServerAddressChange(TenantOwned, ActorTracked):
+    """One attempt to move a device to a different server address.
+
+    The device is the only party that can open a connection, so the software
+    can never verify — or undo — an address the device can no longer reach.
+    That single fact shapes the whole flow: the address is proven **before**
+    the device is told anything, and it is only saved as current once a
+    request has actually arrived from the device at the new address.
+
+    A row here is the attempt, not the setting. It is kept whatever the
+    outcome, so the device page can show who tried what, when, and how it
+    ended. The device's own current address lives on ``BiometricDevice``.
+    """
+
+    class Status(models.TextChoices):
+        # Step 1: the server is fetching its own probe endpoint at the new
+        # address. The device has not been contacted.
+        CHECKING = "checking", "Checking the new address"
+        # Step 1 failed. Nothing was sent; the saved address is untouched.
+        UNREACHABLE = "unreachable", "Address not reachable"
+        # Step 2: the command is waiting for the device's next check-in.
+        QUEUED = "queued", "Waiting for the device to pick up the change"
+        # Step 3: the device fetched the command.
+        DELIVERED = "delivered", "Device received the change"
+        # Step 3b: the device reported a result for it.
+        ACKNOWLEDGED = "acknowledged", "Device acknowledged the change"
+        # Step 4: a request arrived at the new address. Saved.
+        CONFIRMED = "confirmed", "Connected at the new address"
+        # Step 5a: the deadline passed and the device is still at the old
+        # address. Nothing changed on the device.
+        NOT_APPLIED = "not_applied", "Device did not apply the change"
+        # Step 5b: the deadline passed and the device has gone silent. It
+        # switched and cannot reach us; only the terminal can fix that.
+        LOST = "lost", "Device not reachable at the new address"
+        # An administrator abandoned an attempt that had not been sent.
+        CANCELLED = "cancelled", "Cancelled"
+
+    # Statuses where the change is still moving. A device may only have one.
+    IN_FLIGHT = (
+        Status.CHECKING,
+        Status.QUEUED,
+        Status.DELIVERED,
+        Status.ACKNOWLEDGED,
+    )
+    # Statuses reached after the device was told something.
+    SENT = (Status.QUEUED, Status.DELIVERED, Status.ACKNOWLEDGED)
+
+    device = models.ForeignKey(
+        BiometricDevice, on_delete=models.PROTECT, related_name="address_changes"
+    )
+
+    # What was saved before this attempt, so the UI can name the exact value to
+    # type back into the terminal if the device is lost. Blank when the device
+    # had never had a proven address.
+    previous_scheme = models.CharField(max_length=8, blank=True)
+    previous_host = models.CharField(max_length=255, blank=True)
+    previous_port = models.PositiveIntegerField(null=True, blank=True)
+
+    new_scheme = models.CharField(max_length=8)
+    new_host = models.CharField(max_length=255)
+    new_port = models.PositiveIntegerField()
+
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.CHECKING
+    )
+
+    # Step 1. The token is single-use and only ever travels to the address
+    # being tested; the reply must carry a signature only this software can
+    # produce, which is what makes "some server answered" insufficient.
+    probe_token = models.CharField(max_length=64, blank=True)
+    probe_started_at = models.DateTimeField(null=True, blank=True)
+    probe_completed_at = models.DateTimeField(null=True, blank=True)
+
+    # Steps 2-3. The ids are echoed back in the device's devicecmd results,
+    # which is how a result is matched to this attempt. Two of them, because
+    # the SenseFace 2A applies exactly one option per SET OPTION command: a
+    # tab-separated pair is swallowed whole as the value of the first option
+    # (measured — see docs/DEVICE_SETUP.md). ``command_id`` is the host, the
+    # decisive one; ``port_command_id`` is its companion in the same batch.
+    command_id = models.IntegerField(null=True, blank=True)
+    port_command_id = models.IntegerField(null=True, blank=True)
+    command_queued_at = models.DateTimeField(null=True, blank=True)
+    command_delivered_at = models.DateTimeField(null=True, blank=True)
+    command_acknowledged_at = models.DateTimeField(null=True, blank=True)
+    command_return_code = models.CharField(max_length=32, blank=True)
+
+    # Step 4/5. Both are recorded because which one is set at the deadline is
+    # exactly what separates "ignored the command" from "switched and is lost".
+    seen_at_new_address_at = models.DateTimeField(null=True, blank=True)
+    seen_at_old_address_at = models.DateTimeField(null=True, blank=True)
+    deadline_at = models.DateTimeField(null=True, blank=True)
+
+    failure_code = models.CharField(max_length=32, blank=True)
+    failure_reason = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "devices_deviceserveraddresschange"
+        ordering = ("-created_at",)
+        constraints = [
+            # One change at a time per device, enforced in the database as
+            # well as the service: two overlapping attempts would race to
+            # decide what the device's current address is.
+            models.UniqueConstraint(
+                fields=["device"],
+                condition=models.Q(
+                    status__in=("checking", "queued", "delivered", "acknowledged")
+                ),
+                name="uniq_device_address_change_in_flight",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["company", "device", "-created_at"]),
+            models.Index(fields=["company", "status"]),
+        ]
+
+    def __str__(self):
+        return f"{self.device_id} -> {self.new_host} ({self.status})"
+
+    @property
+    def is_in_flight(self):
+        return self.status in self.IN_FLIGHT
+
+    @property
+    def was_sent_to_device(self):
+        """True once the command left for the device, however it ended.
+
+        The difference matters to the reader: a failure before this point
+        changed nothing at all, and a failure after it may have changed the
+        terminal.
+        """
+        return self.command_queued_at is not None
 
 
 class DeviceMessage(TenantOwned):

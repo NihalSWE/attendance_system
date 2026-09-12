@@ -22,6 +22,7 @@ from devices.models import (
     DeviceEnrollment,
     DeviceModel,
 )
+from devices.services import server_address
 from employees.models import Employee
 from organization.models import Branch, CompanyDepartment
 
@@ -81,6 +82,27 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         required=False, initial=True, label="Push punches in real time",
         help_text="When off, the device only uploads on its timed interval.",
     )
+    server_address = forms.CharField(
+        required=False,
+        max_length=255,
+        label="Server address",
+        help_text=(
+            "Where the device sends its data, for example "
+            "https://attendance.example.com or 192.168.1.20:8000. Changing "
+            "this is checked before the device is told anything, and only "
+            "saved once the device has connected at the new address."
+        ),
+    )
+    server_address_confirmed = forms.BooleanField(
+        required=False,
+        label="I understand the risk of changing the server address",
+        help_text=(
+            "The device can only be reached while it is pointing here. If it "
+            "switches to an address it cannot reach, no one can fix it from "
+            "this screen — someone has to walk to the terminal and type the "
+            "old address back in."
+        ),
+    )
 
     class Meta:
         model = BiometricDevice
@@ -107,6 +129,11 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            # Nothing to repoint yet. The address is typed into the terminal
+            # during commissioning, and the detail page states what to type.
+            del self.fields["server_address"]
+            del self.fields["server_address_confirmed"]
         # Tenant-scoped querysets: the manager already filters by the active
         # company, so another tenant's branches can never appear in the list.
         self.fields["branch"].queryset = Branch.objects.order_by("name")
@@ -116,6 +143,18 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
 
         if self.instance.pk:
             settings = self.instance.settings or {}
+            saved = server_address.current_address(self.instance)
+            self.fields["server_address"].initial = saved.text if saved else ""
+            if server_address.in_flight_change(self.instance) is not None:
+                # A second change while one is running would race the first to
+                # decide what the device's address is, so the control is
+                # closed rather than left to fail on submit.
+                self.fields["server_address"].disabled = True
+                self.fields["server_address_confirmed"].disabled = True
+                self.fields["server_address"].help_text = (
+                    "A change is already in progress. Wait for it to finish "
+                    "on the device page before starting another."
+                )
             self.fields["push_interval_seconds"].initial = settings.get(
                 "push_interval_seconds", 10
             )
@@ -127,6 +166,49 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
                 "Leave blank to keep the current key. Entering a new value "
                 "replaces it, and the device must be updated to match."
             )
+
+    def clean(self):
+        """Validate the address format here; the round trip is the view's job.
+
+        ``requested_address`` is left on the form as the parsed value when it
+        differs from what is saved, so the view knows whether to start a
+        change at all — a save that did not touch the address must not queue
+        anything to the device.
+        """
+        data = super().clean()
+        self.requested_address = None
+        if "server_address" not in self.fields:
+            return data
+
+        typed = (data.get("server_address") or "").strip()
+        saved = server_address.current_address(self.instance)
+        if not typed:
+            if saved is not None:
+                self.add_error(
+                    "server_address",
+                    "Enter the address the device uses. Clearing it would "
+                    "leave nothing to point the device at.",
+                )
+            return data
+
+        try:
+            target = server_address.parse_address(typed)
+        except server_address.ServerAddressError as exc:
+            self.add_error("server_address", str(exc))
+            return data
+
+        if saved is not None and saved.matches(target):
+            return data
+        if not data.get("server_address_confirmed"):
+            self.add_error(
+                "server_address_confirmed",
+                "Tick this to confirm you understand what a wrong server "
+                "address does to the device.",
+            )
+            return data
+
+        self.requested_address = target
+        return data
 
     def clean_serial_number(self):
         serial = (self.cleaned_data["serial_number"] or "").strip()
