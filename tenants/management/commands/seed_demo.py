@@ -24,7 +24,7 @@ from access_control.models import AccessPermission, DesignationPermission
 from common.tenant import use_company
 from organization.catalogue import adopt_department, adopt_designation
 from employees.models import Employee
-from employees.services import hire_employee, terminate_employee, transfer_employee
+from employees.services import create_employee, terminate_employee, transfer_employee
 from organization.models import Branch
 from scheduling.models import Holiday, Shift, WeeklyOffRule
 from tenants.models import Company, CompanyFeature, Feature
@@ -140,7 +140,7 @@ class Command(BaseCommand):
                 },
             )
         self.stdout.write(
-            f"Catalogue: {Feature.objects.count()} features, "
+            f"Platform: {Feature.objects.count()} features, "
             f"{AccessPermission.objects.count()} permissions"
         )
 
@@ -236,7 +236,7 @@ class Command(BaseCommand):
             defaults={"first_name": "Ayesha", "last_name": "Rahman"},
         )
 
-        ayesha = hire_employee(
+        ayesha = create_employee(
             company=company, first_name="Ayesha", last_name="Rahman",
             employee_code="NWT-001", branch=hq, department=hr,
             designation=hr_manager, effective_from=dt(2023, 1, 1),
@@ -245,7 +245,7 @@ class Command(BaseCommand):
         )["employee"]
 
         # ...and employees with NO login at all (HR acts on their behalf).
-        tanvir = hire_employee(
+        tanvir = create_employee(
             company=company, first_name="Tanvir", last_name="Hossain",
             employee_code="NWT-002", branch=hq, department=software,
             designation=senior_dev, effective_from=dt(2023, 2, 1),
@@ -253,7 +253,7 @@ class Command(BaseCommand):
             shift=day, joining_date=date(2023, 2, 1),
         )["employee"]
 
-        nusrat = hire_employee(
+        nusrat = create_employee(
             company=company, first_name="Nusrat", last_name="Jahan",
             employee_code="NWT-003", branch=hq, department=software,
             designation=junior_dev, effective_from=dt(2023, 6, 1),
@@ -262,14 +262,14 @@ class Command(BaseCommand):
         )["employee"]
 
         # Different pay bases: daily and hourly.
-        hire_employee(
+        create_employee(
             company=company, first_name="Rakib", last_name="Islam",
             employee_code="NWT-004", branch=unit, department=sales,
             designation=sales_rep, effective_from=dt(2023, 8, 1),
             pay_basis="daily", base_rate=Decimal("1200"),
             joining_date=date(2023, 8, 1),
         )
-        hire_employee(
+        create_employee(
             company=company, first_name="Sabbir", last_name="Ahmed",
             employee_code="NWT-005", branch=unit, department=sales,
             designation=sales_rep, effective_from=dt(2023, 9, 1),
@@ -285,7 +285,7 @@ class Command(BaseCommand):
         )
 
         # A REUSED employee code: Karim leaves, and his code is later reissued.
-        karim = hire_employee(
+        karim = create_employee(
             company=company, first_name="Karim", last_name="Uddin",
             employee_code="NWT-014", branch=hq, department=software,
             designation=junior_dev, effective_from=dt(2023, 3, 1),
@@ -295,7 +295,7 @@ class Command(BaseCommand):
         terminate_employee(
             employee=karim, effective_at=dt(2024, 2, 1), reason="Resigned"
         )
-        sadia = hire_employee(
+        sadia = create_employee(
             company=company, first_name="Sadia", last_name="Akter",
             employee_code="NWT-014",  # same code, only after Karim's interval ended
             branch=hq, department=software, designation=junior_dev,
@@ -356,7 +356,7 @@ class Command(BaseCommand):
 
         # Same employee code as Northwind's first employee is fine: codes are
         # unique per company, not globally.
-        hire_employee(
+        create_employee(
             company=company, first_name="Imran", last_name="Chowdhury",
             employee_code="NWT-001", branch=depot, department=ops,
             designation=supervisor, effective_from=dt(2024, 1, 1),

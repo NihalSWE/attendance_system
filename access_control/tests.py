@@ -18,7 +18,7 @@ from access_control.services import (
     is_feature_enabled,
 )
 from common.tenant import use_company
-from employees.services import hire_employee
+from employees.services import create_employee
 from organization.models import (
     Branch,
     CompanyDepartment,
@@ -47,10 +47,10 @@ class PermissionResolutionTests(TestCase):
         # Root-owned catalogue, shared by every company on the platform.
         self.software = Department.objects.create(code="SW", name="Software")
         self.manager_entry = Designation.objects.create(
-            department=self.software, code="MGR", name="Manager"
+            code="MGR", name="Manager"
         )
         self.dev_entry = Designation.objects.create(
-            department=self.software, code="DEV", name="Developer"
+            code="DEV", name="Developer"
         )
 
         self.company = onboard_company(code="ACME", slug="acme", name="Acme Ltd")
@@ -68,11 +68,11 @@ class PermissionResolutionTests(TestCase):
             CompanyFeature.objects.create(
                 company=self.company, feature=self.leave_feature, effect="enable"
             )
-        self.manager = self._hire("Meera", "E1", self.manager_title)
-        self.developer = self._hire("Dev", "E2", self.dev_title)
+        self.manager = self._create_employee("Meera", "E1", self.manager_title)
+        self.developer = self._create_employee("Dev", "E2", self.dev_title)
 
-    def _hire(self, name, code, designation):
-        return hire_employee(
+    def _create_employee(self, name, code, designation):
+        return create_employee(
             company=self.company, first_name=name, employee_code=code,
             branch=self.branch, department=self.department, designation=designation,
             effective_from=dt(2024, 1, 1),
@@ -149,7 +149,7 @@ class PermissionResolutionTests(TestCase):
             title = CompanyDesignation.objects.create(
                 company_department=dept, designation=self.manager_entry
             )
-        employee = hire_employee(
+        employee = create_employee(
             company=other, first_name="Zed", employee_code="Z1", branch=branch,
             department=dept, designation=title, effective_from=dt(2024, 1, 1),
             pay_basis="monthly", base_rate=Decimal("100"),
@@ -260,7 +260,7 @@ class PermissionResolutionTests(TestCase):
             CompanyFeature.objects.create(
                 company=other, feature=self.leave_feature, effect="enable"
             )
-        outsider = hire_employee(
+        outsider = create_employee(
             company=other, first_name="Nadia", employee_code="C1", branch=branch,
             department=dept, designation=title, effective_from=dt(2024, 1, 1),
             pay_basis="monthly", base_rate=Decimal("100"),

@@ -1,0 +1,75 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'organization:adoption_list' %}">
+            Departments
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Status
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                {{ adoption.branch.name }}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Department status
+                </h2>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    Nothing is deleted. Deactivating stops new employees being placed
+                    into this department while its history stays readable. A department
+                    that still has employees assigned cannot be deactivated.
+                </p>
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger" role="alert">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+                <form method="post" class="stack" novalidate>
+                    {% csrf_token %}
+                    <div class="field {% if form.status.errors %}field-invalid{% endif %}">
+                        <label class="field__label" for="{{ form.status.id_for_label }}">
+                            {{ form.status.label }}
+                        </label>
+                        {{ form.status }}
+                        {% for error in form.status.errors %}
+                            <p class="field__error">
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn--primary" type="submit">
+                            {{ submit_label }}
+                        </button>
+                        <a class="btn btn--ghost" href="{% url 'organization:adoption_list' %}">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}

@@ -100,19 +100,21 @@ class Department(TimeStamped, ActorTracked):
 
 
 class Designation(TimeStamped, ActorTracked):
-    """Platform-wide catalogue of job titles, owned by the root operator.
+    """Platform-wide list of designations, owned by the root operator.
 
-    A title belongs to exactly one catalogue department, so "HR Manager" cannot
-    be filed under Software. There is no parent/child hierarchy here: access
-    ceilings are set on the department (see
-    ``access_control.DepartmentPermission``), not by walking a chain of titles.
+    Deliberately **independent of departments**. Root curates one flat list of
+    names; which designations sit under which department is a company's own
+    decision, recorded on :class:`CompanyDesignation`. So a single "Manager"
+    exists for the whole platform, and one company may place it under Sales
+    while another places it under Production.
+
+    There is no parent/child hierarchy either: access ceilings are set on the
+    department (see ``access_control.DepartmentPermission``), not by walking a
+    chain of designations.
     """
 
-    department = models.ForeignKey(
-        Department, on_delete=models.PROTECT, related_name="designations"
-    )
-    code = models.CharField(max_length=32)
-    name = models.CharField(max_length=255)
+    code = models.CharField(max_length=32, unique=True)
+    name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True)
     status = models.CharField(
         max_length=16, choices=ActiveStatus.choices, default=ActiveStatus.ACTIVE
@@ -120,17 +122,7 @@ class Designation(TimeStamped, ActorTracked):
 
     class Meta:
         db_table = "organization_designation"
-        ordering = ("department__name", "name")
-        constraints = [
-            models.UniqueConstraint(
-                fields=["department", "code"],
-                name="uniq_designation_code_per_department",
-            ),
-            models.UniqueConstraint(
-                fields=["department", "name"],
-                name="uniq_designation_name_per_department",
-            ),
-        ]
+        ordering = ("name",)
 
     def __str__(self):
         return self.name
@@ -197,7 +189,16 @@ class CompanyDepartment(TenantOwned, ActorTracked):
 
 
 class CompanyDesignation(TenantOwned, ActorTracked):
-    """One company's use of a catalogue job title, inside one of its departments."""
+    """The company-wise department-designation relation.
+
+    Root keeps departments and designations as two independent lists. This row
+    is where one company says "in *our* Sales department, Manager is a
+    designation people hold". Another company is free to place the same
+    Manager under Production, and neither choice constrains the other.
+
+    Because the relation lives here rather than on the root designation, any
+    active designation may be assigned to any of the company's departments.
+    """
 
     company_department = models.ForeignKey(
         CompanyDepartment, on_delete=models.PROTECT, related_name="designations"
@@ -224,19 +225,6 @@ class CompanyDesignation(TenantOwned, ActorTracked):
 
     def __str__(self):
         return self.designation.name
-
-    def clean(self):
-        super().clean()
-        if self.designation_id and self.company_department_id:
-            if self.designation.department_id != self.company_department.department_id:
-                raise ValidationError(
-                    {
-                        "designation": (
-                            "This job title belongs to a different catalogue "
-                            "department than the one selected."
-                        )
-                    }
-                )
 
     @property
     def branch(self):

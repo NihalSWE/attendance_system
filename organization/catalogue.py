@@ -22,17 +22,21 @@ from organization.models import (
 
 
 def ensure_department(code, name, **defaults):
-    """Return the catalogue department for ``name``, creating it if new."""
+    """Return the platform department for ``name``, creating it if new."""
     department, _ = Department.objects.get_or_create(
         name=name, defaults={"code": code, **defaults}
     )
     return department
 
 
-def ensure_designation(department, code, name, **defaults):
-    """Return the catalogue job title under ``department``, creating it if new."""
+def ensure_designation(code, name, **defaults):
+    """Return the platform designation for ``name``, creating it if new.
+
+    Takes no department: root keeps designations as a flat list, and which
+    departments use one is each company's decision.
+    """
     designation, _ = Designation.objects.get_or_create(
-        department=department, name=name, defaults={"code": code, **defaults}
+        name=name, defaults={"code": code, **defaults}
     )
     return designation
 
@@ -48,10 +52,8 @@ def adopt_department(branch, code, name, **kwargs):
 
 
 def adopt_designation(company_department, code, name, **kwargs):
-    """Adopt a catalogue job title into one of the company's own departments."""
-    designation = ensure_designation(
-        company_department.department, code, name
-    )
+    """Assign a platform designation to one of the company's own departments."""
+    designation = ensure_designation(code, name)
     return CompanyDesignation.objects.create(
         company_department=company_department, designation=designation, **kwargs
     )

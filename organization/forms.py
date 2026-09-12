@@ -5,10 +5,11 @@ re-validates every submitted value and re-checks row scope before writing.
 """
 
 from django import forms
+from django.db.models import Q
 
 from common.choices import ActiveStatus
 from common.forms import BangladeshPhoneInput, StyledFormMixin
-from organization.models import Branch
+from organization.models import Branch, Department, Designation
 
 
 class BranchForm(StyledFormMixin, forms.ModelForm):
@@ -84,3 +85,66 @@ class BranchStatusForm(forms.Form):
         required=False,
         help_text="Recorded in the audit trail.",
     )
+
+
+class CatalogueDepartmentForm(StyledFormMixin, forms.ModelForm):
+    """Root-only: a department name in the platform-wide catalogue.
+
+    No branch, no company, no dates — those describe one company's *use* of a
+    department and live on CompanyDepartment. Putting any of them here would
+    make one tenant's fact visible to every other tenant sharing the name.
+    """
+
+    class Meta:
+        model = Department
+        fields = ("code", "name", "description", "status")
+        widgets = {"description": forms.TextInput()}
+        help_texts = {
+            "code": "Short identifier, unique across the whole platform.",
+            "name": "The canonical name every company will see. Unique platform-wide.",
+        }
+
+    def clean_code(self):
+        # Stored uppercase so "hr" and "HR" collide as the same catalogue row
+        # instead of creating two entries that read identically in a list.
+        return (self.cleaned_data.get("code") or "").strip().upper()
+
+    def clean_name(self):
+        return (self.cleaned_data.get("name") or "").strip()
+
+
+class CatalogueDesignationForm(StyledFormMixin, forms.ModelForm):
+    """Root-only: one designation in the platform-wide list.
+
+    No department field, deliberately. Root keeps designations and departments
+    as two independent lists; which designation sits under which department is
+    each company's own decision, recorded on CompanyDesignation. So "Manager"
+    is created once for the whole platform, and one company may place it under
+    Sales while another places it under Production.
+    """
+
+    class Meta:
+        model = Designation
+        fields = ("code", "name", "description", "status")
+        widgets = {"description": forms.TextInput()}
+        help_texts = {
+            "code": "Short identifier, unique across the whole platform.",
+            "name": (
+                "The canonical name every company will see. Unique "
+                "platform-wide — companies decide which departments use it."
+            ),
+        }
+
+    def clean_code(self):
+        # Stored uppercase so "mgr" and "MGR" collide as one entry rather than
+        # creating two rows that read identically in a list.
+        return (self.cleaned_data.get("code") or "").strip().upper()
+
+    def clean_name(self):
+        return (self.cleaned_data.get("name") or "").strip()
+
+
+class CatalogueStatusForm(StyledFormMixin, forms.Form):
+    """Activate or deactivate a root list entry. There is no delete."""
+
+    status = forms.ChoiceField(choices=ActiveStatus.choices, label="Status")

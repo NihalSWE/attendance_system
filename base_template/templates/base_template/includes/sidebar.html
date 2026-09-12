@@ -73,7 +73,7 @@
             Branches
         </span>
     </a>
-    <a class="sidebar__link {% active request 'department_list' %}" href="{% url 'department_list' %}">
+    <a class="sidebar__link {% active request 'adoption_list' 'adoption_create' 'adoption_edit' 'adoption_status' 'department_list' %}" href="{% url 'organization:adoption_list' %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="7" height="7" rx="1.5"/>
             <rect x="14" y="3" width="7" height="7" rx="1.5"/>

@@ -22,6 +22,26 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    /* Server-rendered platform tables that only want client-side sorting and
+       filtering over the current page. Same `data-enhance` contract the device
+       screens use, so there is one convention rather than two. The server's own
+       count and pager stay authoritative. */
+    if (window.DataTable) {
+        document.querySelectorAll("table[data-enhance]").forEach(function (enhanced) {
+            new DataTable(enhanced, {
+                paging: false,
+                info: false,
+                autoWidth: false,
+                order: [],
+                columnDefs: [{targets: "no-sort", orderable: false}],
+                language: {
+                    search: "Filter this page:",
+                    zeroRecords: "No rows match that filter."
+                }
+            });
+        });
+    }
+
     const table = document.getElementById("companies-table");
     if (!table) return;
     if (!window.DataTable) {

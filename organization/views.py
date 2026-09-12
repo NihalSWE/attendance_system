@@ -14,6 +14,7 @@ from django.views.decorators.http import require_POST
 
 from common.choices import ActiveStatus
 from common.tenant import use_company
+from organization.adoption_services import provision_new_branch
 from organization.forms import BranchForm, BranchStatusForm
 from organization.models import Branch
 from organization.services import (
@@ -47,7 +48,10 @@ def branch_list(request):
     with use_company(company_id):
         queryset = (
             visible_branches(membership)
-            .annotate(department_count=Count("departments", distinct=True))
+            # Departments hang off the branch through the adoption row now;
+            # the old `departments` accessor belonged to the tenant-owned
+            # Department that the root catalogue replaced.
+            .annotate(department_count=Count("company_departments", distinct=True))
             .order_by("-is_default", "name")
         )
 
@@ -105,7 +109,24 @@ def branch_create(request):
             except ValidationError as exc:
                 form.add_error(None, exc)
             else:
-                messages.success(request, f"Branch “{branch.name}” created.")
+                # Every branch offers the same departments and designations, so a
+                # new one is given the company's existing set rather than
+                # starting empty and being filled in by hand. The rows are the
+                # branch's own — each still carries its own head, status and
+                # device rules — so diverging later is a normal edit.
+                copied, _skipped = provision_new_branch(
+                    actor=request.user, company_id=company_id, branch=branch
+                )
+                if copied:
+                    messages.success(
+                        request,
+                        f"Branch “{branch.name}” created with "
+                        f"{len(copied)} department{'' if len(copied) == 1 else 's'} "
+                        "copied from your existing branches. Appoint a head for "
+                        "each when you are ready.",
+                    )
+                else:
+                    messages.success(request, f"Branch “{branch.name}” created.")
                 return redirect("organization:branch_list")
     else:
         # A company's first branch is created during onboarding, so a new one

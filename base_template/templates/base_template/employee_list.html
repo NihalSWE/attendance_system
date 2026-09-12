@@ -27,9 +27,9 @@
             <button class="btn btn--ghost" type="button" disabled title="Export is not available yet">
                 Export (unavailable)
             </button>
-            <button class="btn btn--primary" type="button" disabled title="Employee onboarding forms are the next slice">
-                Add employee (coming next)
-            </button>
+            <a class="btn btn--primary" href="{% url 'organization:employee_create' %}">
+                Create employee
+            </a>
         </div>
     </div>
     <div class="card">

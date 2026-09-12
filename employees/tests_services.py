@@ -1,4 +1,4 @@
-"""Employee lifecycle service tests: hire, transfer, salary revision."""
+"""Employee lifecycle service tests: create, transfer, salary revision."""
 
 from datetime import datetime, time, timezone as dt_timezone
 from decimal import Decimal
@@ -8,7 +8,7 @@ from django.test import TestCase
 
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
-from employees.services import hire_employee, revise_compensation, transfer_employee
+from employees.services import create_employee, revise_compensation, transfer_employee
 from organization.models import (
     Branch,
     CompanyDepartment,
@@ -30,10 +30,10 @@ class EmployeeServiceTests(TestCase):
         software_entry = Department.objects.create(code="SW", name="Software")
         sales_entry = Department.objects.create(code="SL", name="Sales")
         dev_entry = Designation.objects.create(
-            department=software_entry, code="DEV", name="Developer"
+            code="DEV", name="Developer"
         )
         rep_entry = Designation.objects.create(
-            department=sales_entry, code="REP", name="Sales Rep"
+            code="REP", name="Sales Rep"
         )
 
         self.company = onboard_company(code="ACME", slug="acme", name="Acme Ltd")
@@ -56,8 +56,8 @@ class EmployeeServiceTests(TestCase):
                 scheduled_minutes=480,
             )
 
-    def _hire(self, first_name="Alice", code="E100", start=None, **kw):
-        return hire_employee(
+    def _create_employee(self, first_name="Alice", code="E100", start=None, **kw):
+        return create_employee(
             company=self.company,
             first_name=first_name,
             employee_code=code,
@@ -70,31 +70,31 @@ class EmployeeServiceTests(TestCase):
             **kw,
         )
 
-    # --- hire --------------------------------------------------------------
+    # --- create employee ----------------------------------------------------
 
-    def test_hire_creates_employee_assignment_and_compensation(self):
-        result = self._hire()
+    def test_create_employee_makes_employee_assignment_and_compensation(self):
+        result = self._create_employee()
         self.assertIsNotNone(result["employee"].pk)
         self.assertEqual(result["assignment"].employee_code, "E100")
         self.assertEqual(result["compensation"].base_rate, Decimal("30000"))
         # Currency defaults from the company when not supplied.
         self.assertEqual(result["compensation"].currency, self.company.currency)
 
-    def test_hire_can_attach_a_shift(self):
-        result = self._hire(shift=self.shift)
+    def test_create_employee_can_attach_a_shift(self):
+        result = self._create_employee(shift=self.shift)
         self.assertIsNotNone(result["shift_assignment"])
         self.assertEqual(result["shift_assignment"].shift, self.shift)
 
-    def test_hire_without_a_shift_leaves_none(self):
-        self.assertIsNone(self._hire()["shift_assignment"])
+    def test_create_employee_without_a_shift_leaves_none(self):
+        self.assertIsNone(self._create_employee()["shift_assignment"])
 
-    def test_employee_may_be_hired_without_a_user_account(self):
-        self.assertIsNone(self._hire()["employee"].user)
+    def test_employee_may_be_created_without_a_user_account(self):
+        self.assertIsNone(self._create_employee()["employee"].user)
 
-    def test_hire_rejects_a_designation_from_another_department(self):
+    def test_create_employee_rejects_a_designation_from_another_department(self):
         # designation "rep" belongs to Sales, but department passed is Software.
         with self.assertRaises(ValidationError):
-            hire_employee(
+            create_employee(
                 company=self.company, first_name="Bob", employee_code="E200",
                 branch=self.branch, department=self.software, designation=self.rep,
                 effective_from=dt(2024, 1, 1),
@@ -103,9 +103,9 @@ class EmployeeServiceTests(TestCase):
         with use_company(self.company):
             self.assertEqual(Employee.objects.count(), 0)  # rolled back
 
-    def test_failed_hire_creates_no_partial_records(self):
+    def test_a_failed_create_leaves_no_partial_records(self):
         with self.assertRaises(ValidationError):
-            hire_employee(
+            create_employee(
                 company=self.company, first_name="Bob", employee_code="E200",
                 branch=self.branch, department=self.software, designation=self.rep,
                 effective_from=dt(2024, 1, 1),
@@ -119,7 +119,7 @@ class EmployeeServiceTests(TestCase):
     # --- transfer ------------------------------------------------------------
 
     def test_transfer_closes_the_old_assignment_and_opens_a_new_one(self):
-        employee = self._hire()["employee"]
+        employee = self._create_employee()["employee"]
         new_assignment = transfer_employee(
             employee=employee, effective_at=dt(2024, 6, 1),
             department=self.sales, designation=self.rep, reason="Moved to Sales",
@@ -136,7 +136,7 @@ class EmployeeServiceTests(TestCase):
         self.assertEqual(new_assignment.department, self.sales)
 
     def test_transfer_carries_forward_unspecified_attributes(self):
-        employee = self._hire(code="E100")["employee"]
+        employee = self._create_employee(code="E100")["employee"]
         new_assignment = transfer_employee(
             employee=employee, effective_at=dt(2024, 6, 1), reason="Same role"
         )
@@ -145,17 +145,17 @@ class EmployeeServiceTests(TestCase):
         self.assertEqual(new_assignment.branch, self.branch)
 
     def test_transfer_before_the_current_start_is_rejected(self):
-        employee = self._hire(start=dt(2024, 6, 1))["employee"]
+        employee = self._create_employee(start=dt(2024, 6, 1))["employee"]
         with self.assertRaises(ValidationError):
             transfer_employee(employee=employee, effective_at=dt(2024, 1, 1))
 
     def test_transfer_preserves_history_after_the_code_is_reused(self):
-        alice = self._hire(first_name="Alice", code="E100")["employee"]
+        alice = self._create_employee(first_name="Alice", code="E100")["employee"]
         # Alice moves on to a new code; E100 is then free for Bob.
         transfer_employee(
             employee=alice, effective_at=dt(2024, 6, 1), employee_code="E999"
         )
-        bob = hire_employee(
+        bob = create_employee(
             company=self.company, first_name="Bob", employee_code="E100",
             branch=self.branch, department=self.software, designation=self.dev,
             effective_from=dt(2024, 6, 1),
@@ -179,7 +179,7 @@ class EmployeeServiceTests(TestCase):
     # --- compensation revision ------------------------------------------------
 
     def test_revision_closes_the_old_rate_and_opens_the_new_one(self):
-        employee = self._hire()["employee"]
+        employee = self._create_employee()["employee"]
         revised = revise_compensation(
             employee=employee, effective_at=dt(2024, 7, 1),
             base_rate=Decimal("35000"), reason="Annual raise",
@@ -197,7 +197,7 @@ class EmployeeServiceTests(TestCase):
         self.assertIsNone(revised.effective_to)
 
     def test_revision_carries_forward_pay_basis_and_currency(self):
-        employee = self._hire()["employee"]
+        employee = self._create_employee()["employee"]
         revised = revise_compensation(
             employee=employee, effective_at=dt(2024, 7, 1),
             base_rate=Decimal("35000"),
@@ -206,7 +206,7 @@ class EmployeeServiceTests(TestCase):
         self.assertEqual(revised.currency, self.company.currency)
 
     def test_revision_before_the_current_start_is_rejected(self):
-        employee = self._hire(start=dt(2024, 6, 1))["employee"]
+        employee = self._create_employee(start=dt(2024, 6, 1))["employee"]
         with self.assertRaises(ValidationError):
             revise_compensation(
                 employee=employee, effective_at=dt(2024, 1, 1),
@@ -215,7 +215,7 @@ class EmployeeServiceTests(TestCase):
 
     def test_mid_month_raise_leaves_both_periods_queryable(self):
         # Payroll must be able to split the month at the change instant.
-        employee = self._hire()["employee"]
+        employee = self._create_employee()["employee"]
         revise_compensation(
             employee=employee, effective_at=dt(2024, 7, 15),
             base_rate=Decimal("36000"),

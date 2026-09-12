@@ -6,7 +6,7 @@ Three things happen here:
    company adoption rows, for the same reason as everywhere else: a permission
    rule belongs to one company, and the catalogue rows are about to go global.
 2. ``DepartmentPermission`` arrives. The department is now the unit of
-   delegation, and its rules cap what a job title or an individual grant may
+   delegation, and its rules cap what a designation or an individual grant may
    reach.
 3. Nothing is dropped from ``Designation`` here. Its ``parent`` column, and the
    ceiling walk that used it, are removed in ``organization.0003`` because the

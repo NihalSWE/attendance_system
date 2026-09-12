@@ -1,0 +1,171 @@
+{% extends "tenants/platform/base.html" %}
+{% block title %}
+    Departments · Platform
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        Platform
+        <span aria-hidden="true">
+            /
+        </span>
+        Departments
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Departments
+            </h1>
+            <p class="page__sub">
+                The platform-wide list every company chooses from. A company adds a
+                department to one of its branches rather than creating its own.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'catalogue:department_create' %}">
+                Add department
+            </a>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Departments
+            </h2>
+            <span class="spacer">
+            </span>
+            <span class="t-muted">
+                <span class="amount">
+                    {{ filtered_total }}
+                </span>
+                of
+                <span class="amount">
+                    {{ total }}
+                </span>
+                total
+            </span>
+        </div>
+        <form method="get" class="toolbar">
+            <label for="department-search">
+                Search departments
+            </label>
+            <input class="input toolbar__grow" id="department-search" name="q" value="{{ query }}" type="search"
+                   placeholder="Search by name or code">
+            <label class="sr-only" for="department-status">
+                Status
+            </label>
+            <select class="input select js-select" id="department-status" name="status">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if status == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+        </form>
+        {% if page.object_list %}
+            <div class="table-scroll">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Name
+                            </th>
+                            <th>
+                                Description
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="numeric">
+                                Used by
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for department in page.object_list %}
+                            <tr>
+                                <td>
+                                    {{ department.code }}
+                                </td>
+                                <td>
+                                    {{ department.name }}
+                                </td>
+                                <td>
+                                    {{ department.description|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if department.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ department.adoption_count }}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'catalogue:department_edit' department.pk %}">
+                                        Edit
+                                    </a>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'catalogue:department_status' department.pk %}">
+                                        Status
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
+                </span>
+                <div class="pagination__links">
+                    {% if page.has_previous %}
+                        <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}&q={{ query }}&status={{ status }}">
+                            Previous
+                        </a>
+                    {% endif %}
+                    {% if page.has_next %}
+                        <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}&q={{ query }}&status={{ status }}">
+                            Next
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    {% if query or status %}
+                        Nothing matches that filter
+                    {% else %}
+                        No departments yet
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    {% if query or status %}
+                        Clear the search or status filter to see every department.
+                    {% else %}
+                        Add the first department. No company can use one until it
+                        exists here.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

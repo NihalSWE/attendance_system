@@ -1,4 +1,4 @@
-"""Employee lifecycle services: hire, transfer, revise compensation.
+"""Employee lifecycle services: create, transfer, revise compensation.
 
 Every function here is atomic. The transfer and revision functions follow the
 same "close then open" shape:
@@ -26,7 +26,7 @@ from scheduling.models import EmployeeShiftAssignment
 
 
 @transaction.atomic
-def hire_employee(
+def create_employee(
     *,
     company,
     first_name,
@@ -48,12 +48,12 @@ def hire_employee(
     """Create an employee with their first assignment and compensation.
 
     All three rows are written together: an employee without compensation or an
-    organization placement cannot enter payroll, so a partial hire is invalid.
+    organization placement cannot enter payroll, so a partial record is invalid.
 
     Not idempotent by key — re-running is instead *blocked* by the database:
     the exclusion constraint rejects a second assignment overlapping the same
     (company, employee_code) period. An explicit idempotency key can be added
-    when hiring is exposed over an API.
+    when this is exposed over an API.
     """
     with use_company(company):
         employee = create_validated(
@@ -75,7 +75,7 @@ def hire_employee(
             designation=designation,
             manager=manager,
             effective_from=effective_from,
-            change_reason="Initial hire",
+            change_reason="Initial placement",
             created_by=created_by,
         )
         compensation = create_validated(

@@ -1,0 +1,166 @@
+{% extends "tenants/platform/base.html" %}
+{% block title %}
+    Designations · Platform
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        Platform
+        <span aria-hidden="true">
+            /
+        </span>
+        Designations
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Designations
+            </h1>
+            <p class="page__sub">
+                A flat, platform-wide list with no departments in it. Each company
+                decides which of its own departments use a designation, so one
+                Manager here can sit under Sales in one company and under
+                Production in another.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'catalogue:designation_create' %}">
+                Add designation
+            </a>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Designations
+            </h2>
+            <span class="spacer">
+            </span>
+            <span class="t-muted">
+                <span class="amount">
+                    {{ filtered_total }}
+                </span>
+                of
+                <span class="amount">
+                    {{ total }}
+                </span>
+                total
+            </span>
+        </div>
+        <form method="get" class="toolbar">
+            <label for="designation-search">
+                Search designations
+            </label>
+            <input class="input toolbar__grow" id="designation-search" name="q" value="{{ query }}" type="search"
+                   placeholder="Search by designation or code">
+            <label class="sr-only" for="designation-status">
+                Status
+            </label>
+            <select class="input select js-select" id="designation-status" name="status">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if status == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+        </form>
+        {% if page.object_list %}
+            <div class="table-scroll">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Designation
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="numeric">
+                                Used by
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for designation in page.object_list %}
+                            <tr>
+                                <td>
+                                    {{ designation.code }}
+                                </td>
+                                <td>
+                                    {{ designation.name }}
+                                </td>
+                                <td>
+                                    {% if designation.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ designation.adoption_count }}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'catalogue:designation_edit' designation.pk %}">
+                                        Edit
+                                    </a>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'catalogue:designation_status' designation.pk %}">
+                                        Status
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
+                </span>
+                <div class="pagination__links">
+                    {% if page.has_previous %}
+                        <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}&q={{ query }}&status={{ status }}">
+                            Previous
+                        </a>
+                    {% endif %}
+                    {% if page.has_next %}
+                        <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}&q={{ query }}&status={{ status }}">
+                            Next
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    {% if query or status %}
+                        Nothing matches that filter
+                    {% else %}
+                        No designations yet
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    {% if query or status %}
+                        Clear the filters to see every designation.
+                    {% else %}
+                        Add the first designation. Companies choose which of their departments use it.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

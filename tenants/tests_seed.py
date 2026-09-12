@@ -10,7 +10,7 @@ from django.test import TestCase
 from access_control.services import has_permission
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
-from employees.services import hire_employee, terminate_employee
+from employees.services import create_employee, terminate_employee
 from organization.models import (
     Branch,
     CompanyDepartment,
@@ -30,7 +30,7 @@ class TerminationTests(TestCase):
     def setUp(self):
         software_entry = Department.objects.create(code="SW", name="Software")
         dev_entry = Designation.objects.create(
-            department=software_entry, code="DEV", name="Developer"
+            code="DEV", name="Developer"
         )
         self.company = onboard_company(code="ACME", slug="acme", name="Acme Ltd")
         with use_company(self.company):
@@ -42,15 +42,15 @@ class TerminationTests(TestCase):
                 company_department=self.dept, designation=dev_entry
             )
 
-    def _hire(self, name, code, start=dt(2023, 1, 1)):
-        return hire_employee(
+    def _create_employee(self, name, code, start=dt(2023, 1, 1)):
+        return create_employee(
             company=self.company, first_name=name, employee_code=code,
             branch=self.branch, department=self.dept, designation=self.title,
             effective_from=start, pay_basis="monthly", base_rate=Decimal("30000"),
         )["employee"]
 
     def test_termination_closes_assignment_and_compensation(self):
-        employee = self._hire("Karim", "E014")
+        employee = self._create_employee("Karim", "E014")
         terminate_employee(employee=employee, effective_at=dt(2024, 2, 1))
         with use_company(self.company):
             assignment = EmployeeAssignment.objects.get(employee=employee)
@@ -63,7 +63,7 @@ class TerminationTests(TestCase):
         self.assertEqual(employee.leaving_date, dt(2024, 2, 1).date())
 
     def test_termination_deletes_nothing(self):
-        employee = self._hire("Karim", "E014")
+        employee = self._create_employee("Karim", "E014")
         terminate_employee(employee=employee, effective_at=dt(2024, 2, 1))
         with use_company(self.company):
             # The person and their history remain fully queryable.
@@ -73,9 +73,9 @@ class TerminationTests(TestCase):
             )
 
     def test_code_is_reusable_after_termination(self):
-        karim = self._hire("Karim", "E014")
+        karim = self._create_employee("Karim", "E014")
         terminate_employee(employee=karim, effective_at=dt(2024, 2, 1))
-        sadia = self._hire("Sadia", "E014", start=dt(2024, 5, 1))
+        sadia = self._create_employee("Sadia", "E014", start=dt(2024, 5, 1))
         with use_company(self.company):
             holders = list(
                 EmployeeAssignment.objects.filter(employee_code="E014")

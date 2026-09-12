@@ -1,0 +1,105 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'employee_list' %}">
+            Employees
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Create employee
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        {% if not has_departments %}
+            <div class="alert alert--warning">
+                This company has no departments yet, so there is nowhere
+                to place a new employee.
+                <a href="{% url 'organization:adoption_create' %}">
+                    Add a department
+                </a>
+                first.
+            </div>
+        {% endif %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Employee details
+                </h2>
+            </div>
+            <div class="card__body">
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger" role="alert">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="stack" novalidate
+                      data-departments-url="{% url 'organization:employee_branch_departments' %}"
+                      data-designations-url="{% url 'organization:employee_department_designations' %}">
+                    {% csrf_token %}
+
+                    <div class="grid grid--2">
+                        {% for field in form %}
+                            <div class="field {% if field.errors %}field-invalid{% endif %}">
+                                <label class="field__label" for="{{ field.id_for_label }}">
+                                    {{ field.label }}
+                                    {% if field.field.required %}
+                                        <span class="field__req" aria-label="required">
+                                            *
+                                        </span>
+                                    {% endif %}
+                                </label>
+                                {{ field }}
+                                {% if field.help_text %}
+                                    <div class="field__help">
+                                        {{ field.help_text }}
+                                    </div>
+                                {% endif %}
+                                {% for error in field.errors %}
+                                    <p class="field__error">
+                                        {{ error }}
+                                    </p>
+                                {% endfor %}
+                            </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn--primary" type="submit"
+                                {% if not has_departments %}disabled title="Add a department first"{% endif %}>
+                            {{ submit_label }}
+                        </button>
+                        <a class="btn btn--ghost" href="{% url 'employee_list' %}">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'organization/js/employee_form.js' %}">
+    </script>
+{% endblock %}
