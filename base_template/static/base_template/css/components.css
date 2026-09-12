@@ -373,6 +373,11 @@ Table — spec §4. Row height lands near 38px: standard density.
     width: 100%;
     border-collapse: collapse;
 }
+/* A date or an amount split over lines is unreadable and makes rows tall. */
+.table .numeric,
+.table .badge {
+    white-space: nowrap;
+}
 .table thead th {
     background: var(--thead);
     color: var(--thead-text);

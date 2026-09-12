@@ -1,4 +1,5 @@
 {% extends "base_template/base.html" %}
+{% load tz %}
 {% block title %}
     Attendance · Attendance
 {% endblock %}
@@ -99,6 +100,17 @@
         {% if page.object_list %}
             <div class="table-wrap">
                 <table class="table">
+                    <colgroup>
+                        <col style="width: 11%">
+                        <col style="width: 18%">
+                        <col style="width: 11%">
+                        <col style="width: 8%">
+                        <col style="width: 8%">
+                        <col style="width: 10%">
+                        <col style="width: 9%">
+                        <col style="width: 8%">
+                        <col style="width: 17%">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th class="numeric">
@@ -163,10 +175,10 @@
                                     {% endif %}
                                 </td>
                                 <td class="numeric">
-                                    {{ record.first_in_at|time:"H:i"|default:"—" }}
+                                    {{ record.first_in_at|timezone:company_tz|time:"H:i"|default:"—" }}
                                 </td>
                                 <td class="numeric">
-                                    {{ record.last_out_at|time:"H:i"|default:"—" }}
+                                    {{ record.last_out_at|timezone:company_tz|time:"H:i"|default:"—" }}
                                 </td>
                                 <td class="numeric">
                                     {{ record.worked_minutes }}

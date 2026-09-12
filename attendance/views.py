@@ -80,6 +80,8 @@ def attendance_list(request):
         "status": status,
         "statuses": AttendanceRecord.AttendanceStatus.choices,
         "can_manage": membership.role in STRUCTURE_ROLES,
+        # Punch times are stored in UTC; people read them in company time.
+        "company_tz": membership.company.timezone or "UTC",
     })
 
 
