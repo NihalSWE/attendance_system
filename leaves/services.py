@@ -179,7 +179,7 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
     calendar = WorkCalendar(company_id, start_date, end_date)
     if not calendar.has_any_shift:
         raise ValidationError(
-            "Set up shifts under Schedules first. Leave is measured against the "
+            "Set up shifts under Shifts first. Leave is measured against the "
             "working day, so it needs a shift."
         )
 
@@ -207,7 +207,7 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
                 raise ValidationError({
                     "start_date": (
                         f"{assignment.department.name} has no shift on {on:%d %b %Y}. "
-                        "Set one under Schedules."
+                        "Set one under Shifts."
                     )
                 })
             tz = _tz(assignment)

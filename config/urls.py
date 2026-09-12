@@ -15,7 +15,7 @@ urlpatterns = [
     # organization/ with their models.
     path("platform/", include("organization.catalogue_urls")),
     path("organization/", include("organization.urls")),
-    path("schedules/", include("scheduling.urls")),
+    path("shifts/", include("scheduling.urls")),
     path("leave/", include("leaves.urls")),
     path("attendance/", include("attendance.urls")),
     path("salary/", include("payroll.urls")),

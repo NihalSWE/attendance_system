@@ -88,7 +88,7 @@ class Command(BaseCommand):
         if not calendar.has_any_shift:
             raise CommandError(
                 "This company has no shifts set up. Add department shifts or a "
-                "company shift under Schedules first."
+                "company shift under Shifts first."
             )
 
         with use_company(company):

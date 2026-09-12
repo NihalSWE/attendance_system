@@ -94,6 +94,9 @@
                             <th class="numeric">
                                 Base rate
                             </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -142,6 +145,11 @@
                                     {% else %}
                                         —
                                     {% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'organization:employee_edit' r.e.pk %}">
+                                        Edit
+                                    </a>
                                 </td>
                             </tr>
                         {% endfor %}

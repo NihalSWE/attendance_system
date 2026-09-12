@@ -449,13 +449,14 @@ connects back.
 | Mid-month salary change (compensation segments / proration) | The rate in force at month end is used for the whole month | Payroll record |
 | Joining or leaving mid-month (proration rules) | Only days on the payroll are counted | Payroll record |
 | Salary structure: allowances and components | Base rate only | Payroll lines |
+| **Company salary settings** (`PayrollSettings` §54, `PayrollPolicyVersion` §55): monthly divisor, proration method, daily/hourly rate method, leave and absence treatment, overtime method; and **penalty rules** (`AttendancePenaltyRule` §36) | The ÷30 divisor and every method are fixed in code for all companies | Payroll calculation reads the company's policy instead of constants |
 | **Finalise / lock a payroll run**, approval steps, correction/reversal after finalising | Runs stay draft and are regenerated; nothing is locked | Payroll run |
 | Manual bonus / deduction lines on a salary | Not available | Payroll lines (`is_manual` already exists) |
 | Attendance review status and manual day corrections; the *Incomplete* (missing OUT) decision | A missing OUT is counted as present and flagged | Attendance record |
 | Payslip as PDF / email; per-employee salary history | Browser print only | Payslip |
 | Salary and attendance pages for HR and managers, not only the company admin | Company admin only | Access |
 | Payments, part-payments, dues, advances, loans (P5) | Payslip shows the amount; paying it is not recorded | Salary management |
-| Employee detail, edit, history, transfer, salary revision, terminate screens | Services exist, no screens | Employee records used by payroll |
+| Employee detail/history page and terminate screen (edit details, placement and salary **built 2026-09-12**) | Termination only through the service | Employee records used by payroll |
 | Access: department heads, permissions, employee logins; branch-administrator decision | Company admin only | Leave approval |
 | A proper time-picker component | Plain `HH:MM` text box | Shift form |
 | **Holiday year calendar** (Ajay, priority later): a larger calendar to select all of a year's holidays at once, multiple dates, with month/year navigation | Holidays are added one at a time | Holiday list |

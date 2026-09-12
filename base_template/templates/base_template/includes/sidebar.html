@@ -22,7 +22,7 @@
             Dashboard
         </span>
     </a>
-    <a class="sidebar__link {% active request 'employee_list' %}" href="{% url 'employee_list' %}">
+    <a class="sidebar__link {% active request 'employee_list' 'employee_create' 'employee_edit' %}" href="{% url 'employee_list' %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="9" cy="8" r="3.2"/>
             <path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
@@ -90,7 +90,7 @@
             <path d="M12 7v5l3 2"/>
         </svg>
         <span>
-            Schedules
+            Shifts
         </span>
     </a>
     <a class="sidebar__link {% active request 'device_list' 'device_detail' 'device_register' 'device_edit' 'enrollment_list' 'enrollment_create' 'enrollment_edit' 'message_list' 'message_detail' 'punch_list' 'punch_detail' 'unresolved_queue' %}" href="{% url 'devices:device_list' %}">

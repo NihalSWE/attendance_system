@@ -1,0 +1,143 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Edit {{ employee.full_name }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'employee_list' %}">
+            Employees
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Edit
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Edit {{ employee.full_name }}
+            </h1>
+            <p class="page__sub">
+                {% if assignment %}
+                    {{ assignment.employee_code }} · {{ assignment.designation.name }},
+                    {{ assignment.department.name }}, {{ assignment.branch.name }}
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page stack">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Details
+                </h2>
+            </div>
+            <div class="card__body">
+                {% if details.non_field_errors %}
+                    <div class="alert alert--danger">
+                        {{ details.non_field_errors }}
+                    </div>
+                {% endif %}
+                <form method="post" class="stack" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="details">
+                    <div class="grid grid--2">
+                        {% for field in details %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    </div>
+                    <div class="row">
+                        <button class="btn btn--primary" type="submit">
+                            Save details
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Placement
+                </h2>
+                {% if placement_since %}
+                    <span class="badge badge--neutral">
+                        Current since {{ placement_since|date:"d M Y" }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body">
+                {% if placement.non_field_errors %}
+                    <div class="alert alert--danger">
+                        {{ placement.non_field_errors }}
+                    </div>
+                {% endif %}
+                <form method="post" class="stack" novalidate
+                      data-departments-url="{% url 'organization:employee_branch_departments' %}"
+                      data-designations-url="{% url 'organization:employee_department_designations' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="placement">
+                    <div class="grid grid--2">
+                        {% for field in placement %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    </div>
+                    <div class="row">
+                        <button class="btn btn--primary" type="submit">
+                            Save placement
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Salary
+                </h2>
+                {% if compensation %}
+                    <span class="badge badge--neutral">
+                        {{ compensation.get_pay_basis_display }}, {{ compensation.base_rate }} {{ compensation.currency }} since {{ salary_since|date:"d M Y" }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body">
+                {% if salary.non_field_errors %}
+                    <div class="alert alert--danger">
+                        {{ salary.non_field_errors }}
+                    </div>
+                {% endif %}
+                <form method="post" class="stack" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="salary">
+                    <div class="grid grid--2">
+                        {% for field in salary %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    </div>
+                    <div class="row">
+                        <button class="btn btn--primary" type="submit">
+                            Save salary
+                        </button>
+                        <a class="btn btn--ghost" href="{% url 'employee_list' %}">
+                            Back to employees
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'organization/js/employee_form.js' %}">
+    </script>
+{% endblock %}

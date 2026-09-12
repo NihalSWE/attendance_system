@@ -113,7 +113,7 @@ def calculate_attendance(*, actor, company_id, year, month):
     calendar = WorkCalendar(company_id, first, last)
     if not calendar.has_any_shift:
         raise ValidationError(
-            "Set up shifts under Schedules first: a shift for each department, or a "
+            "Set up shifts under Shifts first: a shift for each department, or a "
             "company shift. Attendance is measured against the shift."
         )
 

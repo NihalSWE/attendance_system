@@ -1,0 +1,171 @@
+"""Editing an employee: personal details, placement, and salary.
+
+Placement and salary are dated history that attendance and payroll read, so
+they are changed through the existing ``employees.services`` functions:
+
+- a change **from a later date** closes the current row and opens a new one
+  (``transfer_employee`` / ``revise_compensation``), keeping the history;
+- a change **from the same date the current row started** is a correction of
+  a mistake, so the current row is fixed in place rather than turned into a
+  zero-length piece of history.
+
+Every write: owner/company-admin only, the employee must belong to the company,
+validation through ``full_clean``, and an audit row in the same transaction.
+"""
+
+from django.core.exceptions import PermissionDenied, ValidationError
+from django.db import transaction
+
+from auditlog.services import record_company_event
+from common.tenant import use_company
+from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
+from employees.services import revise_compensation, transfer_employee
+from organization.services import assert_branch_in_scope, require_structure_manager
+
+DETAIL_FIELDS = ("first_name", "last_name", "work_email", "phone", "joining_date")
+
+
+def _open_row(model, employee):
+    return (
+        model.objects.filter(employee=employee, effective_to__isnull=True)
+        .exclude(status__in=["cancelled", "draft"])
+        .order_by("-effective_from")
+        .first()
+    )
+
+
+def get_employee_for_edit(*, actor, company_id, employee_id):
+    membership = require_structure_manager(actor, company_id)
+    with use_company(company_id):
+        employee = Employee.objects.filter(pk=employee_id).first()
+        if employee is None:
+            raise PermissionDenied("Employee not found in this company.")
+        assignment = _open_row(EmployeeAssignment, employee)
+        compensation = _open_row(EmployeeCompensation, employee)
+    return membership, employee, assignment, compensation
+
+
+@transaction.atomic
+def update_employee_details(*, actor, company_id, employee_id, values):
+    membership, employee, _, _ = get_employee_for_edit(
+        actor=actor, company_id=company_id, employee_id=employee_id
+    )
+    unsupported = set(values) - set(DETAIL_FIELDS)
+    if unsupported:
+        raise ValidationError(f"Unsupported field: {', '.join(sorted(unsupported))}")
+    with use_company(company_id):
+        before = {f: str(getattr(employee, f) or "") for f in DETAIL_FIELDS}
+        for field, value in values.items():
+            setattr(employee, field, value)
+        employee.updated_by = actor
+        employee.full_clean()
+        employee.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="employee.details_updated", obj=employee, before=before,
+            after={f: str(getattr(employee, f) or "") for f in DETAIL_FIELDS},
+        )
+    return employee
+
+
+@transaction.atomic
+def change_placement(*, actor, company_id, employee_id, values):
+    """New branch / department / designation / code from a date."""
+    membership, employee, current, _ = get_employee_for_edit(
+        actor=actor, company_id=company_id, employee_id=employee_id
+    )
+    if current is None:
+        raise ValidationError("This employee has no current placement to change.")
+    starts = values["effective_at"]
+    with use_company(company_id):
+        assert_branch_in_scope(membership, values["branch"])
+        before = {
+            "branch_id": current.branch_id, "department_id": current.department_id,
+            "designation_id": current.designation_id, "employee_code": current.employee_code,
+            "effective_from": current.effective_from.isoformat(),
+        }
+        if starts < current.effective_from:
+            raise ValidationError({
+                "placement_from": (
+                    f"The current placement started on {current.effective_from:%d %b %Y}; "
+                    "a change cannot start before it."
+                )
+            })
+        correction = starts == current.effective_from
+        if correction:
+            # A correction: fix the current row instead of adding history.
+            current.branch = values["branch"]
+            current.department = values["department"]
+            current.designation = values["designation"]
+            current.employee_code = values["employee_code"]
+            current.change_reason = values.get("reason", "") or current.change_reason
+            current.updated_by = actor
+            current.full_clean()
+            current.save()
+            assignment = current
+        else:
+            assignment = transfer_employee(
+                employee=employee, effective_at=starts,
+                branch=values["branch"], department=values["department"],
+                designation=values["designation"],
+                employee_code=values["employee_code"],
+                reason=values.get("reason", ""), actor=actor,
+            )
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="employee.placement_changed", obj=employee, before=before,
+            after={
+                "branch_id": assignment.branch_id, "department_id": assignment.department_id,
+                "designation_id": assignment.designation_id,
+                "employee_code": assignment.employee_code,
+                "effective_from": assignment.effective_from.isoformat(),
+                "correction": correction,
+            },
+        )
+    return assignment
+
+
+@transaction.atomic
+def change_salary(*, actor, company_id, employee_id, values):
+    """New pay basis / rate from a date."""
+    membership, employee, _, current = get_employee_for_edit(
+        actor=actor, company_id=company_id, employee_id=employee_id
+    )
+    if current is None:
+        raise ValidationError("This employee has no current salary to change.")
+    starts = values["effective_at"]
+    with use_company(company_id):
+        before = {
+            "pay_basis": current.pay_basis, "base_rate": str(current.base_rate),
+            "effective_from": current.effective_from.isoformat(),
+        }
+        if starts < current.effective_from:
+            raise ValidationError({
+                "salary_from": (
+                    f"The current salary started on {current.effective_from:%d %b %Y}; "
+                    "a change cannot start before it."
+                )
+            })
+        if starts == current.effective_from:
+            current.pay_basis = values["pay_basis"]
+            current.base_rate = values["base_rate"]
+            current.reason = values.get("reason", "") or current.reason
+            current.updated_by = actor
+            current.full_clean()
+            current.save()
+            compensation = current
+        else:
+            compensation = revise_compensation(
+                employee=employee, effective_at=starts,
+                pay_basis=values["pay_basis"], base_rate=values["base_rate"],
+                reason=values.get("reason", ""), actor=actor,
+            )
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="employee.salary_changed", obj=employee, before=before,
+            after={
+                "pay_basis": compensation.pay_basis, "base_rate": str(compensation.base_rate),
+                "effective_from": compensation.effective_from.isoformat(),
+            },
+        )
+    return compensation
