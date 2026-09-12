@@ -103,9 +103,9 @@ Branches, departments, and positions inside a company.
 
 #### 8. `Designation`
 
-- **Purpose:** The platform-wide list of job titles, also root-owned. Each title belongs to one catalogue department, so "HR Manager" cannot be filed under Software.
-- **Related models:** Belongs to Department. Companies reach it only through CompanyDesignation.
-- **Example:** Root adds "HR Manager" under Human Resources. There is deliberately no parent title: access limits come from the department (see DepartmentPermission), because a chain of titles that is right for one company is wrong for the next.
+- **Purpose:** The platform-wide list of designations, also root-owned, and kept **separate from the department list**. Root decides which designations exist; each company decides which of its departments use them.
+- **Related models:** Companies reach it only through CompanyDesignation, which places it under one of their departments.
+- **Example:** Root adds "Manager" once. Northwind places it under Sales, Sunrise places it under Operations. There is deliberately no parent designation: access limits come from the department (see DepartmentPermission).
 
 #### 84. `CompanyDepartment`
 
@@ -115,9 +115,9 @@ Branches, departments, and positions inside a company.
 
 #### 85. `CompanyDesignation`
 
-- **Purpose:** Records that one company uses a catalogue job title inside one of its own departments. Employee assignments and title-level permission rules point here, never at the shared catalogue.
-- **Related models:** Links CompanyDepartment to a catalogue Designation; used by EmployeeAssignment and DesignationPermission.
-- **Example:** Northwind's Dhaka Sales adopts "Sales Representative". Giving that title leave-approval rights inside Northwind changes nothing for any other company using the same title.
+- **Purpose:** The company's own department–designation relation: it places one root designation under one of the company's departments. The company admin picks a department and assigns the designations it uses. Employee assignments and designation-level permission rules point here, never at the shared root list.
+- **Related models:** Links CompanyDepartment to a root Designation; used by EmployeeAssignment and DesignationPermission.
+- **Example:** Northwind assigns "Manager" and "Sales Representative" to its Dhaka Sales department. Giving "Manager" leave-approval rights inside Northwind changes nothing for any other company that also uses "Manager".
 
 
 ### 4. `employees` — 3 models

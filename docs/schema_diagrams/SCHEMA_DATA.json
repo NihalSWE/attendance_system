@@ -1057,24 +1057,13 @@
           "note": "Inherited ActorTracked field."
         },
         {
-          "name": "department",
-          "column": "department_id",
-          "type": "bigint",
-          "nullable": false,
-          "pk": false,
-          "unique": false,
-          "note": "FK -> Department, PROTECT.",
-          "target": "Department",
-          "deletion": "PROTECT"
-        },
-        {
           "name": "code",
           "column": "code",
           "type": "varchar",
           "nullable": false,
           "pk": false,
-          "unique": false,
-          "note": "CharField."
+          "unique": true,
+          "note": "CharField, globally unique."
         },
         {
           "name": "name",
@@ -1082,8 +1071,8 @@
           "type": "varchar",
           "nullable": false,
           "pk": false,
-          "unique": false,
-          "note": "CharField."
+          "unique": true,
+          "note": "CharField, globally unique."
         },
         {
           "name": "description",
@@ -1106,7 +1095,7 @@
       ],
       "table": "organization_designation",
       "tenant": false,
-      "constraints": "Constraints: unique `(department, code)`; unique `(department, name)`."
+      "constraints": ""
     },
     {
       "number": 84,
@@ -1346,7 +1335,7 @@
       ],
       "table": "organization_company_designation",
       "tenant": true,
-      "constraints": "Constraints: unique `(company_department, designation)`; the catalogue title's department must match the adoption row's catalogue department."
+      "constraints": "Constraints: unique `(company_department, designation)`. Any active designation may be placed under any of the company's departments; a designation root has deactivated cannot be newly placed, but existing placements keep it."
     },
     {
       "number": 9,
@@ -1822,7 +1811,7 @@
       ],
       "table": "employees_employee_assignment",
       "tenant": true,
-      "constraints": "Constraints: the adopted department belongs to the assignment's branch; the adopted designation belongs to that department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
+      "constraints": "Constraints: the company department belongs to the assignment's branch; the designation is one the company has placed under that department (a CompanyDesignation of it); manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
     },
     {
       "number": 11,
@@ -16726,14 +16715,6 @@
       "unique": false,
       "nullable": true,
       "shared": true
-    },
-    {
-      "from": "Designation",
-      "field": "department_id",
-      "to": "Department",
-      "unique": false,
-      "nullable": false,
-      "shared": false
     },
     {
       "from": "CompanyDepartment",

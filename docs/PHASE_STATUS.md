@@ -157,6 +157,52 @@ the `department_designation_relation_companywise` branch at commit a5f59f9.
 environment variables. **Not yet applied to the development database** — the
 user runs `migrate`.
 
+## Designations are independent of departments — 2026-09-12
+
+**Correction of the 2026-09-09 catalogue change.** Ajay's instruction was that
+root keeps departments and designations as **two separate lists**, and each
+company decides which designations go under which of its departments — the
+backup branch was named `department_designation_relation_companywise` for
+exactly that reason. The 2026-09-09 change kept the old `Designation.department`
+foreign key on the root catalogue, which made the relation root-wise: root had
+to create "HR Manager" and "Sales Manager" separately, and no company could put a
+designation under a department of its own choosing. That was carried over from
+the old model without being checked against the instruction, and it was then
+written into Nihal's task prompt as intended behaviour, so his root and company
+screens were built to enforce it.
+
+Corrected design, now reflected in `docs/MODEL_FIELD_DICTIONARY.md` §8/§85,
+`docs/DATABASE_SCHEMA.md` rows 8/85, `docs/DATABASE_MODEL_PLAN.md` §8/§85 and the
+regenerated schema artifacts:
+
+```
+Department          root     code, name
+Designation         root     code, name          <- no department
+CompanyDepartment   company  branch + department (+ head)
+CompanyDesignation  company  company_department + designation   <- the relation
+```
+
+`CompanyDesignation` already existed and already was the company-wise relation;
+the only structural error was the root foreign key and the rules built on it.
+
+Also recorded: a **vocabulary rule** in `docs/UI_AND_ONBOARDING_CONVENTIONS.md`.
+Nihal's screens used "Hire an employee", "job title", "adopt a department" and
+"catalogue". This portal creates and edits employees; it does not hire. The UI
+says **Create employee / Edit employee**, **Designation**, **Add department /
+Assign designations**, and never "catalogue" on company screens.
+
+**Status: documents updated, code not yet.** The code on
+`feature/company-org-setup` still has `Designation.department`. Nihal is making
+the code change on `feature/organisation-catalogue-ui`: one additive migration
+`organization/0004` that removes the foreign key and merges designations that
+were only split by department, plus every form, service, view, endpoint, script
+and test built on the old rule, plus the wording. He was told not to edit
+`docs/`, so the two branches do not conflict. When his branch is pushed, Ajay's
+session pulls it, reviews it against these documents, and merges it.
+
+Schema artifacts regenerated: 86 models / 91 tables / **1,638 columns / 464
+FKs** (one column and one foreign key fewer). `verify_schema.cjs` passes.
+
 ## Current checkpoint
 
 - **Current deliverable:** P1 platform onboarding implemented; company setup and employee write workflows remain next. See [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md) for files/functions and the UI workflow.
@@ -164,7 +210,7 @@ user runs `migrate`.
 - **Platform UI:** root routes to /platform/companies/ without membership; generated company identifiers, company create/edit/status, one master administrator with editable credentials/status, dated feature access and recent audit history work through forms.
 - **Company UI:** existing lists remain read-only. Company-wide access is now restricted to unrestricted owner/company_admin; other roles/scopes fail closed until proper scoped views ship. Unimplemented Add/Export controls are explicitly disabled with reasons.
 - **Design:** Warm Paper / Ink tokens and Sora; new platform tables use real DataTables with server-side paging/search/sorting, and database-backed selects use real Select2 while fixed choices use styled native selects. Responsive browser verification is required. Remaining component groups are not claimed complete.
-- **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps and moves the inventory to 86 models / 91 tables / 1,639 columns / 465 FKs.
+- **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. The code catches up when Nihal's organization/0004 merges.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
 - **Next action:** apply the six new migrations to the development database, then root catalogue screens (department/designation) followed by the company adoption screens; then employee lifecycle forms and full P1 acceptance. Do not restart P0, recreate apps, or assign root a membership as a shortcut.

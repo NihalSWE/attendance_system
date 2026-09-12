@@ -837,3 +837,33 @@ that no new FK points at a catalogue row.
 forwards over seeded duplicates; `makemigrations --check` reports no drift;
 schema artifacts regenerated and `verify_schema.cjs` passes. Applying the
 migrations to the development database is the user's own step.
+
+
+## Lesson 17 — Change what you were asked to change, and check what you carried over
+
+**What happened.** The instruction was "root owns departments and designations;
+each company maps designations to its departments". The implementation changed
+*ownership* — who may write the tables — and left every other part of the old
+model standing, including `Designation.department`. That one carried-over
+foreign key quietly moved the department–designation relation from the company
+to root, which is the opposite of what was asked. When its consequence surfaced
+("root must create Manager once per department"), it was explained as intended
+rather than recognised as a contradiction, and it went into a teammate's task
+prompt, so two days of screens were built on it.
+
+**The rule.** When you restructure a model, re-read the instruction against
+*every field the model keeps*, not only the ones you touched. A field you did
+not change is still a decision, and "it was already there" is not a reason.
+If a consequence of your design would surprise the person who gave the
+instruction, say so as a question before building on it — do not describe it
+as intended.
+
+**For the lead.** A task prompt is a transcription, and a transcription can be
+wrong. Before a prompt goes to someone who will work alone for days, check its
+core rule against the original words. Here the backup branch's own name —
+`department_designation_relation_companywise` — contradicted the prompt.
+
+**Vocabulary is part of the spec.** The same screens said "Hire an employee",
+"job title", "adopt" and "catalogue": borrowed or internal words the users do not
+use. The fix is a written vocabulary table (UI conventions doc) rather than
+correcting words one screen at a time.

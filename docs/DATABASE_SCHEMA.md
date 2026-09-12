@@ -230,9 +230,9 @@ The list below is the compact database relationship schema. Scalar columns are d
 
 6. `organization_branch` — tenant; unique branch code inside company; exactly one default branch per active company; nullable device_attendance_scope_override for employees assigned here.
 7. `organization_department` — **global root catalogue**; globally unique code and name; no company or branch column. Companies never write here.
-8. `organization_designation` — **global root catalogue**; FK `department_id`; unique code and name inside the catalogue department. No parent hierarchy.
+8. `organization_designation` — **global root catalogue**; globally unique code and name; **no department column** — which department a designation belongs to is decided per company in row 85. No parent hierarchy.
 84. `organization_company_department` — tenant; FKs `branch_id`, `department_id` (catalogue), nullable `head_id` -> Employee; unique `(branch, department)`. Every company-specific reference to "a department" points here, never at row 7.
-85. `organization_company_designation` — tenant; FKs `company_department_id`, `designation_id` (catalogue); unique `(company_department, designation)`; the catalogue title must belong to the adopted catalogue department.
+85. `organization_company_designation` — tenant; FKs `company_department_id`, `designation_id` (catalogue); unique `(company_department, designation)`. **This is the department–designation relation, and it is company-wise**: any active designation may be placed under any of the company's departments.
 
 ### employees
 

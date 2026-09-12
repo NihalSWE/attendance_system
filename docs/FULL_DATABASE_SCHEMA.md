@@ -1,6 +1,6 @@
 # Complete attendance database schema — every field
 
-This is the field-level schema for the proposed attendance project: **83 domain models, 5 implicit M2M junctions, 1639 columns, and 465 foreign-key relationships**. No database or Django application is generated.
+This is the field-level schema for the proposed attendance project: **83 domain models, 5 implicit M2M junctions, 1638 columns, and 464 foreign-key relationships**. No database or Django application is generated.
 
 - [Interactive diagram](ATTENDANCE_SCHEMA.html): search a table, zoom, and highlight its relationships.
 - [Full SVG diagram](ATTENDANCE_SCHEMA.svg): all table boxes contain all physical fields, types, key markers, and referenced targets.
@@ -232,13 +232,10 @@ Physical table: `organization_designation`. Global/platform table; see company f
 | `id` | `bigint` | PK | No | — |
 | `created_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
 | `updated_by_id` | `bigint` | FK | Yes | `accounts_user.id` |
-| `department_id` | `bigint` | FK | No | `organization_department.id` |
-| `code` | `varchar` | — | No | — |
-| `name` | `varchar` | — | No | — |
+| `code` | `varchar` | UQ | No | — |
+| `name` | `varchar` | UQ | No | — |
 | `description` | `text` | — | No | — |
 | `status` | `varchar` | — | No | — |
-
-Constraints: unique `(department, code)`; unique `(department, name)`.
 ### CompanyDepartment
 
 Physical table: `organization_company_department`. Direct tenant owner: `company_id`.
@@ -276,7 +273,7 @@ Physical table: `organization_company_designation`. Direct tenant owner: `compan
 | `designation_id` | `bigint` | FK | No | `organization_designation.id` |
 | `status` | `varchar` | — | No | — |
 
-Constraints: unique `(company_department, designation)`; the catalogue title's department must match the adoption row's catalogue department.
+Constraints: unique `(company_department, designation)`. Any active designation may be placed under any of the company's departments; a designation root has deactivated cannot be newly placed, but existing placements keep it.
 
 ## employees
 
@@ -343,7 +340,7 @@ Physical table: `employees_employee_assignment`. Direct tenant owner: `company_i
 | `status` | `varchar` | — | No | — |
 | `device_attendance_scope_override` | `varchar` | — | Yes | — |
 
-Constraints: the adopted department belongs to the assignment's branch; the adopted designation belongs to that department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends.
+Constraints: the company department belongs to the assignment's branch; the designation is one the company has placed under that department (a CompanyDesignation of it); manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends.
 ### EmployeeCompensation
 
 Physical table: `employees_employee_compensation`. Direct tenant owner: `company_id`.

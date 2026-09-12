@@ -15,6 +15,29 @@ Updated 2026-09-07 from the user's correction of the platform onboarding slice. 
 - Center the page container within the content area (after the sidebar), with a narrower centered form container. Preserve local table scrolling, counts and pagination. Keep numeric headers and cells aligned in their own column, with visible separation from actions.
 - Company detail uses a responsive details/administrator grid, compact feature summaries and a bounded recent-activity list. Verify desktop, tablet and mobile with screenshots and computed geometry. WARM_PAPER_INK_SPEC.md still owns all color/type tokens; design_reference owns form language.
 
+## Vocabulary — use the project's words (2026-09-12)
+
+This portal manages a company's existing workforce and its structure. Words
+borrowed from other domains, or from our own internal model names, confuse the
+people using it. Everything a user reads follows this table: page titles,
+headings, buttons, labels, help text, placeholders, empty states, messages,
+`aria-label`s and URL paths.
+
+| Do not show | Show |
+|---|---|
+| Hire, Hire an employee | **Create employee** / **Edit employee** |
+| Job title, title, position, role (meaning a designation) | **Designation** |
+| Adopt, adopted, adoption | **Add department** / **Assign designations** / **Departments** |
+| Catalogue, platform catalogue | Company screens: nothing. Root panel: **Departments**, **Designations** |
+
+Internal names such as `CompanyDepartment`, `CompanyDesignation` or an
+`adoption_*` module are fine in code, because nobody reads them on screen. Code
+whose name carries a wrong user-facing word (a `hire_*` view, URL or template)
+is renamed anyway, so it is not copied back into the UI.
+
+When a word is not in the table, use the one the rest of the project already
+uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
+
 ## Database clarification and Django admin
 
 Creating a company also creates Head Office and CompanyAttendanceSettings in the onboarding transaction. Attendance settings define shift mode, punch interpretation/windows, device scope and missing-punch handling. The current company field is an inherited FK with a unique constraint: at most one settings row per company, equivalent to one-to-one cardinality, not M2M. This does not create shifts or attendance records.

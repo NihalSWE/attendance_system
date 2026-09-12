@@ -140,12 +140,11 @@ Table organization_designation {
   id bigint [pk, increment, not null, note: "Primary key; BigAutoField."]
   created_by_id bigint [null, note: "Inherited ActorTracked field."]
   updated_by_id bigint [null, note: "Inherited ActorTracked field."]
-  department_id bigint [not null, note: "FK -> Department, PROTECT."]
-  code varchar [not null, note: "CharField."]
-  name varchar [not null, note: "CharField."]
+  code varchar [not null, unique, note: "CharField, globally unique."]
+  name varchar [not null, unique, note: "CharField, globally unique."]
   description text [not null, note: "TextField, blank."]
   status varchar [not null, note: "active/inactive."]
-  Note: "Designation | Global/platform scope; AuditLog company is optional. Constraints: unique `(department, code)`; unique `(department, name)`."
+  Note: "Designation | Global/platform scope; AuditLog company is optional. "
 }
 
 Table organization_company_department {
@@ -175,7 +174,7 @@ Table organization_company_designation {
   company_department_id bigint [not null, note: "FK -> CompanyDepartment, PROTECT."]
   designation_id bigint [not null, note: "FK -> Designation (catalogue), PROTECT."]
   status varchar [not null, note: "active/inactive."]
-  Note: "CompanyDesignation | Direct company ownership. Constraints: unique `(company_department, designation)`; the catalogue title's department must match the adoption row's catalogue department."
+  Note: "CompanyDesignation | Direct company ownership. Constraints: unique `(company_department, designation)`. Any active designation may be placed under any of the company's departments; a designation root has deactivated cannot be newly placed, but existing placements keep it."
 }
 
 Table employees_employee {
@@ -231,7 +230,7 @@ Table employees_employee_assignment {
   change_reason text [not null, note: "TextField."]
   status varchar [not null, note: "active/ended/cancelled."]
   device_attendance_scope_override varchar [null, note: "nullable CharField: assigned_devices, department_devices, branch_devices, company_devices; null inherits the assigned branch/company policy. This employee-level override lives on dated assignment history; changing it closes the old interval and creates its successor."]
-  Note: "EmployeeAssignment | Direct company ownership. Constraints: the adopted department belongs to the assignment's branch; the adopted designation belongs to that department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
+  Note: "EmployeeAssignment | Direct company ownership. Constraints: the company department belongs to the assignment's branch; the designation is one the company has placed under that department (a CompanyDesignation of it); manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends."
 }
 
 Table employees_employee_compensation {
@@ -2042,7 +2041,6 @@ Ref: organization_department.created_by_id > accounts_user.id
 Ref: organization_department.updated_by_id > accounts_user.id
 Ref: organization_designation.created_by_id > accounts_user.id
 Ref: organization_designation.updated_by_id > accounts_user.id
-Ref: organization_designation.department_id > organization_department.id
 Ref: organization_company_department.company_id > tenants_company.id
 Ref: organization_company_department.created_by_id > accounts_user.id
 Ref: organization_company_department.updated_by_id > accounts_user.id

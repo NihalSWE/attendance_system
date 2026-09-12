@@ -218,16 +218,16 @@ Relations: Designation, CompanyDepartment.
 
 ### 8. Designation
 
-**Root-owned catalogue, same rule as Department.** A job title belongs to exactly one catalogue department, so "HR Manager" cannot be filed under Software.
+**Root-owned catalogue, same rule as Department — and independent of it.** Root keeps departments and designations as two separate lists. Which designations sit under which department is **each company's decision**, recorded on CompanyDesignation (85). One "Manager" therefore exists for the whole platform, and each company places it under whichever of its own departments need one.
 
 Common fields: timestamps plus actor tracking.
 
-- `department` — FK -> Department, PROTECT.
-- `code`, `name` — CharField.
+- `code` — CharField, globally unique.
+- `name` — CharField, globally unique.
 - `description` — TextField, blank.
 - `status` — active/inactive.
 
-Constraints: unique `(department, code)`; unique `(department, name)`.
+There is deliberately **no `department` field**. A root-level link would make the department–designation relation the same for every company, which is not how companies are organised: one puts "Manager" under Sales, another under Production.
 
 There is deliberately **no parent/child hierarchy**. Access ceilings are carried by the department through DepartmentPermission (86), not by walking a chain of titles: a chain that is correct for one company is wrong for the next, and a global catalogue cannot be both.
 
@@ -250,7 +250,7 @@ Constraints: unique `(branch, department)` — a branch adopts each catalogue de
 
 ### 85. CompanyDesignation
 
-One company's use of a catalogue job title, inside one of its own departments.
+**The department–designation relation, and it is company-wise.** One row places a root designation under one of the company's own departments (CompanyDepartment). Root decides which designations exist; each company decides where they go.
 
 Common fields: TenantOwned plus actor tracking.
 
@@ -260,7 +260,7 @@ Common fields: TenantOwned plus actor tracking.
 
 `code`, `name` and `branch` are read through, as with CompanyDepartment.
 
-Constraints: unique `(company_department, designation)`; the catalogue title's department must match the adoption row's catalogue department.
+Constraints: unique `(company_department, designation)`. Any active designation may be placed under any of the company's departments; a designation root has deactivated cannot be newly placed, but existing placements keep it.
 
 ## 4. employees
 
@@ -299,7 +299,7 @@ Common fields: TenantOwned plus actor tracking.
 - `status` — active/ended/cancelled.
 - `device_attendance_scope_override` — nullable CharField: assigned_devices, department_devices, branch_devices, company_devices; null inherits the assigned branch/company policy. This employee-level override lives on dated assignment history; changing it closes the old interval and creates its successor.
 
-Constraints: the adopted department belongs to the assignment's branch; the adopted designation belongs to that department; manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends.
+Constraints: the company department belongs to the assignment's branch; the designation is one the company has placed under that department (a CompanyDesignation of it); manager is not the employee; no overlapping active periods for one employee; no overlapping occupancy of `(company, employee_code)`. The same code may be reused after the earlier interval ends.
 
 ### 11. EmployeeCompensation
 
@@ -374,7 +374,7 @@ Common fields: TenantOwned plus actor tracking.
 - `effective_from`, `effective_to` — nullable DateTimeField.
 - `reason` — TextField.
 
-A DENIED rule is a hard ceiling: neither a job title (13) nor an individual grant (14) can lift it. An ALLOWED rule is the floor everyone in the department gets unless something below revokes it individually.
+A DENIED rule is a hard ceiling: neither a designation rule (13) nor an individual grant (14) can lift it. An ALLOWED rule is the floor everyone in the department gets unless something below revokes it individually.
 
 Constraints: one effective rule per department/permission at any instant; end after start.
 
