@@ -42,7 +42,7 @@
             Attendance
         </span>
     </a>
-    <a class="sidebar__link" href="#" aria-disabled="true">
+    <a class="sidebar__link {% active request 'leave_list' 'leave_record' 'leave_cancel' 'leave_type_list' 'leave_type_create' 'leave_type_edit' 'leave_type_status' %}" href="{% url 'leaves:leave_list' %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 3.5h14v17l-3.5-2.2L12 20.5l-3.5-2.2L5 20.5z"/>
             <path d="M9 9h6M9 13h4"/>

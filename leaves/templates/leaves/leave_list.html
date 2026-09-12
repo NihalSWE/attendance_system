@@ -1,0 +1,231 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Leave · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Leave
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Leave
+            </h1>
+            <p class="page__sub">
+                Approved leave. Unpaid leave days are deducted from salary; paid
+                leave days are not.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'leaves:leave_type_list' %}">
+                Leave types
+            </a>
+            {% if can_manage and has_types %}
+                <a class="btn btn--primary" href="{% url 'leaves:leave_record' %}">
+                    Record leave
+                </a>
+            {% elif can_manage %}
+                <button class="btn btn--primary" type="button" disabled
+                        title="Add a leave type first">
+                    Record leave
+                </button>
+            {% else %}
+                <button class="btn btn--primary" type="button" disabled
+                        title="Recording leave requires owner or company administrator access">
+                    Record leave
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if can_manage and not has_types %}
+        <div class="alert alert--warning">
+            Add at least one leave type, for example Casual leave, before recording leave.
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Leave in {{ month_name }} {{ year }}
+            </h2>
+            <span class="badge badge--neutral">
+                {{ filtered_total }} of {{ total }}
+            </span>
+        </div>
+        <form method="get" class="toolbar">
+            <label class="sr-only" for="leave-search">
+                Search leave
+            </label>
+            <input class="input toolbar__grow" id="leave-search" name="q" type="search"
+                   value="{{ query }}" placeholder="Search by employee or leave type">
+            <label class="sr-only" for="leave-month">
+                Month
+            </label>
+            <select class="input select js-select" id="leave-month" name="month">
+                {% for value, label in months %}
+                    <option value="{{ value }}" {% if value == month %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="leave-year">
+                Year
+            </label>
+            <select class="input select js-select" id="leave-year" name="year">
+                {% for option in years %}
+                    <option value="{{ option }}" {% if option == year %}selected{% endif %}>
+                        {{ option }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="leave-status">
+                Status
+            </label>
+            <select class="input select js-select" id="leave-status" name="status">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if status == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+        </form>
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Leave type
+                            </th>
+                            <th class="numeric">
+                                From
+                            </th>
+                            <th class="numeric">
+                                To
+                            </th>
+                            <th class="numeric">
+                                Working days
+                            </th>
+                            <th>
+                                Pay
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for leave in page.object_list %}
+                            {% for segment in leave.segments.all %}
+                                <tr>
+                                    <td>
+                                        {{ leave.employee.full_name }}
+                                    </td>
+                                    <td>
+                                        {{ segment.leave_type.name }}
+                                    </td>
+                                    <td class="numeric">
+                                        {{ segment.start_date|date:"d M Y" }}
+                                    </td>
+                                    <td class="numeric">
+                                        {{ segment.end_date|date:"d M Y" }}
+                                    </td>
+                                    <td class="numeric">
+                                        {{ segment.requested_units|floatformat:"-2" }}
+                                    </td>
+                                    <td>
+                                        {% if segment.requested_pay_type == 'paid' %}
+                                            Paid
+                                        {% else %}
+                                            <span class="badge badge--warning">
+                                                Unpaid
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if leave.status == 'approved' %}
+                                            <span class="badge badge--success">
+                                                Approved
+                                            </span>
+                                        {% else %}
+                                            <span class="badge badge--neutral">
+                                                {{ leave.get_status_display }}
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if can_manage and leave.status == 'approved' %}
+                                            <a class="btn btn--quiet btn--sm" href="{% url 'leaves:leave_cancel' leave.pk %}">
+                                                Cancel
+                                            </a>
+                                        {% else %}
+                                            <span class="t-faint">
+                                                —
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
+                </span>
+                <div class="pagination__links">
+                    {% if page.has_previous %}
+                        <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}&month={{ month }}&year={{ year }}&status={{ status }}&q={{ query }}">
+                            Previous
+                        </a>
+                    {% endif %}
+                    {% if page.has_next %}
+                        <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}&month={{ month }}&year={{ year }}&status={{ status }}&q={{ query }}">
+                            Next
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    {% if query or status %}
+                        Nothing matches that filter
+                    {% else %}
+                        No leave in {{ month_name }} {{ year }}
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    Recorded leave appears here for every month it touches.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
+    </script>
+    <script defer src="{% static 'base_template/js/platform.js' %}">
+    </script>
+{% endblock %}

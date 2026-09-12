@@ -251,8 +251,8 @@ them:
 | Step | What | Status |
 |---|---|---|
 | 1 | Schedules: shifts, company attendance settings (single company shift), weekly off days, holidays | **Done** — see below |
-| 2 | Leave, thin slice: paid/unpaid leave types; company admin records approved full-day leave | Next |
-| 3 | Attendance calculation from device punches: present / half day / absent / weekly off / holiday / paid leave / unpaid leave; monthly calculate + review list | After 2 |
+| 2 | Leave, thin slice: leave types; company admin records approved full-day leave, paid or unpaid | **Done** — see below |
+| 3 | Attendance calculation from device punches: present / half day / absent / weekly off / holiday / paid leave / unpaid leave; monthly calculate + review list | Next |
 | 4 | Payroll: period, run, record per employee, earning/deduction lines, manual adjustment, draft → finalise → payslip | After 3 |
 
 **Formula agreed (defaults, 2026-09-12):**
@@ -320,6 +320,46 @@ company administrator.
   visually hidden but focusable, with the calendar's filled-ink selected style.
   Checked at desktop and 375px. 36 scheduling tests pass.
 
+### Step 2 — Leave, thin slice (done 2026-09-12)
+
+New in the `leaves` app: models, migration `leaves/0001_initial`, services,
+forms, views, URLs and templates, mounted at `/leave/`. The sidebar "Leave"
+link, previously a dead `#`, now points there.
+
+- **Models** use the dictionary's names and fields (§39, §46–48), today's
+  subset only: `LeaveType`, `LeaveRequest`, `LeaveRequestSegment`, `LeaveDay`.
+  Tables follow the payroll-family rule: `payroll_leave_type`,
+  `payroll_leave_request`, `payroll_leave_request_segment`,
+  `payroll_leave_day`.
+- **Paid or unpaid is chosen per leave, not per type** — the design has the
+  approver decide pay, so a leave type carries no paid flag.
+- **Record leave**: employee, leave type, from–to (one range control), paid or
+  unpaid, reason. Recorded as already approved. The service expands the range
+  into one `LeaveDay` per **working** day: weekly offs and holidays inside the
+  range are skipped and noted on the request, so a Thursday–Saturday unpaid
+  leave with Friday off costs two days. Each day stores the shift window and
+  minutes it covers and a pay percentage (100 or 0).
+- Refused with a readable message: overlap with existing leave (names the
+  dates), before joining or after leaving, no placement on a date, a range with
+  no working day, an inactive leave type, no company shift chosen yet.
+- **Cancel** keeps the leave on record; its days become cancelled and the same
+  dates can be recorded again.
+- **Leave types**: list, add, edit, activate/deactivate.
+- `scheduling/calendar.py` — new shared `WorkCalendar`: for a branch and date,
+  working day / weekly off / holiday. Leave uses it now; attendance will too.
+- `common/forms.py` — `apply_service_errors` moved here from the schedule views
+  so every app puts a service's error on the right field the same way.
+
+**Another calendar bug found while testing, fixed in `datepicker.js`:** the
+date-range picker closed after its first date, so an end date could never be
+picked. Clicking a day redraws the grid and removes the clicked button, so the
+outside-click check found it "outside". Outside clicks are now judged by the
+click's recorded path. Report-style quick ranges ("Last 30 days") are switched
+off on the leave field with `data-presets="none"`. Verified in a browser:
+17 → 19 September writes both dates.
+
+18 new tests (`leaves/tests_leave.py`), all passing.
+
 ### Skipped today — must be built and connected to salary
 
 This is the authoritative list. Nothing on it is dropped; each item says how it
@@ -327,7 +367,11 @@ connects back.
 
 | Skipped | Effect on today's salary until built | Connects back into |
 |---|---|---|
-| **Full leave (P2):** employee requests, approval step, half-day and hourly leave, balances/entitlements, attachments, withdrawal, cancellation and amendment | Only admin-recorded, pre-approved full-day leave counts | Attendance day status → payroll deductions |
+| **Full leave (P2):** employee requests, approval step, half-day and hourly leave, partial pay, leave policies and policy versions, balances/entitlements and the balance ledger, attachments, withdrawal, amendment (cancel exists) | Only admin-recorded, pre-approved full-day leave counts | Attendance day status → payroll deductions |
+| Leave fields not built yet: `policy_version`, `original_request`/`supersedes`, `current_approval_stage` (request); `original_segment` (segment); `policy_type_rule`, `entitlement`, `supersedes` (leave day) | None until policies, balances and amendment exist | Additive migrations on the same tables |
+| HR role recording leave (only owner/company admin today) | Company admin records all leave | Access work |
+| Default leave types created at company onboarding | Each company adds its own types first | Onboarding |
+| Employee code shown in the leave form's employee picker | Names only; two people with one name look alike | Record leave form |
 | Attendance corrections (manual fixes to a day) | A missed punch stays absent / half day | Attendance record → payroll |
 | Breaks and multiple IN/OUT sessions (`AttendanceSession`, `PunchAllocation`) | Only first IN and last OUT count | Worked minutes |
 | Late, absence and repeated-lateness penalty rules | Late minutes recorded, not deducted | Payroll deduction lines |

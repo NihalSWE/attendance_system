@@ -1,0 +1,131 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Leave types · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'leaves:leave_list' %}">
+            Leave
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Leave types
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Leave types
+            </h1>
+            <p class="page__sub">
+                The kinds of leave this company offers. Whether a particular leave
+                is paid is chosen when it is recorded.
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_manage %}
+                <a class="btn btn--primary" href="{% url 'leaves:leave_type_create' %}">
+                    Add leave type
+                </a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Leave types
+            </h2>
+            <span class="badge badge--neutral">
+                {{ leave_types|length }}
+            </span>
+        </div>
+        {% if leave_types %}
+            <div class="table-wrap">
+                <table class="table" data-enhance>
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Leave type
+                            </th>
+                            <th>
+                                Description
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for leave_type in leave_types %}
+                            <tr>
+                                <td>
+                                    {{ leave_type.code }}
+                                </td>
+                                <td>
+                                    {{ leave_type.name }}
+                                </td>
+                                <td>
+                                    {{ leave_type.description|default:"—" }}
+                                </td>
+                                <td>
+                                    {% if leave_type.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if can_manage %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'leaves:leave_type_edit' leave_type.pk %}">
+                                            Edit
+                                        </a>
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'leaves:leave_type_status' leave_type.pk %}">
+                                            Status
+                                        </a>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            View only
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No leave types yet
+                </div>
+                <div class="empty__text">
+                    Add the kinds of leave employees take, for example Casual,
+                    Sick and Annual leave.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
+    </script>
+    <script defer src="{% static 'base_template/js/platform.js' %}">
+    </script>
+{% endblock %}

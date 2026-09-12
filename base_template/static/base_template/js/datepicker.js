@@ -253,9 +253,19 @@
         return !!(target && target.closest && target.closest(".cs__menu"));
     }
 
+    // Where the click travelled, recorded when it was dispatched. Clicking a
+    // day redraws the grid and removes the very button that was clicked, so
+    // by the time this handler runs the target is no longer inside the panel.
+    // Asking the panel whether it contains the target would call that an
+    // outside click and close the range picker after its first date.
+    function clickedInside(e, node) {
+        var path = e.composedPath ? e.composedPath() : [];
+        return path.indexOf(node) !== -1 || node.contains(e.target);
+    }
+
     document.addEventListener("click", function (e) {
-        if (openPanel && !openPanel.wrap.contains(e.target)
-            && !openPanel.panel.contains(e.target)
+        if (openPanel && !clickedInside(e, openPanel.wrap)
+            && !clickedInside(e, openPanel.panel)
             && !inOwnDropdown(e.target)) closeOpen();
     });
     // Capture phase, so this check runs before the custom select's own
@@ -411,7 +421,14 @@
             presets.appendChild(b);
         });
 
-        shell.panel.append(presets, calendar.el);
+        // "Last 30 days" suits a report filter, not a form that records
+        // something for the future such as leave. A field opts out with
+        // data-presets="none" on its first input.
+        if (startInput.dataset.presets === "none") {
+            shell.panel.append(calendar.el);
+        } else {
+            shell.panel.append(presets, calendar.el);
+        }
 
         var foot = document.createElement("div");
         foot.className = "dp__foot";

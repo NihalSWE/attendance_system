@@ -58,3 +58,21 @@ class StyledFormMixin:
                 widget.attrs.update({"class": "textarea", "rows": 3})
             if isinstance(field, (forms.IntegerField, forms.DecimalField, forms.FloatField)):
                 widget.attrs["inputmode"] = "numeric" if isinstance(field, forms.IntegerField) else "decimal"
+
+
+def apply_service_errors(form, exc):
+    """Put a service's ValidationError on the form fields it names.
+
+    Services validate independently of forms, because a form is not a security
+    boundary. When a service refuses, its message should still appear next to
+    the field the user has to change, and anything not tied to a visible field
+    goes to the top of the form.
+    """
+    if hasattr(exc, "error_dict"):
+        for field, errors in exc.error_dict.items():
+            target = field if field in form.fields else None
+            for error in errors:
+                form.add_error(target, error)
+    else:
+        for message in exc.messages:
+            form.add_error(None, message)

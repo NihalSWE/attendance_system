@@ -14,6 +14,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from common.choices import ActiveStatus
+from common.forms import apply_service_errors
 from common.tenant import use_company
 from organization.services import (
     STRUCTURE_ROLES,
@@ -34,25 +35,13 @@ from scheduling.forms import (
 from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
 
 
-def _apply_errors(form, exc):
-    """Put a service's ValidationError on the fields it names, the rest on top."""
-    if hasattr(exc, "error_dict"):
-        for field, errors in exc.error_dict.items():
-            target = field if field in form.fields else None
-            for error in errors:
-                form.add_error(target, error)
-    else:
-        for message in exc.messages:
-            form.add_error(None, message)
-
-
 def _form_page(request, *, form, title, submit_label, action, success, explanation=""):
     """Shared POST handling: validate the form, call the service, report back."""
     if request.method == "POST" and form.is_valid():
         try:
             action(form.cleaned_data)
         except ValidationError as exc:
-            _apply_errors(form, exc)
+            apply_service_errors(form, exc)
         else:
             messages.success(request, success)
             return redirect("scheduling:schedule_overview")

@@ -57,6 +57,13 @@ uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
 - **Overlays that move their list to `<body>`** (the custom select, Select2)
   sit outside their parent in the DOM. Anything that closes on an outside
   click, like the calendar, must treat those lists as inside.
+- **Outside-click checks use the click's recorded path** (`composedPath()`),
+  not `contains(target)`: a control that redraws on click removes its own
+  target before the check runs.
+- **Date ranges**: two inputs sharing a `data-daterange` key become one
+  control; render them in one field with one label. Add `data-presets="none"`
+  to the first input where report-style quick ranges make no sense, e.g.
+  recording leave.
 - **After a JavaScript or CSS change**, a browser keeps the cached file until a
   hard refresh (Ctrl+F5). Development has no cache-busting yet.
 

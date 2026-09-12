@@ -1,0 +1,100 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'leaves:leave_list' %}">
+            Leave
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ title }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="card">
+            <div class="card__body">
+                <p class="field__help">
+                    {{ explanation }}
+                </p>
+
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+
+                <form method="post" class="stack" novalidate>
+                    {% csrf_token %}
+
+                    <div class="grid grid--2">
+                        {% for field in form %}
+                            {% if field.name == 'employee' or field.name == 'leave_type' %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endif %}
+                        {% endfor %}
+
+                        {% comment %}
+                            From and To are one control: datepicker.js joins the two
+                            inputs that share data-daterange into a single range picker.
+                        {% endcomment %}
+                        <div class="field">
+                            <label class="field__label" for="{{ form.start_date.id_for_label }}">
+                                Leave dates
+                                <span class="field__req">
+                                    *
+                                </span>
+                            </label>
+                            {{ form.start_date }}
+                            {{ form.end_date }}
+                            <span class="field__help">
+                                First and last day. Weekly off days and holidays in between are skipped.
+                            </span>
+                            {% for error in form.start_date.errors %}
+                                <span class="field__error">
+                                    {{ error }}
+                                </span>
+                            {% endfor %}
+                            {% for error in form.end_date.errors %}
+                                <span class="field__error">
+                                    {{ error }}
+                                </span>
+                            {% endfor %}
+                        </div>
+
+                        {% include "leaves/includes/field.html" with field=form.pay_type %}
+                    </div>
+
+                    {% include "leaves/includes/field.html" with field=form.reason %}
+
+                    <div class="row">
+                        <button class="btn btn--primary" type="submit">
+                            {{ submit_label }}
+                        </button>
+                        <a class="btn btn--ghost" href="{% url 'leaves:leave_list' %}">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}

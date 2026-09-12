@@ -886,3 +886,22 @@ error at all and raises `ValueError` instead.
 **How to catch it.** Test the form with bad input, not only the service with
 good input. Here `test_end_before_start_without_night_tick_is_a_field_error`
 failed twice, once for each bug. The service tests never would have.
+
+## Lesson 19 — An outside-click check that fails because the target moved
+
+**What happened.** The date-range picker closed after its first date. Clicking
+a day called `render()`, which rebuilt the day grid and removed the button that
+had just been clicked. The document-level "close on outside click" handler ran
+after that. It asked `panel.contains(e.target)`, got `false` because the
+target was no longer in the page, and closed the picker. The month/year bug
+earlier the same day was the same question giving the wrong answer for a
+different reason: the dropdown list lives on `<body>`, outside the panel.
+
+**The rule.** Decide "inside or outside" from where the click went, not from
+where its target is now. `event.composedPath()` is recorded when the event is
+dispatched and survives the DOM changing underneath it. Anything that renders
+its own list at body level must also be treated as inside.
+
+**How it was found.** By driving the real control in a browser with the real
+scripts, not by reading the code — the logic looked right until a click
+redrew the grid.
