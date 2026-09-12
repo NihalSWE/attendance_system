@@ -17,6 +17,8 @@ urlpatterns = [
     path("organization/", include("organization.urls")),
     path("schedules/", include("scheduling.urls")),
     path("leave/", include("leaves.urls")),
+    path("attendance/", include("attendance.urls")),
+    path("salary/", include("payroll.urls")),
     # Device integration. Mounted at the root because the /iclock/ paths are
     # built by the ZKTeco firmware itself and cannot be prefixed.
     path("", include("devices.urls")),

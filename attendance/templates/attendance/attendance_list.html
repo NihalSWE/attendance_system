@@ -1,0 +1,216 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Attendance · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Attendance
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Attendance
+            </h1>
+            <p class="page__sub">
+                Daily attendance calculated from device punches, leave, weekly off
+                days and holidays. Salary is worked out from this.
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_manage %}
+                <form method="post" action="{% url 'attendance:attendance_calculate' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <input type="hidden" name="year" value="{{ year }}">
+                    <button class="btn btn--primary" type="submit">
+                        Calculate {{ month_name }} {{ year }}
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                {{ month_name }} {{ year }}
+            </h2>
+            <span class="badge badge--neutral">
+                {{ filtered_total }} of {{ total }} days
+            </span>
+        </div>
+        <form method="get" class="toolbar">
+            <label class="sr-only" for="att-month">
+                Month
+            </label>
+            <select class="input select js-select" id="att-month" name="month">
+                {% for value, label in months %}
+                    <option value="{{ value }}" {% if value == month %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="att-year">
+                Year
+            </label>
+            <select class="input select js-select" id="att-year" name="year">
+                {% for option in years %}
+                    <option value="{{ option }}" {% if option == year %}selected{% endif %}>
+                        {{ option }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="att-employee">
+                Employee
+            </label>
+            <select class="input select js-select2" id="att-employee" name="employee">
+                <option value="">
+                    All employees
+                </option>
+                {% for employee in employees %}
+                    <option value="{{ employee.pk }}" {% if employee_id == employee.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ employee.full_name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="att-status">
+                Status
+            </label>
+            <select class="input select js-select" id="att-status" name="status">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if status == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+        </form>
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th class="numeric">
+                                Date
+                            </th>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="numeric">
+                                In
+                            </th>
+                            <th class="numeric">
+                                Out
+                            </th>
+                            <th class="numeric">
+                                Worked (min)
+                            </th>
+                            <th class="numeric">
+                                Late (min)
+                            </th>
+                            <th class="numeric">
+                                Payable
+                            </th>
+                            <th>
+                                Note
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in page.object_list %}
+                            <tr>
+                                <td class="numeric">
+                                    {{ record.work_date|date:"D d M" }}
+                                </td>
+                                <td>
+                                    {{ record.employee.full_name }}
+                                </td>
+                                <td>
+                                    {% if record.attendance_status == 'present' %}
+                                        <span class="badge badge--success">
+                                            Present
+                                        </span>
+                                    {% elif record.attendance_status == 'absent' %}
+                                        <span class="badge badge--danger">
+                                            Absent
+                                        </span>
+                                    {% elif record.attendance_status == 'half_day' or record.attendance_status == 'incomplete' %}
+                                        <span class="badge badge--warning">
+                                            {{ record.get_attendance_status_display }}
+                                        </span>
+                                    {% elif record.attendance_status == 'leave' %}
+                                        <span class="badge badge--info">
+                                            Leave
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            {{ record.get_attendance_status_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ record.first_in_at|time:"H:i"|default:"—" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ record.last_out_at|time:"H:i"|default:"—" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ record.worked_minutes }}
+                                </td>
+                                <td class="numeric">
+                                    {{ record.late_minutes }}
+                                </td>
+                                <td class="numeric">
+                                    {{ record.payable_fraction|floatformat:"-2" }}
+                                </td>
+                                <td>
+                                    {{ record.note|default:"—" }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <span class="pagination__info">
+                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
+                </span>
+                <div class="pagination__links">
+                    {% if page.has_previous %}
+                        <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}&month={{ month }}&year={{ year }}&employee={{ employee_id }}&status={{ status }}">
+                            Previous
+                        </a>
+                    {% endif %}
+                    {% if page.has_next %}
+                        <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}&month={{ month }}&year={{ year }}&employee={{ employee_id }}&status={{ status }}">
+                            Next
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No attendance for {{ month_name }} {{ year }}
+                </div>
+                <div class="empty__text">
+                    Press Calculate to build it from the month's punches, leave and calendar.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

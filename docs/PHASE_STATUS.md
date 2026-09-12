@@ -252,8 +252,8 @@ them:
 |---|---|---|
 | 1 | Schedules: shifts, company attendance settings (single company shift), weekly off days, holidays | **Done** — see below |
 | 2 | Leave, thin slice: leave types; company admin records approved full-day leave, paid or unpaid | **Done** — see below |
-| 3 | Attendance calculation from device punches: present / half day / absent / weekly off / holiday / paid leave / unpaid leave; monthly calculate + review list | Next |
-| 4 | Payroll: period, run, record per employee, earning/deduction lines, manual adjustment, draft → finalise → payslip | After 3 |
+| 3 | Attendance calculation from device punches: present / half day / absent / weekly off / holiday / paid leave / unpaid leave; monthly calculate + review list | **Done** — see below |
+| 4 | Basic salary: generate a month (draft, regenerable), one record per employee with lines, payslip | **Done** — see below |
 
 **Formula agreed (defaults, 2026-09-12):**
 
@@ -360,6 +360,48 @@ off on the leave field with `data-presets="none"`. Verified in a browser:
 
 18 new tests (`leaves/tests_leave.py`), all passing.
 
+### Steps 3 and 4 — Attendance and basic salary (done 2026-09-12)
+
+**Attendance** (`attendance` app, `/attendance/`): `AttendanceRecord`
+(dictionary §34 subset, table `payroll_attendance_record`), one per employee
+per day. `calculate_attendance` reads authorized, non-duplicate device punches
+inside the shift's attendance window, approved `LeaveDay`s and the
+`WorkCalendar`:
+
+- leave → *Leave*, payable by its pay percentage
+- holiday / weekly off → payable if marked paid
+- IN and OUT → *Present* (≥ full-day minutes), *Half day* (≥ half-day
+  minutes) or *Absent*; late minutes after the grace are recorded
+- IN only → *Incomplete*, counted as present and flagged, when the company's
+  missing-punch setting is "review required"; *Absent* when it is "treat as
+  absent"
+- no punch → *Absent*
+
+Recalculating replaces the month. The attendance page lists every day with
+filters, and has a Calculate button.
+
+**Basic salary** (`payroll` app, `/salary/`): `PayrollPeriod`, `PayrollRun`,
+`PayrollRecord`, `PayrollLine` (dictionary §60–62, §65 subset; tables
+`payroll_period`, `payroll_run`, `payroll_record`, `payroll_line`).
+**Generate** recalculates the month's attendance, then writes one draft record
+per employee. `calculate_pay` is pure and applies the agreed formula: monthly
+base − (absent + unpaid leave + ½ per half day + unpaid off days) × base ÷ 30;
+daily rate × payable working days; hourly rate × hours worked plus paid leave
+hours. It never goes below zero. The rate is the compensation in force at
+month end. Runs stay **draft** and can be regenerated. Each employee has a
+**payslip** with earnings, deductions, net pay and the month's attendance
+counts, printable from the browser.
+
+**Demo punches** for development: `python manage.py seed_demo_punches
+--company <code> [--month YYYY-MM]` registers a clearly labelled simulated
+device, enrols the company's employees, and sends a repeatable month of
+punches (on time, late, half day, absent, one missing OUT) through the real
+parser and `ingest()` pipeline. DEBUG only unless `--force`.
+
+7 new tests (`payroll/tests_basic.py`): the formula for each pay basis, and
+punches → attendance → salary end to end. The full suite was not run, at
+Ajay's instruction, until salary works; it is the gate before `main`.
+
 ### Skipped today — must be built and connected to salary
 
 This is the authoritative list. Nothing on it is dropped; each item says how it
@@ -383,7 +425,11 @@ connects back.
 | Mid-month salary change (compensation segments / proration) | The rate in force at month end is used for the whole month | Payroll record |
 | Joining or leaving mid-month (proration rules) | Only days on the payroll are counted | Payroll record |
 | Salary structure: allowances and components | Base rate only | Payroll lines |
-| Payroll approval steps; correction/reversal after finalising | One-step finalise, no reversal | Payroll run |
+| **Finalise / lock a payroll run**, approval steps, correction/reversal after finalising | Runs stay draft and are regenerated; nothing is locked | Payroll run |
+| Manual bonus / deduction lines on a salary | Not available | Payroll lines (`is_manual` already exists) |
+| Attendance review status and manual day corrections; the *Incomplete* (missing OUT) decision | A missing OUT is counted as present and flagged | Attendance record |
+| Payslip as PDF / email; per-employee salary history | Browser print only | Payslip |
+| Salary and attendance pages for HR and managers, not only the company admin | Company admin only | Access |
 | Payments, part-payments, dues, advances, loans (P5) | Payslip shows the amount; paying it is not recorded | Salary management |
 | Employee detail, edit, history, transfer, salary revision, terminate screens | Services exist, no screens | Employee records used by payroll |
 | Access: department heads, permissions, employee logins; branch-administrator decision | Company admin only | Leave approval |

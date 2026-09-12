@@ -1,0 +1,237 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Payslip · {{ record.employee.full_name }} · {{ period.name }}
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'payroll:payroll_home' %}?month={{ period.start_date.month }}&year={{ period.start_date.year }}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Payslip
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Payslip — {{ period.name }}
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }} · Draft
+            </p>
+        </div>
+        <div class="page__actions">
+            <button class="btn btn--ghost" type="button" onclick="window.print()">
+                Print
+            </button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__body">
+            <dl class="facts">
+                <dt>
+                    Employee
+                </dt>
+                <dd>
+                    {{ record.employee.full_name }}
+                </dd>
+                <dt>
+                    Code
+                </dt>
+                <dd>
+                    {{ assignment.employee_code|default:"—" }}
+                </dd>
+                <dt>
+                    Branch
+                </dt>
+                <dd>
+                    {{ assignment.branch.name|default:"—" }}
+                </dd>
+                <dt>
+                    Department
+                </dt>
+                <dd>
+                    {{ assignment.department.name|default:"—" }}
+                </dd>
+                <dt>
+                    Designation
+                </dt>
+                <dd>
+                    {{ assignment.designation.name|default:"—" }}
+                </dd>
+                <dt>
+                    Pay basis
+                </dt>
+                <dd>
+                    {{ record.calculation_snapshot.pay_basis|title }}, rate {{ record.calculation_snapshot.base_rate }} {{ record.currency }}
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Earnings and deductions
+            </h2>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>
+                            Item
+                        </th>
+                        <th class="numeric">
+                            Quantity
+                        </th>
+                        <th class="numeric">
+                            Rate
+                        </th>
+                        <th class="numeric">
+                            Amount
+                        </th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in earnings %}
+                        <tr>
+                            <td>
+                                {{ line.description }}
+                            </td>
+                            <td class="numeric">
+                                {{ line.quantity|floatformat:"-2" }}
+                            </td>
+                            <td class="numeric">
+                                {{ line.rate|floatformat:2 }}
+                            </td>
+                            <td class="numeric">
+                                {{ line.amount }}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                    {% for line in deductions %}
+                        <tr>
+                            <td>
+                                Less: {{ line.description }}
+                            </td>
+                            <td class="numeric">
+                                {{ line.quantity|floatformat:"-2" }}
+                            </td>
+                            <td class="numeric">
+                                {{ line.rate|floatformat:2 }}
+                            </td>
+                            <td class="numeric">
+                                −{{ line.amount }}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="3">
+                            Gross
+                        </th>
+                        <th class="numeric">
+                            {{ record.gross_earnings }}
+                        </th>
+                    </tr>
+                    <tr>
+                        <th colspan="3">
+                            Deductions
+                        </th>
+                        <th class="numeric">
+                            −{{ record.total_deductions }}
+                        </th>
+                    </tr>
+                    <tr>
+                        <th colspan="3">
+                            Net pay ({{ record.currency }})
+                        </th>
+                        <th class="numeric">
+                            {{ record.net_pay }}
+                        </th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Attendance this month
+            </h2>
+        </div>
+        <div class="card__body">
+            <dl class="facts">
+                <dt>
+                    Present
+                </dt>
+                <dd>
+                    {{ counts.present|default:0 }}
+                </dd>
+                <dt>
+                    Half days
+                </dt>
+                <dd>
+                    {{ counts.half_day|default:0 }}
+                </dd>
+                <dt>
+                    Missing OUT
+                </dt>
+                <dd>
+                    {{ counts.incomplete|default:0 }}
+                </dd>
+                <dt>
+                    Absent
+                </dt>
+                <dd>
+                    {{ counts.absent|default:0 }}
+                </dd>
+                <dt>
+                    Paid leave
+                </dt>
+                <dd>
+                    {{ counts.paid_leave|default:0 }}
+                </dd>
+                <dt>
+                    Unpaid leave
+                </dt>
+                <dd>
+                    {{ counts.unpaid_leave|default:0 }}
+                </dd>
+                <dt>
+                    Weekly off
+                </dt>
+                <dd>
+                    {{ counts.weekly_off|default:0 }}
+                </dd>
+                <dt>
+                    Holidays
+                </dt>
+                <dd>
+                    {{ counts.holiday|default:0 }}
+                </dd>
+                <dt>
+                    Late (min)
+                </dt>
+                <dd>
+                    {{ counts.late_minutes|default:0 }}
+                </dd>
+            </dl>
+        </div>
+    </div>
+{% endblock %}
