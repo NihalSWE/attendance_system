@@ -456,6 +456,65 @@ class DeviceScreenTests(TestCase):
         header = response.content.decode().split('class="page__actions"', 1)[1]
         self.assertIn("Open the enrollment used", header.split("</div>", 1)[0])
 
+    def test_mapping_a_device_to_one_department_twice_is_a_readable_error(self):
+        """The same shape as the double-enrollment bug, one model over.
+
+        ``excl_devicedepartment_overlap`` stops a device being mapped to the
+        same department for overlapping dates. Without a matching check in the
+        form the administrator got an IntegrityError page instead of being
+        told what was already there.
+        """
+        add = reverse("devices:device_department_add", args=[self.device.public_id])
+        self.client.post(add, {
+            "department": self.department.pk,
+            "effective_from": "2026-09-01T00:00",
+            "effective_to": "",
+        }, follow=True)
+
+        response = self.client.post(add, {
+            "department": self.department.pk,
+            "effective_from": "2026-09-15T00:00",
+            "effective_to": "",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already serves")
+        self.assertEqual(DeviceDepartment.all_objects.count(), 1)
+
+    def test_a_mapping_may_be_re_added_once_the_previous_one_has_ended(self):
+        """Ending is not deleting: the same pair must be mappable again."""
+        add = reverse("devices:device_department_add", args=[self.device.public_id])
+        self.client.post(add, {
+            "department": self.department.pk,
+            "effective_from": "2026-09-01T00:00",
+            "effective_to": "2026-09-10T00:00",
+        }, follow=True)
+
+        response = self.client.post(add, {
+            "department": self.department.pk,
+            "effective_from": "2026-09-10T00:00",
+            "effective_to": "",
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(DeviceDepartment.all_objects.count(), 2)
+
+    def test_two_departments_may_share_one_device_at_the_same_time(self):
+        """The constraint is per department pair, not per device."""
+        with use_company(self.company):
+            other = adopt_department(self.branch, "OPS", "Operations")
+        add = reverse("devices:device_department_add", args=[self.device.public_id])
+        self.client.post(add, {
+            "department": self.department.pk,
+            "effective_from": "2026-09-01T00:00",
+            "effective_to": "",
+        }, follow=True)
+        response = self.client.post(add, {
+            "department": other.pk,
+            "effective_from": "2026-09-01T00:00",
+            "effective_to": "",
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(DeviceDepartment.all_objects.count(), 2)
+
     # --- troubleshooting screens -----------------------------------------
 
     def test_troubleshooting_screens_render(self):

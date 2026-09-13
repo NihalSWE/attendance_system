@@ -74,7 +74,6 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["start_time"].widget.format = "%H:%M"
         self.fields["end_time"].widget.format = "%H:%M"
-        self.fields["spans_next_day"].widget.attrs["class"] = ""
 
     def clean_code(self):
         return (self.cleaned_data.get("code") or "").strip().upper()
@@ -203,10 +202,9 @@ class WeeklyOffForm(StyledFormMixin, forms.Form):
         super().__init__(*args, **kwargs)
         if branches is not None:
             self.fields["branch"].queryset = branches
-        # StyledFormMixin gives every widget the text-input class; checkboxes
-        # carry their own.
+        # The day buttons are visually hidden inputs styled by the day picker,
+        # not the shared checkbox.
         self.fields["weekdays"].widget.attrs["class"] = "day-picker__input"
-        self.fields["is_paid"].widget.attrs["class"] = ""
 
 
 class EndWeeklyOffForm(StyledFormMixin, forms.Form):
@@ -246,4 +244,3 @@ class HolidayForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         if branches is not None:
             self.fields["branch"].queryset = branches
-        self.fields["is_paid"].widget.attrs["class"] = ""
