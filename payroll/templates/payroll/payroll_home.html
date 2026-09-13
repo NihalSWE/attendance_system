@@ -24,6 +24,9 @@
         </div>
         <div class="page__actions">
             {% if can_manage %}
+                <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}">
+                    Salary settings
+                </a>
                 <form method="post" action="{% url 'payroll:payroll_generate' %}">
                     {% csrf_token %}
                     <input type="hidden" name="month" value="{{ month }}">

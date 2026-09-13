@@ -1,15 +1,21 @@
-"""Company salary pages: generate a month's salary and read payslips."""
+"""Company salary pages: generate a month's salary, read payslips, and the
+company's salary settings."""
+
+import datetime
+from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from attendance.models import AttendanceRecord
 from attendance.services import month_bounds
 from attendance.views import month_context, read_month
+from common.forms import apply_service_errors
 from common.tenant import use_company
 from organization.services import (
     STRUCTURE_ROLES,
@@ -17,7 +23,9 @@ from organization.services import (
     require_structure_manager,
 )
 from organization.views import _company_or_redirect
-from payroll.models import PayrollPeriod, PayrollRecord, PayrollRun
+from payroll import policy
+from payroll.forms import GeneralSettingsForm, SalaryRulesForm
+from payroll.models import PayrollPeriod, PayrollPolicyVersion, PayrollRecord, PayrollRun
 from payroll.services import generate_payroll, summarise
 
 
@@ -77,6 +85,126 @@ def payroll_generate(request):
             message += f" Skipped, no salary set: {', '.join(skipped)}."
         messages.success(request, message)
     return redirect(f"{reverse('payroll:payroll_home')}?month={month}&year={year}")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def salary_settings(request):
+    """Company salary settings: dated calculation rules, plus currency and pay day.
+
+    Two forms on one page, told apart by the posted ``section``.
+    """
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    today = timezone.localdate()
+    page = policy.salary_settings_page(actor=request.user, company_id=company_id, today=today)
+    settings = page["settings"]
+
+    section = request.POST.get("section") if request.method == "POST" else None
+    # Start the form from the newest saved rules: if a change is already saved
+    # for a later month, a new change can only start from that month on.
+    latest = next((v for v in page["versions"] if v.status == "active"), None)
+    if latest and latest.effective_from > today:
+        start_rules, start_month = policy.SalaryRules.from_version(latest), latest.effective_from
+    else:
+        start_rules, start_month = page["rules"], today
+    rules_form = SalaryRulesForm(
+        request.POST if section == "rules" else None,
+        initial=SalaryRulesForm.initial_from(start_rules, start_month),
+    )
+    general_form = GeneralSettingsForm(
+        request.POST if section == "general" else None,
+        initial={
+            "currency": page["currency"],
+            "default_pay_day": settings.default_pay_day if settings else None,
+        },
+    )
+
+    if section == "rules" and rules_form.is_valid():
+        values = rules_form.service_values()
+        try:
+            version = policy.change_salary_rules(
+                actor=request.user, company_id=company_id, values=values
+            )
+        except ValidationError as exc:
+            apply_service_errors(rules_form, exc)
+        else:
+            messages.success(
+                request,
+                f"Salary rules saved from {version.effective_from:%B %Y}. "
+                "Regenerate a month's salary to apply them to it.",
+            )
+            return redirect("payroll:salary_settings")
+    elif section == "general" and general_form.is_valid():
+        try:
+            policy.update_general_settings(
+                actor=request.user, company_id=company_id, values=general_form.cleaned_data
+            )
+        except ValidationError as exc:
+            apply_service_errors(general_form, exc)
+        else:
+            messages.success(request, "Salary settings saved.")
+            return redirect("payroll:salary_settings")
+
+    for version in page["versions"]:
+        # effective_to is the first day of the next version; show the last month.
+        version.last_day = (
+            version.effective_to - datetime.timedelta(days=1) if version.effective_to else None
+        )
+        if version.status != PayrollPolicyVersion.Status.ACTIVE:
+            version.state = ("Replaced", "neutral")
+        elif version.effective_from > today:
+            version.state = ("Upcoming", "info")
+        elif version.effective_to and version.effective_to <= today:
+            version.state = ("Ended", "neutral")
+        else:
+            version.state = ("In use", "success")
+    return render(request, "payroll/salary_settings.html", {
+        **page,
+        "summary": rules_summary(page["rules"]),
+        "rules_form": rules_form,
+        "general_form": general_form,
+    })
+
+
+def rules_summary(rules):
+    """The rules in force, as plain sentences for the settings page."""
+    Version = PayrollPolicyVersion
+    if rules.per_day_method == Version.MonthlyProration.FIXED_DIVISOR:
+        per_day = f"Monthly salary ÷ {policy.plain(rules.divisor)} days"
+    else:
+        per_day = Version.MonthlyProration(rules.per_day_method).label
+    incomplete = {
+        Decimal("1"): "Paid in full until reviewed",
+        Decimal("0.5"): "Paid as a half day",
+        Decimal("0"): "Not paid",
+    }[rules.incomplete_pay]
+    step = policy.plain(rules.rounding_increment)
+    if rules.rounding_increment == Decimal("0.01"):
+        rounding = "Exact amount, not rounded"
+    elif rules.rounding_mode == Version.RoundingMode.UP:
+        rounding = f"Rounded up to a multiple of {step}"
+    elif rules.rounding_mode == Version.RoundingMode.DOWN:
+        rounding = f"Rounded down to a multiple of {step}"
+    else:
+        rounding = f"Rounded to the nearest {step}"
+    return [
+        ("One day of a monthly salary", per_day),
+        ("Absence", Version.AbsenceDeduction(rules.absence_method).label),
+        ("A half day pays", f"{policy.plain(rules.half_day_pay * 100)}% of a day"),
+        ("A day without a check-out", incomplete),
+        (
+            "Paid holidays and weekly offs",
+            "Monthly staff: not deducted. "
+            f"Daily staff: {'paid' if rules.daily_paid_days_off else 'not paid'}. "
+            f"Hourly staff: {'paid their shift hours' if rules.hourly_paid_days_off else 'not paid'}.",
+        ),
+        (
+            "Net salary",
+            f"{rounding} · {'can go below zero' if rules.allow_negative else 'never below zero'}",
+        ),
+    ]
 
 
 @login_required

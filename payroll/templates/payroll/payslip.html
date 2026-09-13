@@ -77,6 +77,18 @@
                 <dd>
                     {{ record.calculation_snapshot.pay_basis|title }}, rate {{ record.calculation_snapshot.base_rate }} {{ record.currency }}
                 </dd>
+                <dt>
+                    Salary rules
+                </dt>
+                <dd>
+                    {% with rules=record.calculation_snapshot.rules %}
+                        {% if rules.version_number %}
+                            Company rules, version {{ rules.version_number }}
+                        {% else %}
+                            Standard rules
+                        {% endif %}
+                    {% endwith %}
+                </dd>
             </dl>
         </div>
     </div>
