@@ -905,3 +905,23 @@ its own list at body level must also be treated as inside.
 **How it was found.** By driving the real control in a browser with the real
 scripts, not by reading the code — the logic looked right until a click
 redrew the grid.
+
+## Lesson 20 — Cache the bytes, not the name
+
+**What happened.** Every CSS or JavaScript fix looked unfixed until someone
+pressed Ctrl+F5: the browser kept serving its cached copy, because the file's
+URL never changed. Django's usual answer, `ManifestStaticFilesStorage`, renames
+collected files after their content, but it does nothing under `runserver`
+with `DEBUG=True` (it deliberately returns the plain name there), which is
+exactly where the team works.
+
+**The rule.** A static URL must change when the file's bytes change. The
+project storage keeps the manifest's hashed names for a deployed server and,
+when nothing is collected, appends `?v=<content hash>` itself, recomputed only
+when the file's modification time moves. Because it is the storage, every
+`{% static %}` tag gets it for free; a hard-coded `/static/...` path does not.
+
+**A second trap found while checking it.** The dev server lists each app's
+`static/` folder once, at start-up. An app that gets its *first* `static/`
+folder returns 404 for those files until the server restarts, and editing a
+template does not restart it.

@@ -460,8 +460,8 @@ connects back. **Every row is placed in a step of the 2026-09-13 plan below**
 | Employee detail/history page and terminate screen (edit details, placement and salary **built 2026-09-12**) | Termination only through the service | Employee records used by payroll |
 | Access: department heads, permissions, employee logins; branch-administrator decision | Company admin only | Leave approval |
 | A proper time-picker component | Plain `HH:MM` text box | Shift form |
-| **Holiday year calendar** (Ajay, priority later): a larger calendar to select all of a year's holidays at once, multiple dates, with month/year navigation | Holidays are added one at a time | Holiday list |
-| Static file cache-busting for deployment (hashed file names) | After a JS/CSS change a browser keeps the old file until Ctrl+F5 | Every page |
+| ~~**Holiday year calendar**~~ — **built 2026-09-13 (A2)** | — | Holiday list |
+| ~~Static file cache-busting~~ — **built 2026-09-13 (A1)** | — | Every page |
 
 ## Plan after the fast-track — 2026-09-13
 
@@ -542,8 +542,8 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 
 | # | Step | What it delivers | Point | Covers from "Skipped today" |
 |---|---|---|---|---|
-| A1 | **File cache-busting** ⬆ | After a CSS/JS change the browser loads the new file without Ctrl+F5 | — | Static file cache-busting |
-| A2 | **Holiday year calendar** ⬆ | A full-year calendar to pick many holiday dates at once, with month and year navigation | — | Holiday year calendar |
+| A1 | **File cache-busting** ⬆ — ✅ done 2026-09-13 | After a CSS/JS change the browser loads the new file without Ctrl+F5 | — | Static file cache-busting |
+| A2 | **Holiday year calendar** ⬆ — ✅ done 2026-09-13 | A full-year calendar to pick many holiday dates at once, with month and year navigation | — | Holiday year calendar |
 | A3 | **Company salary settings** | Salary settings page with dated versions (`PayrollSettings`, `PayrollPolicyVersion`): monthly divisor (30 / days in month / working days), daily and hourly rate method, weekly off / holiday pay by pay type, half-day and Incomplete treatment, currency. Payroll reads them instead of constants; each run records the version used; every company starts on today's rules | 2 | Company salary settings |
 | A4 | **Penalty rules** (on the salary settings page) | `AttendancePenaltyRule`: late (per minute, or N late days = one day's pay), absence, repeated lateness; deduction lines on the payslip | 2 | Penalty rules |
 | A5 | **Shifts** | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
@@ -555,6 +555,50 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A11 | **Salary completeness** | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
 | A12 | **Access** | Department heads, permissions, HR and payroll-manager pages | — | Department heads, permissions; salary and attendance pages for HR |
 | A13 | **Later** | Payments, advances, loans (P5) | — | Payments (P5) |
+
+#### Ajay's session — progress
+
+**A1 — file cache-busting (done 2026-09-13, branch `feature/a1-cache-busting`).**
+`STORAGES["staticfiles"]` is `base_template.staticfiles.VersionedStaticFilesStorage`,
+a subclass of Django's `ManifestStaticFilesStorage`. Deployed (`DEBUG=False`
+after `collectstatic`) every file gets a content-hashed name
+(`shell.1a2b3c4d5e6f.css`); in development and tests nothing is collected, so
+the link gets `?v=` and a hash of the source file, recomputed only when the
+file's modification time changes. A file missing from the manifest falls back
+to the versioned link instead of raising. `STATIC_ROOT = BASE_DIR /
+"staticfiles"` (already git-ignored). No template changed. 10 tests
+(`base_template/tests_staticfiles.py`). Checked on the running dev server:
+every stylesheet link carries `?v=` and the versioned URL is served. **No new
+.env variables.**
+
+**A2 — holiday year calendar (done 2026-09-13, branch
+`feature/a2-holiday-calendar`, stacked on A1).** New page
+`scheduling:holiday_year` at `/shifts/holidays/calendar/`, linked from the
+holiday list ("Holiday calendar", primary) and the Shifts overview.
+
+- Twelve month grids (Monday first, like the date picker); each day is a real,
+  visually hidden checkbox. Click to select; Shift-click selects a run of
+  days; arrow keys move between days with one Tab stop.
+- Each selected date is a row with its own name; a date right after a named
+  selected date takes its name.
+- Existing holidays are shaded and listed under their month; a company-wide
+  holiday cannot be selected again. Company weekly offs are shaded.
+- Changing year keeps the selection: with dates selected the year arrows post
+  the form back (`go_year`) and the other year re-renders with the rows kept.
+- "Applies to" (branch or all) and "Paid holidays" apply to the whole batch.
+- `services.add_holidays(actor, company_id, values={"days": [(date, name)],
+  "branch", "is_paid"})`: owner / company admin only, all or nothing, every
+  clash with the same scope named, one audit row per holiday
+  (`holiday.created`, `"from": "year_calendar"`).
+- Form: `HolidayYearForm` + `posted_holiday_rows` in `scheduling/forms.py`.
+  Files: `holiday_year.html`, `scheduling/static/scheduling/css/holiday_year.css`,
+  `.../js/holiday_year.js`.
+- 16 tests (`scheduling/tests_holiday_year.py`). Checked in a browser at 1440
+  (three month columns, sticky panel), 768 (two columns, panel above) and 375
+  (one column, 38px days, long selections scroll inside the panel); no
+  horizontal overflow, no console errors.
+- **After pulling:** restart the dev server once — the scheduling app has its
+  first `static/` folder, which a running server does not see.
 
 #### Keeping the two sides apart
 
@@ -616,7 +660,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. Next: Ajay's session A1 (cache-busting); Nihal N0 then N1 (pairing). Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1 and A2 done 2026-09-13; next for Ajay's session: A3 (company salary settings). Nihal: N0 then N1 (pairing). Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 

@@ -89,8 +89,19 @@ uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
   control; render them in one field with one label. Add `data-presets="none"`
   to the first input where report-style quick ranges make no sense, e.g.
   recording leave.
-- **After a JavaScript or CSS change**, a browser keeps the cached file until a
-  hard refresh (Ctrl+F5). Development has no cache-busting yet.
+- **Cache-busting (2026-09-13).** Every `{% static %}` link carries the file's
+  version, so after a CSS or JavaScript change a normal reload picks up the new
+  file — no Ctrl+F5. Development: `shell.css?v=<hash>`; deployed after
+  `collectstatic`: `shell.<hash>.css`
+  (`base_template/staticfiles.py`). Always link static files with
+  `{% static %}`, never a hard-coded `/static/...` path, or the link is not
+  versioned. One catch: an app that gets its **first** `static/` folder is
+  only found after the dev server restarts.
+- **A page with many choices across a year** (the holiday calendar) uses
+  month grids of real, visually hidden checkboxes in the date picker's form:
+  Monday first, filled-ink selected day, Shift-click for a run of days, arrow
+  keys between days. The action button sits at the top of the selection
+  panel, and on a tablet or phone the panel goes above the calendar.
 
 ## Database clarification and Django admin
 
