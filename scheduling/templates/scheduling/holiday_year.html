@@ -1,0 +1,201 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Holiday calendar {{ year }} · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'scheduling/css/holiday_year.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'scheduling:schedule_overview' %}">
+            Shifts
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'scheduling:holiday_list' %}">
+            Holidays
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Holiday calendar
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Holiday calendar
+            </h1>
+            <p class="page__sub">
+                Select every holiday date, name each one, and add them together.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'scheduling:holiday_list' %}?year={{ year }}">
+                Holiday list
+            </a>
+        </div>
+    </div>
+
+    <form method="post" class="yc-page" id="holiday-year-form" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="year" value="{{ year }}">
+        <input type="hidden" name="go_year" value="">
+
+        <div class="card yc-cal">
+            <div class="card__head yc-cal__head">
+                <div class="yc-year">
+                    <a class="yc-year__nav" href="?year={{ year|add:'-1' }}" data-go-year="{{ year|add:'-1' }}"
+                       aria-label="Previous year, {{ year|add:'-1' }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+                    </a>
+                    <h2 class="yc-year__label">
+                        {{ year }}
+                    </h2>
+                    <a class="yc-year__nav" href="?year={{ year|add:'1' }}" data-go-year="{{ year|add:'1' }}"
+                       aria-label="Next year, {{ year|add:'1' }}">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg>
+                    </a>
+                </div>
+                <ul class="yc-legend" aria-label="Legend">
+                    <li><span class="yc-legend__swatch yc-legend__swatch--selected"></span>Selected</li>
+                    <li><span class="yc-legend__swatch yc-legend__swatch--holiday"></span>Holiday</li>
+                    <li><span class="yc-legend__swatch yc-legend__swatch--branch"></span>Branch holiday</li>
+                    <li><span class="yc-legend__swatch yc-legend__swatch--off"></span>Weekly off</li>
+                </ul>
+            </div>
+            <nav class="yc-months-nav" aria-label="Go to month">
+                {% for month in months %}
+                    <a class="yc-months-nav__link" href="#yc-month-{{ month.number }}">
+                        {{ month.name|slice:":3" }}
+                    </a>
+                {% endfor %}
+            </nav>
+            <div class="yc-grid" data-year-calendar>
+                {% for month in months %}
+                    <section class="yc-month" id="yc-month-{{ month.number }}" aria-label="{{ month.name }} {{ year }}">
+                        <h3 class="yc-month__name">
+                            {{ month.name }}
+                        </h3>
+                        <div class="yc-month__week" aria-hidden="true">
+                            {% for weekday in weekdays %}
+                                <span>
+                                    {{ weekday|slice:":2" }}
+                                </span>
+                            {% endfor %}
+                        </div>
+                        <div class="yc-month__days">
+                            {% for week in month.weeks %}
+                                {% for cell in week %}
+                                    {% if cell %}
+                                        <label class="yc-day{% if cell.weekly_off %} yc-day--off{% endif %}{% if cell.holiday %} yc-day--holiday{% endif %}{% if cell.branch_holiday %} yc-day--branch{% endif %}{% if cell.today %} yc-day--today{% endif %}">
+                                            <input type="checkbox" class="yc-day__input" value="{{ cell.iso }}"
+                                                   data-label="{{ cell.label }}" aria-label="{{ cell.aria }}" tabindex="-1"
+                                                   {% if cell.selected %}checked{% endif %}
+                                                   {% if cell.holiday %}disabled{% endif %}>
+                                            <span class="yc-day__num">
+                                                {{ cell.day }}
+                                            </span>
+                                        </label>
+                                    {% else %}
+                                        <span class="yc-day yc-day--blank" aria-hidden="true"></span>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endfor %}
+                        </div>
+                        {% if month.holidays %}
+                            <ul class="yc-month__holidays">
+                                {% for holiday in month.holidays %}
+                                    <li>
+                                        <span class="yc-month__holiday-day">
+                                            {{ holiday.holiday_date|date:"j" }}
+                                        </span>
+                                        {{ holiday.name }}{% if holiday.branch %} · {{ holiday.branch.name }}{% endif %}{% if not holiday.is_paid %} · Unpaid{% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% endif %}
+                    </section>
+                {% endfor %}
+            </div>
+        </div>
+
+        <aside class="card yc-panel" aria-labelledby="yc-panel-title">
+            <div class="card__head">
+                <h2 id="yc-panel-title">
+                    Selected dates
+                </h2>
+                <span class="badge badge--neutral" data-selected-count>
+                    {{ rows|length }}
+                </span>
+            </div>
+            <div class="card__body stack">
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger">
+                        {% for error in form.non_field_errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <button class="btn btn--primary yc-panel__save" type="submit" name="save" value="1"
+                        data-save {% if not rows %}disabled{% endif %}>
+                    {% if rows %}
+                        Add {{ rows|length }} holiday{{ rows|length|pluralize }}
+                    {% else %}
+                        Add holidays
+                    {% endif %}
+                </button>
+                {% include "leaves/includes/field.html" with field=form.branch %}
+                <label class="check">
+                    {{ form.is_paid }}
+                    <span>
+                        {{ form.is_paid.label }}
+                    </span>
+                </label>
+                <p class="yc-panel__hint" data-empty {% if rows %}hidden{% endif %}>
+                    Click days on the calendar to select them. Shift-click selects every day between two dates.
+                </p>
+                <ol class="yc-rows" data-rows>
+                    {% for row in rows %}
+                        <li class="yc-row" data-date="{{ row.iso }}">
+                            <input type="hidden" name="date" value="{{ row.iso }}">
+                            <span class="yc-row__date">
+                                {{ row.label }}
+                            </span>
+                            <input class="input yc-row__name" type="text" name="name" value="{{ row.name }}"
+                                   maxlength="255" placeholder="Holiday name" aria-label="Holiday name for {{ row.label }}">
+                            <button class="btn btn--quiet btn--sm yc-row__remove" type="button" aria-label="Remove {{ row.label }}">
+                                Remove
+                            </button>
+                        </li>
+                    {% endfor %}
+                </ol>
+                <p class="yc-panel__hint">
+                    A date right after another selected date takes its name, so a holiday of several days is named once.
+                </p>
+            </div>
+        </aside>
+    </form>
+
+    <template id="yc-row-template">
+        <li class="yc-row">
+            <input type="hidden" name="date">
+            <span class="yc-row__date"></span>
+            <input class="input yc-row__name" type="text" name="name" maxlength="255" placeholder="Holiday name">
+            <button class="btn btn--quiet btn--sm yc-row__remove" type="button">
+                Remove
+            </button>
+        </li>
+    </template>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'scheduling/js/holiday_year.js' %}">
+    </script>
+{% endblock %}

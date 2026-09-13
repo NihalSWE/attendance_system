@@ -55,6 +55,9 @@ WEEKLY_OFF_FIELDS = ("branch", "weekdays", "is_paid", "effective_from")
 # What a single stored rule records, for its audit snapshot.
 WEEKLY_OFF_RULE_FIELDS = ("branch", "weekday", "is_paid", "effective_from")
 HOLIDAY_FIELDS = ("branch", "holiday_date", "name", "description", "is_paid")
+# The year calendar: many dates at once, each with its own name.
+HOLIDAY_BATCH_FIELDS = ("branch", "is_paid", "days")
+MAX_HOLIDAYS_PER_BATCH = 366
 
 
 # --------------------------------------------------------------------------
@@ -479,6 +482,68 @@ def create_holiday(*, actor, company_id, values):
             after=_snapshot(holiday, HOLIDAY_FIELDS),
         )
     return holiday
+
+
+@transaction.atomic
+def add_holidays(*, actor, company_id, values):
+    """Add many holidays in one step, from the year calendar.
+
+    ``days`` is a list of ``(date, name)`` pairs; the branch and paid flag
+    apply to all of them. All or nothing, like adding weekly offs: if any date
+    is already a holiday for the same scope, none are added and every clash is
+    named, so the administrator unselects them and saves again.
+    """
+    membership = require_structure_manager(actor, company_id)
+    values = _writable(values, HOLIDAY_BATCH_FIELDS)
+    days = [(day, (name or "").strip()) for day, name in (values.pop("days", None) or [])]
+    if not days:
+        raise ValidationError({"days": "Select at least one date on the calendar."})
+    if len(days) > MAX_HOLIDAYS_PER_BATCH:
+        raise ValidationError({"days": "Select at most one year of dates at a time."})
+    dates = [day for day, _ in days]
+    if len(set(dates)) != len(dates):
+        raise ValidationError({"days": "A date is selected twice."})
+    unnamed = [day for day, name in days if not name]
+    if unnamed:
+        raise ValidationError({
+            "days": "Give every selected date a holiday name: "
+            + ", ".join(f"{day:%d %b %Y}" for day in sorted(unnamed)) + "."
+        })
+
+    with use_company(company_id):
+        _check_branch(membership, values)
+        branch = values.get("branch")
+        clashes = list(
+            Holiday.objects.filter(
+                holiday_date__in=dates, branch=branch, status=Holiday.Status.ACTIVE
+            ).order_by("holiday_date")
+        )
+        if clashes:
+            scope = "for this branch" if branch else "for all branches"
+            listed = "; ".join(f"{h.holiday_date:%d %b %Y} ({h.name})" for h in clashes)
+            raise ValidationError({
+                "days": f"Already a holiday {scope}: {listed}. Unselect it and save again."
+            })
+
+        holidays = []
+        for day, name in sorted(days):
+            holiday = create_validated(
+                Holiday,
+                company=membership.company,
+                created_by=actor,
+                updated_by=actor,
+                branch=branch,
+                holiday_date=day,
+                name=name,
+                is_paid=values.get("is_paid", True),
+            )
+            record_company_event(
+                actor=actor, membership=membership, company=membership.company,
+                action="holiday.created", obj=holiday,
+                after={**_snapshot(holiday, HOLIDAY_FIELDS), "from": "year_calendar"},
+            )
+            holidays.append(holiday)
+    return holidays
 
 
 def get_holiday_for_edit(*, actor, company_id, holiday_id):
