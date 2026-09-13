@@ -5,3 +5,7 @@ psycopg-binary==3.3.5
 psycopg==3.3.5
 sqlparse==0.6.0
 tzdata==2026.3
+# Test-only: Django's --parallel runner needs it to carry a failure
+# back from a worker. Without it a failing test crashes the run with
+# "cannot pickle 'traceback' object" and you never see which test.
+tblib==3.2.2
