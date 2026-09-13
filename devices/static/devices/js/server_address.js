@@ -27,6 +27,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
     const POLL_MS = 4000;
     let timer = null;
+    /* Set only by a poll that came back still running. A finished state can
+       therefore never trigger a reload on its own — which is what turned a
+       failed change into an endless refresh loop: the page rendered a finished
+       "unreachable" state, polled once, saw `finished`, reloaded, and did the
+       whole thing again forever. */
+    let sawRunning = false;
+    let reloading = false;
 
     /* Which alert colour each state deserves. Named states rather than a
        success/failure pair, because "nothing was sent" and "the device is
@@ -117,15 +124,20 @@ document.addEventListener("DOMContentLoaded", function () {
         const next = panel.querySelector("[data-address-next]");
         if (next) next.hidden = !data.active;
 
-        if (data.finished) {
-            /* Reload once so the history table, the flash messages and the
-               edit form all reflect the outcome, instead of leaving a live
-               panel next to a stale page. */
+        if (!data.finished) {
+            sawRunning = true;
+            return;
+        }
+        /* Finished. Stop asking, and reload only if we watched it finish, so
+           the history table and the edit form catch up. Landing on a page that
+           was already finished reloads nothing. */
+        if (timer !== null) {
             window.clearInterval(timer);
             timer = null;
-            if (panel.dataset.wasActive === "1") window.location.reload();
-        } else {
-            panel.dataset.wasActive = "1";
+        }
+        if (sawRunning && !reloading) {
+            reloading = true;
+            window.location.reload();
         }
     }
 
@@ -142,11 +154,10 @@ document.addEventListener("DOMContentLoaded", function () {
             .catch(function () {});
     }
 
-    const initiallyActive = live && !live.hidden
-        && !panel.querySelector("[data-address-alert].alert--success")
-        && !panel.querySelector("[data-address-alert].alert--danger");
-    if (initiallyActive) {
-        panel.dataset.wasActive = "1";
+    /* Straight from the server, not guessed from a CSS class. Only a change
+       that is still moving is worth watching; every finished state — reachable
+       or not, applied or not — is already fully rendered. */
+    if (panel.dataset.addressActive === "1") {
         timer = window.setInterval(poll, POLL_MS);
         poll();
     }

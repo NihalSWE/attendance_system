@@ -579,7 +579,20 @@ select.input:disabled {
 }
 
 /* ---------------------------------------------------------------------------
-   Checkbox / radio row — a control beside its label, aligned on the first line.
+   Checkbox / radio — a control beside its label, aligned on the first line.
+
+   The control is drawn rather than left native. `accent-color` alone tints the
+   browser's own box, which on a warm paper background reads as a grey smudge:
+   no visible border at rest, and nothing that matches the ink accent when
+   checked. Drawing it means one appearance everywhere, a border in --field
+   like every other input, and a focus ring that matches .input.
+
+   Two selectors on purpose. `.check__input` is put on the widget itself by
+   common.forms.StyledFormMixin, so any form-rendered checkbox is styled
+   wherever its template puts it — including templates that do not use the
+   `.check` wrapper. The `.check input[...]` pair covers checkboxes written by
+   hand inside a `.check` label. A checkbox outside both (the day picker's
+   visually hidden inputs) is deliberately untouched.
    ------------------------------------------------------------------------ */
 
 .check {
@@ -590,19 +603,92 @@ select.input:disabled {
     user-select: none;
     font-size: 13px;
 }
+.check__input,
 .check input[type="checkbox"],
 .check input[type="radio"] {
-    width: 16px;
-    height: 16px;
-    margin: 2px 0 0;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    margin: 1px 0 0;
     flex: none;
-    accent-color: var(--accent);
+    /* inline-grid + place-content is what lets the tick sit centred inside a
+       replaced element once appearance is removed. */
+    display: inline-grid;
+    place-content: center;
+    border: 1px solid var(--field);
+    border-radius: var(--r-sm);
+    background: var(--surface);
     cursor: pointer;
+    transition: background var(--tr), border-color var(--tr), box-shadow var(--tr);
 }
+.check__input[type="radio"],
+.check input[type="radio"] {
+    border-radius: var(--r-pill);
+}
+.check__input::before,
+.check input[type="checkbox"]::before,
+.check input[type="radio"]::before {
+    content: "";
+    width: 10px;
+    height: 10px;
+    transform: scale(0);
+    transition: transform var(--tr);
+    background: var(--on-accent);
+    /* The tick, drawn as a clipped block so its colour stays a token rather
+       than being baked into an SVG data URI. */
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0, 43% 62%);
+}
+.check__input[type="radio"]::before,
+.check input[type="radio"]::before {
+    width: 8px;
+    height: 8px;
+    border-radius: var(--r-pill);
+    clip-path: none;
+}
+.check__input:checked,
+.check input[type="checkbox"]:checked,
+.check input[type="radio"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.check__input:checked::before,
+.check input[type="checkbox"]:checked::before,
+.check input[type="radio"]:checked::before {
+    transform: scale(1);
+}
+.check__input:hover:not(:disabled),
+.check input[type="checkbox"]:hover:not(:disabled),
+.check input[type="radio"]:hover:not(:disabled) {
+    border-color: var(--muted);
+}
+.check__input:checked:hover:not(:disabled),
+.check input[type="checkbox"]:checked:hover:not(:disabled),
+.check input[type="radio"]:checked:hover:not(:disabled) {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+}
+/* focus-visible, so a mouse click does not leave a ring behind, but tabbing
+   always shows where you are — the same ring .input uses. */
+.check__input:focus-visible,
+.check input[type="checkbox"]:focus-visible,
+.check input[type="radio"]:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.check__input:disabled,
 .check input:disabled {
+    background: var(--surface-sunken);
+    border-color: var(--border);
     cursor: not-allowed;
 }
-.check input:disabled + span {
+.check__input:disabled::before,
+.check input:disabled::before {
+    background: var(--faint);
+}
+.check input:disabled + span,
+.check__input:disabled ~ .field__label {
     color: var(--faint);
 }
 

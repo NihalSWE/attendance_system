@@ -32,6 +32,16 @@
                 Append-only evidence. The decision below is a frozen snapshot of what applied when the punch happened.
             </p>
         </div>
+        <div class="page__actions">
+            {% if punch.device_enrollment_id %}
+                <a class="btn btn--secondary" href="{% url 'devices:enrollment_edit' punch.device_enrollment_id %}">
+                    Open the enrollment used
+                </a>
+            {% endif %}
+            <a class="btn btn--ghost" href="{% url 'devices:device_detail' punch.device.public_id %}">
+                {{ punch.device.name }}
+            </a>
+        </div>
     </div>
 
     {% if punch.authorization_snapshot.decision_reason %}
@@ -257,13 +267,7 @@
                     </table>
                 </div>
             </div>
-            {% if punch.device_enrollment_id %}
-                <div class="card__foot">
-                    <a class="btn btn--quiet btn--sm" href="{% url 'devices:enrollment_edit' punch.device_enrollment_id %}">
-                        Open the enrollment used
-                    </a>
-                </div>
-            {% endif %}
+
         </div>
     </div>
 {% endblock %}

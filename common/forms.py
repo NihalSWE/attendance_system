@@ -40,6 +40,15 @@ class StyledFormMixin:
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             widget = field.widget
+            # A checkbox is not a text field. Giving it class="input" made it
+            # inherit `width: 100%`, which inside the flex row that renders it
+            # collapsed the control to zero width — a 13px sliver with no box
+            # at all. It gets the checkbox component class instead, so the
+            # shared `.check` styles apply wherever the template puts it.
+            if isinstance(widget, (forms.CheckboxInput, forms.RadioSelect,
+                                   forms.CheckboxSelectMultiple)):
+                widget.attrs["class"] = "check__input"
+                continue
             widget.attrs["class"] = "input"
             # Control choice follows the DATA, not the widget:
             #   database-backed (ModelChoice / ModelMultipleChoice) -> Select2,

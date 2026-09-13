@@ -24,8 +24,14 @@
             </p>
         </div>
         <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'devices:enrollment_create' %}?device={{ device.pk }}">
+                Enroll an employee
+            </a>
             <a class="btn btn--secondary" href="{% url 'devices:device_users' device.public_id %}">
                 Users
+            </a>
+            <a class="btn btn--ghost" href="{% url 'devices:enrollment_list' %}?device={{ device.pk }}">
+                Enrollments
             </a>
             <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
                 Punches
@@ -544,14 +550,6 @@
                         </div>
                     </div>
                 {% endif %}
-            </div>
-            <div class="card__foot">
-                <a class="btn btn--quiet btn--sm" href="{% url 'devices:enrollment_list' %}?device={{ device.pk }}">
-                    Enrollments
-                </a>
-                <a class="btn btn--quiet btn--sm" href="{% url 'devices:enrollment_create' %}">
-                    Enroll an employee
-                </a>
             </div>
         </div>
     </div>

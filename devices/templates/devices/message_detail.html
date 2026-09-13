@@ -29,6 +29,14 @@
                 Append-only evidence. Nothing on this page can be edited or deleted.
             </p>
         </div>
+        <div class="page__actions">
+            <a class="btn btn--secondary" href="{% url 'devices:device_detail' message.device.public_id %}">
+                {{ message.device.name }}
+            </a>
+            <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ message.device.pk }}">
+                Punches
+            </a>
+        </div>
     </div>
 
     {% if message.processing_error %}

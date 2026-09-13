@@ -1,6 +1,10 @@
 {% comment %}
     Shared field rendering, matching the project's existing form markup.
     Checkboxes put the label after the control; everything else above it.
+
+    A checkbox is wrapped in `label.check`, the same component the branch and
+    schedule forms use, so the whole row is a click target and the control is
+    styled once in components.css rather than per page.
 {% endcomment %}
 {% if form.non_field_errors %}
     <div class="alert alert--danger" role="alert">
@@ -10,12 +14,12 @@
 {% for field in form %}
     <div class="field {% if field.errors %}field-invalid{% endif %}" data-field="{{ field.name }}">
         {% if field.field.widget.input_type == "checkbox" %}
-            <div class="row">
+            <label class="check" for="{{ field.id_for_label }}">
                 {{ field }}
-                <label class="field__label" for="{{ field.id_for_label }}">
+                <span>
                     {{ field.label }}
-                </label>
-            </div>
+                </span>
+            </label>
         {% else %}
             <label class="field__label" for="{{ field.id_for_label }}">
                 {{ field.label }}

@@ -222,6 +222,7 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         return serial
 
     def save(self, commit=True):
+        is_new = self.instance.pk is None
         device = super().save(commit=False)
         device.settings = {
             **(device.settings or {}),
@@ -235,7 +236,14 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         entered = (self.cleaned_data.get("comm_key") or "").strip()
         if entered:
             self.issued_comm_key = entered
-        elif not device.authentication_secret_hash:
+        elif is_new and not device.authentication_secret_hash:
+            # Only ever generated for a device being registered. Doing it on an
+            # edit locked a live terminal out: the device had been pushing
+            # without a key for weeks, somebody opened this form to change the
+            # server address, and saving it invented a key nobody had typed
+            # into the device. Every push after that was refused with 401, and
+            # nothing on screen said why. A device already in service keeps
+            # whatever it has unless a key is typed here on purpose.
             self.issued_comm_key = generate_comm_key()
 
         if self.issued_comm_key:
@@ -307,6 +315,20 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
         )
         if not self.instance.pk:
             self.fields["effective_from"].initial = timezone.now()
+            # Both on by default for a new enrollment, and only a new one —
+            # editing keeps whatever was saved.
+            #
+            # attendance_enabled already defaults True on the model.
+            # assigned_device_authorized does not, and leaving it off is a
+            # silent trap: the company default scope is assigned-devices, so
+            # every punch from an enrollment without it is filed as
+            # unauthorized_device, and the person shows up absent in
+            # attendance and unpaid in salary. Someone enrolling an employee
+            # means them to be recognised *and* counted; withholding the
+            # second is the deliberate act, so that is the one that needs a
+            # click.
+            self.fields["attendance_enabled"].initial = True
+            self.fields["assigned_device_authorized"].initial = True
 
     def clean(self):
         data = super().clean()

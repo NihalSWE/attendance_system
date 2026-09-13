@@ -239,6 +239,11 @@ Page furniture
     display: flex;
     align-items: center;
     gap: var(--s2);
+    /* Wraps rather than overflowing. A page with several main actions — the
+       device page has six — pushed the last one past the right edge and gave
+       the whole document a horizontal scrollbar on a phone. */
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 .crumbs {
     display: flex;
@@ -411,6 +416,9 @@ Responsive — the sidebar collapses to icons, then off-canvas.
     .page__actions {
         margin-left: 0;
         width: 100%;
+        /* Full width on a phone, so the buttons line up under the title
+           instead of hanging off the right edge in a ragged block. */
+        justify-content: flex-start;
     }
 }
 .crumbs {
