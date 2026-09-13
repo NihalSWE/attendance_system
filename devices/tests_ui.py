@@ -346,6 +346,116 @@ class DeviceScreenTests(TestCase):
         self.assertEqual(link.status, DeviceDepartment.Status.ENDED)
         self.assertIsNotNone(link.effective_to)
 
+    # --- form controls ----------------------------------------------------
+
+    def test_a_checkbox_is_not_given_the_text_input_class(self):
+        """class="input" carries width:100%, which collapsed it to nothing.
+
+        Inside the flex row that renders a checkbox beside its label, a
+        100%-wide control in a `flex: none` slot measured zero pixels across —
+        the box was not faint, it was absent. Checkboxes get the checkbox
+        component class instead.
+        """
+        response = self.client.get(reverse("devices:enrollment_create"))
+        form = response.context["form"]
+        for name in ("attendance_enabled", "assigned_device_authorized"):
+            with self.subTest(field=name):
+                classes = form.fields[name].widget.attrs["class"].split()
+                self.assertIn("check__input", classes)
+                self.assertNotIn("input", classes)
+
+    def test_text_fields_still_get_the_input_class(self):
+        """The narrowing must not have taken the class off everything else."""
+        response = self.client.get(reverse("devices:enrollment_create"))
+        form = response.context["form"]
+        self.assertIn("input", form.fields["device_user_id"].widget.attrs["class"])
+
+    def test_a_checkbox_is_wrapped_in_the_shared_check_component(self):
+        response = self.client.get(reverse("devices:enrollment_create"))
+        self.assertContains(response, 'class="check"')
+
+    def test_both_enrollment_switches_start_on_for_a_new_enrollment(self):
+        """Recognised and counted, unless somebody says otherwise.
+
+        The company default scope is assigned-devices, so an enrollment saved
+        with assigned_device_authorized off has every punch filed as
+        unauthorized_device and the person reads as absent in attendance and
+        unpaid in salary. Withholding it is the deliberate act.
+        """
+        response = self.client.get(reverse("devices:enrollment_create"))
+        form = response.context["form"]
+        self.assertTrue(form.fields["attendance_enabled"].initial)
+        self.assertTrue(form.fields["assigned_device_authorized"].initial)
+        self.assertContains(response, "checked", count=2)
+
+    def test_editing_an_enrollment_keeps_whatever_was_saved(self):
+        """Defaults are for new rows; an edit must never silently re-enable."""
+        with use_company(self.company):
+            enrollment = DeviceEnrollment.objects.create(
+                device=self.device,
+                employee=self.employee,
+                device_user_id="9100",
+                attendance_enabled=False,
+                assigned_device_authorized=False,
+                effective_from=dt(2026, 1, 1),
+            )
+        response = self.client.get(
+            reverse("devices:enrollment_edit", args=[enrollment.pk])
+        )
+        form = response.context["form"]
+        self.assertFalse(form["attendance_enabled"].value())
+        self.assertFalse(form["assigned_device_authorized"].value())
+
+    # --- action placement -------------------------------------------------
+
+    def test_the_enrollment_actions_are_in_the_device_page_header(self):
+        """They used to sit in the footer of the last card, below a table."""
+        response = self.client.get(
+            reverse("devices:device_detail", args=[self.device.public_id])
+        )
+        body = response.content.decode()
+        header = body.split('class="page__actions"', 1)[1].split("</div>", 1)[0]
+        self.assertIn("Enroll an employee", header)
+        self.assertIn("Enrollments", header)
+        # And not left behind at the bottom as well: the point was to move
+        # them, not to add a second copy.
+        after_header = body.split('class="page__actions"', 1)[1]
+        self.assertNotIn("Enroll an employee", after_header.split("</div>", 1)[1])
+
+    def test_the_punch_page_offers_its_enrollment_at_the_top(self):
+        with use_company(self.company):
+            enrollment = DeviceEnrollment.objects.create(
+                device=self.device,
+                employee=self.employee,
+                device_user_id="9101",
+                effective_from=dt(2026, 1, 1),
+            )
+            message = DeviceMessage.objects.create(
+                device=self.device,
+                branch=self.branch,
+                message_type=DeviceMessage.MessageType.PUNCH_BATCH,
+                received_at=dt(2026, 2, 1),
+                raw_payload_text="x",
+                payload_hash="ph-actions",
+            )
+            punch = PunchEvent.objects.create(
+                device_message=message,
+                device=self.device,
+                branch=self.branch,
+                device_enrollment=enrollment,
+                employee=self.employee,
+                device_user_id="9101",
+                source_record_index=0,
+                punched_at_device_raw="2026-02-01 09:00:00",
+                punched_at_device=dt(2026, 2, 1),
+                punched_at_utc=dt(2026, 2, 1),
+                received_at=dt(2026, 2, 1),
+                raw_record={},
+            )
+        response = self.client.get(reverse("devices:punch_detail", args=[punch.pk]))
+        header = response.content.decode().split('class="page__actions"', 1)[1]
+        self.assertIn("Open the enrollment used", header.split("</div>", 1)[0])
+
     # --- troubleshooting screens -----------------------------------------
 
     def test_troubleshooting_screens_render(self):
