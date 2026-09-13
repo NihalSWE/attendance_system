@@ -196,6 +196,21 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+# Where `collectstatic` gathers files for a deployed server. Git-ignored.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Cache-busting: every static URL changes when its file changes, so a browser
+# never keeps an old CSS/JS file after an update (no more Ctrl+F5). Hashed
+# file names when deployed, `?v=<hash>` in development and tests — see
+# base_template/staticfiles.py.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'base_template.staticfiles.VersionedStaticFilesStorage',
+    },
+}
 
 
 # Email
