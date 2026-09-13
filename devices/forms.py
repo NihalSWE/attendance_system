@@ -222,6 +222,7 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         return serial
 
     def save(self, commit=True):
+        is_new = self.instance.pk is None
         device = super().save(commit=False)
         device.settings = {
             **(device.settings or {}),
@@ -235,7 +236,14 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         entered = (self.cleaned_data.get("comm_key") or "").strip()
         if entered:
             self.issued_comm_key = entered
-        elif not device.authentication_secret_hash:
+        elif is_new and not device.authentication_secret_hash:
+            # Only ever generated for a device being registered. Doing it on an
+            # edit locked a live terminal out: the device had been pushing
+            # without a key for weeks, somebody opened this form to change the
+            # server address, and saving it invented a key nobody had typed
+            # into the device. Every push after that was refused with 401, and
+            # nothing on screen said why. A device already in service keeps
+            # whatever it has unless a key is typed here on purpose.
             self.issued_comm_key = generate_comm_key()
 
         if self.issued_comm_key:

@@ -6,7 +6,9 @@
     complete and accurate without the script — the poll only saves a refresh.
 {% endcomment %}
 <div class="card" data-address-panel
-     data-status-url="{% url 'devices:device_server_address_status' device.public_id %}">
+     data-status-url="{% url 'devices:device_server_address_status' device.public_id %}"
+     data-address-active="{% if address_status.active %}1{% else %}0{% endif %}"
+     data-address-status="{{ address_status.status }}">
     <div class="card__head">
         <h2>
             Server address

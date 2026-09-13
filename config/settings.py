@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
+import sys
 from pathlib import Path
 
 import environ
@@ -115,6 +116,15 @@ TEMPLATES = [
         },
     },
 ]
+
+# Tests only. PBKDF2 is deliberately slow — about a second per call on this
+# hardware — which is right in production and pointless for the hundreds of
+# throwaway users the suite creates. Swapping it for MD5 under `manage.py test`
+# cut the run by roughly a third. Production is untouched: this branch cannot
+# be reached by a real server process.
+if sys.argv[1:2] == ['test']:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
+
 
 WSGI_APPLICATION = 'config.wsgi.application'
 

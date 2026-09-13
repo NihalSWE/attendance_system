@@ -811,6 +811,158 @@ class ServerAddressScreenTests(ServerAddressTestCase):
             server_address.cancel(attempt=attempt, actor=self.admin)
 
 
+# --------------------------------------------------------- the status panel
+
+
+@override_settings(ALLOWED_HOSTS=ALLOWED)
+class StatusPanelTests(ServerAddressTestCase):
+    """What the page tells the poller about whether to keep watching.
+
+    A finished change must render as finished and *stay* there. Getting this
+    wrong turned a failed address change into a page that reloaded itself
+    forever: the panel rendered a terminal state, the script could not tell it
+    apart from a running one, polled once, saw "finished", reloaded, and did
+    the same thing on every load.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.admin)
+
+    def _panel(self):
+        response = self.client.get(
+            reverse("devices:device_detail", args=[self.device.public_id])
+        )
+        body = response.content.decode()
+        return body.split("data-address-panel", 1)[1].split(">", 1)[0]
+
+    def test_a_running_change_tells_the_page_to_watch(self):
+        self._request_change()
+        self.assertIn('data-address-active="1"', self._panel())
+
+    def test_a_failed_check_tells_the_page_to_stop(self):
+        """The exact state that used to loop: nothing was even sent."""
+        attempt = self._request_change(
+            fetch=self._failing_probe(status=404, body="not found")
+        )
+        self.assertEqual(attempt.status, DeviceServerAddressChange.Status.UNREACHABLE)
+        panel = self._panel()
+        self.assertIn('data-address-active="0"', panel)
+        self.assertIn('data-address-status="unreachable"', panel)
+
+    def test_every_finished_state_tells_the_page_to_stop(self):
+        """Not just the two that happened to be styled as success or danger.
+
+        The old guard looked at the alert's colour class and only recognised
+        success and danger, so the warning-coloured outcomes kept polling.
+        """
+        finished = (
+            DeviceServerAddressChange.Status.UNREACHABLE,
+            DeviceServerAddressChange.Status.CONFIRMED,
+            DeviceServerAddressChange.Status.NOT_APPLIED,
+            DeviceServerAddressChange.Status.LOST,
+            DeviceServerAddressChange.Status.CANCELLED,
+        )
+        for status in finished:
+            with self.subTest(status=status):
+                DeviceServerAddressChange.all_objects.all().delete()
+                DeviceServerAddressChange.all_objects.create(
+                    company=self.company, device=self.device, created_by=self.admin,
+                    previous_scheme="https", previous_host=OLD_HOST,
+                    previous_port=443,
+                    new_scheme="https", new_host=NEW_HOST, new_port=443,
+                    status=status,
+                )
+                self.assertIn('data-address-active="0"', self._panel())
+
+    def test_a_device_with_no_change_at_all_tells_the_page_to_stop(self):
+        self.assertIn('data-address-active="0"', self._panel())
+
+
+# ------------------------------------------------------ the communication key
+
+
+@override_settings(ALLOWED_HOSTS=ALLOWED)
+class CommKeyOnEditTests(ServerAddressTestCase):
+    """Editing a device must not invent a key the device was never told.
+
+    This locked a live terminal out. The device had been pushing without a
+    comm key for weeks, which the ingestion path allows when none is stored.
+    Somebody opened the edit form to change the server address, saved it, and
+    the form generated a key because none existed — so every push afterwards
+    was refused with 401 and the device simply went quiet.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.admin)
+        BiometricDevice.all_objects.filter(pk=self.device.pk).update(
+            authentication_secret_hash="", authentication_key_id=""
+        )
+        self.device.refresh_from_db()
+
+    def _edit(self, **overrides):
+        data = {
+            "name": self.device.name,
+            "serial_number": self.device.serial_number,
+            "branch": self.branch.pk,
+            "device_model": self.device.device_model_id,
+            "external_device_id": "",
+            "timezone": "Asia/Dhaka",
+            "installed_at": "",
+            "status": BiometricDevice.Status.ACTIVE,
+            "comm_key": "",
+            "push_interval_seconds": 10,
+            "error_delay_seconds": 30,
+            "realtime": "on",
+            "server_address": f"https://{OLD_HOST}",
+        }
+        data.update(overrides)
+        return self.client.post(
+            reverse("devices:device_edit", args=[self.device.public_id]),
+            data, follow=True,
+        )
+
+    def test_editing_a_keyless_device_leaves_it_keyless(self):
+        self._edit(name="Renamed")
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.authentication_secret_hash, "")
+
+    def test_a_keyless_device_still_pushes_after_an_edit(self):
+        """The end-to-end version: the device must still be let in."""
+        self._edit(name="Renamed")
+        response = self.client.get(
+            "/iclock/getrequest", {"SN": self.device.serial_number},
+            HTTP_HOST=OLD_HOST, HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_typing_a_key_on_the_edit_form_still_sets_one(self):
+        """Deliberate is still deliberate."""
+        self._edit(comm_key="abc123def456")
+        self.device.refresh_from_db()
+        self.assertNotEqual(self.device.authentication_secret_hash, "")
+
+    def test_registering_a_device_still_issues_a_key(self):
+        response = self.client.post(reverse("devices:device_register"), {
+            "name": "Back Door",
+            "serial_number": "SN-NEW-1",
+            "branch": self.branch.pk,
+            "device_model": self.device.device_model_id,
+            "external_device_id": "",
+            "timezone": "Asia/Dhaka",
+            "installed_at": "",
+            "status": BiometricDevice.Status.PENDING,
+            "comm_key": "",
+            "push_interval_seconds": 10,
+            "error_delay_seconds": 30,
+            "realtime": "on",
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        created = BiometricDevice.all_objects.get(serial_number="SN-NEW-1")
+        self.assertNotEqual(created.authentication_secret_hash, "")
+
+
 # ------------------------------------------------- permissions and auditing
 
 
