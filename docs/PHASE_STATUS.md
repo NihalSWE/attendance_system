@@ -530,7 +530,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 
 | # | Step | What it delivers | Point | Covers from "Skipped today" |
 |---|---|---|---|---|
-| N0 | **Button fix** | The 8 `btn--secondary` buttons (a class that does not exist), all on his device and adoption pages, become `btn--ghost` | — | (loose end below) |
+| N0 | **Button and calendar fix** | The 8 `btn--secondary` buttons (a class that does not exist), all on his device and adoption pages, become `btn--ghost`. The five `datetime-local` fields in `devices/forms.py` (device installed at; enrollment and device-department effective from/to) show the browser's own calendar: date on the project calendar + `HH:MM` time text. A test fails if any project form has a date field without the project calendar. Device register/edit changes stay with Nihal | — | (loose ends below) |
 | N1 | **Pairing and daily totals** | `AttendanceSession` + `PunchAllocation`; every scan labelled check-in / break-out / break-in / check-out (DEVICE_ATTENDANCE_POLICY.md step 7); total, in-office and out-of-office minutes and break count per day; repeat-scan window. `worked_minutes` becomes in-office time | 3 | Breaks and multiple IN/OUT sessions; attendance settings punch pairing, duplicate window, attendance windows, rounding |
 | N2 | **Attendance calendar** ⬆ | Month calendar per employee, days coloured by status; clicking a date shows every scan with label, time and device, and the day's totals. Built as a reusable piece so the employee panel (A7) shows the same calendar for "my attendance" | 3 | (new) |
 | N3 | **In-office badge on the Employees page** ⬆ | "Now" column: In office (green), On break (amber), Left (grey), Not in yet (grey), Absent (red, after shift start plus grace), On leave (blue), Off today (grey); refreshes every minute | 5 | (new) |
@@ -577,6 +577,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | Item | State |
 |---|---|
 | `btn--secondary` buttons | The class does not exist, so 8 buttons render as a plain `.btn`: `devices/device_detail.html` (3), `devices/device_users.html` (2), `devices/message_detail.html`, `devices/punch_detail.html`, `organization/adoption_list.html`. Fix: `btn--ghost` — Nihal's N0. |
+| Browser-default calendars on the device pages | Five `datetime-local` fields in `devices/forms.py` (register/edit device, enrollment, device department). Every other date field uses the project calendar. Fix: Nihal's N0. |
 | Excluded punches on Nihal's server | The new default tick applies to new enrollments only. Existing enrollments need "Authorised for assigned-devices mode" ticked by hand; already-excluded punches stay excluded until N4's Re-check. |
 | Felna Tech shift mode | Still single company shift (set 2026-09-12 so its attendance could be calculated). Switching to department shifts is a settings change in Shifts. |
 | Demo data in Ajay's local database | Simulated device `DEMO-SIM-FELNA` ("not real hardware") and its 1–12 Sep demo punches stay, at Ajay's request; they feed Felna's attendance and salary. |

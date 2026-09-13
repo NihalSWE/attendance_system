@@ -40,6 +40,13 @@ uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
 
 ## Time and button conventions (2026-09-12)
 
+- **No browser-default pickers anywhere** (Ajay, 2026-09-13). Every date
+  field carries `data-datepicker` (or `data-daterange` for a from/to pair) so
+  the project calendar replaces the browser's. A date-and-time field
+  (`DateTimeField`) is never `type="datetime-local"`: split it into a date on
+  the project calendar and a time as `HH:MM` text (below). On 2026-09-13 the
+  only offenders were five fields in `devices/forms.py` (device installed at,
+  enrollment and device-department effective from/to), fixed in Nihal's N0.
 - **Time of day** is a plain text input, `HH:MM` in 24-hour form, parsed and
   validated server-side. Not `<input type="time">`: the browser draws its own
   clock control there, which the design does not allow. A proper time-picker
