@@ -4,7 +4,7 @@ The playbook requires read and write to ship together, so these exercise the
 forms that create and change data, not only the pages that display it.
 """
 
-from datetime import datetime, time, timezone as dt_timezone
+from datetime import date, datetime, time, timezone as dt_timezone
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -232,8 +232,10 @@ class DeviceScreenTests(TestCase):
             "device_user_id": "7",
             "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
             "attendance_enabled": "on",
-            "effective_from": "2026-09-01T09:00",
-            "effective_to": "",
+            "effective_from_0": "2026-09-01",
+            "effective_from_1": "09:00",
+            "effective_to_0": "",
+            "effective_to_1": "",
         }, follow=True)
         self.assertEqual(response.status_code, 200)
 
@@ -266,8 +268,10 @@ class DeviceScreenTests(TestCase):
                 "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
                 "attendance_enabled": "on",
                 "assigned_device_authorized": "on",
-                "effective_from": "2026-09-01T00:00",
-                "effective_to": "",
+                "effective_from_0": "2026-09-01",
+                "effective_from_1": "00:00",
+                "effective_to_0": "",
+                "effective_to_1": "",
             },
         )
         enrollment.refresh_from_db()
@@ -296,8 +300,10 @@ class DeviceScreenTests(TestCase):
             "device_user_id": "7",
             "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
             "attendance_enabled": "on",
-            "effective_from": "2026-09-15T00:00",
-            "effective_to": "",
+            "effective_from_0": "2026-09-15",
+            "effective_from_1": "00:00",
+            "effective_to_0": "",
+            "effective_to_1": "",
         })
         # A readable message, not an IntegrityError page.
         self.assertEqual(response.status_code, 200)
@@ -318,8 +324,10 @@ class DeviceScreenTests(TestCase):
             "device_user_id": "8",
             "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
             "attendance_enabled": "on",
-            "effective_from": "2026-09-15T00:00",
-            "effective_to": "",
+            "effective_from_0": "2026-09-15",
+            "effective_from_1": "00:00",
+            "effective_to_0": "",
+            "effective_to_1": "",
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "is already enrolled on")
@@ -331,8 +339,10 @@ class DeviceScreenTests(TestCase):
             reverse("devices:device_department_add", args=[self.device.public_id]),
             {
                 "department": self.department.pk,
-                "effective_from": "2026-09-01T00:00",
-                "effective_to": "",
+                "effective_from_0": "2026-09-01",
+                "effective_from_1": "00:00",
+                "effective_to_0": "",
+                "effective_to_1": "",
             },
             follow=True,
         )
@@ -406,6 +416,137 @@ class DeviceScreenTests(TestCase):
         self.assertFalse(form["attendance_enabled"].value())
         self.assertFalse(form["assigned_device_authorized"].value())
 
+    # --- dates and times --------------------------------------------------
+
+    def test_no_device_form_renders_a_browser_drawn_picker(self):
+        """The five that used to: install date, and both effective ranges."""
+        pages = [
+            reverse("devices:device_register"),
+            reverse("devices:device_edit", args=[self.device.public_id]),
+            reverse("devices:enrollment_create"),
+            reverse("devices:device_department_add", args=[self.device.public_id]),
+        ]
+        for url in pages:
+            with self.subTest(url=url):
+                body = self.client.get(url).content.decode()
+                self.assertNotIn('type="datetime-local"', body)
+                self.assertNotIn('type="time"', body)
+
+    def test_each_device_date_field_is_on_the_project_calendar(self):
+        response = self.client.get(reverse("devices:enrollment_create"))
+        body = response.content.decode()
+        # Two halves per datetime: a date input carrying data-datepicker, and
+        # an HH:MM text box.
+        self.assertEqual(body.count("data-datepicker"), 2)
+        self.assertEqual(body.count('placeholder="HH:MM"'), 2)
+
+    def test_a_datetime_is_saved_as_the_company_clock_time(self):
+        """09:30 typed in Dhaka is 03:30 UTC in the database."""
+        response = self.client.post(reverse("devices:enrollment_create"), {
+            "device": self.device.pk,
+            "employee": self.employee.pk,
+            "device_user_id": "7001",
+            "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
+            "attendance_enabled": "on",
+            "assigned_device_authorized": "on",
+            "effective_from_0": "2026-10-01",
+            "effective_from_1": "09:30",
+            "effective_to_0": "",
+            "effective_to_1": "",
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        with use_company(self.company):
+            enrollment = DeviceEnrollment.objects.get(device_user_id="7001")
+        self.assertEqual(
+            enrollment.effective_from.astimezone(dt_timezone.utc).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "2026-10-01 03:30",
+        )
+        self.assertIsNone(enrollment.effective_to)
+
+    def test_editing_shows_back_the_time_that_was_entered(self):
+        """The round trip an administrator actually sees."""
+        self.client.post(reverse("devices:enrollment_create"), {
+            "device": self.device.pk,
+            "employee": self.employee.pk,
+            "device_user_id": "7002",
+            "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
+            "attendance_enabled": "on",
+            "assigned_device_authorized": "on",
+            "effective_from_0": "2026-10-01",
+            "effective_from_1": "09:30",
+            "effective_to_0": "",
+            "effective_to_1": "",
+        }, follow=True)
+        with use_company(self.company):
+            enrollment = DeviceEnrollment.objects.get(device_user_id="7002")
+        response = self.client.get(
+            reverse("devices:enrollment_edit", args=[enrollment.pk])
+        )
+        # Asserted against the response body, not by re-rendering the field
+        # here: the widget reads the company timezone from the active tenant,
+        # which only exists during the request. Re-rendering in the test would
+        # quietly fall back to UTC and "pass" while showing 03:30.
+        self.assertContains(response, 'name="effective_from_0" value="2026-10-01"')
+        self.assertContains(response, 'name="effective_from_1" value="09:30"')
+
+    def test_a_blank_time_is_read_as_midnight(self):
+        response = self.client.post(reverse("devices:enrollment_create"), {
+            "device": self.device.pk,
+            "employee": self.employee.pk,
+            "device_user_id": "7003",
+            "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
+            "attendance_enabled": "on",
+            "assigned_device_authorized": "on",
+            "effective_from_0": "2026-10-02",
+            "effective_from_1": "",
+            "effective_to_0": "",
+            "effective_to_1": "",
+        }, follow=True)
+        self.assertEqual(response.status_code, 200)
+        with use_company(self.company):
+            enrollment = DeviceEnrollment.objects.get(device_user_id="7003")
+        # Midnight in Dhaka is 18:00 UTC the previous day.
+        self.assertEqual(
+            enrollment.effective_from.astimezone(dt_timezone.utc).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "2026-10-01 18:00",
+        )
+
+    def test_a_time_with_no_date_is_a_field_error(self):
+        response = self.client.post(reverse("devices:enrollment_create"), {
+            "device": self.device.pk,
+            "employee": self.employee.pk,
+            "device_user_id": "7004",
+            "device_privilege": DeviceEnrollment.Privilege.NORMAL_USER,
+            "attendance_enabled": "on",
+            "assigned_device_authorized": "on",
+            "effective_from_0": "",
+            "effective_from_1": "09:30",
+            "effective_to_0": "",
+            "effective_to_1": "",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("effective_from", response.context["form"].errors)
+
+    # --- button classes ---------------------------------------------------
+
+    def test_no_device_page_uses_a_button_class_that_has_no_css(self):
+        """btn--secondary is not in components.css, so it rendered unstyled."""
+        pages = [
+            reverse("devices:device_list"),
+            reverse("devices:device_detail", args=[self.device.public_id]),
+            reverse("devices:device_users", args=[self.device.public_id]),
+            reverse("devices:enrollment_list"),
+            reverse("devices:punch_list"),
+            reverse("devices:message_list"),
+        ]
+        for url in pages:
+            with self.subTest(url=url):
+                self.assertNotContains(self.client.get(url), "btn--secondary")
+
     # --- action placement -------------------------------------------------
 
     def test_the_enrollment_actions_are_in_the_device_page_header(self):
@@ -467,14 +608,18 @@ class DeviceScreenTests(TestCase):
         add = reverse("devices:device_department_add", args=[self.device.public_id])
         self.client.post(add, {
             "department": self.department.pk,
-            "effective_from": "2026-09-01T00:00",
-            "effective_to": "",
+            "effective_from_0": "2026-09-01",
+            "effective_from_1": "00:00",
+            "effective_to_0": "",
+            "effective_to_1": "",
         }, follow=True)
 
         response = self.client.post(add, {
             "department": self.department.pk,
-            "effective_from": "2026-09-15T00:00",
-            "effective_to": "",
+            "effective_from_0": "2026-09-15",
+            "effective_from_1": "00:00",
+            "effective_to_0": "",
+            "effective_to_1": "",
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "already serves")
@@ -485,14 +630,18 @@ class DeviceScreenTests(TestCase):
         add = reverse("devices:device_department_add", args=[self.device.public_id])
         self.client.post(add, {
             "department": self.department.pk,
-            "effective_from": "2026-09-01T00:00",
-            "effective_to": "2026-09-10T00:00",
+            "effective_from_0": "2026-09-01",
+            "effective_from_1": "00:00",
+            "effective_to_0": "2026-09-10",
+            "effective_to_1": "00:00",
         }, follow=True)
 
         response = self.client.post(add, {
             "department": self.department.pk,
-            "effective_from": "2026-09-10T00:00",
-            "effective_to": "",
+            "effective_from_0": "2026-09-10",
+            "effective_from_1": "00:00",
+            "effective_to_0": "",
+            "effective_to_1": "",
         }, follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(DeviceDepartment.all_objects.count(), 2)
@@ -504,13 +653,17 @@ class DeviceScreenTests(TestCase):
         add = reverse("devices:device_department_add", args=[self.device.public_id])
         self.client.post(add, {
             "department": self.department.pk,
-            "effective_from": "2026-09-01T00:00",
-            "effective_to": "",
+            "effective_from_0": "2026-09-01",
+            "effective_from_1": "00:00",
+            "effective_to_0": "",
+            "effective_to_1": "",
         }, follow=True)
         response = self.client.post(add, {
             "department": other.pk,
-            "effective_from": "2026-09-01T00:00",
-            "effective_to": "",
+            "effective_from_0": "2026-09-01",
+            "effective_from_1": "00:00",
+            "effective_to_0": "",
+            "effective_to_1": "",
         }, follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(DeviceDepartment.all_objects.count(), 2)

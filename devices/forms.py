@@ -15,7 +15,7 @@ from django import forms
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
-from common.forms import StyledFormMixin
+from common.forms import CompanyDateTimeField, StyledFormMixin
 from devices.models import (
     BiometricDevice,
     DeviceDepartment,
@@ -96,6 +96,12 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         required=False, initial=True, label="Push punches in real time",
         help_text="When off, the device only uploads on its timed interval.",
     )
+    installed_at = CompanyDateTimeField(
+        required=False,
+        label="Installed at",
+        placeholder="Select install date",
+        help_text="Date and 24-hour time, in company time. Leave blank if unknown.",
+    )
     server_address = forms.CharField(
         required=False,
         max_length=255,
@@ -124,11 +130,6 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
             "name", "serial_number", "branch", "device_model",
             "external_device_id", "timezone", "installed_at", "status",
         )
-        widgets = {
-            "installed_at": forms.DateTimeInput(
-                attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
-            ),
-        }
         help_texts = {
             "serial_number": (
                 "Exactly as printed on the device. It is how an inbound push is "
@@ -280,6 +281,14 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
 
     device = forms.ModelChoiceField(queryset=BiometricDevice.all_objects.none())
     employee = forms.ModelChoiceField(queryset=Employee.all_objects.none())
+    effective_from = CompanyDateTimeField(
+        label="Effective from", placeholder="Select start date",
+        help_text="Date and 24-hour time, in company time.",
+    )
+    effective_to = CompanyDateTimeField(
+        required=False, label="Effective to", placeholder="Select end date",
+        help_text="Leave blank while the enrollment is open-ended.",
+    )
 
     class Meta:
         model = DeviceEnrollment
@@ -288,14 +297,6 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
             "attendance_enabled", "assigned_device_authorized",
             "effective_from", "effective_to",
         )
-        widgets = {
-            "effective_from": forms.DateTimeInput(
-                attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
-            ),
-            "effective_to": forms.DateTimeInput(
-                attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
-            ),
-        }
         labels = {
             "device_user_id": "Device user number",
             "attendance_enabled": "Attendance enabled",
@@ -314,7 +315,6 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
                 "Only consulted in assigned-devices mode. Leave off for a "
                 "recognition-only enrollment."
             ),
-            "effective_to": "Leave blank while the enrollment is open-ended.",
         }
 
     def __init__(self, *args, **kwargs):
@@ -408,21 +408,18 @@ class DeviceDepartmentForm(StyledFormMixin, forms.ModelForm):
     """
 
     department = forms.ModelChoiceField(queryset=CompanyDepartment.all_objects.none())
+    effective_from = CompanyDateTimeField(
+        label="Effective from", placeholder="Select start date",
+        help_text="Date and 24-hour time, in company time.",
+    )
+    effective_to = CompanyDateTimeField(
+        required=False, label="Effective to", placeholder="Select end date",
+        help_text="Leave blank while the mapping is open-ended.",
+    )
 
     class Meta:
         model = DeviceDepartment
         fields = ("department", "effective_from", "effective_to")
-        widgets = {
-            "effective_from": forms.DateTimeInput(
-                attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
-            ),
-            "effective_to": forms.DateTimeInput(
-                attrs={"type": "datetime-local"}, format="%Y-%m-%dT%H:%M"
-            ),
-        }
-        help_texts = {
-            "effective_to": "Leave blank while the mapping is open-ended.",
-        }
 
     def __init__(self, *args, device=None, **kwargs):
         super().__init__(*args, **kwargs)

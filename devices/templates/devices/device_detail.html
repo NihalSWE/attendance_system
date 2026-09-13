@@ -27,7 +27,7 @@
             <a class="btn btn--primary" href="{% url 'devices:enrollment_create' %}?device={{ device.pk }}">
                 Enroll an employee
             </a>
-            <a class="btn btn--secondary" href="{% url 'devices:device_users' device.public_id %}">
+            <a class="btn btn--ghost" href="{% url 'devices:device_users' device.public_id %}">
                 Users
             </a>
             <a class="btn btn--ghost" href="{% url 'devices:enrollment_list' %}?device={{ device.pk }}">
@@ -178,7 +178,7 @@
                         <form method="post" action="{% url 'devices:device_command' device.public_id %}">
                             {% csrf_token %}
                             <input type="hidden" name="command" value="{{ key }}">
-                            <button class="btn btn--secondary" type="submit"
+                            <button class="btn btn--ghost" type="submit"
                                     {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
                                 {{ label }}
                             </button>
@@ -248,7 +248,7 @@
                                             </label>
                                             <input class="input" type="number" id="value-{{ opt.key }}"
                                                    name="value" value="{{ opt.current }}">
-                                            <button class="btn btn--secondary" type="submit"
+                                            <button class="btn btn--ghost" type="submit"
                                                     {% if device.status == 'retired' %}disabled title="This device is retired"{% endif %}>
                                                 Queue
                                             </button>

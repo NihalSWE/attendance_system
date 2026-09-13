@@ -30,7 +30,7 @@
             </p>
         </div>
         <div class="page__actions">
-            <a class="btn btn--secondary" href="{% url 'devices:device_detail' message.device.public_id %}">
+            <a class="btn btn--ghost" href="{% url 'devices:device_detail' message.device.public_id %}">
                 {{ message.device.name }}
             </a>
             <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ message.device.pk }}">

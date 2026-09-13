@@ -49,7 +49,7 @@
             <form method="post" action="{% url 'devices:device_users_sync' device.public_id %}"
                   onsubmit="return confirm('Create {{ unmapped_count }} draft employee record(s) from this device? They will be recognition-only until you authorise them.')">
                 {% csrf_token %}
-                <button class="btn btn--secondary" type="submit">
+                <button class="btn btn--ghost" type="submit">
                     Create employees for the unmapped users
                 </button>
             </form>
@@ -95,7 +95,7 @@
                     </option>
                 </select>
             </div>
-            <button class="btn btn--secondary" type="submit">
+            <button class="btn btn--ghost" type="submit">
                 Apply
             </button>
         </form>

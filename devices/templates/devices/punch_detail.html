@@ -34,7 +34,7 @@
         </div>
         <div class="page__actions">
             {% if punch.device_enrollment_id %}
-                <a class="btn btn--secondary" href="{% url 'devices:enrollment_edit' punch.device_enrollment_id %}">
+                <a class="btn btn--ghost" href="{% url 'devices:enrollment_edit' punch.device_enrollment_id %}">
                     Open the enrollment used
                 </a>
             {% endif %}
