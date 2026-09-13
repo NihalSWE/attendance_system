@@ -441,7 +441,7 @@ connects back. **Every row is placed in a step of the 2026-09-13 plan below**
 | Employee code shown in the leave form's employee picker | Names only; two people with one name look alike | Record leave form |
 | Attendance corrections (manual fixes to a day) | A missed punch stays absent / half day | Attendance record → payroll |
 | Breaks and multiple IN/OUT sessions (`AttendanceSession`, `PunchAllocation`) | Only first IN and last OUT count | Worked minutes |
-| Late, absence and repeated-lateness penalty rules | Late minutes recorded, not deducted | Payroll deduction lines |
+| ~~Late, absence and repeated-lateness penalty rules~~ — **built 2026-09-13 (A4)**; time out of the office waits for N1, a rolling window across months is not offered yet | — | Payroll deduction lines |
 | Overtime review, approval and pay | Not paid | Payroll earning lines |
 | Employee-level shift override, rotating shifts | Everyone works their department's shift (or the company shift) | Which shift a day is measured against |
 | Holiday / weekly-off work assignments (`HolidayWorkAssignment`) | Working a holiday is not paid extra | Payroll earning lines |
@@ -450,7 +450,7 @@ connects back. **Every row is placed in a step of the 2026-09-13 plan below**
 | Mid-month salary change (compensation segments / proration) | The rate in force at month end is used for the whole month | Payroll record |
 | Joining or leaving mid-month (proration rules) | Only days on the payroll are counted | Payroll record |
 | Salary structure: allowances and components | Base rate only | Payroll lines |
-| ~~**Company salary settings**~~ — **built 2026-09-13 (A3)**; still to come on the same page: **penalty rules** (`AttendancePenaltyRule` §36, A4), overtime method (A9), daily/hourly rate conversion for overtime (A9) | Penalties are not deducted yet | Payroll deduction lines |
+| ~~**Company salary settings**~~ — **built 2026-09-13 (A3)**; ~~**penalty rules**~~ — **built 2026-09-13 (A4)**; still to come on the same page: overtime method and daily/hourly rate conversion for overtime (A9) | — | Payroll lines |
 | **Finalise / lock a payroll run**, approval steps, correction/reversal after finalising | Runs stay draft and are regenerated; nothing is locked | Payroll run |
 | Manual bonus / deduction lines on a salary | Not available | Payroll lines (`is_manual` already exists) |
 | Attendance review status and manual day corrections; the *Incomplete* (missing OUT) decision | A missing OUT is counted as present and flagged | Attendance record |
@@ -545,7 +545,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A1 | **File cache-busting** ⬆ — ✅ done 2026-09-13 | After a CSS/JS change the browser loads the new file without Ctrl+F5 | — | Static file cache-busting |
 | A2 | **Holiday year calendar** ⬆ — ✅ done 2026-09-13 | A full-year calendar to pick many holiday dates at once, with month and year navigation | — | Holiday year calendar |
 | A3 | **Company salary settings** — ✅ done 2026-09-13 | Salary settings page with dated versions (`PayrollSettings`, `PayrollPolicyVersion`): monthly divisor (30 / days in month / working days), daily and hourly rate method, weekly off / holiday pay by pay type, half-day and Incomplete treatment, currency. Payroll reads them instead of constants; each run records the version used; every company starts on today's rules | 2 | Company salary settings |
-| A4 | **Penalty rules** (on the salary settings page) | `AttendancePenaltyRule`: late (per minute, or N late days = one day's pay), absence, repeated lateness; deduction lines on the payslip | 2 | Penalty rules |
+| A4 | **Penalty rules** (on the salary settings page) — ✅ done 2026-09-13 | `AttendancePenaltyRule`: late (per minute, or N late days = one day's pay), absence, repeated lateness; deduction lines on the payslip | 2 | Penalty rules |
 | A5 | **Shifts** | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
 | A6 | **Logins** | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
 | A7 | **Employee panel** | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
@@ -642,6 +642,61 @@ linked from the Salary page; the sidebar keeps Payroll active.
   `payroll/tests_basic.py`). Checked in a browser at 1440, 768 and 375 px.
   **No new .env variables.** After pulling: `python manage.py migrate`.
 
+**A4 — penalty rules (done 2026-09-13, branch `feature/a4-penalty-rules`,
+stacked on A3; built in a separate worktree, `D:\attendance_device_a4`, so
+Ajay's running server was not touched while he checked A3).**
+
+- **Models** (migration `payroll/0003_penalty_rules`, additive only):
+  `AttendancePenaltyRule` §36 (`payroll_attendance_penalty_rule`),
+  `PenaltyAssessment` §37 (`payroll_penalty_assessment`),
+  `PenaltyAssessmentAttendance` §38 (`payroll_penalty_assessment_attendance`),
+  and `PayrollLine.source_type` + `PayrollLine.penalty_assessment` (§65).
+- **Deviation, on purpose:** the dictionary lists §36–38 with the attendance
+  models; they are in the **payroll app** (same table names) because they are
+  salary settings and the attendance app is Nihal's — two sides adding
+  migrations to one app would collide.
+- **Versioned like the salary rules** (`payroll/penalties.py`): `code` names a
+  rule across versions; change = new version from the 1st of a month (the one
+  in force closes, one starting the same month is replaced, a later saved
+  change refuses an earlier one); stop = no longer applies from a month.
+  Audit: `penalty_rule.created/changed/stopped`, `penalty.waived`.
+- **What a rule measures:** arriving late (`late_minutes`), leaving early
+  (scheduled end − last OUT), working less than the shift (expected − worked),
+  an absent day. `outside_minutes` is stored but not offered until N1's
+  pairing. Operators: at least / more than / at most / less than / exactly.
+- **How often:** every day it happens; every N qualifying days in the month
+  (7 late days with N=3 → 2 penalties); N working days in a row (weekly offs
+  and holidays skipped; leave, absence or a non-qualifying day breaks the run;
+  `sequence_break_policy` holds this, defaults only). Runs and counts stay
+  inside the month; `rolling_window` is stored but not offered.
+- **What it deducts:** the minutes themselves (for an absent day, the day's
+  shift minutes), a fixed number of minutes, part of a day, a full day, or a
+  fixed amount. A day's value is the monthly per-day value from the salary
+  rules (falls back to ÷ the fixed days when absence is not prorated), the
+  daily rate, or the hourly rate × shift hours; a minute's value is a day ÷
+  the shift's expected minutes (hourly: rate ÷ 60).
+- **Stacking:** rules in the same group don't add up on one day — the larger
+  single-day deduction counts; otherwise rules add up. A rule's "at most per
+  month" and the salary setting "penalties can take at most X% of pay"
+  (`maximum_period_deduction_percent`, now on the salary settings form) scale
+  amounts down proportionally; the assessment records `capped`.
+- **In salary generation:** one `PENALTY` deduction line per penalty
+  (description = rule name + dates), linked to its `PenaltyAssessment`
+  (status `proposed`) and the attendance days behind it. Regenerating a draft
+  recalculates proposed penalties; **waived ones are kept and not charged
+  again** (matched by `occurrence_identity` = employee + rule code/version +
+  first/last date). The run's snapshot records penalty count, amount and the
+  rule versions used.
+- **Waive:** a draft payslip lists its penalties with days, minutes and a
+  Waive button; waiving regenerates that month's draft. Undoing a waiver is
+  not built.
+- An absence rule deducts **on top of** the absence setting (the help text
+  says so), per LEAVE_AND_SALARY_MANAGEMENT.md §6.
+- 23 new tests (`payroll/tests_penalties.py`, and an end-to-end test in
+  `payroll/tests_basic.py`). Checked in a browser at 1440, 768 and 375 px on
+  a payslip generated from a demo month. **No new .env variables.** After
+  pulling: `python manage.py migrate`.
+
 #### Keeping the two sides apart
 
 - **The contract is `AttendanceRecord`.** Payroll reads `attendance_status`,
@@ -702,7 +757,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1, A2 and A3 done 2026-09-13; next for Ajay's session: A4 (penalty rules, on the salary settings page). Nihal: N0 then N1 (pairing). Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1–A4 done 2026-09-13; next for Ajay's session: A5 (shifts). Nihal: N0 then N1 (pairing). Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
