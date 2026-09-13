@@ -450,7 +450,7 @@ connects back. **Every row is placed in a step of the 2026-09-13 plan below**
 | Mid-month salary change (compensation segments / proration) | The rate in force at month end is used for the whole month | Payroll record |
 | Joining or leaving mid-month (proration rules) | Only days on the payroll are counted | Payroll record |
 | Salary structure: allowances and components | Base rate only | Payroll lines |
-| **Company salary settings** (`PayrollSettings` §54, `PayrollPolicyVersion` §55): monthly divisor, proration method, daily/hourly rate method, leave and absence treatment, overtime method; and **penalty rules** (`AttendancePenaltyRule` §36) | The ÷30 divisor and every method are fixed in code for all companies | Payroll calculation reads the company's policy instead of constants |
+| ~~**Company salary settings**~~ — **built 2026-09-13 (A3)**; still to come on the same page: **penalty rules** (`AttendancePenaltyRule` §36, A4), overtime method (A9), daily/hourly rate conversion for overtime (A9) | Penalties are not deducted yet | Payroll deduction lines |
 | **Finalise / lock a payroll run**, approval steps, correction/reversal after finalising | Runs stay draft and are regenerated; nothing is locked | Payroll run |
 | Manual bonus / deduction lines on a salary | Not available | Payroll lines (`is_manual` already exists) |
 | Attendance review status and manual day corrections; the *Incomplete* (missing OUT) decision | A missing OUT is counted as present and flagged | Attendance record |
@@ -544,7 +544,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 |---|---|---|---|---|
 | A1 | **File cache-busting** ⬆ — ✅ done 2026-09-13 | After a CSS/JS change the browser loads the new file without Ctrl+F5 | — | Static file cache-busting |
 | A2 | **Holiday year calendar** ⬆ — ✅ done 2026-09-13 | A full-year calendar to pick many holiday dates at once, with month and year navigation | — | Holiday year calendar |
-| A3 | **Company salary settings** | Salary settings page with dated versions (`PayrollSettings`, `PayrollPolicyVersion`): monthly divisor (30 / days in month / working days), daily and hourly rate method, weekly off / holiday pay by pay type, half-day and Incomplete treatment, currency. Payroll reads them instead of constants; each run records the version used; every company starts on today's rules | 2 | Company salary settings |
+| A3 | **Company salary settings** — ✅ done 2026-09-13 | Salary settings page with dated versions (`PayrollSettings`, `PayrollPolicyVersion`): monthly divisor (30 / days in month / working days), daily and hourly rate method, weekly off / holiday pay by pay type, half-day and Incomplete treatment, currency. Payroll reads them instead of constants; each run records the version used; every company starts on today's rules | 2 | Company salary settings |
 | A4 | **Penalty rules** (on the salary settings page) | `AttendancePenaltyRule`: late (per minute, or N late days = one day's pay), absence, repeated lateness; deduction lines on the payslip | 2 | Penalty rules |
 | A5 | **Shifts** | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
 | A6 | **Logins** | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
@@ -599,6 +599,48 @@ holiday list ("Holiday calendar", primary) and the Shifts overview.
   horizontal overflow, no console errors.
 - **After pulling:** restart the dev server once — the scheduling app has its
   first `static/` folder, which a running server does not see.
+
+**A3 — company salary settings (done 2026-09-13, branch
+`feature/a3-salary-settings`, stacked on A2).** New page
+`payroll:salary_settings` at `/salary/settings/` (owner / company admin),
+linked from the Salary page; the sidebar keeps Payroll active.
+
+- **Models** (migration `payroll/0002_salary_settings`, additive only; the
+  user runs `migrate`): `PayrollPolicyVersion` with every §55 field
+  (`payroll_policy_version`) and `PayrollSettings` §54 (`payroll_settings`),
+  plus `PayrollRun.policy_version`.
+- **Deviations from the dictionary, on purpose:** `PayrollRun.policy_version`
+  is nullable — null means the standard rules, used before a company saves
+  its own; `PayrollSettings.default_salary_structure` is not added until the
+  salary structure tables exist (A11).
+- **Versions:** each starts on the 1st of a month; a month uses the version in
+  force on its first day. Saving closes the version in force the day before,
+  replaces (status `retired`, shown "Replaced") one that starts the same
+  month, and is refused if a change is already saved for a later month.
+  Active versions cannot overlap (exclusion constraint
+  `excl_payroll_policy_active_overlap`). Audit: `payroll.rules_changed`,
+  `payroll.settings_updated`.
+- **What the calculation reads** (`payroll/policy.py` `SalaryRules`,
+  `payroll/services.py` `calculate_pay`): one day of a monthly salary (÷ fixed
+  days, ÷ days in the month, ÷ working days); absence by day, by minutes short
+  of the shift (shift length less an unpaid break), or only through penalty
+  rules; half-day pay %; a day without a check-out (full / half / unpaid);
+  paid holidays and weekly offs for daily and hourly staff; net rounding with
+  a visible Rounding line; salary below zero allowed or not. Stored in the
+  version's fields and `calculation_config` (validated keys only).
+- **Standard rules** = the 2026-09-12 formula, with one correction: an hourly
+  employee's day without a check-out is paid the shift's hours (it paid 0),
+  the same as monthly and daily staff.
+- Stored but not on the page until their step: overtime fields (A9),
+  penalty stacking and deduction caps (A4), recovery cap (A13), daily/hourly
+  rate conversion (A9), joining/leaving proration (A11), leave treatments
+  (A10).
+- A run records `policy_version` and the rules used (`totals_snapshot["rules"]`,
+  each record's `calculation_snapshot["rules"]`); a payslip names them
+  ("Standard rules" / "Company rules, version N").
+- 27 new tests (`payroll/tests_settings.py`, and an end-to-end test in
+  `payroll/tests_basic.py`). Checked in a browser at 1440, 768 and 375 px.
+  **No new .env variables.** After pulling: `python manage.py migrate`.
 
 #### Keeping the two sides apart
 
@@ -660,7 +702,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1 and A2 done 2026-09-13; next for Ajay's session: A3 (company salary settings). Nihal: N0 then N1 (pairing). Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1, A2 and A3 done 2026-09-13; next for Ajay's session: A4 (penalty rules, on the salary settings page). Nihal: N0 then N1 (pairing). Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 

@@ -925,3 +925,19 @@ when the file's modification time moves. Because it is the storage, every
 `static/` folder once, at start-up. An app that gets its *first* `static/`
 folder returns 404 for those files until the server restarts, and editing a
 template does not restart it.
+
+## Lesson 21 — `--keepdb` with `--parallel` keeps stale copies after a migration
+
+**What happened.** After adding `payroll/0002`, the full suite
+(`--parallel 4 --keepdb`) died with `TypeError: cannot pickle 'traceback'
+object`, which hides the real error. Every payroll test passed when run on
+its own. `--keepdb` migrates the main test database, but it keeps the four
+per-worker copies (`test_attendance_device_1` … `_4`) as they were, so the
+workers ran against tables without the new column. Run again without
+`--keepdb`, the same code passed: 586 tests.
+
+**The rule.** After pulling or writing a **new migration**, run the full
+suite once with fresh databases: `python manage.py test --parallel 4
+--noinput` (no `--keepdb`). Between migrations, `--keepdb` stays the fast
+default. If a parallel run fails with the pickle error, re-run the failing
+app without `--parallel` to see the real traceback.
