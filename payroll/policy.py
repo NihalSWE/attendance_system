@@ -40,6 +40,7 @@ RULE_FIELDS = (
     "money_rounding_increment",
     "money_rounding_mode",
     "allow_negative_net_pay",
+    "maximum_period_deduction_percent",
 )
 CONFIG_FIELDS = tuple(Version.CONFIG_DEFAULTS)
 GENERAL_FIELDS = ("currency", "default_pay_day")
@@ -65,6 +66,7 @@ class SalaryRules:
     allow_negative: bool
     rounding_increment: Decimal
     rounding_mode: str
+    max_penalty_percent: object = None  # Decimal, or None for no limit
 
     @classmethod
     def from_version(cls, version):
@@ -81,6 +83,7 @@ class SalaryRules:
             allow_negative=source.allow_negative_net_pay,
             rounding_increment=Decimal(source.money_rounding_increment),
             rounding_mode=source.money_rounding_mode,
+            max_penalty_percent=source.maximum_period_deduction_percent,
         )
 
     def round_net(self, value):
@@ -104,6 +107,9 @@ class SalaryRules:
             "hourly_paid_days_off": self.hourly_paid_days_off,
             "allow_negative": self.allow_negative,
             "rounding": f"{self.rounding_mode} {plain(self.rounding_increment)}",
+            "max_penalty_percent": (
+                plain(self.max_penalty_percent) if self.max_penalty_percent is not None else None
+            ),
         }
 
 

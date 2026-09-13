@@ -224,6 +224,9 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
             errors["calculation_config"] = "A half day's pay must be between 0% and 100%."
         if config.get("incomplete_day_treatment", "pay_full") not in dict(self.INCOMPLETE_CHOICES):
             errors["calculation_config"] = "Unknown treatment for an incomplete day."
+        cap = self.maximum_period_deduction_percent
+        if cap is not None and not (Decimal("0") < cap <= Decimal("100")):
+            errors["maximum_period_deduction_percent"] = "Use a percentage above 0 and up to 100."
         if errors:
             raise ValidationError(errors)
 
@@ -274,6 +277,252 @@ class PayrollSettings(TenantOwned, ActorTracked):
 
     def __str__(self):
         return f"Salary settings {self.company_id}"
+
+
+class AttendancePenaltyRule(TenantOwned, ActorTracked):
+    """When attendance costs salary, and how much (dictionary §36).
+
+    Lives in the payroll app (tables keep their planned ``payroll_*`` names)
+    because it is a salary setting and the attendance app is Nihal's
+    workstream. Versioned like the salary rules: ``code`` names the rule across
+    versions, a change is a new version from the 1st of a month, and a month
+    uses the versions in force on its first day.
+    """
+
+    class Metric(models.TextChoices):
+        LATE_MINUTES = "late_minutes", "Arriving late"
+        EARLY_OUT_MINUTES = "early_out_minutes", "Leaving early"
+        WORKED_SHORTFALL = "worked_shortfall", "Working less than the shift"
+        OUTSIDE_MINUTES = "outside_minutes", "Time out of the office"
+        ABSENCE = "absence", "An absent day"
+
+    class Operator(models.TextChoices):
+        GTE = "gte", "at least"
+        GT = "gt", "more than"
+        LTE = "lte", "at most"
+        LT = "lt", "less than"
+        EQUAL = "equal", "exactly"
+
+    class OccurrenceMode(models.TextChoices):
+        SINGLE_DAY = "single_day", "Every day it happens"
+        WITHIN_PERIOD = "within_period", "Every so many days in a month"
+        CONSECUTIVE_WORKDAYS = "consecutive_workdays", "So many working days in a row"
+        ROLLING_WINDOW = "rolling_window", "So many days within a rolling window"
+
+    class DeductionMethod(models.TextChoices):
+        ACTUAL_MINUTES = "actual_minutes", "The minutes themselves"
+        FIXED_MINUTES = "fixed_minutes", "A fixed number of minutes"
+        DAY_FRACTION = "day_fraction", "Part of a day's pay"
+        FULL_DAY = "full_day", "A full day's pay"
+        FIXED_AMOUNT = "fixed_amount", "A fixed amount"
+
+    class Stacking(models.TextChoices):
+        HIGHEST_ONLY = "highest_only", "Only the largest in its group"
+        ADDITIVE = "additive", "Adds up with other rules"
+        CAPPED = "capped", "Adds up, capped per month"
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ACTIVE = "active", "Active"
+        RETIRED = "retired", "Replaced"
+
+    MINUTE_METRICS = (
+        Metric.LATE_MINUTES, Metric.EARLY_OUT_MINUTES,
+        Metric.WORKED_SHORTFALL, Metric.OUTSIDE_MINUTES,
+    )
+    # How a run of working days in a row treats days that are not working days.
+    DEFAULT_SEQUENCE_POLICY = {
+        "weekly_off": "skip", "holiday": "skip", "leave": "break", "absent": "break",
+    }
+
+    name = models.CharField(max_length=120)
+    code = models.CharField(max_length=32)
+    metric = models.CharField(max_length=24, choices=Metric.choices)
+    operator = models.CharField(max_length=8, choices=Operator.choices, default=Operator.GTE)
+    threshold_minutes = models.PositiveIntegerField(null=True, blank=True)
+    required_occurrences = models.PositiveIntegerField(default=1)
+    occurrence_mode = models.CharField(
+        max_length=24, choices=OccurrenceMode.choices, default=OccurrenceMode.SINGLE_DAY
+    )
+    rolling_window_days = models.PositiveIntegerField(null=True, blank=True)
+    sequence_break_policy = models.JSONField(default=dict, blank=True)
+    deduction_method = models.CharField(max_length=16, choices=DeductionMethod.choices)
+    deduction_value = models.DecimalField(
+        max_digits=14, decimal_places=4, default=Decimal("0")
+    )
+    priority = models.IntegerField(default=0)
+    exclusive_group = models.CharField(max_length=40, blank=True, null=True)
+    stacking_policy = models.CharField(
+        max_length=16, choices=Stacking.choices, default=Stacking.ADDITIVE
+    )
+    maximum_deduction = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
+    effective_from = models.DateField()
+    effective_to = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    version = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        db_table = "payroll_attendance_penalty_rule"
+        ordering = ("name", "-version")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "code", "version"], name="uniq_penalty_rule_version"
+            ),
+            ExclusionConstraint(
+                name="excl_penalty_rule_active_overlap",
+                expressions=[
+                    ("company", RangeOperators.EQUAL),
+                    ("code", RangeOperators.EQUAL),
+                    (_DATE_PERIOD, RangeOperators.OVERLAPS),
+                ],
+                condition=models.Q(status="active"),
+            ),
+            models.CheckConstraint(
+                condition=models.Q(required_occurrences__gte=1),
+                name="chk_penalty_rule_occurrences",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(deduction_value__gte=0),
+                name="chk_penalty_rule_value_nonnegative",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(effective_to__isnull=True)
+                | models.Q(effective_to__gt=models.F("effective_from")),
+                name="chk_penalty_rule_period_order",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} v{self.version}"
+
+    def sequence_policy(self):
+        return {**self.DEFAULT_SEQUENCE_POLICY, **(self.sequence_break_policy or {})}
+
+    def clean(self):
+        """Rule inputs must agree with the metric and the deduction method."""
+        super().clean()
+        errors = {}
+        if self.effective_from and self.effective_from.day != 1:
+            errors["effective_from"] = "Penalty rules start on the 1st of a month."
+        if self.metric in self.MINUTE_METRICS:
+            if self.threshold_minutes is None:
+                errors["threshold_minutes"] = "Say how many minutes."
+        else:
+            # An absent day has no minutes to compare.
+            self.threshold_minutes = None
+        if self.occurrence_mode == self.OccurrenceMode.SINGLE_DAY:
+            self.required_occurrences = 1
+        elif self.required_occurrences < 2:
+            errors["required_occurrences"] = "Use 2 or more days, or choose “Every day it happens”."
+        if self.occurrence_mode == self.OccurrenceMode.ROLLING_WINDOW and not self.rolling_window_days:
+            errors["rolling_window_days"] = "Say how many days the window covers."
+        value = self.deduction_value or Decimal("0")
+        if self.deduction_method == self.DeductionMethod.FIXED_MINUTES and value <= 0:
+            errors["deduction_value"] = "Say how many minutes to deduct."
+        elif self.deduction_method == self.DeductionMethod.DAY_FRACTION and not (
+            Decimal("0") < value <= Decimal("31")
+        ):
+            errors["deduction_value"] = "Use a number of days above 0, e.g. 0.5 for half a day."
+        elif self.deduction_method == self.DeductionMethod.FIXED_AMOUNT and value <= 0:
+            errors["deduction_value"] = "Say the amount to deduct."
+        if self.maximum_deduction is not None and self.maximum_deduction <= 0:
+            errors["maximum_deduction"] = "Leave empty for no limit, or use an amount above 0."
+        # The stacking policy follows from the inputs rather than being set twice.
+        if self.exclusive_group:
+            self.stacking_policy = self.Stacking.HIGHEST_ONLY
+        elif self.maximum_deduction:
+            self.stacking_policy = self.Stacking.CAPPED
+        else:
+            self.stacking_policy = self.Stacking.ADDITIVE
+        if errors:
+            raise ValidationError(errors)
+
+
+class PenaltyAssessment(TenantOwned):
+    """One penalty an employee actually incurred in a month (dictionary §37).
+
+    Drafted by salary generation as ``proposed``; regenerating a draft
+    replaces the proposed ones but keeps a ``waived`` one, matched by its
+    stable ``occurrence_identity``, so a waiver survives regeneration.
+    """
+
+    class Status(models.TextChoices):
+        PROPOSED = "proposed", "Proposed"
+        APPROVED = "approved", "Approved"
+        WAIVED = "waived", "Waived"
+        POSTED = "posted", "Posted"
+        REVERSED = "reversed", "Reversed"
+
+    employee = models.ForeignKey(
+        "employees.Employee", on_delete=models.PROTECT, related_name="penalty_assessments"
+    )
+    penalty_rule = models.ForeignKey(
+        AttendancePenaltyRule, on_delete=models.PROTECT, related_name="assessments"
+    )
+    payroll_period = models.ForeignKey(
+        "payroll.PayrollPeriod", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="penalty_assessments",
+    )
+    period_start = models.DateField()
+    period_end = models.DateField()
+    occurrence_identity = models.CharField(max_length=160)
+    occurrence_count = models.PositiveIntegerField(default=1)
+    deduction_minutes = models.PositiveIntegerField(default=0)
+    deduction_day_fraction = models.DecimalField(max_digits=8, decimal_places=4, default=Decimal("0"))
+    deduction_amount = models.DecimalField(max_digits=14, decimal_places=2, default=ZERO)
+    currency = models.CharField(max_length=3, default="BDT")
+    calculation_details = models.JSONField(default=dict, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PROPOSED)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="decided_penalty_assessments",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    reversal_of = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.PROTECT, related_name="reversals"
+    )
+    calculated_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "payroll_penalty_assessment"
+        ordering = ("period_start", "pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "occurrence_identity"],
+                condition=~models.Q(status="reversed"),
+                name="uniq_penalty_occurrence",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.penalty_rule_id} {self.employee_id} {self.deduction_amount}"
+
+
+class PenaltyAssessmentAttendance(TenantOwned):
+    """The attendance days behind one penalty (dictionary §38)."""
+
+    penalty_assessment = models.ForeignKey(
+        PenaltyAssessment, on_delete=models.PROTECT, related_name="days"
+    )
+    attendance_record = models.ForeignKey(
+        "attendance.AttendanceRecord", on_delete=models.PROTECT,
+        related_name="penalty_links",
+    )
+    sequence_number = models.PositiveIntegerField(default=1)
+    qualifying_value = models.DecimalField(max_digits=10, decimal_places=2, default=ZERO)
+    reason_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "payroll_penalty_assessment_attendance"
+        ordering = ("sequence_number",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["penalty_assessment", "attendance_record"],
+                name="uniq_penalty_assessment_day",
+            ),
+        ]
 
 
 class PayrollPeriod(TenantOwned, ActorTracked):
@@ -376,6 +625,13 @@ class PayrollLine(TenantOwned):
         PayrollRecord, on_delete=models.PROTECT, related_name="lines"
     )
     line_type = models.CharField(max_length=16, choices=LineType.choices)
+    # What caused the line (dictionary §65). Only "penalty" carries a typed
+    # source so far; the other sources arrive with their features.
+    source_type = models.CharField(max_length=24, blank=True, default="")
+    penalty_assessment = models.ForeignKey(
+        PenaltyAssessment, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="payroll_lines",
+    )
     code = models.CharField(max_length=32)
     description = models.CharField(max_length=255)
     quantity = models.DecimalField(max_digits=10, decimal_places=2, default=ZERO)

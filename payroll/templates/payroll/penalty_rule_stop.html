@@ -1,0 +1,61 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Stop {{ rule.name }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'payroll:salary_settings' %}#penalty-rules">
+            Salary settings
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Stop a penalty rule
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Stop {{ rule.name }}
+            </h1>
+            <p class="page__sub">
+                The rule no longer applies from the month you choose. Earlier months keep it, so
+                their salary does not change.
+            </p>
+        </div>
+    </div>
+    <div class="form-page">
+        <div class="card">
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <div class="card__body stack">
+                    {% if form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {% for error in form.non_field_errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="grid grid--2">
+                        {% for field in form %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="card__foot">
+                    <button class="btn btn--danger" type="submit">
+                        Stop the rule
+                    </button>
+                    <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}#penalty-rules">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}

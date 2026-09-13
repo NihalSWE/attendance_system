@@ -22,7 +22,7 @@ import datetime
 from collections import Counter
 from decimal import ROUND_HALF_UP, Decimal
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -35,12 +35,15 @@ from employees.models import EmployeeCompensation
 from organization.services import require_structure_manager
 from payroll.models import (
     PayrollLine,
+    PenaltyAssessment,
+    PenaltyAssessmentAttendance,
     PayrollPeriod,
     PayrollPolicyVersion,
     PayrollRecord,
     PayrollRun,
     PayrollSettings,
 )
+from payroll.penalties import PayValue, assess, rules_in_force
 from payroll.policy import STANDARD_RULES, plain, rules_for
 
 CENT = Decimal("0.01")
@@ -184,8 +187,14 @@ def _day_pay(record, rules):
     return Decimal("0")
 
 
-def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30):
-    """Lines and totals for one employee. Pure: no database writes."""
+def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
+                  penalty_rules=(), waived=frozenset(), employee_key=""):
+    """Lines and totals for one employee. Pure: no database writes.
+
+    ``penalty_rules`` add one deduction line per penalty found; the
+    penalties themselves come back in ``result["penalties"]`` as
+    ``(line index, Occurrence)`` so the caller can store them.
+    """
     rules = rules or STANDARD_RULES
     counts = summarise(records)
     rate = Decimal(rate)
@@ -235,6 +244,27 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30):
                 ))
 
     gross = sum((amount for kind, *_, amount in lines if kind == "earning"), Decimal("0"))
+
+    penalties = []
+    if penalty_rules:
+        per_day = _per_day(rules, rate, records, days_in_month) if pay_basis == "monthly" else None
+        if pay_basis == "monthly" and not per_day:
+            # A penalty needs a day's value even when absence is not prorated.
+            per_day = rate / rules.divisor
+        found = assess(
+            penalty_rules, records, PayValue(pay_basis, rate, per_day, expected_minutes),
+            gross=gross, max_percent=rules.max_penalty_percent,
+            waived=waived, employee_key=employee_key,
+        )
+        for occurrence in found:
+            penalties.append((len(lines), occurrence))
+            lines.append((
+                "deduction", "PENALTY",
+                f"{occurrence.rule.name} ({occurrence.describe_days()})",
+                Decimal(len(occurrence.days)), occurrence.amount / len(occurrence.days),
+                occurrence.amount,
+            ))
+
     deductions = sum((amount for kind, *_, amount in lines if kind == "deduction"), Decimal("0"))
     if not rules.allow_negative:
         # A month of absences cannot produce a negative salary.
@@ -256,7 +286,81 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30):
         "net": money(gross - deductions),
         "counts": dict(counts),
         "rules": rules.describe(),
+        "penalties": penalties,
     }
+
+
+def _store_penalty(company, employee, period, occurrence, currency):
+    """Save one penalty and the attendance days behind it."""
+    rule = occurrence.rule
+    assessment = PenaltyAssessment.objects.create(
+        company=company, employee=employee, penalty_rule=rule, payroll_period=period,
+        period_start=occurrence.first, period_end=occurrence.last,
+        occurrence_identity=f"{employee.pk}:{occurrence.identity}",
+        occurrence_count=len(occurrence.days),
+        deduction_minutes=occurrence.minutes,
+        deduction_day_fraction=occurrence.day_fraction,
+        deduction_amount=occurrence.amount,
+        currency=currency,
+        calculation_details={
+            "rule": f"{rule.code} v{rule.version}",
+            "method": rule.deduction_method,
+            "values": [str(value) for _, value in occurrence.days],
+            **occurrence.details,
+        },
+        calculated_at=timezone.now(),
+    )
+    PenaltyAssessmentAttendance.objects.bulk_create([
+        PenaltyAssessmentAttendance(
+            company=company, penalty_assessment=assessment, attendance_record=record,
+            sequence_number=number, qualifying_value=Decimal(value),
+            reason_snapshot={
+                "status": record.attendance_status, "late_minutes": record.late_minutes,
+                "worked_minutes": record.worked_minutes,
+            },
+        )
+        for number, (record, value) in enumerate(occurrence.days, start=1)
+    ])
+    return assessment
+
+
+@transaction.atomic
+def waive_penalty(*, actor, company_id, assessment_id):
+    """Waive one proposed penalty, then regenerate that month's draft salary.
+
+    The waiver is kept across regenerations: the same occurrence is not
+    charged again while the draft is rebuilt.
+    """
+    membership = require_structure_manager(actor, company_id)
+    with use_company(company_id):
+        assessment = (
+            # Lock only the penalty row: FOR UPDATE cannot reach the nullable
+            # side of the outer join to its period.
+            PenaltyAssessment.objects.select_for_update(of=("self",)).select_related("payroll_period")
+            .filter(pk=assessment_id).first()
+        )
+        if assessment is None:
+            raise PermissionDenied("Penalty not found in this company.")
+        if assessment.status != PenaltyAssessment.Status.PROPOSED:
+            raise ValidationError("Only a penalty on a draft salary can be waived.")
+        assessment.status = PenaltyAssessment.Status.WAIVED
+        assessment.approved_by = actor
+        assessment.approved_at = timezone.now()
+        assessment.save(update_fields=["status", "approved_by", "approved_at"])
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="penalty.waived", obj=assessment,
+            before={"status": "proposed"},
+            after={"status": "waived", "amount": str(assessment.deduction_amount)},
+        )
+        period = assessment.payroll_period
+        employee_id = assessment.employee_id
+    run = generate_payroll(
+        actor=actor, company_id=company_id,
+        year=period.start_date.year, month=period.start_date.month,
+    )
+    with use_company(company_id):
+        return run.records.filter(employee_id=employee_id).first()
 
 
 @transaction.atomic
@@ -270,6 +374,7 @@ def generate_payroll(*, actor, company_id, year, month):
     )
 
     rules = rules_for(company_id, first)
+    penalty_rules = rules_in_force(company_id, first)
 
     with use_company(company_id):
         settings = PayrollSettings.objects.first()
@@ -291,6 +396,18 @@ def generate_payroll(*, actor, company_id, year, month):
             # Regenerating a draft replaces it entirely.
             PayrollLine.objects.filter(payroll_record__payroll_run=run).delete()
             run.records.all().delete()
+        # Proposed penalties are recalculated; a waived one is kept and its
+        # occurrence is not charged again.
+        proposed = PenaltyAssessment.objects.filter(
+            payroll_period=period, status=PenaltyAssessment.Status.PROPOSED
+        )
+        PenaltyAssessmentAttendance.objects.filter(penalty_assessment__in=proposed).delete()
+        proposed.delete()
+        waived = set(
+            PenaltyAssessment.objects.filter(
+                payroll_period=period, status=PenaltyAssessment.Status.WAIVED
+            ).values_list("occurrence_identity", flat=True)
+        )
 
         records_by_employee = {}
         for record in (
@@ -314,6 +431,7 @@ def generate_payroll(*, actor, company_id, year, month):
             result = calculate_pay(
                 compensation.pay_basis, compensation.base_rate, records,
                 rules=rules, days_in_month=last.day,
+                penalty_rules=penalty_rules, waived=waived, employee_key=f"{employee.pk}:",
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,
@@ -329,14 +447,27 @@ def generate_payroll(*, actor, company_id, year, month):
                     "rules": result["rules"],
                 },
             )
+            currency = compensation.currency or default_currency
+            assessments = {
+                index: _store_penalty(
+                    membership.company, employee, period, occurrence, currency
+                )
+                for index, occurrence in result["penalties"]
+            }
             PayrollLine.objects.bulk_create([
                 PayrollLine(
                     company=membership.company, payroll_record=payroll_record,
                     line_type=kind, code=code, description=label,
                     quantity=money(quantity), rate=rate, amount=amount, sequence=index,
+                    penalty_assessment=assessments.get(index),
+                    source_type="penalty" if index in assessments else "",
                 )
                 for index, (kind, code, label, quantity, rate, amount) in enumerate(result["lines"])
             ])
+            totals["penalties"] += len(assessments)
+            totals["penalty_amount"] += sum(
+                (occurrence.amount for _, occurrence in result["penalties"]), Decimal("0")
+            )
             totals["employees"] += 1
             totals["gross"] += result["gross"]
             totals["deductions"] += result["deductions"]
@@ -352,6 +483,9 @@ def generate_payroll(*, actor, company_id, year, month):
             "net": str(money(totals["net"])),
             "skipped_without_salary": skipped,
             "rules": rules.describe(),
+            "penalties": totals["penalties"],
+            "penalty_amount": str(money(totals["penalty_amount"])),
+            "penalty_rules": [f"{rule.code} v{rule.version}" for rule in penalty_rules],
         }
         run.updated_by = actor
         run.save()
