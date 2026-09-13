@@ -1,0 +1,137 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Attendance calendar · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/attendance-calendar.css' %}">
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'attendance/js/calendar.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'dashboard' %}">
+                    Dashboard
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <a href="{% url 'attendance:attendance_list' %}">
+                    Attendance
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Calendar
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Attendance calendar
+            </h1>
+            <p class="page__sub">
+                {{ month_name }} {{ year }}{% if employee %} · {{ employee.full_name }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'attendance:attendance_list' %}?month={{ month }}&year={{ year }}">
+                Table view
+            </a>
+        </div>
+    </div>
+
+    {% if not employee %}
+        <div class="empty">
+            <div class="empty__title">
+                No employees yet
+            </div>
+            <div class="empty__text">
+                Add an employee first; the calendar shows one person's month.
+            </div>
+        </div>
+    {% else %}
+        <div class="card">
+            <div class="card__body">
+                <form class="cal__toolbar" method="get">
+                    <div class="field cal__toolbar-employee">
+                        <label class="field__label" for="employee">
+                            Employee
+                        </label>
+                        <select class="input select js-select2" id="employee" name="employee">
+                            {% for person in employees %}
+                                <option value="{{ person.pk }}" {% if person.pk|stringformat:"s" == employee_id %}selected{% endif %}>
+                                    {{ person.full_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="month">
+                            Month
+                        </label>
+                        <select class="input select js-select" id="month" name="month">
+                            {% for value, name in months %}
+                                <option value="{{ value }}" {% if value == month %}selected{% endif %}>
+                                    {{ name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="year">
+                            Year
+                        </label>
+                        <select class="input select js-select" id="year" name="year">
+                            {% for value in years %}
+                                <option value="{{ value }}" {% if value == year %}selected{% endif %}>
+                                    {{ value }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="cal__toolbar-actions">
+                        <button class="btn btn--primary" type="submit">
+                            Show
+                        </button>
+                        <a class="btn btn--ghost btn--sm"
+                           href="?employee={{ employee_id }}&month={{ previous_month }}&year={{ previous_year }}"
+                           aria-label="Previous month">
+                            ‹ Prev
+                        </a>
+                        <a class="btn btn--ghost btn--sm"
+                           href="?employee={{ employee_id }}&month={{ next_month }}&year={{ next_year }}"
+                           aria-label="Next month">
+                            Next ›
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        {% if not has_any_record %}
+            <div class="alert alert--info" role="status">
+                <div>
+                    <strong>
+                        Nothing has been calculated yet.
+                    </strong>
+                    <p>
+                        Attendance is built from the month's scans, leave and working
+                        calendar — it is not live. Open the
+                        <a href="{% url 'attendance:attendance_list' %}?month={{ month }}&year={{ year }}">table view</a>
+                        and press Calculate, then come back.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card__body">
+                {% include "attendance/includes/attendance_calendar.html" %}
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

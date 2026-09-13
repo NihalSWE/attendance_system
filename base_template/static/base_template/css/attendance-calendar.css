@@ -1,0 +1,413 @@
+/* ============================================================================
+   Attendance calendar — a planner month, not the date picker's little grid.
+
+   Every colour here is a token from tokens.css. The five status families
+   (success / warning / danger / info / neutral) already exist as badges; a day
+   square borrows the same family for a left edge and a wash, so a month reads
+   at a glance without introducing a sixth colour.
+
+   Two renderings of the same days: a seven-column grid down to 768px, and a
+   one-row-per-day list below that. Seven 110px squares cannot be made
+   readable on a 375px screen, and a grid that scrolls sideways is worse than
+   a list — so the list is not a fallback, it is the phone design.
+   ========================================================================= */
+
+/* ---------------------------------------------------------------- toolbar */
+
+.cal__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: var(--s3);
+}
+.cal__toolbar .field {
+    margin: 0;
+    min-width: 140px;
+}
+.cal__toolbar-employee {
+    flex: 1 1 240px;
+}
+.cal__toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    margin-left: auto;
+}
+
+/* ---------------------------------------------------------------- summary */
+
+.cal__summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin-bottom: var(--s4);
+}
+.cal__stat {
+    flex: 1 1 96px;
+    padding: var(--s3);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface-sunken);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.cal__stat--wide {
+    flex: 1 1 140px;
+}
+.cal__stat-value {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.1;
+}
+.cal__stat-label {
+    font-size: 11.5px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+/* ------------------------------------------------------------------- grid */
+
+.cal__weekdays,
+.cal__grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: var(--s1);
+}
+.cal__weekdays {
+    margin-bottom: var(--s1);
+}
+.cal__weekday {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--thead-text);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    padding: var(--s1) var(--s2);
+}
+
+.cal__day {
+    /* The square. min-height rather than height so a day with a long holiday
+       name grows instead of clipping it. */
+    min-height: 118px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    padding: var(--s2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    text-align: left;
+    font: inherit;
+    color: var(--text);
+    overflow: hidden;
+}
+button.cal__day {
+    cursor: pointer;
+    transition: box-shadow var(--tr), border-color var(--tr), background var(--tr);
+}
+button.cal__day:hover {
+    background: var(--row-hover);
+    box-shadow: var(--shadow-sm);
+}
+button.cal__day:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.cal__day--filler {
+    background: var(--surface-sunken);
+    border-color: transparent;
+    border-left-color: transparent;
+}
+.cal__day--filler .cal__date {
+    color: var(--faint);
+}
+.cal__day--empty {
+    background: var(--surface);
+}
+.cal__day.is-today {
+    /* The one square somebody looks for first. */
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+.cal__day.is-today .cal__date {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-radius: var(--r-pill);
+    padding: 1px 7px;
+}
+
+.cal__date {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+}
+.cal__badge {
+    max-width: 100%;
+}
+.cal__times {
+    font-size: 12px;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.cal__meta,
+.cal__late {
+    font-size: 11.5px;
+    color: var(--muted);
+}
+.cal__late {
+    color: var(--warning-ink);
+}
+
+/* Status tints. Border and wash from the same family as the badge, so the
+   square and the badge on it can never disagree. */
+.cal__day--success { border-left-color: var(--success); background: var(--success-soft); }
+.cal__day--warning { border-left-color: var(--warning); background: var(--warning-soft); }
+.cal__day--danger  { border-left-color: var(--danger);  background: var(--danger-soft); }
+.cal__day--info    { border-left-color: var(--info);    background: var(--info-soft); }
+.cal__day--neutral { border-left-color: var(--field);   background: var(--surface-sunken); }
+
+button.cal__day--success:hover { background: var(--success-soft); }
+button.cal__day--warning:hover { background: var(--warning-soft); }
+button.cal__day--danger:hover  { background: var(--danger-soft); }
+button.cal__day--info:hover    { background: var(--info-soft); }
+
+/* ---------------------------------------------------------- the phone list */
+
+.cal__list {
+    display: none;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.cal__list-item + .cal__list-item {
+    margin-top: var(--s1);
+}
+.cal__row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    padding: var(--s2) var(--s3);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface);
+    text-align: left;
+    font: inherit;
+    color: var(--text);
+}
+button.cal__row {
+    cursor: pointer;
+}
+button.cal__row:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.cal__row.is-today {
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+.cal__row-date {
+    flex: none;
+    width: 40px;
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+}
+.cal__row-date strong {
+    font-size: 16px;
+}
+.cal__row-date span {
+    font-size: 11px;
+}
+.cal__row-main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    /* Start, not stretch: a badge is a pill around its own text, and a column
+       flex child would otherwise pull it the full width of the row. */
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+}
+.cal__row-total {
+    flex: none;
+    font-size: 12px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+.cal__row--success { border-left-color: var(--success); }
+.cal__row--warning { border-left-color: var(--warning); }
+.cal__row--danger  { border-left-color: var(--danger); }
+.cal__row--info    { border-left-color: var(--info); }
+.cal__row--neutral { border-left-color: var(--field); }
+
+/* ------------------------------------------------------------- day panel */
+
+.cal-panel[hidden] {
+    display: none !important;
+}
+.cal-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    justify-content: flex-end;
+}
+.cal-panel__scrim {
+    position: absolute;
+    inset: 0;
+    background: rgba(23, 23, 26, .28);
+}
+.cal-panel__body {
+    position: relative;
+    width: min(420px, 100%);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+.cal-panel__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding: var(--s4);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+}
+.cal-panel__title {
+    margin: 0;
+    font-size: 16px;
+}
+.cal-panel__sub {
+    margin: 2px 0 0;
+    font-size: 12.5px;
+    color: var(--muted);
+}
+.cal-panel__body-inner {
+    padding: var(--s4);
+}
+.cal-panel__section {
+    margin: 0 0 var(--s2);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+}
+
+.cal-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s2);
+}
+.cal-totals__item {
+    padding: var(--s3);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface-sunken);
+}
+.cal-totals__value {
+    display: block;
+    font-size: 17px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.cal-totals__label {
+    display: block;
+    font-size: 11.5px;
+    color: var(--muted);
+}
+
+/* --------------------------------------------------------------- timeline */
+
+.timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 var(--s3);
+    border-left: 2px solid var(--border);
+}
+.timeline__item {
+    position: relative;
+    display: flex;
+    align-items: baseline;
+    gap: var(--s2);
+    padding: var(--s2) 0;
+}
+.timeline__item::before {
+    content: "";
+    position: absolute;
+    left: calc(-1 * var(--s3) - 5px);
+    top: 15px;
+    width: 8px;
+    height: 8px;
+    border-radius: var(--r-pill);
+    background: var(--accent);
+}
+.timeline__item--muted {
+    opacity: .55;
+}
+.timeline__item--muted::before {
+    background: var(--faint);
+}
+.timeline__time {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+.timeline__label {
+    flex: 1 1 auto;
+    font-size: 12.5px;
+}
+.timeline__device {
+    flex: none;
+    font-size: 11.5px;
+}
+
+/* ------------------------------------------------------------ responsive */
+
+@media (max-width: 900px) {
+    .cal__day {
+        min-height: 104px;
+    }
+    .cal__times,
+    .cal__meta,
+    .cal__late {
+        font-size: 11px;
+    }
+}
+
+@media (max-width: 767px) {
+    /* The grid stops being readable here: seven columns of a 375px screen is
+       50px a square. The same days become one row each. */
+    .cal__grid-wrap {
+        display: none;
+    }
+    .cal__list {
+        display: block;
+    }
+    .cal__toolbar-actions {
+        margin-left: 0;
+        width: 100%;
+    }
+    .cal__stat {
+        flex-basis: calc(50% - var(--s2));
+    }
+    .cal-panel__body {
+        width: 100%;
+        border-left: 0;
+    }
+    .cal-totals {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}

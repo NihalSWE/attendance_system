@@ -9,6 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from attendance import month_view
 from attendance.models import AttendanceRecord
 from attendance.services import calculate_attendance, month_bounds
 from common.tenant import use_company
@@ -82,6 +83,101 @@ def attendance_list(request):
         "can_manage": membership.role in STRUCTURE_ROLES,
         # Punch times are stored in UTC; people read them in company time.
         "company_tz": membership.company.timezone or "UTC",
+    })
+
+
+def _month_steps(year, month):
+    """The previous and next month, for the arrows."""
+    previous = (year - 1, 12) if month == 1 else (year, month - 1)
+    following = (year + 1, 1) if month == 12 else (year, month + 1)
+    return previous, following
+
+
+@login_required
+@require_http_methods(["GET"])
+def attendance_calendar(request):
+    """One employee's month as a planner-style calendar.
+
+    The page picks the employee; the grid itself is an include so the employee
+    panel (A7) can render exactly the same month for whoever is logged in.
+    """
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership = require_company_membership(request.user, company_id)
+    year, month = read_month(request.GET)
+    company_tz = membership.company.timezone or "UTC"
+    requested = request.GET.get("employee", "").strip()
+
+    with use_company(company_id):
+        employees = list(Employee.objects.order_by("first_name", "last_name"))
+        employee = None
+        if requested.isdigit():
+            employee = next(
+                (e for e in employees if e.pk == int(requested)), None
+            )
+        # Default to somebody rather than an empty screen: a calendar with no
+        # employee chosen has nothing to say.
+        if employee is None and employees:
+            employee = employees[0]
+
+        calendar = (
+            month_view.build_month(
+                employee=employee, year=year, month=month,
+                company_timezone=company_tz,
+                today=timezone.localdate(),
+            )
+            if employee is not None
+            else None
+        )
+        has_any_record = AttendanceRecord.objects.exists()
+
+    previous, following = _month_steps(year, month)
+    return render(request, "attendance/attendance_calendar.html", {
+        **month_context(year, month),
+        "calendar": calendar,
+        "employee": employee,
+        "employees": employees,
+        "employee_id": str(employee.pk) if employee else "",
+        "has_any_record": has_any_record,
+        "can_manage": membership.role in STRUCTURE_ROLES,
+        "company_tz": company_tz,
+        "previous_year": previous[0], "previous_month": previous[1],
+        "next_year": following[0], "next_month": following[1],
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def attendance_day(request, employee_id, on):
+    """One day's history, rendered as the panel's contents.
+
+    Returned as a fragment rather than JSON so the timeline is built by the
+    template like every other list on the site, and the panel still reads
+    correctly if the script does not load.
+    """
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership = require_company_membership(request.user, company_id)
+    company_tz = membership.company.timezone or "UTC"
+
+    with use_company(company_id):
+        record = (
+            AttendanceRecord.objects.select_related("shift", "employee")
+            .filter(employee_id=employee_id, work_date=on)
+            .first()
+        )
+        if record is None:
+            return render(request, "attendance/includes/day_panel.html", {
+                "on": on, "detail": None,
+            })
+        detail = month_view.build_day_detail(
+            record=record, company_timezone=company_tz
+        )
+        detail["employee"] = record.employee
+    return render(request, "attendance/includes/day_panel.html", {
+        "on": on, "detail": detail,
     })
 
 

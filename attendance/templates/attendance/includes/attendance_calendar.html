@@ -1,0 +1,201 @@
+{% comment %}
+    One employee's month, as a planner.
+
+    Takes `calendar` (attendance.month_view.build_month) and `employee`, so the
+    admin page and the employee panel render the identical month. It renders
+    the same days twice — a grid for desktop and tablet, a list for a phone —
+    and CSS shows one of them. Two markups rather than one squeezed: seven
+    columns of 110px squares cannot become a readable phone screen, and a grid
+    that scrolls sideways is worse than a list.
+
+    Every day is a <button>, so the keyboard reaches it and Enter opens the
+    history. The panel it opens is fetched from attendance:attendance_day.
+{% endcomment %}
+<div class="cal" data-attendance-calendar
+     data-day-url-template="{% url 'attendance:attendance_day' employee.pk '0000-00-00' %}">
+
+    <div class="cal__summary">
+        <div class="cal__stat">
+            <span class="cal__stat-value">
+                {{ calendar.summary.present }}
+            </span>
+            <span class="cal__stat-label">
+                Present
+            </span>
+        </div>
+        <div class="cal__stat">
+            <span class="cal__stat-value">
+                {{ calendar.summary.late }}
+            </span>
+            <span class="cal__stat-label">
+                Late
+            </span>
+        </div>
+        <div class="cal__stat">
+            <span class="cal__stat-value">
+                {{ calendar.summary.absent }}
+            </span>
+            <span class="cal__stat-label">
+                Absent
+            </span>
+        </div>
+        <div class="cal__stat">
+            <span class="cal__stat-value">
+                {{ calendar.summary.leave }}
+            </span>
+            <span class="cal__stat-label">
+                Leave
+            </span>
+        </div>
+        <div class="cal__stat">
+            <span class="cal__stat-value">
+                {{ calendar.summary.holiday }}
+            </span>
+            <span class="cal__stat-label">
+                Holidays
+            </span>
+        </div>
+        <div class="cal__stat cal__stat--wide">
+            <span class="cal__stat-value">
+                {{ calendar.summary.in_office }}
+            </span>
+            <span class="cal__stat-label">
+                In office
+            </span>
+        </div>
+    </div>
+
+    {# ------------------------------------------------ desktop and tablet #}
+    <div class="cal__grid-wrap">
+        <div class="cal__weekdays" aria-hidden="true">
+            {% for name in calendar.weekday_names %}
+                <div class="cal__weekday">
+                    {{ name }}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="cal__grid" role="grid" aria-label="Attendance for the month">
+            {% for week in calendar.weeks %}
+                {% for day in week %}
+                    {% if day.is_filler %}
+                        <div class="cal__day cal__day--filler" role="gridcell" aria-hidden="true">
+                            <span class="cal__date">
+                                {{ day.number }}
+                            </span>
+                        </div>
+                    {% elif day.has_record %}
+                        <button type="button" role="gridcell"
+                                class="cal__day cal__day--{{ day.tone }}{% if day.is_today %} is-today{% endif %}"
+                                data-day="{{ day.date|date:'Y-m-d' }}"
+                                aria-label="{{ day.date|date:'j F' }}: {{ day.status_label }}">
+                            <span class="cal__date">
+                                {{ day.number }}
+                            </span>
+                            <span class="badge badge--{{ day.tone }} cal__badge">
+                                {{ day.status_label }}
+                            </span>
+                            {% if day.is_late %}
+                                <span class="cal__late">
+                                    Late {{ day.record.late_minutes }}m
+                                </span>
+                            {% endif %}
+                            {% if day.has_times %}
+                                <span class="cal__times">
+                                    {{ day.check_in }} → {{ day.check_out|default:"—" }}
+                                </span>
+                                <span class="cal__meta">
+                                    {{ day.in_office }}{% if day.break_label %} · {{ day.break_label }}{% endif %}
+                                </span>
+                            {% elif day.note %}
+                                <span class="cal__meta">
+                                    {{ day.note|truncatechars:34 }}
+                                </span>
+                            {% endif %}
+                        </button>
+                    {% else %}
+                        <div class="cal__day cal__day--empty{% if day.is_today %} is-today{% endif %}"
+                             role="gridcell">
+                            <span class="cal__date">
+                                {{ day.number }}
+                            </span>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+
+    {# --------------------------------------------------------- phone list #}
+    <ul class="cal__list">
+        {% for day in calendar.days %}
+            <li class="cal__list-item">
+                {% if day.has_record %}
+                    <button type="button"
+                            class="cal__row cal__row--{{ day.tone }}{% if day.is_today %} is-today{% endif %}"
+                            data-day="{{ day.date|date:'Y-m-d' }}">
+                        <span class="cal__row-date">
+                            <strong>
+                                {{ day.date|date:'j' }}
+                            </strong>
+                            <span class="t-faint">
+                                {{ day.date|date:'D' }}
+                            </span>
+                        </span>
+                        <span class="cal__row-main">
+                            <span class="badge badge--{{ day.tone }}">
+                                {{ day.status_label }}
+                            </span>
+                            {% if day.has_times %}
+                                <span class="cal__times">
+                                    {{ day.check_in }} → {{ day.check_out|default:"—" }}
+                                </span>
+                            {% elif day.note %}
+                                <span class="cal__meta">
+                                    {{ day.note|truncatechars:40 }}
+                                </span>
+                            {% endif %}
+                        </span>
+                        <span class="cal__row-total">
+                            {% if day.has_times %}
+                                {{ day.in_office }}
+                            {% endif %}
+                        </span>
+                    </button>
+                {% else %}
+                    <div class="cal__row cal__row--empty{% if day.is_today %} is-today{% endif %}">
+                        <span class="cal__row-date">
+                            <strong>
+                                {{ day.date|date:'j' }}
+                            </strong>
+                            <span class="t-faint">
+                                {{ day.date|date:'D' }}
+                            </span>
+                        </span>
+                        <span class="cal__row-main t-faint">
+                            {% if day.is_future %}
+                                —
+                            {% else %}
+                                No record
+                            {% endif %}
+                        </span>
+                        <span class="cal__row-total">
+                        </span>
+                    </div>
+                {% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+
+{% comment %}
+    The day history. One panel, reused for every day; a drawer on desktop and
+    a full-width sheet on a phone, which is the same element at two widths.
+{% endcomment %}
+<div class="cal-panel" data-day-panel hidden>
+    <div class="cal-panel__scrim" data-panel-close></div>
+    <aside class="cal-panel__body" role="dialog" aria-modal="true"
+           aria-label="Attendance for the day" tabindex="-1">
+        <div data-panel-content>
+        </div>
+    </aside>
+</div>

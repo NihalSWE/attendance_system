@@ -24,6 +24,9 @@
             </p>
         </div>
         <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}?month={{ month }}&year={{ year }}">
+                Calendar view
+            </a>
             {% if can_manage %}
                 <form method="post" action="{% url 'attendance:attendance_calculate' %}">
                     {% csrf_token %}

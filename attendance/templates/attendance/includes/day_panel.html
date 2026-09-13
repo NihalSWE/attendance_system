@@ -1,0 +1,135 @@
+{% comment %}
+    One day's history: the panel's contents, fetched on click.
+
+    A fragment rather than JSON, so the timeline is built by the template like
+    every other list on the site and the markup lives in one place.
+{% endcomment %}
+{% if detail %}
+    <div class="cal-panel__head">
+        <div>
+            <h2 class="cal-panel__title">
+                {{ detail.date|date:"l j F Y" }}
+            </h2>
+            <p class="cal-panel__sub">
+                {{ detail.employee.full_name }}
+                {% if detail.shift_name %}
+                    · {{ detail.shift_name }} {{ detail.shift_times }}
+                {% endif %}
+            </p>
+        </div>
+        <button class="btn btn--ghost btn--sm" type="button" data-panel-close>
+            Close
+        </button>
+    </div>
+
+    <div class="cal-panel__body-inner stack">
+        <div>
+            <span class="badge badge--{{ detail.tone }}">
+                {{ detail.status_label }}
+            </span>
+            {% if detail.is_late %}
+                <span class="badge badge--warning">
+                    Late {{ detail.late_minutes }} min
+                </span>
+            {% endif %}
+            {% if detail.note %}
+                <p class="t-muted">
+                    {{ detail.note }}
+                </p>
+            {% endif %}
+        </div>
+
+        <div class="cal-totals">
+            <div class="cal-totals__item">
+                <span class="cal-totals__value">
+                    {{ detail.total }}
+                </span>
+                <span class="cal-totals__label">
+                    Total time
+                </span>
+            </div>
+            <div class="cal-totals__item">
+                <span class="cal-totals__value">
+                    {{ detail.in_office }}
+                </span>
+                <span class="cal-totals__label">
+                    In office
+                </span>
+            </div>
+            <div class="cal-totals__item">
+                <span class="cal-totals__value">
+                    {{ detail.outside }}
+                </span>
+                <span class="cal-totals__label">
+                    Out of office
+                </span>
+            </div>
+            <div class="cal-totals__item">
+                <span class="cal-totals__value">
+                    {{ detail.break_count }}
+                </span>
+                <span class="cal-totals__label">
+                    Breaks
+                </span>
+            </div>
+        </div>
+
+        {% if detail.scans %}
+            <div>
+                <h3 class="cal-panel__section">
+                    Every scan
+                </h3>
+                <ol class="timeline">
+                    {% for scan in detail.scans %}
+                        <li class="timeline__item{% if not scan.is_included %} timeline__item--muted{% endif %}">
+                            <span class="timeline__time">
+                                {{ scan.time }}
+                            </span>
+                            <span class="timeline__label">
+                                {{ scan.label }}
+                            </span>
+                            <span class="timeline__device t-faint">
+                                {{ scan.device|default:"—" }}
+                            </span>
+                        </li>
+                    {% endfor %}
+                </ol>
+                {% if detail.ignored_count %}
+                    <p class="t-faint">
+                        {{ detail.ignored_count }} repeat
+                        scan{{ detail.ignored_count|pluralize }} ignored: a second
+                        read inside the duplicate window is the same arrival.
+                    </p>
+                {% endif %}
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No scans
+                </div>
+                <div class="empty__text">
+                    Nothing was recorded on this device for this day.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% else %}
+    <div class="cal-panel__head">
+        <h2 class="cal-panel__title">
+            {{ on }}
+        </h2>
+        <button class="btn btn--ghost btn--sm" type="button" data-panel-close>
+            Close
+        </button>
+    </div>
+    <div class="cal-panel__body-inner">
+        <div class="empty">
+            <div class="empty__title">
+                Nothing calculated for this day
+            </div>
+            <div class="empty__text">
+                Calculate the month to build it from the day's scans.
+            </div>
+        </div>
+    </div>
+{% endif %}
