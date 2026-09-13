@@ -76,6 +76,8 @@ Main sequence: **P0 -> P1 -> P2 -> P3 -> P4 -> P5 -> P6**.
 
 **2026-09-12 reorder (salary fast-track).** To produce salary the same day, a thin slice of P1 scheduling, P2 leave, P3 attendance and P4 payroll was pulled forward ahead of the rest of P1. This changes order only: every skipped item is listed in `PHASE_STATUS.md` ("Salary fast-track") and is still built, then connected back into the same attendance and payroll calculation. D1 starts when the hardware and P3 boundary are available; it can run alongside P4/P5 without changing their calculation services. If the device arrives earlier, document protocol/access facts and schedule the integration after P3. If it arrives later, continue the software phases.
 
+**2026-09-13 plan.** After the fast-track, Ajay added five points: employee logins, company salary settings, an attendance calendar with the full check-in / break-out / break-in / check-out history, counting attendance from several devices, and a live in-office badge on the employee list; plus leave requests from an employee panel, approved by the branch manager. These and every skipped item are ordered as one 16-step plan in `PHASE_STATUS.md` ("Plan after the fast-track — 2026-09-13"). It is still reordering, not cutting: each step lands in the phase it belongs to (P1 access, P2 leave, P3 attendance, P4 payroll, P5 later).
+
 Do not label each phase as a day or promise P0–P5 in the week before hardware arrival. Use completed acceptance criteria to schedule the next phase. During the wait, prioritize P0/P1, then usable leave, then the minimum attendance input/calculation contract required by payroll.
 
 ## P0 — bootstrap and settle the contracts

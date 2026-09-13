@@ -429,7 +429,8 @@ the UI.
 ### Skipped today — must be built and connected to salary
 
 This is the authoritative list. Nothing on it is dropped; each item says how it
-connects back.
+connects back. **Every row is placed in a step of the 2026-09-13 plan below**
+(the "Covers" column there says which).
 
 | Skipped | Effect on today's salary until built | Connects back into |
 |---|---|---|
@@ -462,6 +463,120 @@ connects back.
 | **Holiday year calendar** (Ajay, priority later): a larger calendar to select all of a year's holidays at once, multiple dates, with month/year navigation | Holidays are added one at a time | Holiday list |
 | Static file cache-busting for deployment (hashed file names) | After a JS/CSS change a browser keeps the old file until Ctrl+F5 | Every page |
 
+## Plan after the fast-track — 2026-09-13
+
+**Status: proposed order, waiting for Ajay to confirm it.** Nothing below is
+built yet. When Ajay gives the order, renumber the table to match and keep it
+the single plan; do not start a parallel list.
+
+### Ajay's five points (2026-09-13)
+
+1. An employee can be made a user and given login credentials whenever the
+   admin wants.
+2. Company salary settings.
+3. Attendance history in a calendar. Clicking a date shows the full history:
+   check-in, check-out, every break-out and break-in time, total time,
+   in-office time and out-of-office time.
+4. There can be several devices; an employee's attendance on any of them is
+   counted.
+5. The employee list shows, with a coloured badge, whether each person is in
+   the office.
+
+Also raised: **there is no employee panel**, so no employee can request leave
+today (only the company admin records leave, already approved).
+
+All five fit the current design:
+
+- **1** — `Employee.user` (nullable FK) and `CompanyMembership` roles
+  `employee` and `manager` with `allowed_branches` already exist.
+- **2** — `PayrollSettings` (§54), `PayrollPolicyVersion` (§55) and
+  `AttendancePenaltyRule` (§36) are in the dictionary, not built yet.
+- **3** — `AttendanceSession` / `PunchAllocation` and the attendance record's
+  break and outside minutes are in the dictionary, not built yet; the calendar
+  is a new screen.
+- **4** — attendance already merges authorised punches from every company
+  device. `device_attendance_scope` exists (company / branch / department /
+  assigned devices) but has no screen, and already-excluded punches have no
+  re-check.
+- **5** — derived from today's scans with the same pairing as 3; no table.
+
+### Decisions (Ajay, 2026-09-13)
+
+- **Check-in, break-out, break-in and check-out are decided by the software by
+  pairing. Final.** The device's own IN/OUT or break keys are not used. The
+  rule is written in DEVICE_ATTENDANCE_POLICY.md, processing step 7. Ajay knows
+  the limitations of pairing; do not raise them again.
+- **Leave requests are approved by the branch manager.** A branch manager is a
+  login with role `manager` and `allowed_branches` set to their branch(es) —
+  no new table. The approver is the active manager of the employee's branch.
+  *Default (proposed by Ajay's session, change if he says):* if the branch has
+  no manager, or the person asking is that manager, the request goes to the
+  company admin, so no request is stuck.
+- **"User list" in point 5 is taken to mean the Employees page.** The same
+  badge can go on a device's Users page if Ajay meant that.
+
+### The plan — proposed order
+
+"Needs" is what must be built first; any order that keeps those ahead works.
+
+| # | Step | What it delivers | Needs | Point | Covers from "Skipped today" |
+|---|---|---|---|---|---|
+| 1 | **Which devices count + Re-check punches** | Attendance settings: all company devices / branch devices / department devices / assigned devices. "Re-check punches" for a date range re-runs authorisation on excluded punches, audited, then attendance is recalculated. | — | 4 | (new) |
+| 2 | **Pairing and daily totals** | `AttendanceSession` + `PunchAllocation`; every scan labelled check-in / break-out / break-in / check-out; total, in-office and out-of-office minutes and break count per day; repeat-scan window; hourly pay uses in-office time | 1 | 3 | Breaks and multiple IN/OUT sessions; shift break minutes and paid break; attendance settings punch pairing, duplicate window, attendance windows, rounding |
+| 3 | **Attendance calendar** | Month calendar per employee, days coloured by status; clicking a date shows every scan with label, time and device, and the day's totals | 2 | 3 | (new) |
+| 4 | **In-office badge on the Employees page** | "Now" column: In office (green), On break (amber), Left (grey), Not in yet (grey), Absent (red, after shift start plus grace), On leave (blue), Off today (grey); refreshes every minute | 2 | 5 | (new) |
+| 5 | **Logins** | "Give login" on an employee: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | — | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
+| 6 | **Employee panel** | Own sidebar: My attendance (step 3's calendar), My leave, My payslips, My profile | 3, 5 | 1 | (new) |
+| 7 | **Leave requests, branch-manager approval** | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 5, 6 | 1 | Full leave: employee requests, approval step; Salary and attendance pages for managers (branch manager part) |
+| 8 | **Company salary settings** | Salary settings page with dated versions: monthly divisor (30 / days in month / working days), daily and hourly rate method, weekly off / holiday pay by pay type, half-day and Incomplete treatment, currency. Payroll reads them instead of constants; each run records the version used | — | 2 | Company salary settings (`PayrollSettings`, `PayrollPolicyVersion`) |
+| 9 | **Penalty rules** | Late, absence and repeated-lateness rules; deduction lines on the payslip | 2, 8 | 2 | Penalty rules (`AttendancePenaltyRule`) |
+| 10 | **Overtime** | Overtime-after on the shift, review and approval, rate from salary settings; pay for holiday / weekly-off work | 2, 8 | — | Overtime review, approval and pay; `HolidayWorkAssignment`; shift overtime-after; attendance settings overtime approval |
+| 11 | **Attendance corrections** | Fix a day (add a missed scan or change status) with reason and audit; review list for Incomplete days | 2 | — | Attendance corrections; attendance review status and the Incomplete decision |
+| 12 | **Full leave** | Half-day and hourly leave, partial pay, policies and versions, balances / entitlements / ledger, attachments, withdraw, amend; default leave types at onboarding; HR records leave; employee code in the picker | 7 | — | Full leave (rest); leave fields not built; HR role recording leave; default leave types; employee code in picker |
+| 13 | **Salary completeness** | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | 8 | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
+| 14 | **Shift extras** | Employee-level shift override, rotating shifts, time picker, grace-out, shift effective dates | — | — | Employee override, rotating shifts; time picker; remaining shift fields |
+| 15 | **People and access** | Employee detail / history page, terminate screen, department heads, permissions, HR and payroll-manager pages | 5 | — | Employee detail and terminate; department heads, permissions; salary and attendance pages for HR |
+| 16 | **Later** | Holiday year calendar; static file cache-busting; payments, advances, loans (P5) | — | — | Holiday year calendar; cache-busting; payments (P5) |
+
+Why this order: 1–4 make real scans count and pair correctly, and everything
+after reads from them. 5–7 let employees log in and request leave. 8–11 then
+make the salary numbers right on correct attendance. Step 8 needs nothing
+before it and can move to the top if salary settings come first. Step 1 is
+device work and suits Nihal's workstream; step 2 can run alongside it.
+
+### Loose ends from 2026-09-12 (not in the table above)
+
+| Item | State |
+|---|---|
+| `btn--secondary` buttons | The class does not exist, so 8 buttons render as a plain `.btn`: `devices/device_detail.html` (3), `devices/device_users.html` (2), `devices/message_detail.html`, `devices/punch_detail.html`, `organization/adoption_list.html`. Fix: `btn--ghost`. |
+| Excluded punches on Nihal's server | The new default tick applies to new enrollments only. Existing enrollments need "Authorised for assigned-devices mode" ticked by hand; already-excluded punches stay excluded until step 1's Re-check. |
+| Felna Tech shift mode | Still single company shift (set 2026-09-12 so its attendance could be calculated). Switching to department shifts is a settings change in Shifts. |
+| Demo data in Ajay's local database | Simulated device `DEMO-SIM-FELNA` ("not real hardware") and its 1–12 Sep demo punches stay, at Ajay's request; they feed Felna's attendance and salary. |
+
+### Merged 2026-09-13
+
+Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
+`fix/device-department-overlap-error` (ef2049c) are merged into `main`
+(81daa91). Full suite: **533 tests, green, 3.4 minutes** with `--parallel 4
+--keepdb`.
+
+- Checkboxes are drawn by the shared `.check` component; `StyledFormMixin`
+  gives checkboxes and radios `check__input` instead of `input` (see
+  UI_AND_ONBOARDING_CONVENTIONS.md).
+- Both enrollment switches ("Attendance enabled", "Authorised for
+  assigned-devices mode") start ticked for a new enrollment; editing keeps the
+  saved values.
+- Device page actions ("Enrollments", "Enroll an employee", "Open the
+  enrollment used") moved into the page header; `.page__actions` wraps.
+- Editing a device no longer invents a comm key (it had locked a live device
+  out with 401s); the server-address status panel no longer reloads forever.
+- Mapping a device to one department twice is a readable form error instead of
+  an exclusion-violation page.
+- `PASSWORD_HASHERS` is MD5 under `manage.py test` only (the full run fell from
+  ~8.5 to ~3.4 minutes). Production is unaffected.
+- Ajay's session, in the merge: removed the scheduling forms' `class=""`
+  resets on checkboxes, which only existed to undo the old `input` class.
+
 ## Current checkpoint
 
 - **Current deliverable:** P1 platform onboarding implemented; company setup and employee write workflows remain next. See [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md) for files/functions and the UI workflow.
@@ -472,7 +587,7 @@ connects back.
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action:** salary fast-track (2026-09-12) — step 2, the thin leave slice, then attendance calculation, then payroll. Then build everything in the "Skipped today" table and connect it back. Employee lifecycle screens and full P1 acceptance follow. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). Ajay is choosing the order of the 16-step "Plan after the fast-track — 2026-09-13" above, which contains his five new points and every "Skipped today" row. Build in the order he gives. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -482,9 +597,9 @@ connects back.
 |---|---|---|---|
 | P0 — Foundation/contracts | **Verified** | Runnable Django/PostgreSQL foundation, initial migrations/checks, tenancy and dependency decisions | Complete: migrations applied on PostgreSQL, 5/5 isolation tests green on Postgres, tenancy strategy + scoping code recorded |
 | P1 — Company/people/calendar | In progress — platform onboarding delivered | Browser company setup, employee/history and access checks | Next: company organization/scheduling writes and scoped authorization, then employee lifecycle forms. Full P1 cold-start gate remains outstanding. |
-| P2 — Leave | Not started | Approved full/half/hourly/partial-pay leave, optional balances, cancellation and concurrent-balance checks | After P1 |
-| P3 — Attendance simulation/manual | Not started | Shared ingestion/calculation pipeline, cross-device/retry/history tests, manual correction workflow | After P1; integrate LeaveDay from P2 |
-| P4 — Payroll | Not started | Correct monthly/daily/hourly calculations, traceable lines, finalization and correction checks | After P2 and minimum complete P3 |
+| P2 — Leave | In progress — thin slice (2026-09-12): leave types, admin-recorded approved full-day leave, cancel | Approved full/half/hourly/partial-pay leave, optional balances, cancellation and concurrent-balance checks | Steps 7 and 12 of the 2026-09-13 plan |
+| P3 — Attendance simulation/manual | In progress — thin slice (2026-09-12): monthly calculation from authorised punches, first IN / last OUT | Shared ingestion/calculation pipeline, cross-device/retry/history tests, manual correction workflow | Steps 1–4 and 11 of the 2026-09-13 plan |
+| P4 — Payroll | In progress — basic salary (2026-09-12): draft runs, fixed formula, payslip | Correct monthly/daily/hourly calculations, traceable lines, finalization and correction checks | Steps 8–10 and 13 of the 2026-09-13 plan |
 | P5 — Salary management | Not started | Payments/dues, adjustment and funded-advance recovery checks | After P4 |
 | D1 — Real device | Waiting for hardware and P3 | Actual model/firmware/payload/retry/offline evidence; distinguish one-device from multi-device proof | Continue software phases while waiting |
 | P6 — Pilot | Not started | End-to-end workflows, tenant/isolation checks, operational readiness and explicit manual/biometric release label | After P1–P5; D1 for biometric claim |
@@ -1264,6 +1379,7 @@ New model `DeviceServerAddressChange` and three columns on `BiometricDevice`
   terminal.
 - The device detail page overflows horizontally by 8px at 375px, caused by the
   pre-existing "Retire device" button in `page__actions`. Not touched here.
+  *(Fixed 2026-09-13: `.page__actions` now wraps, in `feature/device-ui-fixes`.)*
 - Devices whose address was typed in by hand show "not confirmed yet" until
   their first change; there is no backfill, deliberately, because we have no
   evidence of where they point until a request arrives.

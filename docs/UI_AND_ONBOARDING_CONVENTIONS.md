@@ -50,7 +50,21 @@ uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
   `btn--danger`, plus `btn--sm`. **`btn--secondary` does not exist** in the
   stylesheets, although some device and department list templates use it —
   those render as a plain `.btn`. Use `btn--ghost` for a secondary action.
+  (Still used in 8 places on 2026-09-13; fixing them is a loose end in
+  `PHASE_STATUS.md`.)
 - Form actions sit in a `.row`, primary button first, then the ghost Cancel.
+- **A page's main actions go in `.page__actions` at the top**, beside the
+  title — never in the footer of the last card below a table. Form submit
+  buttons stay with their form, and a card's "see all" link stays with its
+  card. `.page__actions` wraps, so several buttons never push the page wider
+  than a phone (2026-09-13).
+- **Checkboxes** (2026-09-13): `StyledFormMixin` gives a checkbox or radio the
+  class `check__input`, not `input` — `input` carries `width: 100%`, which
+  collapsed the box to nothing. The shared `.check` component draws the box
+  (18px, `--field` border, `--accent` fill and a tick when checked, focus
+  ring). In a template, wrap it as `<label class="check">{{ field }}
+  <span>label</span></label>`. Do not reset a checkbox's class in a form;
+  only the day picker's hidden inputs set their own (`day-picker__input`).
 - **Several choices from a short fixed set** (for example weekdays) use the
   `.day-picker` buttons: real checkboxes, visually hidden but focusable, with
   the filled-ink selected state the calendar uses. Weekdays run Saturday first.
