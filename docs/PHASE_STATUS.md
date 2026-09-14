@@ -539,7 +539,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N5 | **Attendance corrections** | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b). Approving overtime (set the end time, approved minutes) and its pay are A9's; the list links to A9's approve action (agreed 2026-09-14) | — | Attendance corrections; attendance review status and the Incomplete decision |
 | N6 | **Employee detail page + terminate screen** | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
 | N7 | **Payslip redesign** - done 2026-09-14, branch `feature/n7-payslip`, merged with the employee's view (A7) (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/. Also (A7): the employee opens the same template with `for_employee=True` — breadcrumbs then lead to My payslips, never company pages — and the "Draft" label must come from the run's status (a finalised month says Finalised) | — | (new) |
-| N8 | **Device connection check** (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. Builds on the existing server-address status panel | — | (new) |
+| N8 | **Device connection check** - done 2026-09-14, branch `feature/n8-device-connection` (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. Builds on the existing server-address status panel | — | (new) |
 | N9 | **Data tables on Nihal's pages** (see A15) | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
 
 #### Ajay's session
@@ -995,7 +995,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A5c (weekly off start date, remove the paid-day-off boxes, day-value label), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A5c (weekly off start date, remove the paid-day-off boxes, day-value label), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5 (`feature/n5-corrections`), N6 (`feature/n6-employee-detail`) and N8 (`feature/n8-device-connection`) pushed, waiting to be merged; N9 after A15. Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2022,3 +2022,75 @@ tests passed whether or not they judged by today's rules. Checked by breaking
 reason so the count stays on screen).
 
 **No new migration, no new environment variable.**
+
+
+## 2026-09-14 — N8: is the device connected, and a connection test (Nihal)
+
+Branch `feature/n8-device-connection`, from clean `main` (after A16). **No
+migration, no new environment variable.**
+
+A terminal cannot be pinged — it calls the server. So "connected" means one
+thing: it has checked in recently. `last_seen_at` is stamped on every
+authenticated device request, including the idle `getrequest` poll, and
+`devices/services/connection.py` reads it against the device's push interval:
+
+| Badge | When |
+|---|---|
+| **Connected** (green) | seen within 6 × the push interval, and never tighter than 2 minutes — real polling drifts from the setting (Nihal's SenseFace is set to 20 s; the server log shows it polling every 5–10 s) |
+| **Last seen … ago** (amber) | quiet for up to 15 minutes |
+| **Not connected** (red) | quiet for longer, or never checked in |
+| Retired / Suspended (grey) | not judged |
+
+**1. Live badge** — on the device list (new *Connection* column replacing
+*Last seen*) and on the device page. Correct when served; `connection.js`
+refreshes it every 20 s from `devices:device_connections` (JSON, this
+company's devices only; unknown or foreign ids are ignored).
+
+**2. Connection test** — a *Connection* card at the top of the device page.
+A test is a start time; it passes when a check-in arrives after it.
+*Register device* and *Edit* now land on the device page with a test already
+running (`?test=<start>#connection`), because whether the terminal can reach
+the server is the next thing anybody wants to know. *Test connection* starts
+one by hand; ticking *Also send a harmless command* queues
+`query_options` (the device re-sends its own settings) and follows it by its
+command id: queued → picked up → answered (with the return code if it
+failed). The panel polls every 3 s and stops once everything has answered.
+After max(6 × interval, 2 minutes) with no check-in it says what to check —
+the server address and port to type on the terminal (from
+`setup_instructions`), the registered serial number, the network, the comm
+key — and keeps listening. The start time is URL-encoded: an ISO time ends in
+"+00:00", and an unencoded "+" reads back as a space, which silently showed no
+test at all (caught by a test).
+
+**3. Alert** — *"N devices have stopped checking in"*, listing each with its
+branch and how long it has been quiet, on the device list and on the dashboard
+(dashboard only for people who may manage devices). Only **active** devices
+that are *Not connected*: a pending device is being set up, not broken.
+
+Shared files touched: `base_template/views.py` and `dashboard.html` (the alert),
+both identical to `origin/main` before the change.
+
+**Found on the way:** the device list's header had a screen-reader-only
+"Actions" label. `.sr-only` is `position: absolute`, and `.table-wrap` is not
+positioned, so the label escaped the table's scroll box and widened the whole
+page to 684 px on a phone. Fixed on this page by making the header text
+visible. **The same trap is on every table with an `.sr-only` header** (other
+device lists, the attendance list). The one-line general fix is
+`position: relative` on `.table-wrap` in `components.css` — a shared
+design-system file, so it is left for Ajay. N5's review list had the same
+problem and was fixed the same way.
+
+**Checked on the real terminal** (Main Entrance, NYU7251601501): a test started
+before its last check-in reads *Connected at 18:44:13*; one started after it
+and older than 2 minutes shows the advice. While testing, the terminal stopped
+polling at 18:44:13 local with every earlier request answered 200 and the
+server still up — the badge showed *Last seen … ago* as designed. Checked at
+1440, 768 and 375 px.
+
+**Tests:** 26 in `devices/tests_connection.py`, including a real `getrequest`
+poll passing a test end to end, and signed-out access to every new route. A
+mistake worth recording: inserting the redirect helper above
+`device_register` moved its `@login_required` / `@company_user_required` onto
+the helper, leaving Register unprotected. The existing tests failed at once;
+the decorators are back on `device_register` and the diff against `main` shows
+no decorator change on any existing view.

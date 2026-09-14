@@ -56,6 +56,16 @@ def dashboard(request):
     }
     recent = employees.order_by("-created_at")[:8]
 
+    # Devices that have stopped checking in (plan step N8), for the people who
+    # can do something about it — the device pages refuse everybody else.
+    from devices.services import connection, panel_access
+
+    stopped_devices = (
+        connection.stopped_devices(request.company_id)
+        if panel_access.may_manage_devices(request.user, request.company_id)
+        else []
+    )
+
     return render(request, "base_template/dashboard.html", {
         "total_employees": employees.count(),
         "active_count": by_status["active"],
@@ -64,6 +74,7 @@ def dashboard(request):
         "branch_count": Branch.objects.count(),
         "department_count": CompanyDepartment.objects.count(),
         "recent": recent,
+        "stopped_devices": stopped_devices,
     })
 
 

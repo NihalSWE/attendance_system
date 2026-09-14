@@ -1,0 +1,88 @@
+{% comment %}
+    The device's connection, and a connection test (plan step N8).
+
+    Correct when served: the badge and any test in progress are worked out on
+    the server. connection.js then keeps them current. A test is a start time
+    in the URL, so a reload carries on with the same test instead of starting
+    a new one.
+{% endcomment %}
+{% load tz %}
+<div class="card" id="connection" data-connection-board data-connections-url="{% url 'devices:device_connections' %}" data-connection-devices="{{ device.public_id }}">
+    <div class="card__head">
+        <h2>
+            Connection
+        </h2>
+        <span class="badge badge--{{ connection.tone }}" data-connection-for="{{ device.public_id }}">
+            {{ connection.label }}
+        </span>
+    </div>
+    <div class="card__body stack">
+        <p class="conn-lead">
+            <strong data-connection-detail-of="{{ device.public_id }}">{{ connection.detail }}</strong>
+            <span class="t-muted">
+                A device cannot be called from here: it calls this server every {{ device.settings.push_interval_seconds|default:10 }} seconds or so, and each call is what shows it is connected.
+            </span>
+        </p>
+
+        {% if connection_test %}
+            {% with result=connection_test.result %}
+                <div class="conn-test{% if result.checked_in %} conn-test--ok{% elif result.gave_up %} conn-test--failed{% endif %}"
+                     data-connection-test data-status-url="{{ connection_test.status_url }}" data-timezone="{{ active_company.timezone }}">
+                    <p class="conn-test__status" data-test-status>
+                        {% if result.checked_in %}
+                            <strong>Connected at {{ result.checked_in_at|timezone:active_company.timezone|date:"H:i:s" }}.</strong>
+                            The device checked in after the test started.
+                        {% elif result.gave_up %}
+                            <strong>No check-in yet.</strong>
+                            Nothing has arrived for {{ result.waited_seconds }} seconds. Check the points below; the test keeps listening.
+                        {% else %}
+                            <strong>Waiting for the device to check in…</strong>
+                            Started {{ result.started_at|timezone:active_company.timezone|date:"H:i:s" }}.
+                        {% endif %}
+                    </p>
+                    <p class="conn-test__command t-muted" data-test-command {% if not result.command %}hidden{% endif %}>
+                        {{ result.command.text }}
+                    </p>
+                    <div class="conn-advice" data-test-advice {% if not connection_test.advice %}hidden{% endif %}>
+                        {% for item in connection_test.advice %}
+                            <div class="conn-advice__item">
+                                <strong>
+                                    {{ item.title }}
+                                </strong>
+                                <p class="t-muted">
+                                    {{ item.text }}
+                                </p>
+                                {% if item.values %}
+                                    <dl class="conn-advice__values">
+                                        {% for label, value in item.values %}
+                                            <dt>
+                                                {{ label }}
+                                            </dt>
+                                            <dd>
+                                                {{ value }}
+                                            </dd>
+                                        {% endfor %}
+                                    </dl>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endwith %}
+        {% endif %}
+    </div>
+    {% if device.status != "retired" %}
+        <form class="card__foot conn-foot" method="post" action="{% url 'devices:device_connection_test' device.public_id %}">
+            {% csrf_token %}
+            <label class="check" for="conn-with-command">
+                <input class="check__input" type="checkbox" id="conn-with-command" name="with_command" value="1">
+                <span>
+                    Also send a harmless command and wait for its answer
+                </span>
+            </label>
+            <button class="btn btn--primary" type="submit">
+                {% if connection_test %}Test again{% else %}Test connection{% endif %}
+            </button>
+        </form>
+    {% endif %}
+</div>

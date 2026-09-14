@@ -41,8 +41,14 @@ ingestion_urlpatterns = [
 ui_urlpatterns = [
     path("devices/", ui.device_list, name="device_list"),
     path("devices/register/", ui.device_register, name="device_register"),
+    path("devices/connection/", ui.device_connections, name="device_connections"),
     path("devices/<uuid:public_id>/", ui.device_detail, name="device_detail"),
     path("devices/<uuid:public_id>/edit/", ui.device_edit, name="device_edit"),
+    path(
+        "devices/<uuid:public_id>/connection/test/",
+        ui.device_connection_test,
+        name="device_connection_test",
+    ),
     path("devices/<uuid:public_id>/users/", ui.device_users, name="device_users"),
     path(
         "devices/<uuid:public_id>/users/sync/",
