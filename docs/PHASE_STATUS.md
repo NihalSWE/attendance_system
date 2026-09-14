@@ -556,6 +556,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A11 | **Salary completeness** | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
 | A12 | **Access** | Department heads, permissions, HR and payroll-manager pages | — | Department heads, permissions; salary and attendance pages for HR |
 | A13 | **Later** | Payments, advances, loans (P5) | — | Payments (P5) |
+| A14 | **Sidebar menus with submenus** (Ajay, 2026-09-14) | Every important page reachable from the sidebar: a menu per area with its pages as submenus, e.g. Employees (All employees, Create employee); Attendance (Daily list, Calendar); Leave (Leave list, Record leave, Leave types); Salary (Salary by month, Salary settings, Penalty rules); Shifts (Overview, Shifts, Department shifts, Weekly offs, Holidays, Holiday calendar, Attendance settings); Organisation (Branches, Departments); Devices (Devices, Enrollments, Punches, Messages, Unresolved). Ajay: pages he could not find were only reachable through buttons inside other pages. Every later step adds its pages to these menus | — | (new) |
 
 #### Ajay's session — progress
 
