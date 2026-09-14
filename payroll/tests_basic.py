@@ -16,7 +16,9 @@ from employees.services import create_employee
 from leaves import services as leave_services
 from organization.catalogue import adopt_department, adopt_designation
 from organization.models import Branch
-from payroll.models import PayrollRecord
+from payroll.models import PayrollRecord, PenaltyAssessment
+from payroll.penalties import create_penalty_rule
+from payroll.policy import change_salary_rules
 from payroll.services import calculate_pay, generate_payroll
 from scheduling import services as schedule
 from tenants.services import onboard_company
@@ -174,3 +176,93 @@ class EndToEndTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
         self.assertContains(self.client.get(reverse("payroll:payslip", args=[record.pk])), "Net pay")
+
+    def test_the_company_rules_for_the_month_are_used_and_recorded(self):
+        standard = generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        self.assertIsNone(standard.policy_version)
+        with use_company(self.company):
+            before = PayrollRecord.objects.get(payroll_run=standard, employee=self.monthly).net_pay
+
+        # August has 31 days: one day of pay becomes 30000/31 instead of 30000/30.
+        version = change_salary_rules(actor=self.admin, company_id=self.company.pk, values={
+            "effective_from": datetime.date(2026, 8, 1),
+            "monthly_proration_method": "calendar_days",
+        })
+        run = generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        self.assertEqual(run.policy_version, version)
+        self.assertEqual(run.totals_snapshot["rules"]["version_number"], 1)
+        with use_company(self.company):
+            record = PayrollRecord.objects.get(payroll_run=run, employee=self.monthly)
+            deductions = list(record.lines.filter(line_type="deduction"))
+        self.assertTrue(deductions)
+        for line in deductions:
+            with self.subTest(line=line.code):
+                self.assertEqual(line.rate, (Decimal("30000") / 31).quantize(Decimal("0.0001")))
+        self.assertEqual(record.net_pay, Decimal("30000.00") - sum(line.amount for line in deductions))
+        self.assertGreater(record.net_pay, before)
+
+        # July keeps the standard rules.
+        july = generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=7)
+        self.assertIsNone(july.policy_version)
+
+        self.client.force_login(self.admin)
+        payslip = self.client.get(reverse("payroll:payslip", args=[record.pk]))
+        self.assertContains(payslip, "Company rules, version 1")
+
+    def test_late_days_become_penalties_that_can_be_waived(self):
+        # The demo month has late arrivals (25 min after start, 10 min grace).
+        create_penalty_rule(actor=self.admin, company_id=self.company.pk, values={
+            "effective_from": datetime.date(2026, 8, 1), "name": "Late 10+",
+            "metric": "late_minutes", "operator": "gte", "threshold_minutes": 10,
+            "occurrence_mode": "single_day", "required_occurrences": 1,
+            "deduction_method": "fixed_amount", "deduction_value": Decimal("100"),
+            "exclusive_group": "", "maximum_deduction": None,
+        })
+        run = generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        with use_company(self.company):
+            record = PayrollRecord.objects.get(payroll_run=run, employee=self.monthly)
+            proposed = list(PenaltyAssessment.objects.filter(employee=self.monthly))
+            lines = list(record.lines.filter(code="PENALTY"))
+            late_days = AttendanceRecord.objects.filter(
+                employee=self.monthly, late_minutes__gte=10,
+                attendance_status__in=[S.PRESENT, S.HALF_DAY, S.INCOMPLETE],
+            ).count()
+            self.assertTrue(all(a.days.count() == 1 for a in proposed))
+        self.assertGreater(late_days, 0)
+        self.assertEqual(len(proposed), late_days)
+        self.assertEqual({line.penalty_assessment_id for line in lines}, {a.pk for a in proposed})
+        self.assertTrue(all(line.source_type == "penalty" and line.amount == Decimal("100.00") for line in lines))
+        with use_company(self.company):
+            all_penalties = PenaltyAssessment.objects.count()  # both employees
+        self.assertEqual(run.totals_snapshot["penalties"], all_penalties)
+
+        # Regenerating does not double the penalties.
+        generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        with use_company(self.company):
+            self.assertEqual(PenaltyAssessment.objects.filter(employee=self.monthly).count(), late_days)
+
+        # Waive one through the payslip: the salary is regenerated without it.
+        self.client.force_login(self.admin)
+        with use_company(self.company):
+            record = PayrollRecord.objects.get(payroll_run=run, employee=self.monthly)
+            target = PenaltyAssessment.objects.filter(employee=self.monthly).first()
+        before = record.net_pay
+        self.assertContains(self.client.get(reverse("payroll:payslip", args=[record.pk])), "Waive")
+        response = self.client.post(reverse("payroll:penalty_waive", args=[target.pk]))
+        with use_company(self.company):
+            after = PayrollRecord.objects.get(payroll_run=run, employee=self.monthly)
+            target.refresh_from_db()
+            self.assertEqual(
+                PenaltyAssessment.objects.filter(employee=self.monthly, status="proposed").count(),
+                late_days - 1,
+            )
+        self.assertRedirects(response, reverse("payroll:payslip", args=[after.pk]))
+        self.assertEqual(target.status, "waived")
+        self.assertEqual(after.net_pay, before + Decimal("100.00"))
+        # And it stays waived when the month is generated again.
+        generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        target.refresh_from_db()
+        self.assertEqual(target.status, "waived")
+        with use_company(self.company):
+            again = PayrollRecord.objects.get(payroll_run=run, employee=self.monthly)
+        self.assertEqual(again.net_pay, after.net_pay)

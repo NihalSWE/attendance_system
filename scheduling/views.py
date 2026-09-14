@@ -5,11 +5,16 @@ Thin adapters: every authorization decision and every write happens in
 rules without re-implementing them.
 """
 
+import calendar
+import datetime
+from collections import defaultdict
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -30,10 +35,12 @@ from scheduling.forms import (
     DepartmentShiftForm,
     EndWeeklyOffForm,
     HolidayForm,
+    HolidayYearForm,
     ShiftForm,
     ShiftStatusForm,
     WeeklyOffForm,
 )
+from scheduling.calendar import WEEKLY_OFF, WorkCalendar
 from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
 
 
@@ -399,6 +406,116 @@ def holiday_create(request):
                 actor=request.user, company_id=company_id, values=data
             ),
         )
+
+
+def _year_or(raw, default):
+    raw = (raw or "").strip()
+    return int(raw) if raw.isdigit() and 2000 <= int(raw) <= 2100 else default
+
+
+def _year_months(company_id, year, today, selected):
+    """Twelve month grids for the year calendar, Monday first like the date picker.
+
+    Each day says whether it is today, a company weekly off, or already a
+    holiday. A company-wide holiday cannot be selected again; a branch-only
+    holiday can, since a company-wide one may still be added on that date.
+    """
+    start, end = datetime.date(year, 1, 1), datetime.date(year, 12, 31)
+    work = WorkCalendar(company_id, start, end)
+    with use_company(company_id):
+        existing = list(
+            Holiday.objects.select_related("branch")
+            .filter(status=Holiday.Status.ACTIVE, holiday_date__range=(start, end))
+            .order_by("holiday_date", "branch__name")
+        )
+    by_date = defaultdict(list)
+    for holiday in existing:
+        by_date[holiday.holiday_date].append(holiday)
+
+    grid = calendar.Calendar(firstweekday=0)
+    months = []
+    for number in range(1, 13):
+        weeks = []
+        for week in grid.monthdatescalendar(year, number):
+            cells = []
+            for day in week:
+                if day.month != number:
+                    cells.append(None)
+                    continue
+                holidays = by_date.get(day, [])
+                company_wide = next((h for h in holidays if h.branch_id is None), None)
+                names = ", ".join(
+                    h.name + (f" ({h.branch.name})" if h.branch_id else "") for h in holidays
+                )
+                cells.append({
+                    "day": day.day,
+                    "iso": day.isoformat(),
+                    "label": f"{day:%a, %d %b %Y}",
+                    "aria": f"{day:%A %d %B %Y}" + (f", holiday: {names}" if names else ""),
+                    "today": day == today,
+                    "weekly_off": work.day(None, day).kind == WEEKLY_OFF,
+                    "holiday": company_wide is not None,
+                    "branch_holiday": bool(holidays) and company_wide is None,
+                    "selected": day.isoformat() in selected,
+                })
+            weeks.append(cells)
+        months.append({
+            "number": number,
+            "name": calendar.month_name[number],
+            "weeks": weeks,
+            "holidays": [
+                h for h in existing if h.holiday_date.month == number
+            ],
+        })
+    return months
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def holiday_year(request):
+    """Select many holiday dates on a year calendar and save them together.
+
+    POST does two things: "save" adds the selected dates; anything else is a
+    change of year that must keep the selection, so the page re-renders the
+    other year with the posted rows still selected.
+    """
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership = require_structure_manager(request.user, company_id)
+    today = timezone.localdate()
+    year = _year_or(
+        request.POST.get("go_year") or request.POST.get("year") or request.GET.get("year"),
+        today.year,
+    )
+    with use_company(company_id):
+        form = HolidayYearForm(
+            request.POST or None,
+            branches=visible_branches(membership).order_by("name"),
+        )
+        if request.method == "POST" and "save" in request.POST and form.is_valid():
+            data = form.cleaned_data
+            try:
+                added = services.add_holidays(
+                    actor=request.user, company_id=company_id,
+                    values={"branch": data["branch"], "is_paid": data["is_paid"],
+                            "days": data["days"]},
+                )
+            except ValidationError as exc:
+                apply_service_errors(form, exc)
+            else:
+                count = len(added)
+                messages.success(request, f"{count} holiday{'' if count == 1 else 's'} added.")
+                return redirect(f"{reverse('scheduling:holiday_year')}?year={year}")
+
+        selected = {row["iso"] for row in form.rows}
+        return render(request, "scheduling/holiday_year.html", {
+            "form": form,
+            "rows": form.rows,
+            "year": year,
+            "months": _year_months(company_id, year, today, selected),
+            "weekdays": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+        })
 
 
 @login_required

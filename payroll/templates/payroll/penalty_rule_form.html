@@ -1,0 +1,101 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'payroll:payroll_home' %}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'payroll:salary_settings' %}#penalty-rules">
+            Salary settings
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ title }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                {% if rule %}
+                    A change applies from the month you choose; earlier months keep the rule as it was.
+                {% else %}
+                    When arriving late, leaving early, working short or an absent day costs salary.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="card">
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <div class="card__body stack">
+                    {% if form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {% for error in form.non_field_errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    {% include "leaves/includes/field.html" with field=form.name %}
+
+                    <h3 class="t-card-head">
+                        When it applies
+                    </h3>
+                    <div class="grid grid--3">
+                        {% include "leaves/includes/field.html" with field=form.metric %}
+                        {% include "leaves/includes/field.html" with field=form.operator %}
+                        {% include "leaves/includes/field.html" with field=form.threshold_minutes %}
+                    </div>
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=form.occurrence_mode %}
+                        {% include "leaves/includes/field.html" with field=form.required_occurrences %}
+                    </div>
+
+                    <h3 class="t-card-head">
+                        What it deducts
+                    </h3>
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=form.deduction_method %}
+                        {% include "leaves/includes/field.html" with field=form.deduction_value %}
+                        {% include "leaves/includes/field.html" with field=form.maximum_deduction %}
+                        {% include "leaves/includes/field.html" with field=form.exclusive_group %}
+                    </div>
+
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=form.applies_month %}
+                        {% include "leaves/includes/field.html" with field=form.applies_year %}
+                    </div>
+                    <p class="field__help">
+                        Examples: late by at least 10 minutes, each day → 0.25 day of pay.
+                        Late by at least 1 minute, every 3 days in a month → 1 day of pay.
+                        An absent day, 3 working days in a row → a fixed amount.
+                        An absent day is already deducted by the salary settings; an absence rule deducts on top of that.
+                    </p>
+                </div>
+                <div class="card__foot">
+                    <button class="btn btn--primary" type="submit">
+                        {{ submit_label }}
+                    </button>
+                    <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}#penalty-rules">
+                        Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}

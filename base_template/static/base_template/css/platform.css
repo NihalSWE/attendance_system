@@ -40,6 +40,10 @@
     margin:0;
     overflow-wrap:anywhere;
 }
+/* Longer labels, e.g. the salary rules summary. */
+.facts--wide {
+    grid-template-columns:220px minmax(0,1fr);
+}
 .record-row {
     display:flex;
     align-items:center;
@@ -112,6 +116,14 @@
     }
     .facts {
         grid-template-columns:90px minmax(0,1fr);
+    }
+    /* Stacked on a phone: a long label above its value. */
+    .facts--wide {
+        grid-template-columns:minmax(0,1fr);
+        gap:2px var(--s3);
+    }
+    .facts--wide dd {
+        margin-bottom:var(--s2);
     }
     .mobile-menu {
         display:inline-flex;

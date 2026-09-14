@@ -30,13 +30,16 @@
         </div>
         <div class="page__actions">
             {% if can_manage %}
-                <a class="btn btn--primary" href="{% url 'scheduling:holiday_create' %}">
-                    Add holiday
+                <a class="btn btn--ghost" href="{% url 'scheduling:holiday_create' %}">
+                    Add one holiday
+                </a>
+                <a class="btn btn--primary" href="{% url 'scheduling:holiday_year' %}?year={{ year }}">
+                    Holiday calendar
                 </a>
             {% else %}
                 <button class="btn btn--primary" type="button" disabled
-                        title="Adding a holiday requires owner or company administrator access">
-                    Add holiday
+                        title="Adding holidays requires owner or company administrator access">
+                    Holiday calendar
                 </button>
             {% endif %}
         </div>

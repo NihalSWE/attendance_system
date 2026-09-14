@@ -1,0 +1,344 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Salary settings · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'payroll:payroll_home' %}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Salary settings
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Salary settings
+            </h1>
+            <p class="page__sub">
+                How salary is calculated. A change applies from the month you choose;
+                earlier months keep the rules they had.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'payroll:payroll_home' %}">
+                Back to salary
+            </a>
+        </div>
+    </div>
+
+    <div class="form-page stack">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Rules in force now
+                </h2>
+                {% if current %}
+                    <span class="badge badge--success">
+                        Version {{ current.version_number }}, since {{ current.effective_from|date:"F Y" }}
+                    </span>
+                {% else %}
+                    <span class="badge badge--neutral">
+                        Standard rules
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                {% for version in upcoming %}
+                    <div class="alert alert--info">
+                        New rules (version {{ version.version_number }}) apply from {{ version.effective_from|date:"F Y" }}.
+                    </div>
+                {% endfor %}
+                <dl class="facts facts--wide">
+                    {% for label, text in summary %}
+                        <dt>
+                            {{ label }}
+                        </dt>
+                        <dd>
+                            {{ text }}
+                        </dd>
+                    {% endfor %}
+                </dl>
+            </div>
+        </div>
+
+        <div class="card" id="penalty-rules">
+            <div class="card__head">
+                <h2>
+                    Penalty rules
+                </h2>
+                <span class="badge badge--neutral">
+                    {{ penalty_rules|length }}
+                </span>
+                <a class="btn btn--primary btn--sm" href="{% url 'payroll:penalty_rule_create' %}">
+                    Add penalty rule
+                </a>
+            </div>
+            {% if penalty_rules %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <colgroup>
+                            <col style="width: 20%">
+                            <col style="width: 30%">
+                            <col style="width: 24%">
+                            <col style="width: 13%">
+                            <col style="width: 13%">
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <th>
+                                    Rule
+                                </th>
+                                <th>
+                                    When
+                                </th>
+                                <th>
+                                    Deducts
+                                </th>
+                                <th>
+                                    Applies
+                                </th>
+                                <th class="no-sort">
+                                    Action
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in penalty_rules %}
+                                <tr>
+                                    <td>
+                                        {{ item.rule.name }}
+                                    </td>
+                                    <td>
+                                        {{ item.when }}
+                                    </td>
+                                    <td>
+                                        {{ item.deducts }}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge--{{ item.state.1 }}">
+                                            {{ item.state.0 }}
+                                        </span>
+                                        <div class="t-faint">
+                                            From {{ item.rule.effective_from|date:"M Y" }}{% if item.last_day %} to {{ item.last_day|date:"M Y" }}{% endif %}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if item.can_change %}
+                                            <a class="btn btn--quiet btn--sm" href="{% url 'payroll:penalty_rule_change' item.rule.pk %}">
+                                                Change
+                                            </a>
+                                            <a class="btn btn--quiet btn--sm" href="{% url 'payroll:penalty_rule_stop' item.rule.pk %}">
+                                                Stop
+                                            </a>
+                                        {% else %}
+                                            <span class="t-faint">
+                                                —
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty">
+                    <div class="empty__title">
+                        No penalty rules
+                    </div>
+                    <div class="empty__text">
+                        Arriving late, leaving early, working short or an absent day cost nothing extra until you add a rule.
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Change the rules
+                </h2>
+            </div>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="rules">
+                <div class="card__body stack">
+                    {% if rules_form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {% for error in rules_form.non_field_errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <p class="field__help">
+                        Saving makes a new version from the 1st of the chosen month. A salary
+                        already generated for that month changes only when you regenerate it.
+                    </p>
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=rules_form.applies_month %}
+                        {% include "leaves/includes/field.html" with field=rules_form.applies_year %}
+                    </div>
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=rules_form.monthly_proration_method %}
+                        {% include "leaves/includes/field.html" with field=rules_form.monthly_divisor %}
+                        {% include "leaves/includes/field.html" with field=rules_form.absence_deduction_method %}
+                        {% include "leaves/includes/field.html" with field=rules_form.half_day_pay_percent %}
+                        {% include "leaves/includes/field.html" with field=rules_form.incomplete_day_treatment %}
+                    </div>
+                    <div class="stack">
+                        {% for field in rules_form %}
+                            {% if field.widget_type == "checkbox" and field.name != "allow_negative_net_pay" %}
+                                <label class="check">
+                                    {{ field }}
+                                    <span>
+                                        {{ field.label }}
+                                    </span>
+                                </label>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=rules_form.money_rounding_increment %}
+                        {% include "leaves/includes/field.html" with field=rules_form.money_rounding_mode %}
+                        {% include "leaves/includes/field.html" with field=rules_form.maximum_period_deduction_percent %}
+                    </div>
+                    <label class="check">
+                        {{ rules_form.allow_negative_net_pay }}
+                        <span>
+                            {{ rules_form.allow_negative_net_pay.label }}
+                        </span>
+                    </label>
+                </div>
+                <div class="card__foot">
+                    <button class="btn btn--primary" type="submit">
+                        Save rules
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    General
+                </h2>
+            </div>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="general">
+                <div class="card__body">
+                    {% if general_form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {% for error in general_form.non_field_errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="grid grid--2">
+                        {% for field in general_form %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="card__foot">
+                    <button class="btn btn--primary" type="submit">
+                        Save
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    History
+                </h2>
+                <span class="badge badge--neutral">
+                    {{ versions|length }}
+                </span>
+            </div>
+            {% if versions %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th class="numeric">
+                                    Version
+                                </th>
+                                <th>
+                                    Applies from
+                                </th>
+                                <th>
+                                    Until
+                                </th>
+                                <th>
+                                    Status
+                                </th>
+                                <th>
+                                    Saved by
+                                </th>
+                                <th class="numeric">
+                                    Saved on
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for version in versions %}
+                                <tr>
+                                    <td class="numeric">
+                                        {{ version.version_number }}
+                                    </td>
+                                    <td>
+                                        {{ version.effective_from|date:"F Y" }}
+                                    </td>
+                                    <td>
+                                        {% if version.status == "retired" %}
+                                            —
+                                        {% elif version.last_day %}
+                                            {{ version.last_day|date:"F Y" }}
+                                        {% else %}
+                                            Open
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge badge--{{ version.state.1 }}">
+                                            {{ version.state.0 }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {{ version.activated_by.email|default:"—" }}
+                                    </td>
+                                    <td class="numeric">
+                                        {{ version.activated_at|date:"d M Y" }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty">
+                    <div class="empty__title">
+                        No changes yet
+                    </div>
+                    <div class="empty__text">
+                        The company is on the standard rules. Change them above and each change is kept here.
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

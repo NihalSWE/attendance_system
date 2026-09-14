@@ -1,6 +1,8 @@
 """Forms for the working calendar. Convenience only — ``scheduling.services``
 re-validates every value and re-checks scope before writing."""
 
+import datetime
+
 from django import forms
 
 from common.choices import ActiveStatus
@@ -216,6 +218,61 @@ class EndWeeklyOffForm(StyledFormMixin, forms.Form):
         ),
         widget=_date_widget("Select end date"),
     )
+
+
+def posted_holiday_rows(data):
+    """The year calendar's selected dates, as posted.
+
+    One row per selected day: parallel ``date`` and ``name`` lists. Read
+    leniently so the page can show back exactly what was posted; a date that
+    cannot be read keeps ``date=None`` and fails validation.
+    """
+    rows = []
+    for raw, name in zip(data.getlist("date"), data.getlist("name")):
+        try:
+            day = datetime.date.fromisoformat(raw)
+        except ValueError:
+            day = None
+        rows.append({
+            "date": day,
+            "iso": raw,
+            "label": f"{day:%a, %d %b %Y}" if day else raw,
+            "name": name.strip(),
+        })
+    rows.sort(key=lambda row: row["iso"])
+    return rows
+
+
+class HolidayYearForm(StyledFormMixin, forms.Form):
+    """Many holidays at once from the year calendar.
+
+    The branch and paid flag apply to every selected date; each date carries
+    its own name. The dates arrive as rows (see ``posted_holiday_rows``), not
+    as a form field, because the calendar adds and removes them.
+    """
+
+    branch = forms.ModelChoiceField(
+        queryset=Branch.all_objects.none(),
+        required=False,
+        label="Applies to",
+        empty_label="All branches",
+    )
+    is_paid = forms.BooleanField(required=False, initial=True, label="Paid holidays")
+
+    def __init__(self, *args, branches=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if branches is not None:
+            self.fields["branch"].queryset = branches
+        self.rows = posted_holiday_rows(self.data) if self.is_bound else []
+
+    def clean(self):
+        data = super().clean()
+        if any(row["date"] is None for row in self.rows):
+            raise forms.ValidationError(
+                "A selected date could not be read. Remove it and select it again."
+            )
+        data["days"] = [(row["date"], row["name"]) for row in self.rows]
+        return data
 
 
 class HolidayForm(StyledFormMixin, forms.ModelForm):

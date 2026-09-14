@@ -77,6 +77,18 @@
                 <dd>
                     {{ record.calculation_snapshot.pay_basis|title }}, rate {{ record.calculation_snapshot.base_rate }} {{ record.currency }}
                 </dd>
+                <dt>
+                    Salary rules
+                </dt>
+                <dd>
+                    {% with rules=record.calculation_snapshot.rules %}
+                        {% if rules.version_number %}
+                            Company rules, version {{ rules.version_number }}
+                        {% else %}
+                            Standard rules
+                        {% endif %}
+                    {% endwith %}
+                </dd>
             </dl>
         </div>
     </div>
@@ -168,6 +180,85 @@
             </table>
         </div>
     </div>
+
+    {% if penalties %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Penalties
+                </h2>
+                <span class="badge badge--neutral">
+                    {{ penalties|length }}
+                </span>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Rule
+                            </th>
+                            <th>
+                                Days
+                            </th>
+                            <th class="numeric">
+                                Amount
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for penalty in penalties %}
+                            <tr>
+                                <td>
+                                    {{ penalty.penalty_rule.name }}
+                                </td>
+                                <td>
+                                    {% for day in penalty.days.all %}{{ day.attendance_record.work_date|date:"d M" }}{% if day.qualifying_value and penalty.penalty_rule.metric != "absence" %} ({{ day.qualifying_value|floatformat:"0" }} min){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                </td>
+                                <td class="numeric">
+                                    {{ penalty.deduction_amount }}
+                                </td>
+                                <td>
+                                    {% if penalty.status == "waived" %}
+                                        <span class="badge badge--neutral">
+                                            Waived
+                                        </span>
+                                        <div class="t-faint">
+                                            {{ penalty.approved_by.email|default:"" }}
+                                        </div>
+                                    {% else %}
+                                        <span class="badge badge--warning">
+                                            {{ penalty.get_status_display }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if can_waive and penalty.status == "proposed" %}
+                                        <form method="post" action="{% url 'payroll:penalty_waive' penalty.pk %}">
+                                            {% csrf_token %}
+                                            <button class="btn btn--quiet btn--sm" type="submit">
+                                                Waive
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
 
     <div class="card">
         <div class="card__head">
