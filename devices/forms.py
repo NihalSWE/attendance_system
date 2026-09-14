@@ -101,6 +101,20 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         required=False, initial=True, label="Push punches in real time",
         help_text="When off, the device only uploads on its timed interval.",
     )
+    push_protocol = forms.ChoiceField(
+        required=False,
+        label="Push protocol",
+        choices=(
+            ("auto", "As the device announces"),
+            ("3", "PushSDK 3.x"),
+        ),
+        initial="auto",
+        help_text=(
+            "Leave on “As the device announces”. Choose 3.x only when the "
+            "device's own menu shows Push 3.x but it connects as 2.x; restart "
+            "the device afterwards. If it then stops sending, switch back."
+        ),
+    )
     installed_at = CompanyDateTimeField(
         required=False,
         label="Installed at",
@@ -182,6 +196,7 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
                 "error_delay_seconds", 30
             )
             self.fields["realtime"].initial = settings.get("realtime", True)
+            self.fields["push_protocol"].initial = settings.get("push_protocol", "auto")
             if self.instance.authentication_secret_hash:
                 self.fields["comm_key"].help_text = (
                     "This device has a key: it is refused unless it sends that key "
@@ -254,6 +269,7 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
             "push_interval_seconds": self.cleaned_data.get("push_interval_seconds") or 10,
             "error_delay_seconds": self.cleaned_data.get("error_delay_seconds") or 30,
             "realtime": bool(self.cleaned_data.get("realtime")),
+            "push_protocol": self.cleaned_data.get("push_protocol") or "auto",
         }
 
         # Returned to the view so it can be shown exactly once.
