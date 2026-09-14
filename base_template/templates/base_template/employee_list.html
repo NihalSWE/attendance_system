@@ -1,6 +1,12 @@
 {% extends "base_template/base.html" %}
+{% load static %}
 {% block title %}
     Employees · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'attendance/js/now_badge.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="page__head">
@@ -32,7 +38,9 @@
             </a>
         </div>
     </div>
-    <div class="card">
+    <div class="card" data-now-board
+         data-now-url="{% url 'attendance:attendance_now' %}"
+         data-now-employees="{{ employee_ids }}">
         <form class="toolbar" method="get">
             <div class="toolbar__grow">
                 <label class="sr-only" for="q">
@@ -89,6 +97,9 @@
                                 Designation
                             </th>
                             <th>
+                                Now
+                            </th>
+                            <th>
                                 Status
                             </th>
                             <th class="numeric">
@@ -116,6 +127,22 @@
                                 </td>
                                 <td>
                                     {{ r.a.designation.name|default:"—" }}
+                                </td>
+                                <td data-now-for="{{ r.e.pk }}">
+                                    {% if r.now %}
+                                        <span class="badge badge--{{ r.now.tone }}">
+                                            {{ r.now.label }}
+                                        </span>
+                                        {% if r.now.since_text %}
+                                            <div class="t-faint">
+                                                since {{ r.now.since_text }}
+                                            </div>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if r.e.employment_status == 'active' %}

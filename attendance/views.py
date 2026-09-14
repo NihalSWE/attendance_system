@@ -10,12 +10,13 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from attendance import month_view
+from attendance import live_status, month_view
 from attendance.models import AttendanceRecord
 from attendance.services import month_bounds, refresh
 from common.tenant import use_company
@@ -158,6 +159,33 @@ def attendance_calendar(request):
         "company_tz": company_tz,
         "previous_year": previous[0], "previous_month": previous[1],
         "next_year": following[0], "next_month": following[1],
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def attendance_now(request):
+    """Who is in the office right now, as JSON.
+
+    Polled by the Employees page once a minute. Derived on read from today's
+    scans — nothing is stored, so this can be called as often as it likes.
+    """
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    require_company_membership(request.user, company_id)
+
+    wanted = request.GET.get("employees", "").strip()
+    employee_ids = [
+        int(value) for value in wanted.split(",") if value.strip().isdigit()
+    ] or None
+
+    statuses = live_status.statuses_for(company_id, employee_ids=employee_ids)
+    return JsonResponse({
+        "employees": {
+            str(employee_id): status.as_dict()
+            for employee_id, status in statuses.items()
+        },
     })
 
 
