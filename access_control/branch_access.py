@@ -29,12 +29,14 @@ from auditlog.services import record_company_event
 from common.tenant import use_company
 from employees.models import Employee
 from organization.models import Branch
+from tenants.models import Feature
 
 Role = CompanyMembership.Role
 Override = EmployeePermissionOverride
 
-# (code, label, feature code, action). The migration
-# access_control.0003_branch_permissions seeds the same rows.
+# (code, label, feature code, action). Checking needs no database rows; the
+# AccessPermission row is created the first time a permission is granted
+# (``_permission``), and an existing row with the same code is kept.
 BRANCH_PERMISSIONS = (
     ("employees.view", "View employees", "employees", "view"),
     ("employees.edit", "Create and edit employees", "employees", "edit"),
@@ -136,6 +138,23 @@ def scope_queryset(queryset, user, company_id, code, field="branch"):
     return queryset.filter(**{f"{field}__in": branches})
 
 
+def _permission(code):
+    """The catalogue row for a branch permission, created on first use."""
+    permission = AccessPermission.objects.filter(code=code).first()
+    if permission is not None:
+        return permission
+    _, label, feature_code, action = next(p for p in BRANCH_PERMISSIONS if p[0] == code)
+    feature, _ = Feature.objects.get_or_create(
+        code=feature_code, defaults={"name": feature_code.title()}
+    )
+    permission, _ = AccessPermission.objects.get_or_create(
+        code=code,
+        defaults={"name": label, "action": action, "feature": feature,
+                  "is_sensitive": feature_code == "payroll"},
+    )
+    return permission
+
+
 def _checked(actor, company_id, employee_id, code, branch_ids):
     """Shared validation for granting and removing. Call inside the tenant context."""
     membership = _membership(actor, company_id)
@@ -159,7 +178,7 @@ def _checked(actor, company_id, employee_id, code, branch_ids):
             raise PermissionDenied(
                 "You can only give or remove access you hold, in branches where you may grant it."
             )
-    return membership, employee, branch_ids, AccessPermission.objects.get(code=code)
+    return membership, employee, branch_ids, _permission(code)
 
 
 def _current_grant(employee, permission, at):

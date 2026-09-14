@@ -68,9 +68,12 @@ class BranchAccessTests(TestCase):
         return grant_access(actor=actor, company_id=self.company.pk, employee_id=employee.pk,
                             code=code, branch_ids=[b.pk for b in branches])
 
-    def test_catalogue_is_seeded(self):
-        codes = set(AccessPermission.objects.values_list("code", flat=True))
-        self.assertTrue({code for code, *_ in BRANCH_PERMISSIONS} <= codes)
+    def test_granting_creates_the_permission_row_once(self):
+        self.assertFalse(AccessPermission.objects.filter(code="salary.view").exists())
+        self.grant(self.owner, self.clerk, "salary.view", self.hq)
+        self.grant(self.owner, self.other, "salary.view", self.unit)
+        self.assertEqual(AccessPermission.objects.filter(code="salary.view").count(), 1)
+        self.assertEqual(len(BRANCH_PERMISSIONS), 11)
 
     def test_owner_everywhere_manager_own_branches_hr_company_wide_leave(self):
         company = self.company.pk
