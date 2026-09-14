@@ -44,7 +44,12 @@ class AdjustmentTests(OvertimeBase):
 
         record = remove_adjustment(actor=self.admin, company_id=self.company.pk,
                                    adjustment_id=lines["Eid bonus"].payroll_adjustment_id)
-        self.assertEqual(record.net_pay, net - 2000)
+        with use_company(self.company):
+            descriptions = set(record.lines.values_list("description", flat=True))
+        self.assertNotIn("Eid bonus", descriptions)
+        self.assertIn("Advance recovery", descriptions)
+        # Net never goes below zero under the standard rules.
+        self.assertEqual(record.net_pay, max(net - 2000, 0))
 
     def test_values_role_and_finalised_month_are_checked(self):
         for bad in ({"amount": Decimal("0")}, {"reason": " "}, {"adjustment_type": "gift"}):
