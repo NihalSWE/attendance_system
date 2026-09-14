@@ -11,6 +11,8 @@ an ``effective_to`` and still applies to the days before it, so recalculating
 an old month gives the answer that was true then.
 """
 
+import datetime
+import zoneinfo
 from dataclasses import dataclass
 
 from django.db.models import Q
@@ -19,9 +21,18 @@ from common.tenant import use_company
 from scheduling.models import (
     CompanyAttendanceSettings,
     DepartmentShift,
+    EmployeeShiftAssignment,
     Holiday,
     WeeklyOffRule,
 )
+from tenants.models import Company
+
+
+def _zone(name):
+    try:
+        return zoneinfo.ZoneInfo(name or "UTC")
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+        return datetime.timezone.utc
 
 WORKING = "working"
 WEEKLY_OFF = "weekly_off"
@@ -72,17 +83,56 @@ class WorkCalendar:
             and settings.shift_mode == CompanyAttendanceSettings.ShiftMode.DEPARTMENT_SHIFTS
         )
 
+        # Employee-level shifts (overrides and temporary shifts), as local
+        # dates in company time: an assignment starts at the company's
+        # midnight of its first day. Cancelled ones never applied.
+        with use_company(company_id):
+            tz = _zone(Company.objects.filter(pk=company_id).values_list("timezone", flat=True).first())
+            from_instant = datetime.datetime.combine(start, datetime.time.min, tzinfo=tz)
+            to_instant = datetime.datetime.combine(
+                end + datetime.timedelta(days=1), datetime.time.min, tzinfo=tz
+            )
+            self.employee_shifts = [
+                (
+                    a.employee_id,
+                    a.effective_from.astimezone(tz).date(),
+                    a.effective_to.astimezone(tz).date() if a.effective_to else None,
+                    a,
+                )
+                for a in EmployeeShiftAssignment.objects.select_related("shift")
+                .exclude(status=EmployeeShiftAssignment.Status.CANCELLED)
+                .filter(effective_from__lt=to_instant)
+                .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=from_instant))
+            ]
+
     @property
     def has_any_shift(self):
-        return self.shift is not None or (self.by_department and bool(self.department_shifts))
+        return (
+            self.shift is not None
+            or (self.by_department and bool(self.department_shifts))
+            or bool(self.employee_shifts)
+        )
 
-    def shift_for(self, department_id, on):
-        """The shift a person in this company department works on a date.
+    def employee_shift(self, employee_id, on):
+        """The employee's own shift assignment in force on a date, or None."""
+        for owner, first, until, assignment in self.employee_shifts:
+            if owner == employee_id and first <= on and (until is None or on < until):
+                return assignment
+        return None
 
-        Department mode: the department's shift in force that day, else the
-        company shift. Single-shift mode: always the company shift. An
-        employee-level override is not built yet.
+    def shift_for(self, department_id, on, employee_id=None):
+        """The shift a person works on a date.
+
+        An employee's own shift (an override or a temporary shift) wins. Else,
+        in department mode, the department's shift in force that day, else the
+        company shift; in single-shift mode, always the company shift. Callers
+        that know the employee must pass ``employee_id`` or an override is
+        missed.
         """
+        if employee_id is not None:
+            assignment = self.employee_shift(employee_id, on)
+            if assignment is not None:
+                return assignment.shift
         if self.by_department:
             for link in self.department_shifts:
                 if (

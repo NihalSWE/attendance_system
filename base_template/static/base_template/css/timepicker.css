@@ -1,0 +1,128 @@
+/* ============================================================================
+   Time picker (timepicker.js): an HH:MM text box with a clock button and a
+   panel of hour and minute buttons. Same panel form as the date picker
+   (datepicker.css); colours are tokens only.
+   ========================================================================= */
+
+.tp {
+    position: relative;
+    width: 100%;
+}
+.tp__input.input {
+    padding-right: 40px;
+    font-variant-numeric: tabular-nums;
+}
+.tp__btn {
+    position: absolute;
+    top: 50%;
+    right: 5px;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background var(--tr), color var(--tr);
+}
+.tp__btn:hover {
+    background: var(--surface-sunken);
+    color: var(--text);
+}
+.tp__btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.tp__btn svg {
+    width: 16px;
+    height: 16px;
+    stroke-width: 2;
+}
+
+.tp__panel {
+    /* Fixed and on <body>, like the date picker, so a card's overflow cannot clip it. */
+    position: fixed;
+    z-index: 200;
+    top: 0;
+    left: 0;
+    display: flex;
+    gap: var(--s4);
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    transform: translateY(-4px) scale(.985);
+    pointer-events: none;
+    transition: opacity .15s ease, transform .15s ease;
+    flex-wrap: wrap;
+    max-width: calc(100vw - 16px);
+}
+.tp__panel--open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+.tp__label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: var(--s2);
+}
+.tp__grid {
+    display: grid;
+    gap: 2px;
+}
+.tp__grid--hours {
+    grid-template-columns: repeat(6, 38px);
+}
+.tp__grid--minutes {
+    grid-template-columns: repeat(3, 38px);
+    padding-left: var(--s4);
+    border-left: 1px solid var(--border);
+}
+.tp__cell {
+    height: 30px;
+    border: 0;
+    border-radius: var(--r);
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    transition: background var(--tr), color var(--tr);
+}
+.tp__cell:hover {
+    background: var(--surface-sunken);
+}
+.tp__cell:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 var(--ring-width) var(--ring);
+}
+.tp__cell--on,
+.tp__cell--on:hover {
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 700;
+}
+.tp__note {
+    flex-basis: 100%;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+@media (max-width: 420px) {
+    /* Hours above minutes on a phone. */
+    .tp__grid--minutes {
+        grid-template-columns: repeat(6, 38px);
+        padding-left: 0;
+        border-left: 0;
+    }
+}

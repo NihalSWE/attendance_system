@@ -98,6 +98,8 @@ def time_widget():
             "maxlength": 5,
             "inputmode": "numeric",
             "autocomplete": "off",
+            # The project time picker (timepicker.js); typing still works.
+            "data-timepicker": "",
         }
     )
 

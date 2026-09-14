@@ -47,10 +47,14 @@ uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
   the project calendar and a time as `HH:MM` text (below). On 2026-09-13 the
   only offenders were five fields in `devices/forms.py` (device installed at,
   enrollment and device-department effective from/to), fixed in Nihal's N0.
-- **Time of day** is a plain text input, `HH:MM` in 24-hour form, parsed and
+- **Time of day** is a text input, `HH:MM` in 24-hour form, parsed and
   validated server-side. Not `<input type="time">`: the browser draws its own
-  clock control there, which the design does not allow. A proper time-picker
-  component is on the skipped list.
+  clock control there, which the design does not allow. **Since 2026-09-14
+  every `HH:MM` box carries `data-timepicker`:** `timepicker.js` adds a clock
+  button and a panel of hour and minute buttons in the date picker's form;
+  typing still works and is tidied on blur ("930" → 09:30).
+  `common.forms.time_widget()` and the shift form set it, and a test fails if
+  an `HH:MM` box anywhere lacks it.
 - **Derived values are never typed.** A shift's length comes from its start
   and end times.
 - Button variants that exist: `btn--primary`, `btn--ghost`, `btn--quiet`,

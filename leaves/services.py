@@ -202,7 +202,7 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
                         "Leave can only fall inside their employment."
                     )
                 })
-            shift = calendar.shift_for(assignment.department_id, on)
+            shift = calendar.shift_for(assignment.department_id, on, employee_id=employee.pk)
             if shift is None:
                 raise ValidationError({
                     "start_date": (

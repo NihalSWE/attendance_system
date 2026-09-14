@@ -135,6 +135,118 @@
                 </form>
             </div>
         </div>
+
+        <div class="card" id="shift">
+            <div class="card__head">
+                <h2>
+                    Shift
+                </h2>
+                {% if works_shift %}
+                    <span class="badge badge--neutral">
+                        Today: {{ works_shift.name }}, {{ works_shift.start_time|time:"H:i" }}–{{ works_shift.end_time|time:"H:i" }} · {{ works_from }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                <p class="field__help">
+                    An employee works their department's shift (or the company shift). Give them their
+                    own shift here: without a last day it stays until changed; with one it is temporary,
+                    and afterwards they are back on what they had.
+                </p>
+                {% if shift_form.non_field_errors %}
+                    <div class="alert alert--danger">
+                        {{ shift_form.non_field_errors }}
+                    </div>
+                {% endif %}
+                <form method="post" class="stack" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="shift">
+                    <div class="grid grid--2">
+                        {% for field in shift_form %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    </div>
+                    <div class="row">
+                        <button class="btn btn--primary" type="submit">
+                            Save shift
+                        </button>
+                    </div>
+                </form>
+
+                {% if own_shifts %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Own shift
+                                    </th>
+                                    <th class="numeric">
+                                        From
+                                    </th>
+                                    <th class="numeric">
+                                        Until
+                                    </th>
+                                    <th>
+                                        Type
+                                    </th>
+                                    <th>
+                                        Reason
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in own_shifts %}
+                                    <tr>
+                                        <td>
+                                            {{ row.shift.name }}
+                                        </td>
+                                        <td class="numeric">
+                                            {{ row.first_day|date:"d M Y" }}
+                                        </td>
+                                        <td class="numeric">
+                                            {% if row.last_day %}{{ row.last_day|date:"d M Y" }}{% else %}Until changed{% endif %}
+                                        </td>
+                                        <td>
+                                            {% if row.assignment_type == "temporary" %}Temporary{% else %}Own shift{% endif %}
+                                        </td>
+                                        <td>
+                                            {{ row.reason|default:"—" }}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+
+                {% if endable %}
+                    {% if end_form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {{ end_form.non_field_errors }}
+                        </div>
+                    {% endif %}
+                    <form method="post" class="stack" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="section" value="shift_end">
+                        <input type="hidden" name="assignment" value="{{ endable.pk }}">
+                        <h3 class="t-card-head">
+                            End {{ endable.shift.name }} (from {{ endable.first_day|date:"d M Y" }})
+                        </h3>
+                        <div class="grid grid--2">
+                            {% for field in end_form %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--ghost" type="submit">
+                                End this shift
+                            </button>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
     </div>
 {% endblock %}
 {% block extra_js %}

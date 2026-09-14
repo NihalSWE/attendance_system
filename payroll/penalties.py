@@ -124,7 +124,9 @@ def qualifying_value(rule, record, expected_minutes):
         last_out = getattr(record, "last_out_at", None)
         if status not in (Status.PRESENT, Status.HALF_DAY) or last_out is None:
             return None
-        value = _minutes_between(record.scheduled_end_at, last_out)
+        # Like lateness: leaving within the shift's grace-out is not early.
+        grace = getattr(getattr(record, "shift", None), "grace_out_minutes", 0) or 0
+        value = max(0, _minutes_between(record.scheduled_end_at, last_out) - grace)
     elif rule.metric == Rule.Metric.WORKED_SHORTFALL:
         if status not in (Status.PRESENT, Status.HALF_DAY):
             return None

@@ -20,6 +20,7 @@ force at the time.
 """
 
 import datetime
+import zoneinfo
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -34,6 +35,7 @@ from organization.services import assert_branch_in_scope, require_structure_mana
 from scheduling.models import (
     CompanyAttendanceSettings,
     DepartmentShift,
+    EmployeeShiftAssignment,
     Holiday,
     Shift,
     WeeklyOffRule,
@@ -46,9 +48,14 @@ SHIFT_FIELDS = (
     "end_time",
     "spans_next_day",
     "grace_in_minutes",
+    "grace_out_minutes",
     "minimum_full_day_minutes",
     "minimum_half_day_minutes",
+    "default_break_minutes",
+    "break_is_paid",
+    "overtime_after_minutes",
 )
+EMPLOYEE_SHIFT_FIELDS = ("employee", "shift", "first_day", "last_day", "reason")
 SETTINGS_FIELDS = ("shift_mode", "company_shift", "missing_punch_policy")
 DEPARTMENT_SHIFT_FIELDS = ("department", "shift", "effective_from")
 WEEKLY_OFF_FIELDS = ("branch", "weekdays", "is_paid", "effective_from")
@@ -124,6 +131,12 @@ def _apply_shift_values(shift, values):
         errors["minimum_half_day_minutes"] = (
             "A half day cannot need more minutes than a full day."
         )
+    if shift.scheduled_minutes and shift.grace_out_minutes >= shift.scheduled_minutes:
+        errors["grace_out_minutes"] = "Leaving early grace must be shorter than the shift."
+    if shift.scheduled_minutes and shift.grace_in_minutes >= shift.scheduled_minutes:
+        errors["grace_in_minutes"] = "Late grace must be shorter than the shift."
+    if shift.overtime_after_minutes > 24 * 60:
+        errors["overtime_after_minutes"] = "Use at most 1440 minutes (24 hours)."
     if errors:
         raise ValidationError(errors)
 
@@ -255,6 +268,227 @@ def set_department_shift(*, actor, company_id, values):
                    "effective_from": starts.isoformat()},
         )
     return link
+
+
+# --------------------------------------------------------------------------
+# One employee's own shift
+# --------------------------------------------------------------------------
+
+def _company_zone(company):
+    try:
+        return zoneinfo.ZoneInfo(company.timezone or "UTC")
+    except (zoneinfo.ZoneInfoNotFoundError, ValueError):
+        return datetime.timezone.utc
+
+
+def _midnight(tz, on):
+    """An employee shift starts and ends at the company's midnight."""
+    return datetime.datetime.combine(on, datetime.time.min, tzinfo=tz)
+
+
+def _employee_snapshot(assignment, tz):
+    return {
+        "employee_id": assignment.employee_id,
+        "shift_id": assignment.shift_id,
+        "type": assignment.assignment_type,
+        "first_day": assignment.effective_from.astimezone(tz).date().isoformat(),
+        "until": (
+            assignment.effective_to.astimezone(tz).date().isoformat()
+            if assignment.effective_to else None
+        ),
+        "status": assignment.status,
+    }
+
+
+def _employee_in_scope(membership, employee):
+    """The employee belongs to this company and to a branch the actor manages."""
+    from employees.models import Employee, EmployeeAssignment
+
+    if not Employee.objects.filter(pk=employee.pk).exists():
+        raise PermissionDenied("Employee not found in this company.")
+    placement = (
+        EmployeeAssignment.objects.select_related("branch")
+        .filter(employee=employee, effective_to__isnull=True)
+        .exclude(status__in=["cancelled", "draft"])
+        .first()
+    )
+    if placement is not None:
+        assert_branch_in_scope(membership, placement.branch)
+
+
+@transaction.atomic
+def set_employee_shift(*, actor, company_id, values):
+    """Give one employee their own shift from a day, optionally until a day.
+
+    No last day: an **override**, in force until changed. With a last day: a
+    **temporary** shift; afterwards the employee is back on what they had —
+    the override it interrupted, or else their department's or the company's
+    shift. Either way it wins over the department and company shift.
+
+    One employee shift at a time, like department shifts: a new one closes the
+    one in force on its first day, one starting that same day is replaced, and
+    a change already saved for a later day refuses an earlier one.
+    """
+    membership = require_structure_manager(actor, company_id)
+    values = _writable(values, EMPLOYEE_SHIFT_FIELDS)
+    employee, shift = values["employee"], values["shift"]
+    first_day, last_day = values["first_day"], values.get("last_day")
+    if last_day is not None and last_day < first_day:
+        raise ValidationError({"last_day": "The last day cannot be before the first day."})
+    tz = _company_zone(membership.company)
+    starts = _midnight(tz, first_day)
+    ends = _midnight(tz, last_day + datetime.timedelta(days=1)) if last_day else None
+
+    with use_company(company_id):
+        _employee_in_scope(membership, employee)
+        if shift.status != ActiveStatus.ACTIVE:
+            raise ValidationError({"shift": "Choose an active shift."})
+        existing = (
+            EmployeeShiftAssignment.objects.select_for_update()
+            .filter(employee=employee)
+            .exclude(status=EmployeeShiftAssignment.Status.CANCELLED)
+        )
+        later = existing.filter(effective_from__gt=starts).order_by("effective_from").first()
+        if later is not None:
+            raise ValidationError({
+                "first_day": (
+                    f"{employee.full_name} already has a shift change from "
+                    f"{later.effective_from.astimezone(tz):%d %b %Y}. Pick that day or a later one."
+                )
+            })
+        current = existing.filter(effective_from__lte=starts).filter(
+            Q(effective_to__isnull=True) | Q(effective_to__gt=starts)
+        ).first()
+        before = _employee_snapshot(current, tz) if current else {}
+        resume = None
+        if current is not None:
+            # A temporary shift in the middle of a longer one: the longer one
+            # carries on afterwards.
+            if ends is not None and (current.effective_to is None or current.effective_to > ends):
+                resume = (current.shift, current.assignment_type, current.effective_to, current.reason)
+            if current.effective_from == starts:
+                current.status = EmployeeShiftAssignment.Status.CANCELLED
+            else:
+                current.effective_to = starts
+                current.status = EmployeeShiftAssignment.Status.ENDED
+            current.updated_by = actor
+            current.full_clean()
+            current.save()
+
+        assignment = create_validated(
+            EmployeeShiftAssignment,
+            company=membership.company,
+            employee=employee,
+            shift=shift,
+            effective_from=starts,
+            effective_to=ends,
+            assignment_type=(
+                EmployeeShiftAssignment.AssignmentType.TEMPORARY if ends
+                else EmployeeShiftAssignment.AssignmentType.EMPLOYEE_OVERRIDE
+            ),
+            reason=(values.get("reason") or "").strip(),
+            assigned_by=actor,
+            status=EmployeeShiftAssignment.Status.ACTIVE,
+            created_by=actor,
+            updated_by=actor,
+        )
+        if resume is not None:
+            resumed_shift, resumed_type, resumed_to, resumed_reason = resume
+            create_validated(
+                EmployeeShiftAssignment,
+                company=membership.company,
+                employee=employee,
+                shift=resumed_shift,
+                effective_from=ends,
+                effective_to=resumed_to,
+                assignment_type=resumed_type,
+                reason=resumed_reason,
+                assigned_by=actor,
+                status=EmployeeShiftAssignment.Status.ACTIVE,
+                created_by=actor,
+                updated_by=actor,
+            )
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="employee_shift.set", obj=assignment,
+            before=before, after={**_employee_snapshot(assignment, tz), "resumes_after": resume is not None},
+        )
+    return assignment
+
+
+def get_employee_shift_for_edit(*, actor, company_id, assignment_id):
+    membership = require_structure_manager(actor, company_id)
+    with use_company(company_id):
+        assignment = (
+            EmployeeShiftAssignment.objects.select_related("employee", "shift")
+            .filter(pk=assignment_id).first()
+        )
+        if assignment is None:
+            raise PermissionDenied("Employee shift not found in this company.")
+        _employee_in_scope(membership, assignment.employee)
+    return membership, assignment
+
+
+@transaction.atomic
+def end_employee_shift(*, actor, company_id, assignment_id, last_day):
+    """The employee's own shift stops after ``last_day``; from the next day they
+    are back on their department's or the company's shift. Ending it before it
+    started cancels it."""
+    membership, assignment = get_employee_shift_for_edit(
+        actor=actor, company_id=company_id, assignment_id=assignment_id
+    )
+    if assignment.status == EmployeeShiftAssignment.Status.CANCELLED:
+        raise ValidationError({"last_day": "This shift was cancelled."})
+    tz = _company_zone(membership.company)
+    stops = _midnight(tz, last_day + datetime.timedelta(days=1))
+    if assignment.effective_to is not None and stops >= assignment.effective_to:
+        raise ValidationError({
+            "last_day": (
+                "It already ends on "
+                f"{(assignment.effective_to.astimezone(tz) - datetime.timedelta(days=1)):%d %b %Y}."
+            )
+        })
+    with use_company(company_id):
+        before = _employee_snapshot(assignment, tz)
+        if stops <= assignment.effective_from:
+            assignment.status = EmployeeShiftAssignment.Status.CANCELLED
+        else:
+            assignment.effective_to = stops
+            assignment.status = EmployeeShiftAssignment.Status.ENDED
+        assignment.updated_by = actor
+        assignment.full_clean()
+        assignment.save()
+        # A shift that was due to resume after this one is dropped too:
+        # ending means "back to the department's shift".
+        EmployeeShiftAssignment.objects.filter(
+            employee=assignment.employee, effective_from__gte=stops,
+        ).exclude(status=EmployeeShiftAssignment.Status.CANCELLED).update(
+            status=EmployeeShiftAssignment.Status.CANCELLED, updated_by=actor,
+        )
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="employee_shift.ended", obj=assignment,
+            before=before, after=_employee_snapshot(assignment, tz),
+        )
+    return assignment
+
+
+def employee_shift_history(company_id, employee, tz):
+    """The employee's own shifts, newest first, with local first/last days."""
+    with use_company(company_id):
+        rows = list(
+            EmployeeShiftAssignment.objects.select_related("shift", "assigned_by")
+            .filter(employee=employee)
+            .exclude(status=EmployeeShiftAssignment.Status.CANCELLED)
+            .order_by("-effective_from")
+        )
+    for row in rows:
+        row.first_day = row.effective_from.astimezone(tz).date()
+        row.last_day = (
+            (row.effective_to.astimezone(tz) - datetime.timedelta(days=1)).date()
+            if row.effective_to else None
+        )
+    return rows
 
 
 # --------------------------------------------------------------------------
