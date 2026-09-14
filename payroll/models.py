@@ -506,8 +506,13 @@ class PenaltyAssessmentAttendance(TenantOwned):
     penalty_assessment = models.ForeignKey(
         PenaltyAssessment, on_delete=models.PROTECT, related_name="days"
     )
+    # CASCADE, not the dictionary's PROTECT. Attendance recalculates itself and
+    # drops a day that no longer applies (e.g. a placement ended); a PROTECT
+    # link from a draft penalty would make that recalculation fail. The
+    # penalty is proposed and rebuilt at the next salary generation anyway; a
+    # finalised month's attendance never recalculates, so its evidence stays.
     attendance_record = models.ForeignKey(
-        "attendance.AttendanceRecord", on_delete=models.PROTECT,
+        "attendance.AttendanceRecord", on_delete=models.CASCADE,
         related_name="penalty_links",
     )
     sequence_number = models.PositiveIntegerField(default=1)

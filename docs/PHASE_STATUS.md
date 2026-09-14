@@ -655,6 +655,12 @@ Ajay's running server was not touched while he checked A3).**
   models; they are in the **payroll app** (same table names) because they are
   salary settings and the attendance app is Nihal's — two sides adding
   migrations to one app would collide.
+- **Second deviation (2026-09-14, `payroll/0004`):**
+  `PenaltyAssessmentAttendance.attendance_record` is `CASCADE`, not PROTECT.
+  Attendance recalculates itself and deletes a day that no longer applies; a
+  PROTECT link from a draft penalty would make that fail. Draft penalties are
+  rebuilt at the next salary generation, and a finalised month's attendance
+  never recalculates, so no evidence of a posted penalty can be lost.
 - **Versioned like the salary rules** (`payroll/penalties.py`): `code` names a
   rule across versions; change = new version from the 1st of a month (the one
   in force closes, one starting the same month is replaced, a later saved

@@ -266,3 +266,26 @@ class EndToEndTests(TestCase):
         with use_company(self.company):
             again = PayrollRecord.objects.get(payroll_run=run, employee=self.monthly)
         self.assertEqual(again.net_pay, after.net_pay)
+
+    def test_attendance_can_drop_a_day_a_draft_penalty_points_at(self):
+        """Attendance recalculates itself and removes days that no longer apply
+        (the queryset delete in calculate_attendance). A draft penalty's link
+        to such a day must not block that."""
+        create_penalty_rule(actor=self.admin, company_id=self.company.pk, values={
+            "effective_from": datetime.date(2026, 8, 1), "name": "Late 10+",
+            "metric": "late_minutes", "operator": "gte", "threshold_minutes": 10,
+            "occurrence_mode": "single_day", "required_occurrences": 1,
+            "deduction_method": "fixed_amount", "deduction_value": Decimal("100"),
+            "exclusive_group": "", "maximum_deduction": None,
+        })
+        generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        with use_company(self.company):
+            linked = AttendanceRecord.objects.filter(penalty_links__isnull=False).first()
+            self.assertIsNotNone(linked)
+            linked.sessions.all().delete()
+            linked.allocations.all().delete()
+            AttendanceRecord.objects.filter(pk=linked.pk).delete()
+        # And the next generation simply rebuilds everything.
+        run = generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        with use_company(self.company):
+            self.assertEqual(run.records.count(), 2)
