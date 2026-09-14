@@ -538,7 +538,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N4 | **Which devices count + Re-check punches** | Attendance settings: all company devices / branch devices / department devices / assigned devices. "Re-check punches" for a date range re-runs authorisation on excluded punches, audited, then attendance is recalculated | 4 | (new) |
 | N5 | **Attendance corrections** | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b). Approving overtime (set the end time, approved minutes) and its pay are A9's; the list links to A9's approve action (agreed 2026-09-14) | — | Attendance corrections; attendance review status and the Incomplete decision |
 | N6 | **Employee detail page + terminate screen** | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
-| N7 | **Payslip redesign** (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/. Also (A7): the employee opens the same template with `for_employee=True` — breadcrumbs then lead to My payslips, never company pages — and the "Draft" label must come from the run's status (a finalised month says Finalised) | — | (new) |
+| N7 | **Payslip redesign** - done 2026-09-14, branch `feature/n7-payslip`, merged with the employee's view (A7) (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/. Also (A7): the employee opens the same template with `for_employee=True` — breadcrumbs then lead to My payslips, never company pages — and the "Draft" label must come from the run's status (a finalised month says Finalised) | — | (new) |
 | N8 | **Device connection check** (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. Builds on the existing server-address status panel | — | (new) |
 | N9 | **Data tables on Nihal's pages** (see A15) | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
 
@@ -977,7 +977,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A9 (overtime, approved automatically when scanned out) and N0–N3 (N1b day close / live attendance and N3 in-office badge merged 2026-09-14). Ajay's session, in order (Ajay, 2026-09-14): A6b (first salary for an employee created from device users), A5c (weekly off start date, remove the paid-day-off boxes, day-value label), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N7, N4, N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Nihal: N7 (payslip redesign), then N4 (device attendance scope + Re-check punches), N5, N6. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A6b (first salary for an employee created from device users), A5c (weekly off start date, remove the paid-day-off boxes, day-value label), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -1879,3 +1879,62 @@ pulled immediately before touching them.
 
 **No new migration, no new environment variable.** 21 tests in
 `attendance/tests_now_badge.py`; checked at 1440, 768 and 375 px.
+
+
+## 2026-09-14 — N7: the payslip, redesigned (Nihal)
+
+Branch `feature/n7-payslip`, from clean `main`. Template and CSS only:
+`payroll/templates/payroll/payslip.html`, a new
+`payroll/static/payroll/css/payslip.css`, and a test file. No payroll view,
+service or calculation was changed — the page uses exactly the context the
+view already passed.
+
+It reads top to bottom the way a paper payslip is read:
+
+1. **Who and which month.** Employee name, code, Designation, Department and
+   branch beside the pay period, its dates, and the pay basis and rate. The
+   page head shows the run's **real status** — Draft or Finalised — where the
+   old page always said "Draft".
+2. **Three figures.** Gross earnings, deductions, and **net pay as the one
+   hero figure** (`metric--hero`, per the style guide: one hero only). Where
+   three figures fall to two per row (≤1100 px), net pay takes its own row
+   rather than sitting half-width under the others.
+3. **Earnings beside deductions**, as separate tables, each closed by its
+   total; the deductions table ends with net pay under an ink rule. Every
+   line carries **its basis underneath**, e.g. "Monthly salary", "11 days ×
+   2,000.00 a day", "12 h × 150.00", "340 minutes short of the shift across
+   the month". A penalty names its rule and the dates (with minutes late),
+   and **Waive** sits on that line while the run is a draft. A waived
+   penalty is listed under the table as "Waived, not deducted", with who
+   waived it.
+4. **The month's attendance** as a strip of small figures (absent in red when
+   there are any), a **Calendar view** link to that employee's N2 calendar for
+   the same month, and the salary rules in the card footer.
+
+Every amount goes through `{% load money %}` / `|money`. Print hides the
+sidebar, topbar, breadcrumbs and buttons and keeps the two tables side by
+side.
+
+The table component has no `tfoot` styles, so totals rendered with 1px
+padding and centred labels (the old payslip had the same). `payslip.css`
+gives them the body cells' rhythm. That fix is local to the payslip; other
+tables with a `tfoot` still have the gap.
+
+Checked on Northwind's September draft at 1440, 768 and 375 px: no page
+overflow, and neither table scrolls at 375. 8 tests in
+`payroll/tests_payslip.py` (layout and wording only — they reuse the August
+fixture from `tests_basic.EndToEndTests`).
+
+### Found along the way — pushed separately
+
+Generating that September draft crashed:
+`IntegrityError: null value in column "scheduled_start_at"`. My bug from N1b:
+an employee with **no shift** (department mode, their department has none,
+another department does) got a record on a weekly off or holiday with no
+scheduled start. Before N1b such an employee got no record on any day; N1b
+checked that for working days only. Fixed on
+**`fix/attendance-no-shift-day-off`** (3 regression tests). Punch ingestion
+was never affected — `recalculate_for_punches` catches the error — but
+Generate salary and any page calling `refresh()` for that employee were.
+
+**No new migration, no new environment variable.**

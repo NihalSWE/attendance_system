@@ -1,0 +1,178 @@
+/* ============================================================================
+Payslip
+Reads top to bottom the way a payslip is read on paper: who and which month,
+what they take home, then how that number was reached, then the month's
+attendance behind it. Tokens only — no colour is defined here.
+========================================================================= */
+
+.slip-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: var(--s6);
+}
+.slip-head__block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s1);
+    min-width: 0;
+}
+.slip-head__block + .slip-head__block {
+    border-left: 1px solid var(--border);
+    padding-left: var(--s6);
+}
+.slip-head__name {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -.02em;
+    overflow-wrap: anywhere;
+}
+.slip-head__meta {
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+/* Earnings beside deductions, the way a paper slip sets them. They stack
+   before the columns get too narrow for an amount to sit on one line. */
+.slip-tables {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s4);
+    align-items: start;
+}
+.slip-tables > .card {
+    margin: 0;
+}
+.slip-line__basis {
+    display: block;
+    color: var(--muted);
+    font-size: 11.5px;
+    margin-top: 2px;
+}
+.slip-line__action {
+    margin-top: var(--s1);
+}
+.slip-empty {
+    color: var(--muted);
+    text-align: center;
+    padding: var(--s5) var(--s4);
+}
+/* The table component styles thead and tbody only; totals get the same
+   cell rhythm here so they line up with the rows above them. */
+.slip-table tfoot th {
+    padding: 11px 14px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-align: left;
+}
+.slip-table td.numeric,
+.slip-table th.numeric {
+    text-align: right;
+    white-space: nowrap;
+}
+/* What they take home closes the table, set off from the totals above it. */
+.slip-table tfoot .slip-table__net th {
+    border-top: 1px solid var(--text);
+    font-size: 14px;
+}
+.slip-head-action {
+    margin-left: auto;
+}
+
+.slip-waived {
+    margin: 0;
+    padding: var(--s3) var(--s4);
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* The month's attendance: a strip of small figures, as many per row as fit. */
+.slip-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    gap: var(--s2);
+    margin: 0;
+}
+.slip-stats__item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--s3);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    min-width: 0;
+}
+.slip-stats__item dt {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.slip-stats__item dd {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.slip-stats__item--alert dd {
+    color: var(--danger-ink);
+}
+
+.slip-foot {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+@media (max-width: 1100px) {
+    .slip-tables {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    /* Three figures become two per row here. Net pay takes a row of its own
+       rather than sitting half-width under the other two. */
+    .slip-metrics .metric--hero {
+        grid-column: 1 / -1;
+    }
+}
+@media (max-width: 680px) {
+    .slip-head {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--s4);
+    }
+    .slip-head__block + .slip-head__block {
+        border-left: 0;
+        padding-left: 0;
+        border-top: 1px solid var(--border);
+        padding-top: var(--s4);
+    }
+}
+
+/* On paper: no navigation, no buttons, and the two tables side by side. */
+@media print {
+    .sidebar,
+    .topbar,
+    .crumbs,
+    .page__actions,
+    .slip-line__action {
+        display: none !important;
+    }
+    .shell,
+    .main,
+    .page {
+        display: block;
+        margin: 0;
+        padding: 0;
+    }
+    .card,
+    .metric--hero {
+        box-shadow: none;
+        break-inside: avoid;
+    }
+    .slip-tables {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
