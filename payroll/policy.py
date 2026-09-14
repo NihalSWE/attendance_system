@@ -41,6 +41,10 @@ RULE_FIELDS = (
     "money_rounding_mode",
     "allow_negative_net_pay",
     "maximum_period_deduction_percent",
+    "overtime_multiplier",
+    "holiday_overtime_multiplier",
+    "minimum_overtime_minutes",
+    "overtime_rounding_minutes",
 )
 CONFIG_FIELDS = tuple(Version.CONFIG_DEFAULTS)
 GENERAL_FIELDS = ("currency", "default_pay_day")
@@ -67,11 +71,21 @@ class SalaryRules:
     rounding_increment: Decimal
     rounding_mode: str
     max_penalty_percent: object = None  # Decimal, or None for no limit
+    pays_overtime: bool = True
+    overtime_multiplier: Decimal = Decimal("2")
+    day_off_multiplier: Decimal = Decimal("2")
+    overtime_minimum: int = 0
+    overtime_step: int = 0
 
     @classmethod
     def from_version(cls, version):
         source = version or Version()
         return cls(
+            pays_overtime=source.overtime_method != Version.OvertimeMethod.NONE,
+            overtime_multiplier=Decimal(source.overtime_multiplier),
+            day_off_multiplier=Decimal(source.holiday_overtime_multiplier),
+            overtime_minimum=source.minimum_overtime_minutes,
+            overtime_step=source.overtime_rounding_minutes,
             version=version,
             per_day_method=source.monthly_proration_method,
             divisor=Decimal(source.monthly_divisor),
@@ -85,6 +99,19 @@ class SalaryRules:
             rounding_mode=source.money_rounding_mode,
             max_penalty_percent=source.maximum_period_deduction_percent,
         )
+
+    def payable_overtime(self, minutes):
+        """Approved minutes of one day, after the minimum and the rounding.
+
+        A day under the minimum pays none; otherwise the minutes are rounded
+        down to whole blocks (30 → 95 min pays 90).
+        """
+        minutes = int(minutes or 0)
+        if not self.pays_overtime or minutes <= 0 or minutes < self.overtime_minimum:
+            return 0
+        if self.overtime_step:
+            minutes -= minutes % self.overtime_step
+        return minutes
 
     def round_net(self, value):
         steps = (Decimal(value) / self.rounding_increment).quantize(
@@ -110,6 +137,13 @@ class SalaryRules:
             "max_penalty_percent": (
                 plain(self.max_penalty_percent) if self.max_penalty_percent is not None else None
             ),
+            "overtime": {
+                "paid": self.pays_overtime,
+                "multiplier": plain(self.overtime_multiplier),
+                "day_off_multiplier": plain(self.day_off_multiplier),
+                "minimum_minutes": self.overtime_minimum,
+                "rounding_minutes": self.overtime_step,
+            },
         }
 
 

@@ -22,3 +22,13 @@ def money(value, places=2):
     except (InvalidOperation, ValueError, TypeError):
         return value
     return f"{amount:,.{places}f}"
+
+
+@register.filter
+def hm(minutes):
+    """Minutes as hours and minutes, as the attendance calendar shows them: 95 -> "1h 35m"."""
+    try:
+        minutes = int(minutes or 0)
+    except (ValueError, TypeError):
+        return minutes
+    return f"{minutes // 60}h {minutes % 60}m"

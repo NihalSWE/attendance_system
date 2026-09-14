@@ -30,8 +30,9 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
     the version in force on its first day.
 
     Only the rules the calculation reads today are on the settings page.
-    Overtime, penalty stacking and recovery caps are stored with their
-    defaults and come alive with those features (plan steps A4, A9, A13).
+    Penalty stacking and recovery caps are stored with their defaults and
+    come alive with those features (plan steps A4, A13). Overtime (A9) pays
+    approved minutes at × the hourly rate: 2× by default (Ajay, 2026-09-14).
     """
 
     class Status(models.TextChoices):
@@ -100,6 +101,7 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
         ("pay_half", "Paid as a half day"),
         ("unpaid", "Not paid"),
     )
+    OVERTIME_STEPS = (0, 15, 30, 60)
 
     name = models.CharField(max_length=120, default="Salary rules")
     code = models.CharField(max_length=32, default="SALARY")
@@ -133,12 +135,15 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
         max_length=24, choices=UnpaidLeaveTreatment.choices, default=UnpaidLeaveTreatment.DEDUCT
     )
     overtime_method = models.CharField(
-        max_length=16, choices=OvertimeMethod.choices, default=OvertimeMethod.NONE
+        max_length=16, choices=OvertimeMethod.choices, default=OvertimeMethod.MULTIPLIER
     )
-    overtime_multiplier = models.DecimalField(max_digits=18, decimal_places=6, default=Decimal("1"))
+    overtime_multiplier = models.DecimalField(max_digits=18, decimal_places=6, default=Decimal("2"))
+    # Work on a holiday or weekly off: every approved minute is paid at this.
     holiday_overtime_multiplier = models.DecimalField(
-        max_digits=18, decimal_places=6, default=Decimal("1")
+        max_digits=18, decimal_places=6, default=Decimal("2")
     )
+    # Approved overtime is rounded down to blocks of this many minutes (0 =
+    # exact), and a day with less than the minimum pays none.
     overtime_rounding_minutes = models.PositiveIntegerField(default=0)
     minimum_overtime_minutes = models.PositiveIntegerField(default=0)
     require_overtime_approval = models.BooleanField(default=True)
@@ -227,6 +232,14 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
         cap = self.maximum_period_deduction_percent
         if cap is not None and not (Decimal("0") < cap <= Decimal("100")):
             errors["maximum_period_deduction_percent"] = "Use a percentage above 0 and up to 100."
+        for field in ("overtime_multiplier", "holiday_overtime_multiplier"):
+            value = getattr(self, field)
+            if value is not None and not (Decimal("1") <= value <= Decimal("10")):
+                errors[field] = "Use a number from 1 to 10, e.g. 2 for double pay."
+        if self.overtime_rounding_minutes not in self.OVERTIME_STEPS:
+            errors["overtime_rounding_minutes"] = "Choose exact minutes, 15, 30 or 60."
+        if self.minimum_overtime_minutes > 24 * 60:
+            errors["minimum_overtime_minutes"] = "Use at most 1440 minutes (24 hours)."
         if errors:
             raise ValidationError(errors)
 
@@ -277,6 +290,58 @@ class PayrollSettings(TenantOwned, ActorTracked):
 
     def __str__(self):
         return f"Salary settings {self.company_id}"
+
+
+class OvertimeDecision(TenantOwned):
+    """Somebody's decision on one employee-day's overtime (plan step A9).
+
+    Kept apart from ``AttendanceRecord`` because attendance recalculates itself
+    and rewrites that row; a decision must survive it. The recalculation copies
+    the approved minutes back onto the record (``approved_overtime_minutes``),
+    which is what salary reads.
+
+    Keyed by employee and date, not by the record, for the same reason.
+    """
+
+    class Status(models.TextChoices):
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+
+    employee = models.ForeignKey(
+        "employees.Employee", on_delete=models.PROTECT, related_name="overtime_decisions"
+    )
+    work_date = models.DateField()
+    status = models.CharField(max_length=16, choices=Status.choices)
+    # What attendance counted when the decision was made, so a later change to
+    # the day (a scan arriving late) can be pointed out.
+    calculated_minutes = models.PositiveIntegerField(default=0)
+    approved_minutes = models.PositiveIntegerField(default=0)
+    # The end the approver set for an overtime session nobody scanned out of.
+    check_out_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=255, blank=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL,
+        related_name="overtime_decisions",
+    )
+    decided_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "payroll_overtime_decision"
+        ordering = ("work_date", "employee_id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "employee", "work_date"],
+                name="uniq_overtime_decision_per_day",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(status="rejected") | models.Q(approved_minutes=0),
+                name="chk_overtime_rejected_pays_nothing",
+            ),
+        ]
+        indexes = [models.Index(fields=["company", "work_date"])]
+
+    def __str__(self):
+        return f"{self.employee_id} {self.work_date} {self.status} {self.approved_minutes}"
 
 
 class AttendancePenaltyRule(TenantOwned, ActorTracked):

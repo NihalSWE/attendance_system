@@ -8,7 +8,7 @@ from django import forms
 from django.utils import timezone
 
 from attendance.views import MONTHS
-from common.forms import StyledFormMixin
+from common.forms import TIME_INPUT_FORMATS, StyledFormMixin, time_widget
 from payroll import penalties
 from payroll.models import AttendancePenaltyRule, PayrollPolicyVersion
 from payroll.policy import plain
@@ -80,6 +80,26 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
         min_value=Decimal("0.01"), max_value=Decimal("100"), decimal_places=2,
         help_text="Of a month's pay, all penalty rules together. Leave empty for no limit.",
     )
+    overtime_multiplier = forms.DecimalField(
+        label="Overtime pays (× the hourly rate)",
+        min_value=Decimal("1"), max_value=Decimal("10"), decimal_places=2,
+        help_text="2 = double pay. Only approved overtime is paid.",
+    )
+    holiday_overtime_multiplier = forms.DecimalField(
+        label="Work on a day off pays (× the hourly rate)",
+        min_value=Decimal("1"), max_value=Decimal("10"), decimal_places=2,
+        help_text="Holidays and weekly offs: every approved minute worked.",
+    )
+    minimum_overtime_minutes = forms.IntegerField(
+        label="Ignore overtime shorter than (minutes)", min_value=0, max_value=1440,
+        help_text="A day with less approved overtime pays none. 0 = pay every minute.",
+    )
+    overtime_rounding_minutes = forms.TypedChoiceField(
+        label="Round overtime down to", coerce=int,
+        choices=[(0, "Exact minutes"), (15, "Blocks of 15 minutes"),
+                 (30, "Blocks of 30 minutes"), (60, "Whole hours")],
+        help_text="Per day. With 30 minutes, 95 minutes pays 90.",
+    )
 
     def __init__(self, *args, years=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -116,6 +136,10 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
                 plain(version.maximum_period_deduction_percent)
                 if version.maximum_period_deduction_percent is not None else None
             ),
+            "overtime_multiplier": plain(version.overtime_multiplier),
+            "holiday_overtime_multiplier": plain(version.holiday_overtime_multiplier),
+            "minimum_overtime_minutes": version.minimum_overtime_minutes,
+            "overtime_rounding_minutes": version.overtime_rounding_minutes,
         }
 
     def service_values(self):
@@ -230,6 +254,36 @@ class StopPenaltyRuleForm(StyledFormMixin, forms.Form):
 
     def stops_from(self):
         return datetime.date(self.cleaned_data["stops_year"], self.cleaned_data["stops_month"], 1)
+
+
+class OvertimeDecisionForm(StyledFormMixin, forms.Form):
+    """Approve or reject one day's overtime; the pressed button says which.
+
+    A day whose overtime session was never scanned out of asks for the time
+    the person left; any other day asks how many of the counted minutes to
+    approve. ``payroll.overtime`` re-checks both.
+    """
+
+    minutes = forms.IntegerField(
+        label="Minutes to approve", required=False, min_value=1, max_value=1440,
+        help_text="All of it, or fewer.",
+    )
+    check_out = forms.TimeField(
+        label="They left at", required=False, input_formats=TIME_INPUT_FORMATS,
+        widget=time_widget(),
+        help_text="24-hour time. The minutes are counted from when overtime starts to this time.",
+    )
+    note = forms.CharField(
+        label="Note", required=False, max_length=255,
+        help_text="Optional. Kept with the decision, e.g. “Stock count”.",
+    )
+
+    def __init__(self, *args, claim, **kwargs):
+        super().__init__(*args, **kwargs)
+        if claim.open_from is not None:
+            del self.fields["minutes"]
+        else:
+            del self.fields["check_out"]
 
 
 class GeneralSettingsForm(StyledFormMixin, forms.Form):

@@ -379,6 +379,7 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                 work_date__lte=end, status__in=LIVE_LEAVE,
             )
         }
+        overtime_by_key = _overtime_decisions(employees.keys(), lookback, end)
 
         for employee_id, employee in employees.items():
             assignments = assignments_by_employee[employee_id]
@@ -422,6 +423,7 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                     calendar=calendar, leave_by_key=leave_by_key,
                     company=company, company_tz=company_tz, now=now,
                     locked=_is_locked(day, posted),
+                    overtime=overtime_by_key.get((employee_id, day)),
                 )
                 if outcome is None:
                     written["skipped"] += 1
@@ -452,9 +454,31 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
     return dict(written)
 
 
+def _overtime_decisions(employee_ids, start, end):
+    """Approved overtime minutes by (employee, day), from payroll's decisions.
+
+    The decision belongs to salary (plan step A9, payroll.overtime); the day
+    only carries its result. Rewriting the day must not drop it, so it is
+    read back here. A rejected day maps to 0.
+    """
+    from payroll.models import OvertimeDecision
+
+    return {
+        (employee_id, work_date): minutes
+        for employee_id, work_date, minutes in OvertimeDecision.objects.filter(
+            employee_id__in=list(employee_ids), work_date__gte=start, work_date__lte=end,
+        ).values_list("employee_id", "work_date", "approved_minutes")
+    }
+
+
 def _write_day(*, day, employee, assignments, window, punches, settings,
-               calendar, leave_by_key, company, company_tz, now, locked):
-    """One employee-day. Returns the record, "locked", or None for no record."""
+               calendar, leave_by_key, company, company_tz, now, locked,
+               overtime=None):
+    """One employee-day. Returns the record, "locked", or None for no record.
+
+    ``overtime`` is the approved minutes of a decision on this day (payroll's
+    A9), or None when nobody has decided it yet.
+    """
     if locked:
         return "locked"
     if (employee.joining_date and day < employee.joining_date) or (
@@ -541,6 +565,12 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
             payable_fraction=fraction, **minutes,
         )
         values["is_open"] = not is_closed
+
+    if overtime is not None and paired is not None:
+        values["approved_overtime_minutes"] = overtime
+        if paired.open_overtime:
+            # The open overtime session was what needed a look, and it has had one.
+            values["review_status"] = ReviewStatus.REVIEWED
 
     record, _ = AttendanceRecord.objects.update_or_create(
         company=company, employee=employee, work_date=day, defaults=values,

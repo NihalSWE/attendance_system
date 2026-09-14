@@ -13,4 +13,7 @@ urlpatterns = [
     path("settings/penalties/<int:pk>/stop/", views.penalty_rule_stop, name="penalty_rule_stop"),
     path("penalties/<int:pk>/waive/", views.penalty_waive, name="penalty_waive"),
     path("payslips/<int:pk>/", views.payslip, name="payslip"),
+    path("overtime/", views.overtime_list, name="overtime_list"),
+    path("overtime/<int:pk>/", views.overtime_decide, name="overtime_decide"),
+    path("overtime/<int:pk>/undo/", views.overtime_undo, name="overtime_undo"),
 ]

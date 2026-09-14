@@ -221,6 +221,20 @@
                             {{ rules_form.allow_negative_net_pay.label }}
                         </span>
                     </label>
+                    <h3 class="t-card-head" id="overtime-rules">
+                        Overtime
+                    </h3>
+                    <p class="field__help">
+                        Time after the shift's end is overtime once it is approved on the
+                        Overtime page. The hourly rate of monthly staff is one day's pay ÷ the
+                        shift's hours; of daily staff, the daily rate ÷ the shift's hours.
+                    </p>
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=rules_form.overtime_multiplier %}
+                        {% include "leaves/includes/field.html" with field=rules_form.holiday_overtime_multiplier %}
+                        {% include "leaves/includes/field.html" with field=rules_form.minimum_overtime_minutes %}
+                        {% include "leaves/includes/field.html" with field=rules_form.overtime_rounding_minutes %}
+                    </div>
                 </div>
                 <div class="card__foot">
                     <button class="btn btn--primary" type="submit">

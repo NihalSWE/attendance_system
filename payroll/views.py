@@ -24,15 +24,17 @@ from organization.services import (
     require_structure_manager,
 )
 from organization.views import _company_or_redirect
-from payroll import penalties, policy
+from payroll import overtime, penalties, policy
 from payroll.forms import (
     GeneralSettingsForm,
+    OvertimeDecisionForm,
     PenaltyRuleForm,
     SalaryRulesForm,
     StopPenaltyRuleForm,
 )
 from payroll.models import (
     AttendancePenaltyRule,
+    OvertimeDecision,
     PayrollPeriod,
     PayrollPolicyVersion,
     PayrollRecord,
@@ -67,11 +69,21 @@ def payroll_home(request):
             if run else []
         )
 
+    decides_overtime = membership.role in overtime.OVERTIME_ROLES
     return render(request, "payroll/payroll_home.html", {
         **month_context(year, month),
         "run": run,
         "records": records,
         "can_manage": membership.role in STRUCTURE_ROLES,
+        "decides_overtime": decides_overtime,
+        "overtime_waiting": (
+            overtime.undecided_count(company_id, first, last) if decides_overtime else 0
+        ),
+        # Decisions made since the draft was generated are not in it yet.
+        "overtime_since_run": (
+            overtime.decided_after(company_id, first, last, run.calculation_finished_at)
+            if run and run.status == PayrollRun.Status.DRAFT else 0
+        ),
     })
 
 
@@ -354,7 +366,142 @@ def rules_summary(rules):
             f"At most {policy.plain(rules.max_penalty_percent)}% of a month's pay, all rules together"
             if rules.max_penalty_percent is not None else "No monthly limit",
         ),
+        ("Overtime", overtime_summary(rules)),
     ]
+
+
+def overtime_summary(rules):
+    if not rules.pays_overtime:
+        return "Not paid"
+    parts = [
+        f"Approved overtime pays {policy.plain(rules.overtime_multiplier)}× the hourly rate",
+        f"work on a day off {policy.plain(rules.day_off_multiplier)}×",
+    ]
+    if rules.overtime_minimum:
+        parts.append(f"under {rules.overtime_minimum} minutes a day pays none")
+    if rules.overtime_step:
+        parts.append(
+            "rounded down to whole hours" if rules.overtime_step == 60
+            else f"rounded down to {rules.overtime_step}-minute blocks"
+        )
+    return " · ".join(parts)
+
+
+OVERTIME_TABS = (
+    ("waiting", "Waiting"),
+    ("approved", "Approved"),
+    ("rejected", "Rejected"),
+    ("all", "All"),
+)
+
+
+def _draft_run_exists(company_id, day):
+    first, last = month_bounds(day.year, day.month)
+    with use_company(company_id):
+        return PayrollRun.objects.filter(
+            payroll_period__start_date=first, payroll_period__end_date=last,
+            status=PayrollRun.Status.DRAFT,
+        ).exists()
+
+
+@login_required
+@require_http_methods(["GET"])
+def overtime_list(request):
+    """A month's overtime, waiting for a decision or already decided."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    year, month = read_month(request.GET)
+    show = request.GET.get("show", "waiting")
+    if show not in dict(OVERTIME_TABS):
+        show = "waiting"
+    page = overtime.overtime_month(actor=request.user, company_id=company_id, year=year, month=month)
+    rows = page["rows"] if show == "all" else [row for row in page["rows"] if row.state == show]
+    return render(request, "payroll/overtime_list.html", {
+        **month_context(year, month),
+        **page,
+        "shown": rows,
+        "show": show,
+        "tabs": [
+            (key, label, len(page["rows"]) if key == "all" else page["counts"].get(key, 0))
+            for key, label in OVERTIME_TABS
+        ],
+        "summary": overtime_summary(page["rules"]),
+        "can_manage": page["membership"].role in STRUCTURE_ROLES,
+        "company_tz": page["membership"].company.timezone or "UTC",
+    })
+
+
+def _overtime_list_url(day, show="waiting"):
+    return f"{reverse('payroll:overtime_list')}?month={day.month}&year={day.year}&show={show}"
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def overtime_decide(request, pk):
+    """Approve or reject one day's overtime."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    page = overtime.overtime_day(actor=request.user, company_id=company_id, record_id=pk)
+    record, claim, decision = page["record"], page["claim"], page["decision"]
+    initial = {"minutes": claim.minutes or None}
+    if decision is not None:
+        initial["note"] = decision.note
+        if decision.status == OvertimeDecision.Status.APPROVED and claim.open_from is None:
+            initial["minutes"] = decision.approved_minutes
+    form = OvertimeDecisionForm(request.POST or None, claim=claim, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        approve = request.POST.get("decision") == "approve"
+        try:
+            decision = overtime.decide_overtime(
+                actor=request.user, company_id=company_id, record_id=record.pk,
+                approve=approve,
+                minutes=form.cleaned_data.get("minutes"),
+                check_out=form.cleaned_data.get("check_out"),
+                note=form.cleaned_data.get("note", ""),
+            )
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            name, day = record.employee.full_name, record.work_date
+            if approve:
+                minutes = decision.approved_minutes
+                message = f"Approved {minutes // 60}h {minutes % 60}m of overtime for {name} on {day:%d %b}."
+            else:
+                message = f"Overtime for {name} on {day:%d %b} rejected; it will not be paid."
+            if _draft_run_exists(company_id, day):
+                message += f" Generate {day:%B} salary again to include it."
+            messages.success(request, message)
+            return redirect(_overtime_list_url(day))
+    return render(request, "payroll/overtime_decide.html", {
+        **page,
+        "form": form,
+        "back_url": _overtime_list_url(record.work_date),
+        "company_tz": page["membership"].company.timezone or "UTC",
+        "day_off_rate": policy.plain(page["rules"].day_off_multiplier),
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def overtime_undo(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    try:
+        overtime.undo_overtime_decision(actor=request.user, company_id=company_id, record_id=pk)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return redirect("payroll:overtime_decide", pk)
+    with use_company(company_id):
+        day = AttendanceRecord.objects.filter(pk=pk).values_list("work_date", flat=True).first()
+    day = day or timezone.localdate()
+    message = "Decision undone; the overtime is waiting again."
+    if _draft_run_exists(company_id, day):
+        message += f" Generate {day:%B} salary again to include the change."
+    messages.success(request, message)
+    return redirect(_overtime_list_url(day))
 
 
 @login_required

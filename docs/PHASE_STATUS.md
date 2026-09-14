@@ -548,7 +548,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A2 | **Holiday year calendar** ⬆ — ✅ done 2026-09-13 | A full-year calendar to pick many holiday dates at once, with month and year navigation | — | Holiday year calendar |
 | A3 | **Company salary settings** — ✅ done 2026-09-13 | Salary settings page with dated versions (`PayrollSettings`, `PayrollPolicyVersion`): monthly divisor (30 / days in month / working days), daily and hourly rate method, weekly off / holiday pay by pay type, half-day and Incomplete treatment, currency. Payroll reads them instead of constants; each run records the version used; every company starts on today's rules | 2 | Company salary settings |
 | A4 | **Penalty rules** (on the salary settings page) — ✅ done 2026-09-13 | `AttendancePenaltyRule`: late (per minute, or N late days = one day's pay), absence, repeated lateness; deduction lines on the payslip | 2 | Penalty rules |
-| A9 | **Overtime** — moved up 2026-09-14: right after Nihal's N1b | Review and approval, including an open overtime session with a blank check-out (the approver sets the time); overtime paid at × the hourly rate on the salary settings page (default 2×), a separate multiplier for holiday / weekly-off work, minimum overtime minutes and rounding; monthly staff's hourly rate = monthly ÷ days ÷ shift hours | — | Overtime review, approval and pay; `HolidayWorkAssignment`; attendance settings overtime approval |
+| A9 | **Overtime** — ✅ done 2026-09-14 (moved up: right after Nihal's N1b) | Review and approval, including an open overtime session with a blank check-out (the approver sets the time); overtime paid at × the hourly rate on the salary settings page (default 2×), a separate multiplier for holiday / weekly-off work, minimum overtime minutes and rounding; monthly staff's hourly rate = monthly ÷ days ÷ shift hours | — | Overtime review, approval and pay; `HolidayWorkAssignment`; attendance settings overtime approval |
 | A5 | **Shifts** — ✅ done 2026-09-14 (rotating shifts deferred by Ajay: "initially I want to keep it simple") | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
 | A6 | **Logins** — ✅ done 2026-09-14 | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
 | A7 | **Employee panel** | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
@@ -813,6 +813,49 @@ merge).**
   is saved as unpaid.
 - 5 tests in `scheduling/tests_screens.py` (one old test replaced).
 
+**A9 — overtime (done 2026-09-14, branch `feature/a9-overtime`, worktree
+`D:\\attendance_device_a5`). Migration `payroll/0005_overtime`.**
+
+- **Where:** sidebar → **Overtime** (also Salary → **Overtime (N waiting)**).
+  A month's list: date, employee, shift end, what attendance counted, the
+  decision and the approved minutes; Show = Waiting / Approved / Rejected /
+  All. **Decide** opens the day: shift, check-in/out, when overtime starts,
+  every scan with its device, and **Approve** / **Reject** with an optional
+  note. A decided day has **Change** and **Undo the decision**.
+- **What counts** (attendance, N1b): time after the shift's end, delayed by
+  the shift's "overtime after" minutes. **Came back after the shift and never
+  scanned out:** the approver types the time they left (time picker; a time
+  earlier than the return is the next morning) and the minutes follow from
+  it — the day's review flag clears. **Work on a holiday or weekly off:**
+  every minute in the office counts, paid at the day-off rate. Otherwise the
+  approver approves all of it or fewer minutes, never more than was counted.
+- **Who:** owner, company administrator or **HR** ("the admin or HR"),
+  within their branches. A month whose salary is finalised is closed.
+- **Kept through recalculation:** decisions live in `OvertimeDecision`
+  (payroll app, one per employee-day). Attendance rewrites its days live, so
+  `attendance.services.recalculate` reads the decisions back and puts the
+  approved minutes on `AttendanceRecord.approved_overtime_minutes` (and marks
+  an approved open session reviewed) — the only change in the attendance app.
+  A scan arriving after a decision shows "The day changed after the decision".
+- **Pay** (`payroll/services.py`): each day's approved minutes, after the
+  minimum and rounding, × the hourly rate × the multiplier. Hourly rate:
+  hourly staff their own; daily staff the daily rate ÷ the shift's paid
+  hours; monthly staff one day's pay (as the absence deduction works it out)
+  ÷ the shift's paid hours. Two payslip lines, "Overtime (N days, 2× the
+  hourly rate)" and "Work on holidays / weekly offs (…)"; the per-day working
+  is kept in the payslip's calculation snapshot.
+- **Salary settings → Overtime:** "Overtime pays (× the hourly rate)",
+  default **2**; "Work on a day off pays", default **2**; "Ignore overtime
+  shorter than (minutes)", default 0; "Round overtime down to" exact / 15 /
+  30 / 60 minutes. Dated like every other salary rule. The migration gives
+  already-saved rules these defaults (the columns were placeholders nothing
+  read: no overtime pay, 1×).
+- **Salary page notices:** days still waiting ("will not be paid until
+  approved") and decisions made after the draft was generated ("Generate
+  again to include it"). Approving does not regenerate salary by itself.
+- 26 tests (`payroll/tests_overtime.py`); two salary settings tests post the
+  new fields. **No new .env variables.**
+
 #### Keeping the two sides apart
 
 - **The contract is `AttendanceRecord`.** Payroll reads `attendance_status`,
@@ -873,7 +916,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A6 and N0–N3 (N1b day close / live attendance and N3 in-office badge merged 2026-09-14). Ajay's session: A9 (overtime approval and pay — N1b gives it `calculated_overtime_minutes` and the open overtime session), then A7. Nihal: N7 (payslip redesign), then N4 (device attendance scope + Re-check punches), N5, N6. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A6, A9 (overtime approval and pay) and N0–N3 (N1b day close / live attendance and N3 in-office badge merged 2026-09-14). Ajay's session: A7 (employee panel), then A14 (sidebar menus), A8. Nihal: N7 (payslip redesign), then N4 (device attendance scope + Re-check punches), N5, N6. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 

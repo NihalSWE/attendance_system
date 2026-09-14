@@ -1,0 +1,272 @@
+{% extends "base_template/base.html" %}
+{% load money static tz %}
+{% block title %}
+    Overtime · {{ record.employee.full_name }} · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'payroll:payroll_home' %}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{{ back_url }}">
+            Overtime
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ record.employee.full_name }}, {{ record.work_date|date:"d M Y" }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Overtime on {{ record.work_date|date:"l, d F Y" }}
+            </h1>
+            <p class="page__sub">
+                {{ record.employee.full_name }} · {{ record.branch.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}?employee={{ record.employee_id }}&month={{ record.work_date.month }}&year={{ record.work_date.year }}">
+                Open in the attendance calendar
+            </a>
+            <a class="btn btn--ghost" href="{{ back_url }}">
+                Back to overtime
+            </a>
+        </div>
+    </div>
+
+    <div class="form-page stack">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    The day
+                </h2>
+                {% if claim.day_off %}
+                    <span class="badge badge--info">
+                        {{ record.get_attendance_status_display }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                <dl class="facts facts--wide">
+                    <dt>
+                        Shift
+                    </dt>
+                    <dd>
+                        {{ record.shift.name }},
+                        {{ record.scheduled_start_at|timezone:company_tz|time:"H:i" }}–{{ record.scheduled_end_at|timezone:company_tz|time:"H:i" }}
+                    </dd>
+                    <dt>
+                        Check-in
+                    </dt>
+                    <dd>
+                        {{ record.first_in_at|timezone:company_tz|time:"H:i"|default:"—" }}
+                    </dd>
+                    <dt>
+                        Check-out
+                    </dt>
+                    <dd>
+                        {{ record.last_out_at|timezone:company_tz|time:"H:i"|default:"—" }}
+                    </dd>
+                    {% if claim.day_off %}
+                        <dt>
+                            Worked on a day off
+                        </dt>
+                        <dd>
+                            {{ claim.minutes|hm }} in the office. Every minute counts, at the day-off rate
+                            ({{ day_off_rate }}× the hourly rate).
+                        </dd>
+                    {% else %}
+                        <dt>
+                            Overtime starts
+                        </dt>
+                        <dd>
+                            {{ claim.overtime_from|timezone:company_tz|time:"H:i" }}
+                            {% if record.shift.overtime_after_minutes %}
+                                <span class="t-faint">
+                                    ({{ record.shift.overtime_after_minutes }} minutes after the shift ends)
+                                </span>
+                            {% endif %}
+                        </dd>
+                        {% if claim.minutes or not claim.open_from %}
+                            <dt>
+                                Overtime counted
+                            </dt>
+                            <dd>
+                                {{ claim.minutes|hm }}
+                            </dd>
+                        {% endif %}
+                    {% endif %}
+                    {% if claim.open_from %}
+                        <dt>
+                            Came back
+                        </dt>
+                        <dd>
+                            At {{ claim.open_from|timezone:company_tz|time:"H:i" }}, and never scanned out.
+                            Set the time they left to approve it.
+                        </dd>
+                    {% endif %}
+                </dl>
+                {% if scans %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Time
+                                    </th>
+                                    <th>
+                                        Scan
+                                    </th>
+                                    <th>
+                                        Device
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for scan in scans %}
+                                    <tr>
+                                        <td>
+                                            {{ scan.event_at|timezone:company_tz|date:"d M H:i" }}
+                                        </td>
+                                        <td>
+                                            {{ scan.get_label_display }}
+                                        </td>
+                                        <td>
+                                            {{ scan.punch_event.device.name|default:"—" }}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if decision %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        Decision
+                    </h2>
+                    {% if decision.status == "approved" %}
+                        <span class="badge badge--success">
+                            Approved
+                        </span>
+                    {% else %}
+                        <span class="badge badge--neutral">
+                            Rejected
+                        </span>
+                    {% endif %}
+                </div>
+                <div class="card__body stack">
+                    <dl class="facts facts--wide">
+                        {% if decision.status == "approved" %}
+                            <dt>
+                                Approved
+                            </dt>
+                            <dd>
+                                {{ decision.approved_minutes|hm }}
+                            </dd>
+                        {% endif %}
+                        {% if decision.check_out_at %}
+                            <dt>
+                                Left at
+                            </dt>
+                            <dd>
+                                {{ decision.check_out_at|timezone:company_tz|date:"d M H:i" }}
+                            </dd>
+                        {% endif %}
+                        <dt>
+                            By
+                        </dt>
+                        <dd>
+                            {{ decision.decided_by.email|default:"—" }}, {{ decision.decided_at|timezone:company_tz|date:"d M Y H:i" }}
+                        </dd>
+                        {% if decision.note %}
+                            <dt>
+                                Note
+                            </dt>
+                            <dd>
+                                {{ decision.note }}
+                            </dd>
+                        {% endif %}
+                    </dl>
+                    {% if not claim.open_from and decision.calculated_minutes != claim.minutes %}
+                        <div class="alert alert--warning">
+                            When this was decided the day counted {{ decision.calculated_minutes|hm }}; it now
+                            counts {{ claim.minutes|hm }}. Decide again if that changes your answer.
+                        </div>
+                    {% endif %}
+                    {% if not locked %}
+                        <form method="post" action="{% url 'payroll:overtime_undo' record.pk %}">
+                            {% csrf_token %}
+                            <button class="btn btn--ghost btn--sm" type="submit">
+                                Undo the decision
+                            </button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% if locked %}
+            <div class="alert alert--info">
+                This month's salary is finalised, so this overtime can no longer change.
+            </div>
+        {% elif record.is_open %}
+            <div class="alert alert--info">
+                This day has not finished yet. Its overtime can be decided once it has.
+            </div>
+        {% else %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        {% if decision %}Change the decision{% else %}Decide{% endif %}
+                    </h2>
+                </div>
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="card__body stack">
+                        {% if form.non_field_errors %}
+                            <div class="alert alert--danger">
+                                {% for error in form.non_field_errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="grid grid--2">
+                            {% for field in form %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="card__foot row">
+                        <button class="btn btn--primary" type="submit" name="decision" value="approve">
+                            Approve
+                        </button>
+                        <button class="btn btn--danger" type="submit" name="decision" value="reject">
+                            Reject
+                        </button>
+                        <a class="btn btn--ghost" href="{{ back_url }}">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

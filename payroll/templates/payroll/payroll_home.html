@@ -24,6 +24,11 @@
             </p>
         </div>
         <div class="page__actions">
+            {% if decides_overtime %}
+                <a class="btn btn--ghost" href="{% url 'payroll:overtime_list' %}?month={{ month }}&year={{ year }}">
+                    Overtime{% if overtime_waiting %} ({{ overtime_waiting }} waiting){% endif %}
+                </a>
+            {% endif %}
             {% if can_manage %}
                 <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}">
                     Salary settings
@@ -39,6 +44,20 @@
             {% endif %}
         </div>
     </div>
+
+    {% if overtime_since_run %}
+        <div class="alert alert--warning">
+            Overtime was decided for {{ overtime_since_run }} day{{ overtime_since_run|pluralize }} after this
+            salary was generated. Generate {{ month_name }} again to include it.
+        </div>
+    {% endif %}
+    {% if run and overtime_waiting %}
+        <div class="alert alert--info">
+            {{ overtime_waiting }} day{{ overtime_waiting|pluralize }} of overtime in {{ month_name }}
+            {{ overtime_waiting|pluralize:"is,are" }} still waiting for a decision and will not be paid until approved.
+            <a href="{% url 'payroll:overtime_list' %}?month={{ month }}&year={{ year }}">Decide overtime</a>
+        </div>
+    {% endif %}
 
     <div class="card">
         <div class="card__head">

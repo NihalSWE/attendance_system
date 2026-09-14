@@ -61,6 +61,15 @@
             Payroll
         </span>
     </a>
+    <a class="sidebar__link {% active request 'overtime_list' 'overtime_decide' %}" href="{% url 'payroll:overtime_list' %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="13" r="8"/>
+            <path d="M12 9v4l2.5 2.5M9.5 2.5h5"/>
+        </svg>
+        <span>
+            Overtime
+        </span>
+    </a>
     <div class="sidebar__label">
         Organisation
     </div>

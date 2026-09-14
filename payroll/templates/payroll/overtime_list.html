@@ -1,0 +1,245 @@
+{% extends "base_template/base.html" %}
+{% load money tz %}
+{% block title %}
+    Overtime · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'payroll:payroll_home' %}?month={{ month }}&year={{ year }}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Overtime
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Overtime
+            </h1>
+            <p class="page__sub">
+                Time after a shift's end, and work on a day off. Nothing is paid until it is approved here.
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_manage %}
+                <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}#overtime-rules">
+                    Overtime pay settings
+                </a>
+            {% endif %}
+            <a class="btn btn--ghost" href="{% url 'payroll:payroll_home' %}?month={{ month }}&year={{ year }}">
+                Salary for {{ month_name }}
+            </a>
+        </div>
+    </div>
+
+    {% if locked %}
+        <div class="alert alert--info">
+            {{ month_name }} {{ year }} salary is finalised, so its overtime can no longer change.
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                {{ month_name }} {{ year }}
+            </h2>
+            <span class="t-faint">
+                {{ summary }}
+            </span>
+        </div>
+        <form method="get" class="toolbar">
+            <label class="sr-only" for="ot-month">
+                Month
+            </label>
+            <select class="input select js-select" id="ot-month" name="month">
+                {% for value, label in months %}
+                    <option value="{{ value }}" {% if value == month %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="ot-year">
+                Year
+            </label>
+            <select class="input select js-select" id="ot-year" name="year">
+                {% for option in years %}
+                    <option value="{{ option }}" {% if option == year %}selected{% endif %}>
+                        {{ option }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="ot-show">
+                Show
+            </label>
+            <select class="input select js-select" id="ot-show" name="show">
+                {% for key, label, count in tabs %}
+                    <option value="{{ key }}" {% if key == show %}selected{% endif %}>
+                        {{ label }} ({{ count }})
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Show
+            </button>
+        </form>
+
+        {% if shown %}
+            <div class="table-wrap">
+                <table class="table">
+                    <colgroup>
+                        <col style="width: 12%">
+                        <col style="width: 18%">
+                        <col style="width: 10%">
+                        <col style="width: 18%">
+                        <col style="width: 14%">
+                        <col style="width: 16%">
+                        <col style="width: 12%">
+                    </colgroup>
+                    <thead>
+                        <tr>
+                            <th>
+                                Date
+                            </th>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Shift ends
+                            </th>
+                            <th>
+                                Counted
+                            </th>
+                            <th>
+                                Decision
+                            </th>
+                            <th>
+                                Approved
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in shown %}
+                            <tr>
+                                <td>
+                                    {{ row.record.work_date|date:"D d M" }}
+                                    {% if row.claim.day_off %}
+                                        <div>
+                                            <span class="badge badge--info">
+                                                {{ row.record.get_attendance_status_display }}
+                                            </span>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ row.record.employee.full_name }}
+                                    <div class="t-faint">
+                                        {{ row.record.branch.name }}
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if row.claim.day_off %}
+                                        <span class="t-faint">
+                                            Day off
+                                        </span>
+                                    {% else %}
+                                        {{ row.record.scheduled_end_at|timezone:company_tz|time:"H:i" }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.claim.minutes %}
+                                        {{ row.claim.minutes|hm }}
+                                    {% endif %}
+                                    {% if row.claim.open_from %}
+                                        <div>
+                                            <span class="badge badge--warning">
+                                                No check-out
+                                            </span>
+                                        </div>
+                                        <div class="t-faint">
+                                            Came back at {{ row.claim.open_from|timezone:company_tz|time:"H:i" }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.state == "waiting" %}
+                                        <span class="badge badge--warning">
+                                            Waiting
+                                        </span>
+                                    {% elif row.state == "approved" %}
+                                        <span class="badge badge--success">
+                                            Approved
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Rejected
+                                        </span>
+                                    {% endif %}
+                                    {% if row.changed %}
+                                        <div class="t-faint">
+                                            The day changed after the decision
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.state == "approved" %}
+                                        {{ row.decision.approved_minutes|hm }}
+                                        {% if row.paid_minutes != row.decision.approved_minutes %}
+                                            <div class="t-faint">
+                                                Pays {{ row.paid_minutes|hm }}
+                                            </div>
+                                        {% endif %}
+                                    {% elif row.decision %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                    {% if row.decision %}
+                                        <div class="t-faint">
+                                            {{ row.decision.decided_by.email|default:"" }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if not locked %}
+                                        <a class="btn {% if row.state == 'waiting' %}btn--primary{% else %}btn--quiet{% endif %} btn--sm" href="{% url 'payroll:overtime_decide' row.record.pk %}">
+                                            {% if row.state == "waiting" %}Decide{% else %}Change{% endif %}
+                                        </a>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    {% if show == "waiting" %}
+                        Nothing waiting in {{ month_name }} {{ year }}
+                    {% else %}
+                        No overtime to show
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    Overtime appears here when somebody stays after their shift's end, comes
+                    back after it, or works on a holiday or weekly off.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -25,6 +25,11 @@ from tenants.services import onboard_company
 
 S = AttendanceRecord.AttendanceStatus
 SHIFT = SimpleNamespace(scheduled_minutes=540, break_is_paid=False, default_break_minutes=60)
+# The rules form always posts its overtime section (A9).
+OVERTIME_POST = {
+    "overtime_multiplier": "2", "holiday_overtime_multiplier": "2",
+    "minimum_overtime_minutes": "0", "overtime_rounding_minutes": "0",
+}
 
 
 def day(status, fraction="1", worked=480, leave_minutes=0, shift=SHIFT):
@@ -248,6 +253,7 @@ class SalarySettingsPageTests(SalarySettingsBase):
             "absence_deduction_method": "day_fraction", "half_day_pay_percent": "50",
             "incomplete_day_treatment": "pay_full", "money_rounding_increment": "1",
             "money_rounding_mode": "half_up", "daily_paid_days_off": "on",
+            **OVERTIME_POST,
         })
         self.assertRedirects(response, reverse(self.URL))
         [version] = self.versions()
@@ -264,7 +270,7 @@ class SalarySettingsPageTests(SalarySettingsBase):
             "monthly_proration_method": "fixed_30", "monthly_divisor": "30",
             "absence_deduction_method": "day_fraction", "half_day_pay_percent": "50",
             "incomplete_day_treatment": "pay_full", "money_rounding_increment": "0.01",
-            "money_rounding_mode": "half_up",
+            "money_rounding_mode": "half_up", **OVERTIME_POST,
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "are already saved")

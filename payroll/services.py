@@ -89,6 +89,7 @@ def summarise(records):
         else:
             counts[status] += 1
         counts["late_minutes"] += record.late_minutes
+        counts["overtime_minutes"] += getattr(record, "approved_overtime_minutes", 0)
     counts["worked_minutes"] = worked_minutes
     counts["paid_leave_minutes"] = paid_leave_minutes
     return counts
@@ -187,13 +188,82 @@ def _day_pay(record, rules):
     return Decimal("0")
 
 
+def shift_hours(record):
+    """Paid hours of the day's shift, for turning a day's pay into an hour's."""
+    minutes = expected_minutes(record) or getattr(getattr(record, "shift", None), "scheduled_minutes", 0)
+    return Decimal(minutes or 480) / Decimal("60")
+
+
+def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
+    """Earning lines for approved overtime, and the per-day evidence.
+
+    Each day's approved minutes pass the minimum and rounding, then pay
+    hours × hourly rate × multiplier: the day-off multiplier on a holiday or
+    weekly off, the overtime one otherwise. The hourly rate is the employee's
+    own for hourly staff; a day's pay ÷ the shift's hours for daily and
+    monthly staff (a monthly day is worked out as the absence deduction is).
+    """
+    if not rules.pays_overtime:
+        return [], []
+    per_day = None
+    if pay_basis == EmployeeCompensation.PayBasis.MONTHLY:
+        per_day = _per_day(rules, rate, records, days_in_month) or rate / rules.divisor
+    groups = {}
+    details = []
+    for record in records:
+        approved = getattr(record, "approved_overtime_minutes", 0)
+        paid = rules.payable_overtime(approved)
+        if not paid:
+            continue
+        if pay_basis == EmployeeCompensation.PayBasis.HOURLY:
+            hourly = rate
+        elif pay_basis == EmployeeCompensation.PayBasis.DAILY:
+            hourly = rate / shift_hours(record)
+        else:
+            hourly = per_day / shift_hours(record)
+        day_off = record.attendance_status in (Status.HOLIDAY, Status.WEEKLY_OFF)
+        multiplier = rules.day_off_multiplier if day_off else rules.overtime_multiplier
+        amount = hourly * multiplier * Decimal(paid) / Decimal("60")
+        group = groups.setdefault(day_off, {"days": 0, "minutes": 0, "amount": Decimal("0")})
+        group["days"] += 1
+        group["minutes"] += paid
+        group["amount"] += amount
+        details.append({
+            "date": record.work_date.isoformat(),
+            "approved_minutes": approved,
+            "paid_minutes": paid,
+            "hourly_rate": str(money(hourly)),
+            "multiplier": plain(multiplier),
+            "day_off": day_off,
+            "amount": str(money(amount)),
+        })
+    lines = []
+    for day_off, code, label, multiplier in (
+        (False, "OVERTIME", "Overtime", rules.overtime_multiplier),
+        (True, "DAY_OFF_WORK", "Work on holidays / weekly offs", rules.day_off_multiplier),
+    ):
+        group = groups.get(day_off)
+        if not group:
+            continue
+        hours = Decimal(group["minutes"]) / Decimal("60")
+        days = group["days"]
+        lines.append((
+            "earning", code,
+            f"{label} ({days} day{'s' if days != 1 else ''}, {plain(multiplier)}× the hourly rate)",
+            money(hours), group["amount"] / hours, money(group["amount"]),
+        ))
+    return lines, details
+
+
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                   penalty_rules=(), waived=frozenset(), employee_key=""):
     """Lines and totals for one employee. Pure: no database writes.
 
     ``penalty_rules`` add one deduction line per penalty found; the
     penalties themselves come back in ``result["penalties"]`` as
-    ``(line index, Occurrence)`` so the caller can store them.
+    ``(line index, Occurrence)`` so the caller can store them. Approved
+    overtime (``AttendanceRecord.approved_overtime_minutes``) adds earning
+    lines; the per-day working comes back in ``result["overtime"]``.
     """
     rules = rules or STANDARD_RULES
     counts = summarise(records)
@@ -243,6 +313,9 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                     money(off_hours), rate, money(off_hours * rate),
                 ))
 
+    overtime_lines, overtime = _overtime_lines(pay_basis, rate, rules, records, days_in_month)
+    lines.extend(overtime_lines)
+
     gross = sum((amount for kind, *_, amount in lines if kind == "earning"), Decimal("0"))
 
     penalties = []
@@ -287,6 +360,7 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
         "counts": dict(counts),
         "rules": rules.describe(),
         "penalties": penalties,
+        "overtime": overtime,
     }
 
 
@@ -445,6 +519,7 @@ def generate_payroll(*, actor, company_id, year, month):
                     "compensation_id": compensation.pk,
                     "counts": result["counts"],
                     "rules": result["rules"],
+                    "overtime": result["overtime"],
                 },
             )
             currency = compensation.currency or default_currency
