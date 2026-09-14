@@ -238,9 +238,19 @@
                     <span class="badge badge--neutral">
                         {{ compensation.get_pay_basis_display }}, {{ compensation.base_rate|money }} {{ compensation.currency }} since {{ salary_since|date:"d M Y" }}
                     </span>
+                {% else %}
+                    <span class="badge badge--warning">
+                        No salary yet
+                    </span>
                 {% endif %}
             </div>
             <div class="card__body">
+                {% if not compensation %}
+                    <div class="alert alert--info">
+                        This employee has no salary, so they are left out when a month's salary is
+                        generated. Set it below.
+                    </div>
+                {% endif %}
                 {% if salary.non_field_errors %}
                     <div class="alert alert--danger">
                         {{ salary.non_field_errors }}
@@ -256,7 +266,7 @@
                     </div>
                     <div class="row">
                         <button class="btn btn--primary" type="submit">
-                            Save salary
+                            {% if compensation %}Save salary{% else %}Set salary{% endif %}
                         </button>
                         <a class="btn btn--ghost" href="{% url 'employee_list' %}">
                             Back to employees

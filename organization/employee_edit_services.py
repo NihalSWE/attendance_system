@@ -17,6 +17,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
 from auditlog.services import record_company_event
+from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from employees.services import revise_compensation, transfer_employee
@@ -127,12 +128,17 @@ def change_placement(*, actor, company_id, employee_id, values):
 
 @transaction.atomic
 def change_salary(*, actor, company_id, employee_id, values):
-    """New pay basis / rate from a date."""
+    """New pay basis / rate from a date — or the first salary, if there is none.
+
+    An employee created from a device's user list (devices/services/user_sync.py)
+    has a placement but no salary; refusing here left no way to give them one
+    (Ajay, 2026-09-14). They get their first salary instead.
+    """
     membership, employee, _, current = get_employee_for_edit(
         actor=actor, company_id=company_id, employee_id=employee_id
     )
     if current is None:
-        raise ValidationError("This employee has no current salary to change.")
+        return _set_first_salary(membership, employee, values, actor)
     starts = values["effective_at"]
     with use_company(company_id):
         before = {
@@ -163,6 +169,56 @@ def change_salary(*, actor, company_id, employee_id, values):
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="employee.salary_changed", obj=employee, before=before,
+            after={
+                "pay_basis": compensation.pay_basis, "base_rate": str(compensation.base_rate),
+                "effective_from": compensation.effective_from.isoformat(),
+            },
+        )
+    return compensation
+
+
+def first_placement(employee):
+    """When the employee was first placed. Call inside the company's context."""
+    return (
+        EmployeeAssignment.objects.filter(employee=employee)
+        .exclude(status__in=["cancelled", "draft"])
+        .order_by("effective_from")
+        .first()
+    )
+
+
+def _set_first_salary(membership, employee, values, actor):
+    """The first salary of an employee who has none. From a date not before
+    their first placement: there is no attendance to pay before it."""
+    starts = values["effective_at"]
+    with use_company(membership.company_id):
+        placed = first_placement(employee)
+        if placed is not None and starts < placed.effective_from:
+            raise ValidationError({
+                "salary_from": (
+                    f"They were placed on {placed.effective_from:%d %b %Y}; "
+                    "the salary cannot start before that."
+                )
+            })
+        if EmployeeCompensation.objects.filter(employee=employee).exclude(
+            status__in=["cancelled", "draft"]
+        ).exists():
+            # Only ended rows: employment was ended, which is not this card's to undo.
+            raise ValidationError("This employee's salary has ended; there is no current salary to change.")
+        compensation = create_validated(
+            EmployeeCompensation,
+            company=membership.company,
+            employee=employee,
+            pay_basis=values["pay_basis"],
+            base_rate=values["base_rate"],
+            currency=membership.company.currency,
+            effective_from=starts,
+            reason=values.get("reason", "") or "First salary",
+            created_by=actor,
+        )
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="employee.salary_set", obj=employee, before={"salary": None},
             after={
                 "pay_basis": compensation.pay_basis, "base_rate": str(compensation.base_rate),
                 "effective_from": compensation.effective_from.isoformat(),
