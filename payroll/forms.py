@@ -91,14 +91,20 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
         help_text="Holidays and weekly offs: every approved minute worked.",
     )
     minimum_overtime_minutes = forms.IntegerField(
-        label="Ignore overtime shorter than (minutes)", min_value=0, max_value=1440,
-        help_text="A day with less approved overtime pays none. 0 = pay every minute.",
+        label="Don't pay overtime shorter than (minutes)", min_value=0, max_value=1440,
+        help_text=(
+            "Per day. With 30, someone who leaves at 18:20 gets nothing and the day "
+            "doesn't wait for a decision. 0 = every minute counts."
+        ),
     )
     overtime_rounding_minutes = forms.TypedChoiceField(
-        label="Round overtime down to", coerce=int,
-        choices=[(0, "Exact minutes"), (15, "Blocks of 15 minutes"),
-                 (30, "Blocks of 30 minutes"), (60, "Whole hours")],
-        help_text="Per day. With 30 minutes, 95 minutes pays 90.",
+        label="Pay overtime in blocks of", coerce=int,
+        choices=[(0, "Every minute (no blocks)"), (15, "15 minutes"),
+                 (30, "30 minutes"), (60, "1 hour")],
+        help_text=(
+            "Per day, minutes left over after the last full block are not paid. "
+            "With 30-minute blocks, 95 minutes pays 90; with 1-hour blocks, 95 pays 60."
+        ),
     )
 
     def __init__(self, *args, years=None, **kwargs):

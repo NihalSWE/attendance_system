@@ -48,7 +48,11 @@ DAYS_OFF = (Status.HOLIDAY, Status.WEEKLY_OFF)
 OVERTIME_ROLES = (*STRUCTURE_ROLES, CompanyMembership.Role.HR)
 
 WAITING = "waiting"
-STATES = (WAITING, OvertimeDecision.Status.APPROVED, OvertimeDecision.Status.REJECTED)
+# Counted, but the company's minimum or rounding leaves nothing to pay, so
+# nobody is asked to decide it (Ajay, 2026-09-14: 26 days of 1–59 minutes were
+# "waiting" under a 60-minute minimum).
+TOO_SHORT = "too_short"
+STATES = (WAITING, OvertimeDecision.Status.APPROVED, OvertimeDecision.Status.REJECTED, TOO_SHORT)
 
 # A day that could hold overtime: minutes counted after the shift, a day off
 # somebody came in on, or a session nobody scanned out of.
@@ -79,6 +83,20 @@ class Claim:
     @property
     def exists(self):
         return self.minutes > 0 or self.open_from is not None
+
+    def pays_nothing(self, rules):
+        """True when the rules would pay none of it even if it were approved.
+
+        An open session has no length until somebody sets when it ended, so
+        it always needs a look.
+        """
+        return self.open_from is None and rules.payable_overtime(self.minutes) == 0
+
+
+def state_of(claim, decision, rules):
+    if decision is not None:
+        return decision.status
+    return TOO_SHORT if claim.pays_nothing(rules) else WAITING
 
 
 def claim_for(record):
@@ -199,7 +217,7 @@ def overtime_month(*, actor, company_id, year, month):
             continue
         decision = decisions.get((record.employee_id, record.work_date))
         row = Row(record=record, claim=claim, decision=decision,
-                  state=decision.status if decision else WAITING)
+                  state=state_of(claim, decision, rules))
         if decision is not None:
             if decision.status == OvertimeDecision.Status.APPROVED:
                 row.paid_minutes = rules.payable_overtime(decision.approved_minutes)
@@ -371,7 +389,11 @@ def decided_after(company_id, first, last, moment):
 
 
 def undecided_count(company_id, first, last):
-    """Days of a month still waiting for a decision (without recalculating)."""
+    """Days of a month still waiting for a decision (without recalculating).
+
+    Overtime too short to pay under the month's rules is not waiting.
+    """
+    rules = rules_for(company_id, first)
     with use_company(company_id):
         records = list(
             AttendanceRecord.objects.prefetch_related("sessions").select_related("shift")
@@ -383,7 +405,11 @@ def undecided_count(company_id, first, last):
                 work_date__gte=first, work_date__lte=last
             ).values_list("employee_id", "work_date")
         )
-    return sum(
-        1 for record in records
-        if (record.employee_id, record.work_date) not in decided and claim_for(record).exists
-    )
+    waiting = 0
+    for record in records:
+        if (record.employee_id, record.work_date) in decided:
+            continue
+        claim = claim_for(record)
+        if claim.exists and not claim.pays_nothing(rules):
+            waiting += 1
+    return waiting

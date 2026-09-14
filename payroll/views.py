@@ -381,8 +381,8 @@ def overtime_summary(rules):
         parts.append(f"under {rules.overtime_minimum} minutes a day pays none")
     if rules.overtime_step:
         parts.append(
-            "rounded down to whole hours" if rules.overtime_step == 60
-            else f"rounded down to {rules.overtime_step}-minute blocks"
+            "paid in whole hours" if rules.overtime_step == 60
+            else f"paid in {rules.overtime_step}-minute blocks"
         )
     return " · ".join(parts)
 
@@ -391,6 +391,7 @@ OVERTIME_TABS = (
     ("waiting", "Waiting"),
     ("approved", "Approved"),
     ("rejected", "Rejected"),
+    ("too_short", "Too short to pay"),
     ("all", "All"),
 )
 

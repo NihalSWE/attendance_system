@@ -180,6 +180,13 @@
                                         <span class="badge badge--success">
                                             Approved
                                         </span>
+                                    {% elif row.state == "too_short" %}
+                                        <span class="badge badge--neutral">
+                                            Too short to pay
+                                        </span>
+                                        <div class="t-faint">
+                                            No decision needed
+                                        </div>
                                     {% else %}
                                         <span class="badge badge--neutral">
                                             Rejected
@@ -211,7 +218,7 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if not locked %}
+                                    {% if not locked and row.state != "too_short" %}
                                         <a class="btn {% if row.state == 'waiting' %}btn--primary{% else %}btn--quiet{% endif %} btn--sm" href="{% url 'payroll:overtime_decide' row.record.pk %}">
                                             {% if row.state == "waiting" %}Decide{% else %}Change{% endif %}
                                         </a>
@@ -237,7 +244,8 @@
                 </div>
                 <div class="empty__text">
                     Overtime appears here when somebody stays after their shift's end, comes
-                    back after it, or works on a holiday or weekly off.
+                    back after it, or works on a holiday or weekly off. Overtime your
+                    rules would not pay (under the minimum) never waits; see “Too short to pay”.
                 </div>
             </div>
         {% endif %}

@@ -117,6 +117,17 @@ class DecidingTests(OvertimeBase):
         self.assertEqual(overtime.undecided_count(self.company.pk, MONDAY.replace(day=1),
                                                   datetime.date(2026, 8, 31)), 1)
 
+    def test_overtime_too_short_to_pay_does_not_wait(self):
+        change_salary_rules(actor=self.admin, company_id=self.company.pk, values={
+            "effective_from": datetime.date(2026, 8, 1), "minimum_overtime_minutes": 60,
+        })
+        self.work(MONDAY, (9, 0), (18, 40))              # 40 min: under the minimum
+        self.work(datetime.date(2026, 8, 11), (9, 0), (19, 30))  # 90 min: waits
+        page = overtime.overtime_month(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        self.assertEqual(sorted(row.state for row in page["rows"]), ["too_short", "waiting"])
+        self.assertEqual(overtime.undecided_count(self.company.pk, datetime.date(2026, 8, 1),
+                                                  datetime.date(2026, 8, 31)), 1)
+
     def test_approving_fewer_minutes_survives_recalculation(self):
         record = self.work(MONDAY, (9, 0), (20, 0))
         self.decide(record, minutes=90, note="Stock count")

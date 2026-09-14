@@ -850,6 +850,14 @@ merge).**
   30 / 60 minutes. Dated like every other salary rule. The migration gives
   already-saved rules these defaults (the columns were placeholders nothing
   read: no overtime pay, 1×).
+- **Too short to pay (fix after Ajay's review, 2026-09-14):** a day whose
+  counted overtime the month's rules would pay nothing for (under "Don't pay
+  overtime shorter than", or less than one block) is shown as "Too short to
+  pay" and does not wait for a decision. Felan Tech had 26 waiting days of
+  1–59 minutes (people scanning out a few minutes after 18:00) under a
+  60-minute minimum; now 0. An open session always waits. The two settings
+  were renamed to say what they do: "Don't pay overtime shorter than
+  (minutes)" and "Pay overtime in blocks of" (every minute / 15 / 30 / 60).
 - **Salary page notices:** days still waiting ("will not be paid until
   approved") and decisions made after the draft was generated ("Generate
   again to include it"). Approving does not regenerate salary by itself.
