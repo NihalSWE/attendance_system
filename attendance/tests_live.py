@@ -416,3 +416,58 @@ class PayrollLockTests(LiveTestCase):
             now=datetime.datetime(2026, 8, 20, 10, tzinfo=DHAKA),
         )
         self.assertIsNotNone(self.record(day))
+
+
+class NoShiftTests(LiveTestCase):
+    """Somebody with no shift gets no record, whatever kind of day it is.
+
+    Shifts per department, and only another department has one: there is
+    nothing to measure this employee's day against. A working day already
+    wrote nothing. A weekly off or a holiday wrote a record with no scheduled
+    start, which the column does not allow, and took Generate salary down
+    with it for the whole company.
+    """
+
+    def setUp(self):
+        super().setUp()
+        with use_company(self.company):
+            other = adopt_department(self.branch, "OPS", "Operations")
+        schedule.set_department_shift(
+            actor=self.admin, company_id=self.company.pk, values={
+                "department": other, "shift": self.shift,
+                "effective_from": datetime.date(2026, 1, 1),
+            },
+        )
+        schedule.update_attendance_settings(
+            actor=self.admin, company_id=self.company.pk,
+            values={"shift_mode": "department_shifts", "company_shift": None},
+        )
+        self.day = datetime.date(2026, 8, 7)  # a Friday
+        self.now = datetime.datetime(2026, 8, 20, tzinfo=UTC)
+        schedule.add_weekly_offs(
+            actor=self.admin, company_id=self.company.pk, values={
+                "weekdays": [self.day.weekday()], "branch": None, "is_paid": True,
+                "effective_from": datetime.date(2026, 1, 1),
+            },
+        )
+
+    def test_a_weekly_off_writes_nothing_rather_than_failing(self):
+        recalculate(self.company.pk, start=self.day, end=self.day, now=self.now)
+        self.assertIsNone(self.record(self.day))
+
+    def test_scans_on_that_day_off_do_not_fail_either(self):
+        """The path ingestion takes: a punch arrives, its day is rebuilt."""
+        self.punch(self.day, 10)
+        self.punch(self.day, 14)
+        recalculate(self.company.pk, start=self.day, end=self.day, now=self.now)
+        self.assertIsNone(self.record(self.day))
+
+    def test_a_whole_month_still_builds_around_that_employee(self):
+        recalculate(
+            self.company.pk, start=datetime.date(2026, 8, 1),
+            end=datetime.date(2026, 8, 19), now=self.now,
+        )
+        with use_company(self.company):
+            self.assertFalse(
+                AttendanceRecord.objects.filter(employee=self.employee).exists()
+            )

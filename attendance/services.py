@@ -491,6 +491,13 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
     if assignment is None:
         return None
 
+    # No shift, no record — on every kind of day, not just a working one. A
+    # record's scheduled start and end cannot be blank, and an employee whose
+    # department has no shift has nothing to measure a holiday or a leave day
+    # against either. Checked before the day's kind for that reason.
+    if window.shift is None:
+        return None
+
     leave = leave_by_key.get((employee.pk, day))
     info = calendar.day(assignment.branch_id, day)
     day_punches = [p for p in punches if window.contains(p[0])]
@@ -551,8 +558,6 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         values["worked_minutes"] = 0
         values["is_open"] = not is_closed
     else:
-        if window.shift is None:
-            return None
         if not day_punches and not is_closed:
             # "Not in yet": the shift has not finished, so nobody is absent.
             return None
