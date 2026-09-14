@@ -22,14 +22,18 @@ def _date_widget(placeholder):
 
 
 def _time_field(label, help_text):
-    # A plain text box rather than <input type="time">: the browser draws its
-    # own clock control for that, which the design does not allow.
+    # A text box rather than <input type="time">: the browser draws its own
+    # clock control for that, which the design does not allow. data-timepicker
+    # adds the project time picker (timepicker.js); typing still works.
     return forms.TimeField(
         label=label,
         input_formats=["%H:%M", "%H.%M"],
         help_text=help_text,
         widget=forms.TextInput(
-            attrs={"placeholder": "HH:MM", "maxlength": 5, "inputmode": "numeric"}
+            attrs={
+                "placeholder": "HH:MM", "maxlength": 5, "inputmode": "numeric",
+                "autocomplete": "off", "data-timepicker": "",
+            }
         ),
     )
 
@@ -47,21 +51,38 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
             "end_time",
             "spans_next_day",
             "grace_in_minutes",
+            "grace_out_minutes",
             "minimum_full_day_minutes",
             "minimum_half_day_minutes",
+            "default_break_minutes",
+            "break_is_paid",
+            "overtime_after_minutes",
         )
         labels = {
             "code": "Shift code",
             "name": "Shift name",
             "spans_next_day": "Ends on the next day (night shift)",
             "grace_in_minutes": "Late after (minutes)",
+            "grace_out_minutes": "Leaving early after (minutes)",
             "minimum_full_day_minutes": "Full day needs (minutes)",
             "minimum_half_day_minutes": "Half day needs (minutes)",
+            "default_break_minutes": "Break (minutes)",
+            "break_is_paid": "The break is paid",
+            "overtime_after_minutes": "Overtime starts after (minutes)",
         }
         help_texts = {
             "code": "Short identifier, unique in this company.",
             "grace_in_minutes": (
                 "Arriving within this many minutes of the start is not late."
+            ),
+            "grace_out_minutes": (
+                "Leaving within this many minutes of the end is not leaving early."
+            ),
+            "default_break_minutes": (
+                "The break the shift allows, e.g. 60 for lunch. Unpaid unless ticked below."
+            ),
+            "overtime_after_minutes": (
+                "Minutes after the shift's end before overtime counts, e.g. 30. 0 = straight away."
             ),
             "minimum_full_day_minutes": (
                 "Worked minutes needed for a full present day. Cannot exceed the "
@@ -72,10 +93,28 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
             ),
         }
 
+    # Blank means 0 for these: no grace, no break, overtime straight away.
+    OPTIONAL_MINUTES = ("grace_out_minutes", "default_break_minutes", "overtime_after_minutes")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["start_time"].widget.format = "%H:%M"
         self.fields["end_time"].widget.format = "%H:%M"
+        for name in self.OPTIONAL_MINUTES:
+            self.fields[name].required = False
+
+    def _minutes_or_zero(self, name):
+        value = self.cleaned_data.get(name)
+        return 0 if value in (None, "") else value
+
+    def clean_grace_out_minutes(self):
+        return self._minutes_or_zero("grace_out_minutes")
+
+    def clean_default_break_minutes(self):
+        return self._minutes_or_zero("default_break_minutes")
+
+    def clean_overtime_after_minutes(self):
+        return self._minutes_or_zero("overtime_after_minutes")
 
     def clean_code(self):
         return (self.cleaned_data.get("code") or "").strip().upper()
@@ -217,6 +256,30 @@ class EndWeeklyOffForm(StyledFormMixin, forms.Form):
             "attendance does not change."
         ),
         widget=_date_widget("Select end date"),
+    )
+
+
+class EmployeeShiftForm(StyledFormMixin, forms.Form):
+    """Give one employee their own shift (the employee is fixed by the page)."""
+
+    shift = forms.ModelChoiceField(queryset=Shift.all_objects.none(), label="Shift")
+    first_day = forms.DateField(label="From", widget=_date_widget("Select first day"))
+    last_day = forms.DateField(
+        label="Until (optional)", required=False, widget=_date_widget("No end"),
+        help_text="Leave empty to keep it until changed. With a last day it is temporary.",
+    )
+    reason = forms.CharField(label="Reason", required=False, max_length=255)
+
+    def __init__(self, *args, shifts=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if shifts is not None:
+            self.fields["shift"].queryset = shifts
+
+
+class EndEmployeeShiftForm(StyledFormMixin, forms.Form):
+    last_day = forms.DateField(
+        label="Last day on this shift", widget=_date_widget("Select last day"),
+        help_text="From the next day the employee works their department's shift again.",
     )
 
 
