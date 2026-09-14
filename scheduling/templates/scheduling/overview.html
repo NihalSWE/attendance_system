@@ -355,9 +355,6 @@
                             <th>
                                 Applies to
                             </th>
-                            <th>
-                                Paid
-                            </th>
                             <th class="numeric">
                                 From
                             </th>
@@ -385,13 +382,6 @@
                                         All branches
                                     {% endif %}
                                 </td>
-                                <td>
-                                    {% if rule.is_paid %}
-                                        Paid
-                                    {% else %}
-                                        Unpaid
-                                    {% endif %}
-                                </td>
                                 <td class="numeric">
                                     {{ rule.effective_from|date:"d M Y" }}
                                 </td>
@@ -410,10 +400,15 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if can_manage and rule.status == 'active' %}
-                                        <a class="btn btn--quiet btn--sm" href="{% url 'scheduling:weekly_off_end' rule.pk %}">
-                                            Stop
+                                    {% if can_manage %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'scheduling:weekly_off_start' rule.pk %}">
+                                            Change start date
                                         </a>
+                                        {% if rule.status == 'active' %}
+                                            <a class="btn btn--quiet btn--sm" href="{% url 'scheduling:weekly_off_end' rule.pk %}">
+                                                Stop
+                                            </a>
+                                        {% endif %}
                                     {% else %}
                                         <span class="t-faint">
                                             —
@@ -468,9 +463,6 @@
                             <th>
                                 Applies to
                             </th>
-                            <th>
-                                Paid
-                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -487,13 +479,6 @@
                                         {{ holiday.branch.name }}
                                     {% else %}
                                         All branches
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if holiday.is_paid %}
-                                        Paid
-                                    {% else %}
-                                        Unpaid
                                     {% endif %}
                                 </td>
                             </tr>

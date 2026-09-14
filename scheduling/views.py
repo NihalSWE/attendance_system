@@ -32,6 +32,7 @@ from scheduling import services
 from organization.models import CompanyDepartment
 from scheduling.forms import (
     AttendanceSettingsForm,
+    ChangeWeeklyOffStartForm,
     DepartmentShiftForm,
     EndWeeklyOffForm,
     HolidayForm,
@@ -297,7 +298,7 @@ def weekly_off_create(request):
         form = WeeklyOffForm(
             request.POST or None,
             branches=visible_branches(membership).order_by("name"),
-            initial={"effective_from": timezone.localdate(), "is_paid": True},
+            initial={"effective_from": timezone.localdate()},
         )
         return _form_page(
             request,
@@ -309,6 +310,35 @@ def weekly_off_create(request):
                 actor=request.user, company_id=company_id, values=data
             ),
         )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def weekly_off_start(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    _, rule = services.get_weekly_off_for_edit(
+        actor=request.user, company_id=company_id, rule_id=pk
+    )
+    form = ChangeWeeklyOffStartForm(
+        request.POST or None, initial={"effective_from": rule.effective_from}
+    )
+    return _form_page(
+        request,
+        form=form,
+        title=f"Change {rule.get_weekday_display()} start date",
+        submit_label="Change start date",
+        success="Weekly off start date changed. Attendance updated; finalised months kept.",
+        explanation=(
+            f"{rule.get_weekday_display()} currently starts on {rule.effective_from:%d %b %Y}. "
+            "Choose when this weekly off should begin."
+        ),
+        action=lambda data: services.change_weekly_off_start(
+            actor=request.user, company_id=company_id, rule_id=rule.pk,
+            effective_from=data["effective_from"],
+        ),
+    )
 
 
 @login_required
@@ -394,7 +424,6 @@ def holiday_create(request):
         form = HolidayForm(
             request.POST or None,
             branches=visible_branches(membership).order_by("name"),
-            initial={"is_paid": True},
         )
         return _form_page(
             request,
@@ -498,8 +527,7 @@ def holiday_year(request):
             try:
                 added = services.add_holidays(
                     actor=request.user, company_id=company_id,
-                    values={"branch": data["branch"], "is_paid": data["is_paid"],
-                            "days": data["days"]},
+                    values={"branch": data["branch"], "days": data["days"]},
                 )
             except ValidationError as exc:
                 apply_service_errors(form, exc)

@@ -562,7 +562,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A14 | **Sidebar menus with submenus** (Ajay, 2026-09-14) | Every important page reachable from the sidebar: a menu per area with its pages as submenus, e.g. Employees (All employees, Create employee); Attendance (Daily list, Calendar); Leave (Leave list, Record leave, Leave types); Salary (Salary by month, Salary settings, Penalty rules); Shifts (Overview, Shifts, Department shifts, Weekly offs, Holidays, Holiday calendar, Attendance settings); Organisation (Branches, Departments); Devices (Devices, Enrollments, Punches, Messages, Unresolved). Ajay: pages he could not find were only reachable through buttons inside other pages. Every later step adds its pages to these menus | — | (new) |
 | A6b | **First salary for an employee without one** (bug, Ajay 2026-09-14) — ✅ done 2026-09-14, branch `feature/a6b-first-salary` | Employees created from a device's users (`devices/services/user_sync.py`) get a placement but no salary row, and Edit employee → Salary refuses: "This employee has no current salary to change" — so they can never be given one. Fix: when there is no salary, the Salary card **sets the first one** (button "Set salary", from the placement's start date by default) instead of refusing; the salary page keeps listing such people under "Skipped, no salary set" until then | — | (bug) |
 | A15 | **Real data tables everywhere** (Ajay, 2026-09-14: "there is no server side pagination in many of the pages. we already discussed this before the start of the project"; then "data tables later" — after A8) | The agreed rule (DEVICE_INTEGRATION_HANDOFF.md, UI conventions): real DataTables with **server-side** paging, search and sorting, a real result count and a page-length select — today only the platform company list does it; the others have hand-built pagination or none. A shared helper in `base_template` (view side: filter/search/order/page a queryset and answer DataTables' JSON; page side: one init) so every list is one small view. Ajay's lists: Salary month, **Overtime (+ Employee and Branch filters)**, Leave, Leave types, Holidays, Penalty rules, Employees, Branches, Departments, My leave, My payslips. Every list gets filters for what people look things up by — employee, branch, status, month. Nihal's lists: N9 | — | (new) |
-| A5c | **Calendar and salary-settings fixes** (Ajay, 2026-09-14) | **Weekly off from an earlier date:** today the clash check ignores dates — any active Friday blocks another Friday ("Already a weekly off company-wide: Friday"), even for a period that does not overlap, and a rule can only be ended, never started earlier. Make the check date-aware (refuse only overlapping periods, which the database constraint already allows), add **Change start date** to a weekly off so Friday-from-September can become Friday-from-2000, and word the refusal with the dates ("Friday is already a weekly off from 1 Sep 2026; change its start date instead"). Moving a start date back recalculates the affected days (finalised months stay locked). **"Paid day off" / "Paid holiday" boxes: removed (Ajay, 2026-09-14)** — days off are always paid; what daily and hourly staff get on them stays on Salary settings. **"One day of a monthly salary is"**: rename to say what it is — the value of one day when deducting absence (and the base of overtime's hourly rate) | — | (new) |
+| A5c | **Calendar and salary-settings fixes** — done 2026-09-14, branch `feature/a5c-calendar-fixes` | Weekly-off conflicts compare date ranges, including stopped history. **Change start date** on Shifts → Weekly off days corrects an active or stopped rule and rebuilds changed attendance dates while preserving finalised months. Paid holiday / weekly-off fields are removed; writes force True and the calendar treats legacy flags as paid. Daily/hourly pay remains on Salary settings. The day-value label explains absence deductions and the overtime hourly-rate base. See progress below. | — | (new) |
 | A16 | **SenseFace 3A** (Ajay, 2026-09-14: "add this to my task") | **Catalogue row — ✅ done 2026-09-14** (`devices/migrations/0004_seed_senseface_3a.py`, branch `feature/senseface-3a`): ZKTeco, `senseface-3a`, ADMS push, same adapter as the 2A; capabilities set conservatively (push, face) until confirmed; appears under Register device after `migrate`. **Connected 2026-09-14 19:02 (Dhaka)** in company Ajay ("Main Entrance", serial VGU6262600120), through Ajay's ngrok tunnel: set on the terminal (COMM → Cloud Server: domain only, port 443, HTTPS on) — the software's Change server address only moves a device that is already connected. It reports **pushver 2.4.1** (the 2A: 3.0.4S) and `DeviceType=att`. It was refused with 401 at first because registration had invented a communication key the device cannot send — fixed on main (5ed6d10: no key unless typed; Edit device → "Remove the communication key"). **Still to do, on the real 3A:** first contact (note its firmware version from the first contact); scans arrive as punches; Device users reads its roster; the server-address change works. Then widen the capabilities that were confirmed (card, fingerprint, commands) and write what was verified in the migration note and here, like the 2A's notes | 4 | (new) |
 
 #### Ajay's session — progress
@@ -995,7 +995,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14, evening):** Ajay continues at home in a new chat — **start from [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md)**; at home build A5c, then A14, A8; A16 (the SenseFace 3A, Push protocol 3.x experiment) is tested in the office with the device. The salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A5c (weekly off start date, remove the paid-day-off boxes, day-value label), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-14, home):** Home setup checks and A5c are complete (see progress below). Continue with **A14 sidebar menus**, then A8; do not repeat A5c. [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md) remains the office context; A16 (the SenseFace 3A, Push protocol 3.x experiment) is tested in the office with the device. The salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2022,3 +2022,55 @@ tests passed whether or not they judged by today's rules. Checked by breaking
 reason so the count stays on screen).
 
 **No new migration, no new environment variable.**
+
+
+## 2026-09-14 — Home setup and A5c (Ajay's session)
+
+Cloned main at `a892f12` into the home project folder and created `venv` using
+Python 3.13. Installed the pinned requirements, including Django 6.1.1 and
+`tblib`. PostgreSQL 18 was already running. Copied `.env.example` to the ignored
+`.env`; Ajay owns its database values/password, development migrations and
+superuser creation. The assistant did not open `.env` or handle the database
+password. `manage.py check` and `pip check` pass; scheduling/payroll first passed
+196 tests, then 213 after the A5c regressions were added. No development database
+reset or assistant-run development migration.
+
+**A5c — branch `feature/a5c-calendar-fixes`.**
+
+- Weekly-off overlap checks use `[effective_from, effective_to)` for the same
+  company/branch and weekday, including stopped history. Adjacent periods are
+  allowed. Refusals name the weekday, scope and dates and suggest changing the
+  existing start date. Weekly-off writes serialize on the company row; the
+  existing exclusion constraint remains the final guard.
+- **Navigation: Shifts → Weekly off days → Change start date**, for active and
+  stopped rules. The project date picker is used. Permission, company and branch
+  scope are rechecked in the service. A start must precede the stop date.
+  Corrections record before/after dates in `weekly_off.start_changed`.
+- Moving either direction rebuilds the changed range with the existing
+  `attendance.services.recalculate`, in monthly batches bounded by employee
+  placement and today. Branch rules limit the employee set. The calendar write,
+  recalculation and audit share a transaction. Finalised months remain locked;
+  an unsuccessful rebuild rolls the correction back.
+- **Shifts → Add weekly off days**, **Shifts → All holidays → Add holiday/Edit**,
+  and **Shifts → Holiday calendar** no longer ask whether days off are paid.
+  The columns remain; service writes always store True, including a caller that
+  submits False. `WorkCalendar` treats legacy False flags as paid without a data
+  rewrite. Daily/hourly day-off payment still follows Salary settings.
+  Redundant Paid columns and Unpaid calendar markers are removed.
+- **Payroll → Salary settings:** the form and current-rules summary say
+  **One day's pay for absence deductions**; help explains unpaid leave and the
+  overtime hourly-rate base. No salary formula or monthly pay basis was changed.
+- 17 new regression tests cover boundaries, stopped periods, dates back to 2000,
+  tenant/branch/role refusal, form submission, audited corrections, recalculation
+  in both directions, finalised-month preservation, rollback and legacy paid flags.
+- Browser QA used synthetic rendered test fixtures (rolled back) at 1440, 768 and
+  375 px: no page horizontal overflow; the new date picker opens within the phone
+  viewport; paid fields are absent. No browser login password was entered.
+- `makemigrations --check --dry-run`: no changes. **No migration and no new
+  environment variable; `.env.example` unchanged.** Full suite: **905 tests
+  PASS**, `manage.py test --parallel 4 --keepdb --noinput`, 276.656 seconds.
+  After the summary-label follow-up, all 26 salary-settings tests also pass.
+
+Next at home: **A14**, then **A8**, then A15. Office A16 still needs the physical
+SenseFace 3A. Nihal continues N5, N6, N8; N9 waits for A15. Keep his attendance
+recalculation API, overtime hook and finalised-month guard when merging N5.

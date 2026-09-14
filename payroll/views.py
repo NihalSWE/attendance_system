@@ -347,7 +347,7 @@ def rules_summary(rules):
     else:
         rounding = f"Rounded to the nearest {step}"
     return [
-        ("One day of a monthly salary", per_day),
+        ("One day's pay for absence deductions", per_day),
         ("Absence", Version.AbsenceDeduction(rules.absence_method).label),
         ("A half day pays", f"{policy.plain(rules.half_day_pay * 100)}% of a day"),
         ("A day without a check-out", incomplete),

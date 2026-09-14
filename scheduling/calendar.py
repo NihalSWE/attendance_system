@@ -145,9 +145,11 @@ class WorkCalendar:
 
     def day(self, branch_id, on):
         """Classify one date. A holiday wins over a weekly off on the same day."""
+        # Days off are always paid (A5c), including legacy rows whose retained
+        # is_paid column is False. Daily/hourly pay still follows salary rules.
         for holiday in self.holidays:
             if holiday.holiday_date == on and holiday.branch_id in (None, branch_id):
-                return DayInfo(HOLIDAY, holiday.is_paid, holiday.name)
+                return DayInfo(HOLIDAY, True, holiday.name)
         for rule in self.rules:
             if (
                 rule.weekday == on.weekday()
@@ -155,5 +157,5 @@ class WorkCalendar:
                 and rule.effective_from <= on
                 and (rule.effective_to is None or on < rule.effective_to)
             ):
-                return DayInfo(WEEKLY_OFF, rule.is_paid, rule.get_weekday_display())
+                return DayInfo(WEEKLY_OFF, True, rule.get_weekday_display())
         return DayInfo(WORKING)

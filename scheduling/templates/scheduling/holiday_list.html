@@ -25,7 +25,7 @@
                 Holidays
             </h1>
             <p class="page__sub">
-                Full-day holidays. A paid holiday is not counted as an absence.
+                Full-day holidays are paid days off. Daily and hourly pay follows Salary settings.
             </p>
         </div>
         <div class="page__actions">
@@ -96,9 +96,6 @@
                                 Applies to
                             </th>
                             <th>
-                                Paid
-                            </th>
-                            <th>
                                 Status
                             </th>
                             <th class="no-sort">
@@ -120,13 +117,6 @@
                                         {{ holiday.branch.name }}
                                     {% else %}
                                         All branches
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if holiday.is_paid %}
-                                        Paid
-                                    {% else %}
-                                        Unpaid
                                     {% endif %}
                                 </td>
                                 <td>

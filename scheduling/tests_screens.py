@@ -393,7 +393,7 @@ class CalendarScreenTests(CalendarBase):
     def test_adding_two_days_through_the_form(self):
         self.client.force_login(self.admin)
         response = self.client.post(reverse("scheduling:weekly_off_create"), {
-            "weekdays": ["4", "5"], "effective_from": "2026-01-01", "is_paid": "on",
+            "weekdays": ["4", "5"], "effective_from": "2026-01-01",
         })
         self.assertRedirects(response, reverse("scheduling:schedule_overview"))
         with use_company(self.company):
@@ -417,7 +417,7 @@ class CalendarScreenTests(CalendarBase):
         )
         self.client.force_login(self.admin)
         response = self.client.post(reverse("scheduling:holiday_create"), {
-            "holiday_date": "2026-12-16", "name": "Again", "is_paid": "on",
+            "holiday_date": "2026-12-16", "name": "Again",
         })
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "is already a holiday on this date")
