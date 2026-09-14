@@ -40,7 +40,9 @@
 > Finalise (owner/admin; refused if overtime changed after generating) and Undo
 > finalise with a reason. **Part 2 done:** payslip → Bonus and deductions (draft
 > only, owner/admin), kept across regeneration; migration `payroll.0006` — Ajay
-> runs migrate. Next: part 3.
+> runs migrate. **Part 3 done:** joining/leaving mid-month — monthly Basic ×
+> employed calendar days ÷ days in month; days outside employment ignored.
+> Next: part 4 (salary change mid-month).
 
 ## 0. First instruction: review and report, do not implement
 
