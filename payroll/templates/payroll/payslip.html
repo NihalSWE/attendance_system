@@ -1,10 +1,11 @@
 {% extends "base_template/base.html" %}
-{% load static %}
+{% load static money %}
 {% block title %}
     Payslip · {{ record.employee.full_name }} · {{ period.name }}
 {% endblock %}
 {% block extra_css %}
     <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+    <link rel="stylesheet" href="{% static 'payroll/css/payslip.css' %}">
 {% endblock %}
 {% block page %}
     <div class="crumbs">
@@ -28,7 +29,16 @@
                 Payslip — {{ period.name }}
             </h1>
             <p class="page__sub">
-                {{ active_company.name }} · Draft
+                {{ active_company.name }} ·
+                {% if record.payroll_run.status == "posted" %}
+                    <span class="badge badge--success">
+                        {{ record.payroll_run.get_status_display }}
+                    </span>
+                {% else %}
+                    <span class="badge badge--warning">
+                        {{ record.payroll_run.get_status_display }}
+                    </span>
+                {% endif %}
             </p>
         </div>
         <div class="page__actions">
@@ -39,290 +49,336 @@
     </div>
 
     <div class="card">
-        <div class="card__body">
-            <dl class="facts">
-                <dt>
+        <div class="card__body slip-head">
+            <div class="slip-head__block">
+                <span class="metric__label">
                     Employee
-                </dt>
-                <dd>
+                </span>
+                <h2 class="slip-head__name">
                     {{ record.employee.full_name }}
-                </dd>
-                <dt>
-                    Code
-                </dt>
-                <dd>
-                    {{ assignment.employee_code|default:"—" }}
-                </dd>
-                <dt>
-                    Branch
-                </dt>
-                <dd>
-                    {{ assignment.branch.name|default:"—" }}
-                </dd>
-                <dt>
-                    Department
-                </dt>
-                <dd>
-                    {{ assignment.department.name|default:"—" }}
-                </dd>
-                <dt>
-                    Designation
-                </dt>
-                <dd>
-                    {{ assignment.designation.name|default:"—" }}
-                </dd>
-                <dt>
-                    Pay basis
-                </dt>
-                <dd>
-                    {{ record.calculation_snapshot.pay_basis|title }}, rate {{ record.calculation_snapshot.base_rate }} {{ record.currency }}
-                </dd>
-                <dt>
-                    Salary rules
-                </dt>
-                <dd>
-                    {% with rules=record.calculation_snapshot.rules %}
-                        {% if rules.version_number %}
-                            Company rules, version {{ rules.version_number }}
-                        {% else %}
-                            Standard rules
-                        {% endif %}
-                    {% endwith %}
-                </dd>
-            </dl>
+                </h2>
+                <span class="slip-head__meta">
+                    {{ assignment.employee_code|default:"No code" }} · {{ assignment.designation.name|default:"No designation" }}
+                </span>
+                <span class="slip-head__meta">
+                    {{ assignment.department.name|default:"No department" }} · {{ assignment.branch.name|default:"No branch" }}
+                </span>
+            </div>
+            <div class="slip-head__block">
+                <span class="metric__label">
+                    Pay period
+                </span>
+                <h2 class="slip-head__name">
+                    {{ period.name }}
+                </h2>
+                <span class="slip-head__meta">
+                    {{ period.start_date|date:"d M Y" }} – {{ period.end_date|date:"d M Y" }}
+                </span>
+                <span class="slip-head__meta">
+                    {{ record.calculation_snapshot.pay_basis|title }} · {{ record.calculation_snapshot.base_rate|money }} {{ record.currency }}
+                </span>
+            </div>
         </div>
     </div>
 
-    <div class="card">
-        <div class="card__head">
-            <h2>
-                Earnings and deductions
-            </h2>
+    <div class="grid grid--3 slip-metrics">
+        <div class="card metric">
+            <span class="metric__label">
+                Gross earnings
+            </span>
+            <strong>
+                {{ record.gross_earnings|money }}
+            </strong>
+            <span class="metric__note">
+                {{ earnings|length }} item{{ earnings|length|pluralize }}
+            </span>
         </div>
-        <div class="table-wrap">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>
-                            Item
-                        </th>
-                        <th class="numeric">
-                            Quantity
-                        </th>
-                        <th class="numeric">
-                            Rate
-                        </th>
-                        <th class="numeric">
-                            Amount
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for line in earnings %}
-                        <tr>
-                            <td>
-                                {{ line.description }}
-                            </td>
-                            <td class="numeric">
-                                {{ line.quantity|floatformat:"-2" }}
-                            </td>
-                            <td class="numeric">
-                                {{ line.rate|floatformat:2 }}
-                            </td>
-                            <td class="numeric">
-                                {{ line.amount }}
-                            </td>
-                        </tr>
-                    {% endfor %}
-                    {% for line in deductions %}
-                        <tr>
-                            <td>
-                                Less: {{ line.description }}
-                            </td>
-                            <td class="numeric">
-                                {{ line.quantity|floatformat:"-2" }}
-                            </td>
-                            <td class="numeric">
-                                {{ line.rate|floatformat:2 }}
-                            </td>
-                            <td class="numeric">
-                                −{{ line.amount }}
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    <tr>
-                        <th colspan="3">
-                            Gross
-                        </th>
-                        <th class="numeric">
-                            {{ record.gross_earnings }}
-                        </th>
-                    </tr>
-                    <tr>
-                        <th colspan="3">
-                            Deductions
-                        </th>
-                        <th class="numeric">
-                            −{{ record.total_deductions }}
-                        </th>
-                    </tr>
-                    <tr>
-                        <th colspan="3">
-                            Net pay ({{ record.currency }})
-                        </th>
-                        <th class="numeric">
-                            {{ record.net_pay }}
-                        </th>
-                    </tr>
-                </tfoot>
-            </table>
+        <div class="card metric">
+            <span class="metric__label">
+                Deductions
+            </span>
+            <strong>
+                {% if record.total_deductions %}−{% endif %}{{ record.total_deductions|money }}
+            </strong>
+            <span class="metric__note">
+                {{ deductions|length }} item{{ deductions|length|pluralize }}
+            </span>
+        </div>
+        <div class="card metric metric--hero">
+            <span class="metric__label">
+                Net pay
+            </span>
+            <strong>
+                {{ record.net_pay|money }}
+            </strong>
+            <span class="metric__note">
+                {{ record.currency }} · {{ period.name }}
+            </span>
         </div>
     </div>
 
-    {% if penalties %}
+    <div class="slip-tables">
         <div class="card">
             <div class="card__head">
                 <h2>
-                    Penalties
+                    Earnings
                 </h2>
-                <span class="badge badge--neutral">
-                    {{ penalties|length }}
-                </span>
             </div>
             <div class="table-wrap">
-                <table class="table">
+                <table class="table slip-table">
                     <thead>
                         <tr>
                             <th>
-                                Rule
-                            </th>
-                            <th>
-                                Days
+                                Item
                             </th>
                             <th class="numeric">
                                 Amount
                             </th>
-                            <th>
-                                Status
-                            </th>
-                            <th class="no-sort">
-                                Action
-                            </th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for penalty in penalties %}
+                        {% for line in earnings %}
                             <tr>
                                 <td>
-                                    {{ penalty.penalty_rule.name }}
-                                </td>
-                                <td>
-                                    {% for day in penalty.days.all %}{{ day.attendance_record.work_date|date:"d M" }}{% if day.qualifying_value and penalty.penalty_rule.metric != "absence" %} ({{ day.qualifying_value|floatformat:"0" }} min){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {{ line.description }}
+                                    <span class="slip-line__basis">
+                                        {% if line.code == "BASIC" %}
+                                            Monthly salary
+                                        {% elif line.code == "ROUNDING" %}
+                                            Net pay rounded up
+                                        {% elif line.code == "DAYS" %}
+                                            {{ line.quantity|floatformat:"-2" }} days × {{ line.rate|money }}
+                                        {% elif line.code == "HOURS" or line.code == "PAID_LEAVE" or line.code == "INCOMPLETE" %}
+                                            {{ line.quantity|floatformat:"-2" }} h × {{ line.rate|money }}
+                                        {% else %}
+                                            {{ line.quantity|floatformat:"-2" }} × {{ line.rate|money }}
+                                        {% endif %}
+                                    </span>
                                 </td>
                                 <td class="numeric">
-                                    {{ penalty.deduction_amount }}
+                                    {{ line.amount|money }}
                                 </td>
-                                <td>
-                                    {% if penalty.status == "waived" %}
-                                        <span class="badge badge--neutral">
-                                            Waived
-                                        </span>
-                                        <div class="t-faint">
-                                            {{ penalty.approved_by.email|default:"" }}
-                                        </div>
-                                    {% else %}
-                                        <span class="badge badge--warning">
-                                            {{ penalty.get_status_display }}
-                                        </span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if can_waive and penalty.status == "proposed" %}
-                                        <form method="post" action="{% url 'payroll:penalty_waive' penalty.pk %}">
-                                            {% csrf_token %}
-                                            <button class="btn btn--quiet btn--sm" type="submit">
-                                                Waive
-                                            </button>
-                                        </form>
-                                    {% else %}
-                                        <span class="t-faint">
-                                            —
-                                        </span>
-                                    {% endif %}
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td class="slip-empty" colspan="2">
+                                    No earnings this month.
                                 </td>
                             </tr>
                         {% endfor %}
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <th>
+                                Gross earnings
+                            </th>
+                            <th class="numeric">
+                                {{ record.gross_earnings|money }}
+                            </th>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
-    {% endif %}
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Deductions
+                </h2>
+            </div>
+            <div class="table-wrap">
+                <table class="table slip-table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Deduction and reason
+                            </th>
+                            <th class="numeric">
+                                Amount
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in deductions %}
+                            <tr>
+                                <td>
+                                    {% if line.code == "PENALTY" %}
+                                        {% for penalty in penalties %}
+                                            {% if penalty.pk == line.penalty_assessment_id %}
+                                                {{ penalty.penalty_rule.name }}
+                                                <span class="slip-line__basis">
+                                                    {% for day in penalty.days.all %}{{ day.attendance_record.work_date|date:"d M" }}{% if day.qualifying_value and penalty.penalty_rule.metric != "absence" %} ({{ day.qualifying_value|floatformat:"0" }} min){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                                </span>
+                                                {% if can_waive and penalty.status == "proposed" %}
+                                                    <form class="slip-line__action" method="post" action="{% url 'payroll:penalty_waive' penalty.pk %}">
+                                                        {% csrf_token %}
+                                                        <button class="btn btn--ghost btn--sm" type="submit">
+                                                            Waive
+                                                        </button>
+                                                    </form>
+                                                {% endif %}
+                                            {% endif %}
+                                        {% empty %}
+                                            {{ line.description }}
+                                        {% endfor %}
+                                    {% else %}
+                                        {{ line.description }}
+                                        <span class="slip-line__basis">
+                                            {% if line.code == "ROUNDING" %}
+                                                Net pay rounded down
+                                            {% elif line.code == "SHORT_MINUTES" %}
+                                                {{ line.quantity|floatformat:"0" }} minutes short of the shift across the month
+                                            {% else %}
+                                                {{ line.quantity|floatformat:"-2" }} day{{ line.quantity|pluralize }} × {{ line.rate|money }} a day
+                                            {% endif %}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    −{{ line.amount|money }}
+                                </td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td class="slip-empty" colspan="2">
+                                    No deductions this month.
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th>
+                                Total deductions
+                            </th>
+                            <th class="numeric">
+                                {% if record.total_deductions %}−{% endif %}{{ record.total_deductions|money }}
+                            </th>
+                        </tr>
+                        <tr class="slip-table__net">
+                            <th>
+                                Net pay ({{ record.currency }})
+                            </th>
+                            <th class="numeric">
+                                {{ record.net_pay|money }}
+                            </th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            {% for penalty in penalties %}
+                {% if penalty.status == "waived" %}
+                    <p class="slip-waived">
+                        Waived, not deducted: {{ penalty.penalty_rule.name }} ({% for day in penalty.days.all %}{{ day.attendance_record.work_date|date:"d M" }}{% if not forloop.last %}, {% endif %}{% endfor %}), {{ penalty.deduction_amount|money }}{% if penalty.approved_by %} — by {{ penalty.approved_by.email }}{% endif %}
+                    </p>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
 
     <div class="card">
         <div class="card__head">
             <h2>
-                Attendance this month
+                Attendance in {{ period.name }}
             </h2>
+            <a class="btn btn--ghost btn--sm slip-head-action" href="{% url 'attendance:attendance_calendar' %}?employee={{ record.employee.pk }}&year={{ period.start_date.year }}&month={{ period.start_date.month }}">
+                Calendar view
+            </a>
         </div>
         <div class="card__body">
-            <dl class="facts">
-                <dt>
-                    Present
-                </dt>
-                <dd>
-                    {{ counts.present|default:0 }}
-                </dd>
-                <dt>
-                    Half days
-                </dt>
-                <dd>
-                    {{ counts.half_day|default:0 }}
-                </dd>
-                <dt>
-                    Missing OUT
-                </dt>
-                <dd>
-                    {{ counts.incomplete|default:0 }}
-                </dd>
-                <dt>
-                    Absent
-                </dt>
-                <dd>
-                    {{ counts.absent|default:0 }}
-                </dd>
-                <dt>
-                    Paid leave
-                </dt>
-                <dd>
-                    {{ counts.paid_leave|default:0 }}
-                </dd>
-                <dt>
-                    Unpaid leave
-                </dt>
-                <dd>
-                    {{ counts.unpaid_leave|default:0 }}
-                </dd>
-                <dt>
-                    Weekly off
-                </dt>
-                <dd>
-                    {{ counts.weekly_off|default:0 }}
-                </dd>
-                <dt>
-                    Holidays
-                </dt>
-                <dd>
-                    {{ counts.holiday|default:0 }}
-                </dd>
-                <dt>
-                    Late (min)
-                </dt>
-                <dd>
-                    {{ counts.late_minutes|default:0 }}
-                </dd>
+            <dl class="slip-stats">
+                <div class="slip-stats__item">
+                    <dt>
+                        Present
+                    </dt>
+                    <dd>
+                        {{ counts.present|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item">
+                    <dt>
+                        Half days
+                    </dt>
+                    <dd>
+                        {{ counts.half_day|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item{% if counts.absent %} slip-stats__item--alert{% endif %}">
+                    <dt>
+                        Absent
+                    </dt>
+                    <dd>
+                        {{ counts.absent|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item">
+                    <dt>
+                        No check-out
+                    </dt>
+                    <dd>
+                        {{ counts.incomplete|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item">
+                    <dt>
+                        Paid leave
+                    </dt>
+                    <dd>
+                        {{ counts.paid_leave|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item">
+                    <dt>
+                        Unpaid leave
+                    </dt>
+                    <dd>
+                        {{ counts.unpaid_leave|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item">
+                    <dt>
+                        Weekly off
+                    </dt>
+                    <dd>
+                        {{ counts.weekly_off|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item">
+                    <dt>
+                        Holidays
+                    </dt>
+                    <dd>
+                        {{ counts.holiday|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item">
+                    <dt>
+                        Late (min)
+                    </dt>
+                    <dd>
+                        {{ counts.late_minutes|default:0 }}
+                    </dd>
+                </div>
+                <div class="slip-stats__item">
+                    <dt>
+                        Hours in office
+                    </dt>
+                    <dd>
+                        {% widthratio counts.worked_minutes 60 1 %}
+                    </dd>
+                </div>
             </dl>
+        </div>
+        <div class="card__foot slip-foot">
+            Salary rules:
+            {% with rules=record.calculation_snapshot.rules %}
+                {% if rules.version_number %}
+                    Company rules, version {{ rules.version_number }}
+                {% else %}
+                    Standard rules
+                {% endif %}
+            {% endwith %}
         </div>
     </div>
 {% endblock %}
