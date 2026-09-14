@@ -2534,6 +2534,15 @@ cancel / approve; overtime view / decide; salary view / prepare (generate, bonus
 and deductions); access give to others. Not grantable: company-wide settings,
 branches/departments, finalising a month.
 
+**Confirmed by Ajay (2026-09-15), rules for every later part:**
+1. The company (owner / company admin) keeps **all access in every branch,
+   exactly as it operates today**. Branch scoping in parts 3–6 only limits
+   branch managers and people given access; owner/admin pages stay unchanged.
+2. **A branch without an active branch manager is handled by the company**
+   (owner/admin already hold every branch). Leave approvals already fall back to
+   the company inbox (A8). The company may also grant that branch's HR or anyone
+   else access from the Access page.
+
 ## A12 part 1 done — permission list and access check — 2026-09-15 (Claude, Ajay's session)
 
 - `access_control/branch_access.py` answers "may this person do X, and in which
