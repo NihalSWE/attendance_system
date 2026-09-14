@@ -49,8 +49,9 @@
             </p>
         </div>
         <div class="page__actions">
-            <button class="btn btn--ghost" type="button" onclick="window.print()">
-                Print
+            <button class="btn btn--ghost" type="button" onclick="window.print()"
+                    title="Opens the print window. Choose Save as PDF as the printer to download a PDF.">
+                Print or save as PDF
             </button>
         </div>
     </div>
@@ -285,7 +286,7 @@
     </div>
 
     {% if not for_employee %}
-        <div class="card">
+        <div class="card no-print">
             <div class="card__head">
                 <h2>
                     Bonus and deductions

@@ -67,6 +67,9 @@ class AdjustmentTests(OvertimeBase):
         self.client.force_login(self.admin)
         page = self.client.get(reverse("payroll:payslip", args=[self.record.pk]))
         self.assertContains(page, "Bonus and deductions")
+        # A11 part 5: printable payslip; the company-only card is not printed.
+        self.assertContains(page, "Print or save as PDF")
+        self.assertContains(page, 'class="card no-print"')
         response = self.client.post(reverse("payroll:payslip_adjustment_add", args=[self.record.pk]), {
             "adjustment_type": "deduction", "amount": "1500", "reason": "Uniform cost",
         })
