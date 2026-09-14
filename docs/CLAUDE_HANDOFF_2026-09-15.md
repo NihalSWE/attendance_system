@@ -42,7 +42,9 @@
 > only, owner/admin), kept across regeneration; migration `payroll.0006` — Ajay
 > runs migrate. **Part 3 done:** joining/leaving mid-month — monthly Basic ×
 > employed calendar days ÷ days in month; days outside employment ignored.
-> Next: part 4 (salary change mid-month).
+> **Part 4 done:** a monthly salary changed inside the month pays each rate for
+> its calendar days (one Basic line per rate); daily/hourly and pay-basis changes
+> still use the month-end rate. Next: part 5 (print-layout payslip PDF).
 
 ## 0. First instruction: review and report, do not implement
 

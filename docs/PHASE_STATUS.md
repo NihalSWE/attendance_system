@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **parts 1 (Finalise / Undo finalise), 2 (bonus and deduction lines) and 3 (joining/leaving mid-month) are done**. Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. Next is **A11 part 4: salary change mid-month**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **parts 1 (Finalise / Undo finalise), 2 (bonus and deduction lines), 3 (joining/leaving mid-month) and 4 (salary change mid-month) are done**. Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. Next is **A11 part 5: payslip PDF (print layout)**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2386,7 +2386,7 @@ leave to stay simple.
 | **1 — done** | Finalise month (owner/admin) and Undo finalise with a reason | No |
 | **2 — done** | Add bonus / Add deduction lines on a draft payslip (amount + reason); kept on regenerate; removable only while draft | Yes: `payroll.0006` |
 | **3 — done** | Joining/leaving mid-month: monthly salary for the employed days, calendar days of the month | No |
-| 4 | Salary change mid-month: days before at the old rate, the rest at the new rate (two Basic lines) | No |
+| **4 — done** | Salary change mid-month: days before at the old rate, the rest at the new rate (one Basic line per rate); monthly salaries only | No |
 | 5 | Payslip PDF as a print layout (browser Save as PDF); no new package | No |
 
 Agreed choices: undo allowed for owner/admin with a reason; proration by calendar
@@ -2457,5 +2457,24 @@ tax, bank files (payments/advances/dues are A13).
 - Tests: formula test (15 of 30 days → half salary; full month unchanged) and
   new `payroll/tests_proration.py` (joining 16 Aug, leaving 10 Aug, full month);
   **full suite 952 tests OK**. Not browser-verified by Claude.
+- No migrations, dependencies or `.env.example` changes.
+
+## A11 part 4 done — salary change mid-month — 2026-09-15 (Claude, Ajay's session)
+
+- Uses the existing dated salary history: a change from a date closes the old
+  salary at that moment and opens the new one (`employees.services.revise_compensation`,
+  e.g. Edit employee → Salary with a later start date).
+- **Monthly salaries:** when more than one monthly salary is in force during the
+  employed days of the month, the payslip has one Basic line per salary, e.g.
+  "Basic salary 30,000.00 (01 Aug–15 Aug, 15 of 31 days)" = 14,516.13 and
+  "Basic salary 31,000.00 (16 Aug–31 Aug, 16 of 31 days)" = 16,000.00. Works
+  together with joining/leaving mid-month (part 3).
+- Kept simple: one day's pay for absence deductions still uses the salary at
+  month end. A change of pay basis inside a month, and daily/hourly rate changes,
+  still use the rate in force at month end (not split).
+- The payslip snapshot stores `basic_segments` (rate, first day, last day).
+- Tests: new `payroll/tests_salary_change.py` (raise on the 16th → two lines;
+  raise plus joining on the 10th → 6 and 16 days; no change → one line);
+  **full suite 955 tests OK**. Not browser-verified by Claude.
 - No migrations, dependencies or `.env.example` changes.
 - No migrations, dependencies or `.env.example` changes.
