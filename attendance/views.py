@@ -1,4 +1,4 @@
-"""Company attendance pages, read-only and live.
+"""Company attendance pages, live — and the one place a day is fixed by hand.
 
 There is no Calculate button. ``attendance.services.refresh`` brings the days
 being read up to date first — a day whose close has passed, or one never
@@ -6,19 +6,28 @@ written because its shift had not finished — so the page shows the finished
 answer rather than whatever was stored last time somebody looked.
 """
 
+import datetime
+
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 
-from attendance import live_status, month_view
-from attendance.models import AttendanceRecord
-from attendance.services import month_bounds, refresh
+from attendance import correction_services, live_status, month_view
+from attendance.forms import (
+    AcceptReviewForm,
+    AddScanForm,
+    ChangeStatusForm,
+    WithdrawForm,
+)
+from attendance.models import AttendanceCorrection, AttendanceRecord
+from attendance.services import _is_locked, locked_ranges, month_bounds, refresh
+from common.forms import apply_service_errors
 from common.tenant import use_company
 from employees.models import Employee
 from organization.services import STRUCTURE_ROLES, require_company_membership
@@ -220,8 +229,15 @@ def attendance_day(request, employee_id, on):
             .first()
         )
         if record is None:
+            # Only offer a fix for somebody who is this company's employee: the
+            # id comes from the URL.
             return render(request, "attendance/includes/day_panel.html", {
                 "on": on, "detail": None,
+                "may_correct": (
+                    correction_services.may_correct(request.user, company_id)
+                    and Employee.objects.filter(pk=employee_id).exists()
+                ),
+                "employee_id": employee_id,
             })
         detail = month_view.build_day_detail(
             record=record, company_timezone=company_tz
@@ -229,6 +245,174 @@ def attendance_day(request, employee_id, on):
         detail["employee"] = record.employee
     return render(request, "attendance/includes/day_panel.html", {
         "on": on, "detail": detail,
+        "may_correct": correction_services.may_correct(request.user, company_id),
+        "employee_id": employee_id,
     })
 
 
+# --------------------------------------------------------------------------
+# Fixing a day, and the days waiting for review (plan step N5)
+# --------------------------------------------------------------------------
+
+FIX_ACTIONS = {
+    "add_scan": AddScanForm,
+    "change_status": ChangeStatusForm,
+    "accept_review": AcceptReviewForm,
+}
+
+
+def _fix_url(employee_id, day):
+    return reverse("attendance:attendance_day_fix", args=[employee_id, day.isoformat()])
+
+
+def _parse_day(on):
+    import datetime as _dt
+
+    try:
+        return _dt.date.fromisoformat(str(on))
+    except ValueError:
+        return None
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def attendance_day_fix(request, employee_id, on):
+    """One employee-day: what it is now, and the three ways to fix it."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership = correction_services.require_corrector(request.user, company_id)
+    day = _parse_day(on)
+    if day is None:
+        messages.error(request, "That is not a date.")
+        return redirect("attendance:attendance_review")
+
+    with use_company(company_id):
+        employee = Employee.objects.filter(pk=employee_id).first()
+    if employee is None:
+        raise PermissionDenied("Employee not found in this company.")
+
+    forms = {
+        "add_scan": AddScanForm(day=day, prefix="scan"),
+        "change_status": ChangeStatusForm(prefix="status"),
+        "accept_review": AcceptReviewForm(prefix="accept"),
+    }
+    if request.method == "POST":
+        action = request.POST.get("action", "")
+        form_class = FIX_ACTIONS.get(action)
+        if form_class is None:
+            messages.error(request, "Choose what to fix.")
+            return redirect(_fix_url(employee_id, day))
+        prefix = {"add_scan": "scan", "change_status": "status", "accept_review": "accept"}[action]
+        kwargs = {"day": day} if action == "add_scan" else {}
+        form = form_class(request.POST, prefix=prefix, **kwargs)
+        forms[action] = form
+        if form.is_valid():
+            data = form.cleaned_data
+            common = {
+                "actor": request.user, "company_id": company_id,
+                "employee_id": employee_id, "work_date": day, "reason": data["reason"],
+            }
+            try:
+                if action == "add_scan":
+                    correction_services.add_scan(at=data["at"], **common)
+                    done = "Scan added. The day has been worked out again with it."
+                elif action == "change_status":
+                    correction_services.change_status(status=data["status"], **common)
+                    done = "Status changed. The day now counts as marked."
+                else:
+                    correction_services.accept_review(**common)
+                    done = "Accepted. The day no longer needs a review."
+            except ValidationError as exc:
+                apply_service_errors(form, exc)
+            else:
+                messages.success(request, done)
+                return redirect(_fix_url(employee_id, day))
+
+    refresh(company_id, employee_ids=[employee_id], start=day, end=day)
+    company_tz = membership.company.timezone or "UTC"
+    with use_company(company_id):
+        record = (
+            AttendanceRecord.objects.select_related("shift", "employee")
+            .filter(employee_id=employee_id, work_date=day).first()
+        )
+        detail = (
+            month_view.build_day_detail(record=record, company_timezone=company_tz)
+            if record is not None else None
+        )
+    corrections = correction_services.corrections_for_day(company_id, employee_id, day)
+    locked = _is_locked(day, locked_ranges(company_id))
+    can_change_status = (
+        record is not None and not record.is_open
+        and record.attendance_status in correction_services.CORRECTABLE_DAY_STATUSES
+    )
+    return render(request, "attendance/day_fix.html", {
+        "employee": employee,
+        "day": day,
+        "record": record,
+        "detail": detail,
+        "forms": forms,
+        "corrections": corrections,
+        "withdraw_form": WithdrawForm(),
+        "company_tz": company_tz,
+        "locked": locked,
+        "can_change_status": can_change_status,
+        "is_rule_check_out": record is not None and record.review_status == "needs_review"
+        and correction_services.is_rule_check_out(record),
+        "is_open_overtime": record is not None and record.review_status == "needs_review"
+        and correction_services.is_open_overtime(record),
+        "calendar_url": (
+            reverse("attendance:attendance_calendar")
+            + f"?employee={employee_id}&year={day.year}&month={day.month}"
+        ),
+    })
+
+
+@require_POST
+@login_required
+def attendance_correction_withdraw(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    correction_services.require_corrector(request.user, company_id)
+    with use_company(company_id):
+        correction = AttendanceCorrection.objects.filter(pk=pk).first()
+    if correction is None:
+        raise PermissionDenied("Correction not found in this company.")
+    form = WithdrawForm(request.POST)
+    form.is_valid()
+    try:
+        correction_services.withdraw(
+            actor=request.user, company_id=company_id, correction_id=pk,
+            note=form.cleaned_data.get("note", ""),
+        )
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0])
+    else:
+        messages.success(request, "Withdrawn. The day has been worked out again without it.")
+    return redirect(_fix_url(correction.employee_id, correction.work_date))
+
+
+@login_required
+@require_http_methods(["GET"])
+def attendance_review(request):
+    """Days that closed without a clear answer and need a person."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership = correction_services.require_corrector(request.user, company_id)
+    # Bring this month and last up to date first: a day that has closed since
+    # anybody last looked is exactly the kind that lands here.
+    today = timezone.now().astimezone(month_view.zone(membership.company.timezone)).date()
+    last_month_start = (today.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
+    refresh(company_id, start=last_month_start, end=today)
+    rows = correction_services.review_queue(company_id)
+    paginator = Paginator(rows, 25)
+    page = paginator.get_page(request.GET.get("page"))
+    return render(request, "attendance/review_list.html", {
+        "page": page,
+        "total": paginator.count,
+        "rule_check_out": correction_services.RULE_CHECK_OUT,
+        "open_overtime": correction_services.OPEN_OVERTIME,
+        "company_tz": membership.company.timezone or "UTC",
+    })

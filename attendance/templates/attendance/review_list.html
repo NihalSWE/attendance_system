@@ -1,0 +1,163 @@
+{% extends "base_template/base.html" %}
+{% load static tz %}
+{% block title %}
+    Days to review · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'attendance/css/corrections.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'attendance:attendance_list' %}">
+                    Attendance
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Days to review
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Days to review
+            </h1>
+            <p class="page__sub">
+                Days that finished without a clear answer. Each one counts as shown until somebody looks at it.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}">
+                Calendar view
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Waiting for a look
+            </h2>
+            <span class="badge badge--neutral">
+                {{ total }}
+            </span>
+        </div>
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table review-table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Date
+                            </th>
+                            <th>
+                                Why
+                            </th>
+                            <th class="review-table__times">
+                                Check-in → check-out
+                            </th>
+                            <th class="numeric">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for record in page.object_list %}
+                            <tr>
+                                <td>
+                                    {{ record.employee.full_name }}
+                                    <span class="review-table__sub t-faint">
+                                        {{ record.employee_assignment.department.name|default:"" }}
+                                    </span>
+                                </td>
+                                <td class="review-table__date">
+                                    {{ record.work_date|date:"j M Y" }}
+                                    <span class="review-table__sub t-faint">
+                                        {{ record.work_date|date:"l" }}
+                                    </span>
+                                    <span class="review-table__sub review-table__times-inline">
+                                        {{ record.first_in_at|timezone:company_tz|date:"H:i"|default:"—" }} → {{ record.last_out_at|timezone:company_tz|date:"H:i"|default:"—" }}{% if record.check_out_by_rule %} (rule){% endif %}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if record.review_reason == open_overtime %}
+                                        <span class="badge badge--warning">
+                                            Overtime, no check-out
+                                        </span>
+                                        <span class="review-table__sub review-table__why t-muted">
+                                            Came back after the shift and never scanned out.
+                                        </span>
+                                    {% elif record.review_reason == rule_check_out %}
+                                        <span class="badge badge--warning">
+                                            Check-out by rule
+                                        </span>
+                                        <span class="review-table__sub review-table__why t-muted">
+                                            No scan out; closed at the shift end.
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            {{ record.review_reason|default:"Needs review"|capfirst }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="review-table__times">
+                                    {{ record.first_in_at|timezone:company_tz|date:"H:i"|default:"—" }}
+                                    →
+                                    {% if record.check_out_by_rule %}
+                                        {{ record.last_out_at|timezone:company_tz|date:"H:i"|default:"—" }}
+                                        <span class="t-faint">(rule)</span>
+                                    {% else %}
+                                        {{ record.last_out_at|timezone:company_tz|date:"H:i"|default:"—" }}
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {% if record.review_reason == open_overtime %}
+                                        <a class="btn btn--primary btn--sm" href="{% url 'payroll:overtime_decide' record.pk %}">
+                                            Decide overtime
+                                        </a>
+                                    {% else %}
+                                        <a class="btn btn--primary btn--sm" href="{% url 'attendance:attendance_day_fix' record.employee_id record.work_date|date:'Y-m-d' %}">
+                                            Fix this day
+                                        </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if page.paginator.num_pages > 1 %}
+                <div class="pagination">
+                    <span class="pagination__info">
+                        Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
+                    </span>
+                    <div class="pagination__links">
+                        {% if page.has_previous %}
+                            <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}">
+                                Previous
+                            </a>
+                        {% endif %}
+                        {% if page.has_next %}
+                            <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}">
+                                Next
+                            </a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    Nothing to review
+                </div>
+                <div class="empty__text">
+                    Every finished day has a clear check-in and check-out, or has already been looked at.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

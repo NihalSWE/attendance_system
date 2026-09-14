@@ -23,7 +23,7 @@ from collections import defaultdict
 
 from django.db.models import Q
 
-from attendance import day_window, pairing
+from attendance import corrections as correction_input, day_window, pairing
 from common.tenant import use_company
 from devices.models import PunchEvent
 from employees.models import EmployeeAssignment
@@ -153,6 +153,11 @@ def statuses_for(company_id, *, employee_ids=None, now=None):
             .values_list("employee_id", "punched_at_utc", "pk")
         ):
             punches_by_employee[employee_id].append((at, punch_id))
+        # Scans added by hand (N5) are part of the day like any other.
+        for employee_id, scans in correction_input.manual_scans(
+            assignments_by_employee.keys(), since=span_start, until=span_end,
+        ).items():
+            punches_by_employee[employee_id].extend(scans)
 
         on_leave = set(
             LeaveDay.objects.filter(
@@ -172,7 +177,10 @@ def statuses_for(company_id, *, employee_ids=None, now=None):
             statuses[employee_id] = _status_for(
                 employee_id=employee_id,
                 assignments=assignments,
-                punches=sorted(punches_by_employee.get(employee_id, [])),
+                punches=sorted(
+                    punches_by_employee.get(employee_id, []),
+                    key=correction_input.stream_order,
+                ),
                 is_on_leave=employee_id in on_leave,
                 calendar=calendar, span_days=span_days, today=today,
                 tz=tz, now=now, window_before=window_before,

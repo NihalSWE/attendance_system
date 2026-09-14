@@ -9,9 +9,10 @@ as not built yet.
 
 from decimal import Decimal
 
+from django.conf import settings
 from django.db import models
 
-from common.models import TenantOwned
+from common.models import ActorTracked, TenantOwned
 
 
 class PunchAllocation(TenantOwned):
@@ -57,6 +58,12 @@ class PunchAllocation(TenantOwned):
         "devices.PunchEvent", null=True, blank=True, on_delete=models.PROTECT,
         related_name="allocations",
     )
+    # The other source: a scan somebody added by hand (plan step N5). Exactly
+    # one of the two is set.
+    attendance_correction = models.ForeignKey(
+        "attendance.AttendanceCorrection", null=True, blank=True,
+        on_delete=models.PROTECT, related_name="allocations",
+    )
     sequence_number = models.PositiveIntegerField()
     event_at = models.DateTimeField()
     interpreted_direction = models.CharField(
@@ -79,6 +86,13 @@ class PunchAllocation(TenantOwned):
             models.UniqueConstraint(
                 fields=["attendance_record", "calculation_version", "sequence_number"],
                 name="uniq_punch_allocation_sequence",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(punch_event__isnull=False, attendance_correction__isnull=True)
+                    | models.Q(punch_event__isnull=True, attendance_correction__isnull=False)
+                ),
+                name="punch_allocation_exactly_one_source",
             ),
         ]
         indexes = [models.Index(fields=["company", "event_at"])]
@@ -258,3 +272,101 @@ class AttendanceRecord(TenantOwned):
         self.sessions.all().delete()
         self.allocations.all().delete()
         return super().delete(*args, **kwargs)
+
+
+class AttendanceCorrection(TenantOwned, ActorTracked):
+    """Somebody fixing one employee-day by hand (plan step N5).
+
+    Attendance recalculates itself whenever a punch arrives or the calendar
+    moves, so a fix made by editing the record would be gone by the next scan.
+    A correction is an input instead: every recalculation reads the corrections
+    in force and builds the day with them, the same way overtime decisions are
+    kept apart and read back (payroll.OvertimeDecision). A PunchEvent is never
+    edited.
+
+    Keyed by employee and date rather than by record, because the record is
+    derived: a recalculation may remove a day and write it again.
+
+    - **add_scan** — a scan the device never got. It joins the day's stream
+      and is labelled by pairing like any other.
+    - **change_status** — present, half day or absent, over what the scans
+      say. At most one in force per day; a new one supersedes the old.
+    - **accept_review** — "the check-out by rule is right". Kept only while
+      the day still needs review for that same reason.
+
+    Nothing is deleted: a mistake is withdrawn, and the audit log holds both.
+    Applied straight away by an administrator or HR; there is no request and
+    approval step yet.
+    """
+
+    class CorrectionType(models.TextChoices):
+        ADD_SCAN = "add_scan", "Added a scan"
+        CHANGE_STATUS = "change_status", "Changed the status"
+        ACCEPT_REVIEW = "accept_review", "Accepted as it is"
+
+    class Status(models.TextChoices):
+        APPLIED = "applied", "In force"
+        SUPERSEDED = "superseded", "Replaced by a later change"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+
+    #: The statuses a person may set by hand. Leave, holidays and weekly offs
+    #: come from their own pages, never from here.
+    SETTABLE_STATUSES = ("present", "half_day", "absent")
+
+    employee = models.ForeignKey(
+        "employees.Employee", on_delete=models.PROTECT,
+        related_name="attendance_corrections",
+    )
+    work_date = models.DateField()
+    correction_type = models.CharField(max_length=16, choices=CorrectionType.choices)
+    proposed_event_at = models.DateTimeField(null=True, blank=True)
+    proposed_status = models.CharField(max_length=16, blank=True)
+    # For accept_review: the reason that was accepted. A different reason
+    # appearing later (a new scan changed the day) needs its own look.
+    accepted_review_reason = models.CharField(max_length=120, blank=True)
+    reason = models.TextField()
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.APPLIED
+    )
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+    before_snapshot = models.JSONField(default=dict, blank=True)
+    after_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "payroll_attendance_correction"
+        ordering = ("-created_at",)
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(correction_type="add_scan")
+                    | models.Q(proposed_event_at__isnull=False)
+                ),
+                name="attendance_correction_scan_has_time",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    ~models.Q(correction_type="change_status")
+                    | models.Q(proposed_status__in=["present", "half_day", "absent"])
+                ),
+                name="attendance_correction_status_is_settable",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "employee", "work_date"],
+                condition=models.Q(correction_type="change_status", status="applied"),
+                name="uniq_attendance_correction_status_in_force",
+            ),
+        ]
+        indexes = [models.Index(fields=["company", "employee", "work_date"])]
+
+    def __str__(self):
+        return f"{self.get_correction_type_display()} {self.employee_id} {self.work_date}"

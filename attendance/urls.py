@@ -13,4 +13,15 @@ urlpatterns = [
         views.attendance_day,
         name="attendance_day",
     ),
+    path("review/", views.attendance_review, name="attendance_review"),
+    path(
+        "day/<int:employee_id>/<slug:on>/fix/",
+        views.attendance_day_fix,
+        name="attendance_day_fix",
+    ),
+    path(
+        "corrections/<int:pk>/withdraw/",
+        views.attendance_correction_withdraw,
+        name="attendance_correction_withdraw",
+    ),
 ]

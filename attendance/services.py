@@ -51,7 +51,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from attendance import day_window, pairing
+from attendance import corrections as correction_input, day_window, pairing
 from attendance.models import (
     AttendanceRecord,
     AttendanceSession,
@@ -211,11 +211,13 @@ def _write_pairing(record, paired):
 
     allocations = []
     for index, scan in enumerate(paired.kept, start=1):
+        punch_id, correction_id = correction_input.source_ids(scan.punch_event_id)
         allocations.append(
             PunchAllocation(
                 company_id=record.company_id,
                 attendance_record=record,
-                punch_event_id=scan.punch_event_id,
+                punch_event_id=punch_id,
+                attendance_correction_id=correction_id,
                 sequence_number=index,
                 event_at=scan.at,
                 interpreted_direction=scan.direction,
@@ -224,12 +226,14 @@ def _write_pairing(record, paired):
                 interpretation_note=scan.note,
             )
         )
-    for index, (at, punch_id) in enumerate(paired.dropped, start=len(allocations) + 1):
+    for index, (at, source) in enumerate(paired.dropped, start=len(allocations) + 1):
+        punch_id, correction_id = correction_input.source_ids(source)
         allocations.append(
             PunchAllocation(
                 company_id=record.company_id,
                 attendance_record=record,
                 punch_event_id=punch_id,
+                attendance_correction_id=correction_id,
                 sequence_number=index,
                 event_at=at,
                 interpreted_direction=PunchAllocation.Direction.IGNORED,
@@ -380,10 +384,19 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
             )
         }
         overtime_by_key = _overtime_decisions(employees.keys(), lookback, end)
+        # What people fixed by hand (plan step N5). Read in on every pass, so a
+        # correction survives the next punch rather than being overwritten.
+        fixes = correction_input.in_force(
+            employees.keys(), since=range_start, until=range_end,
+            start=lookback, end=end,
+        )
 
         for employee_id, employee in employees.items():
             assignments = assignments_by_employee[employee_id]
-            punches = sorted(punches_by_employee[employee_id])
+            punches = sorted(
+                punches_by_employee[employee_id] + fixes.scans.get(employee_id, []),
+                key=correction_input.stream_order,
+            )
 
             # One employee's windows: the shift can differ per day because it
             # follows the placement's department — unless this employee has a
@@ -424,6 +437,8 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                     company=company, company_tz=company_tz, now=now,
                     locked=_is_locked(day, posted),
                     overtime=overtime_by_key.get((employee_id, day)),
+                    status_fix=fixes.statuses.get((employee_id, day)),
+                    accepted_reason=fixes.accepted.get((employee_id, day)),
                 )
                 if outcome is None:
                     written["skipped"] += 1
@@ -473,11 +488,12 @@ def _overtime_decisions(employee_ids, start, end):
 
 def _write_day(*, day, employee, assignments, window, punches, settings,
                calendar, leave_by_key, company, company_tz, now, locked,
-               overtime=None):
+               overtime=None, status_fix=None, accepted_reason=None):
     """One employee-day. Returns the record, "locked", or None for no record.
 
     ``overtime`` is the approved minutes of a decision on this day (payroll's
-    A9), or None when nobody has decided it yet.
+    A9), or None when nobody has decided it yet. ``status_fix`` and
+    ``accepted_reason`` are corrections a person made to this day (N5).
     """
     if locked:
         return "locked"
@@ -570,6 +586,10 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
             payable_fraction=fraction, **minutes,
         )
         values["is_open"] = not is_closed
+        if status_fix is not None and is_closed:
+            # A person said what this day was. The scans and minutes stay as
+            # measured; the status and what it pays follow the correction.
+            values.update(_status_from_fix(status_fix))
 
     if paired is not None:
         # Overtime's approval rule lives with overtime (payroll, plan step A9):
@@ -583,11 +603,33 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
             # The open overtime session was what needed a look, and it has had one.
             values["review_status"] = ReviewStatus.REVIEWED
 
+    if (
+        accepted_reason
+        and values["review_status"] == ReviewStatus.NEEDS_REVIEW
+        and values["review_reason"] == accepted_reason
+    ):
+        # Somebody looked at exactly this and said it is right. A different
+        # reason turning up later is a new question, so it is not covered.
+        values["review_status"] = ReviewStatus.REVIEWED
+
     record, _ = AttendanceRecord.objects.update_or_create(
         company=company, employee=employee, work_date=day, defaults=values,
     )
     _write_pairing(record, paired)
     return record
+
+
+def _status_from_fix(fix):
+    """The record fields a "change status" correction sets."""
+    status = fix.proposed_status
+    fraction = {"present": ONE, "half_day": HALF}.get(status, NONE)
+    label = dict(AttendanceRecord.AttendanceStatus.choices).get(status, status)
+    return {
+        "attendance_status": status,
+        "payable_fraction": fraction,
+        "review_status": ReviewStatus.REVIEWED,
+        "note": f"Marked {label.lower()} by hand: {fix.reason}"[:255],
+    }
 
 
 def _pair(day_punches, window, settings, is_closed):
