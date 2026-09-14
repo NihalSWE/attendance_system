@@ -14,6 +14,12 @@ Every value read here is the value that applied at the punch instant. Where
 that cannot be established the punch becomes ``policy_unresolved`` and waits
 for review; today's broader permission is never silently applied.
 
+The one exception is asked for, never assumed: "Re-check punches" (N4) passes
+``policy_at`` so an administrator can judge excluded punches by the settings as
+they are now — having ticked a forgotten device grant, say. Only the policy
+switches move to that moment. Where the employee was placed, and which
+departments a device served, are facts about the punch and stay at its time.
+
 The employee's assignment/home branch is used throughout — never the branch of
 the device they happened to walk up to, which would let a permissive branch
 authorize attendance for a restricted employee.
@@ -56,6 +62,9 @@ def _assignment_at(*, employee_id, company_id, at):
 
 def _effective_scope(*, assignment, company_id, at, snapshot):
     """Resolve the scope precedence chain as it stood at ``at``.
+
+    ``at`` is the moment whose policy applies: the punch time, or the
+    re-check time when an administrator asked for today's rules.
 
     Returns ``(scope, unresolved_reason)``; a reason means the chain could not
     be established and the punch must be reviewed.
@@ -127,17 +136,21 @@ def _device_serves_department(*, device, department_id, at):
     )
 
 
-def evaluate(*, punch, enrollment):
+def evaluate(*, punch, enrollment, policy_at=None):
     """Decide the authorization status for one resolved punch.
 
     ``punch`` supplies the device, the instant and the source branch;
-    ``enrollment`` is the mapping resolved for that instant.
+    ``enrollment`` is the mapping resolved for that instant. ``policy_at`` is
+    whose settings to judge by: the punch's own time unless a re-check asks
+    for another moment.
     """
     at = punch.punched_at_utc
+    policy_at = policy_at or at
     device = punch.device
     snapshot = {
         "evaluated_at": timezone.now().isoformat(),
         "event_time_utc": at.isoformat(),
+        "policy_judged_at": policy_at.isoformat(),
         "device_id": device.pk,
         "source_branch_id": punch.branch_id,
         "enrollment_id": enrollment.pk,
@@ -146,7 +159,7 @@ def evaluate(*, punch, enrollment):
 
     # 2. The hard denial, checked before any scope is even resolved.
     attendance_enabled, reason = value_at_or_unresolved(
-        enrollment, "attendance_enabled", at
+        enrollment, "attendance_enabled", policy_at
     )
     if is_missing(attendance_enabled):
         snapshot["decision_reason"] = (
@@ -183,7 +196,8 @@ def evaluate(*, punch, enrollment):
 
     # 3. The precedence chain.
     scope, unresolved_reason = _effective_scope(
-        assignment=assignment, company_id=device.company_id, at=at, snapshot=snapshot
+        assignment=assignment, company_id=device.company_id, at=policy_at,
+        snapshot=snapshot,
     )
     if scope is None:
         snapshot["decision_reason"] = (
@@ -197,7 +211,7 @@ def evaluate(*, punch, enrollment):
     # 4. The scope's device rule.
     if scope == DeviceAttendanceScope.ASSIGNED_DEVICES:
         granted, reason = value_at_or_unresolved(
-            enrollment, "assigned_device_authorized", at
+            enrollment, "assigned_device_authorized", policy_at
         )
         if is_missing(granted):
             snapshot["decision_reason"] = (

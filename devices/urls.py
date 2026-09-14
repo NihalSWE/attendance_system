@@ -110,6 +110,16 @@ ui_urlpatterns = [
     path("devices/punches/", ui.punch_list, name="punch_list"),
     path("devices/punches/<int:pk>/", ui.punch_detail, name="punch_detail"),
     path("devices/unresolved/", ui.unresolved_queue, name="unresolved_queue"),
+    path(
+        "devices/attendance-rules/",
+        ui.attendance_rules_page,
+        name="attendance_rules",
+    ),
+    path(
+        "devices/attendance-rules/recheck/",
+        ui.attendance_recheck,
+        name="attendance_recheck",
+    ),
 ]
 
 urlpatterns = ingestion_urlpatterns + ui_urlpatterns

@@ -8,24 +8,29 @@ Nothing here offers an edit or delete control for DeviceMessage or PunchEvent.
 They are append-only evidence; the screens read them and explain them.
 """
 
+import datetime
 from functools import wraps
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from auditlog.models import AuditLog
+from common.forms import company_timezone
 from devices.forms import (
     BiometricDeviceForm,
     DeviceDepartmentForm,
     DeviceEnrollmentForm,
+    DeviceScopeForm,
+    RecheckPunchesForm,
 )
 from devices.models import (
     BiometricDevice,
@@ -35,7 +40,12 @@ from devices.models import (
     DeviceSyncState,
     PunchEvent,
 )
-from devices.services import panel_access, server_address, setup_instructions
+from devices.services import (
+    attendance_rules,
+    panel_access,
+    server_address,
+    setup_instructions,
+)
 from devices.services.commands import (
     COMMAND_LABELS,
     SAFE_COMMANDS,
@@ -1037,3 +1047,127 @@ def device_user_delete(request, public_id):
             "Punch history is kept.",
         )
     return redirect("devices:device_users", public_id=device.public_id)
+
+
+# --------------------------------------------------------------------------
+# Which devices count, and re-checking punches (plan step N4)
+# --------------------------------------------------------------------------
+
+#: The range shown when the page opens: the last month, where a forgotten
+#: grant or a late enrollment usually shows up.
+DEFAULT_RECHECK_DAYS = 30
+
+
+def _recheck_range(request):
+    """The range from the query string, else the last month. Never raises."""
+    # The company's today, not the server's: TIME_ZONE is UTC, and before
+    # 06:00 in Dhaka that is still yesterday.
+    today = timezone.now().astimezone(company_timezone()).date()
+    form = RecheckPunchesForm(request.GET or None)
+    if request.GET and form.is_valid():
+        return form, form.cleaned_data["start"], form.cleaned_data["end"]
+    start = today - datetime.timedelta(days=DEFAULT_RECHECK_DAYS - 1)
+    if not request.GET:
+        form = RecheckPunchesForm(initial={"start": start, "end": today})
+    return form, start, today
+
+
+@login_required
+@company_user_required
+def attendance_rules_page(request):
+    """Choose which devices count, and see and re-check punches that do not."""
+    company_id = request.company_id
+    try:
+        current = attendance_rules.company_scope(company_id)
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0])
+        return redirect("devices:device_list")
+
+    if request.method == "POST":
+        scope_form = DeviceScopeForm(request.POST)
+        if scope_form.is_valid():
+            try:
+                _settings, changed = attendance_rules.set_company_scope(
+                    actor=request.user, company_id=company_id,
+                    scope=scope_form.cleaned_data["scope"],
+                )
+            except ValidationError as exc:
+                scope_form.add_error("scope", exc.messages[0])
+            else:
+                label = dict(scope_form.fields["scope"].choices)[
+                    scope_form.cleaned_data["scope"]
+                ]
+                if changed:
+                    messages.success(
+                        request,
+                        f"Punches now count on: {label}. Punches already stored "
+                        "keep their decision \u2014 re-check them below to apply "
+                        "this to past days.",
+                    )
+                else:
+                    messages.info(request, f"Punches already count on: {label}.")
+                return redirect("devices:attendance_rules")
+    else:
+        scope_form = DeviceScopeForm(initial={"scope": current})
+
+    range_form, start, end = _recheck_range(request)
+    summary = attendance_rules.excluded_summary(company_id, start=start, end=end)
+    return render(request, "devices/attendance_rules.html", {
+        "scope_form": scope_form,
+        "range_form": range_form,
+        "start": start,
+        "end": end,
+        "summary": summary,
+        "excluded_total": sum(row[3] for row in summary),
+        "overrides": attendance_rules.overrides(company_id),
+        "max_days": attendance_rules.MAX_RECHECK_DAYS,
+    })
+
+
+@require_POST
+@login_required
+@company_user_required
+def attendance_recheck(request):
+    """Judge the excluded punches in a range again, under today's rules."""
+    form = RecheckPunchesForm(request.POST)
+    back = reverse("devices:attendance_rules")
+    if not form.is_valid():
+        for errors in form.errors.values():
+            for error in errors:
+                messages.error(request, error)
+        return redirect(back)
+
+    start, end = form.cleaned_data["start"], form.cleaned_data["end"]
+    back = f"{back}?start={start:%Y-%m-%d}&end={end:%Y-%m-%d}"
+    try:
+        result = attendance_rules.recheck_punches(
+            actor=request.user, company_id=request.company_id,
+            start=start, end=end,
+        )
+    except ValidationError as exc:
+        messages.error(request, exc.messages[0])
+        return redirect(back)
+
+    span = f"{start:%d %b} \u2013 {end:%d %b %Y}"
+    if not result.checked and not result.skipped_locked:
+        messages.info(request, f"No punches to re-check between {span}.")
+        return redirect(back)
+
+    parts = [f"Re-checked {result.checked} punch{'es' if result.checked != 1 else ''} ({span})."]
+    if result.now_count:
+        parts.append(
+            f"{result.now_count} now count, and attendance was rebuilt for "
+            "those days."
+        )
+    else:
+        parts.append("None of them count under the current rules.")
+    still = sum(result.still_excluded.values())
+    if still:
+        parts.append(f"{still} still don\u2019t \u2014 the table shows why.")
+    if result.skipped_locked:
+        parts.append(
+            f"{result.skipped_locked} in a finalised salary month were left alone."
+        )
+    level = messages.success if result.now_count else messages.info
+    level(request, " ".join(parts))
+    return redirect(back)

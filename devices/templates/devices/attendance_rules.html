@@ -1,0 +1,185 @@
+{% extends "devices/base.html" %}
+{% load static %}
+{% block title %}
+    Which devices count · Devices
+{% endblock %}
+{% block extra_css %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'devices/css/attendance_rules.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'devices:device_list' %}">
+                    Devices
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Which devices count
+                </span>
+            </nav>
+            <h1 class="page__title">
+                Which devices count
+            </h1>
+            <p class="page__sub">
+                Choose which devices an employee's punches count on, and re-check punches that did not count.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}">
+                All punches
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Punches count on
+            </h2>
+        </div>
+        <form method="post" action="{% url 'devices:attendance_rules' %}">
+            {% csrf_token %}
+            <div class="card__body stack">
+                {% if scope_form.errors %}
+                    <div class="alert alert--danger" role="alert">
+                        {% for error in scope_form.scope.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <fieldset class="scope-options">
+                    <legend class="sr-only">
+                        Punches count on
+                    </legend>
+                    {% for option in scope_form.options %}
+                        <label class="check scope-option{% if option.checked %} scope-option--on{% endif %}" for="{{ option.id }}">
+                            <input class="check__input" type="radio" name="scope" id="{{ option.id }}" value="{{ option.value }}" {% if option.checked %}checked{% endif %}>
+                            <span class="scope-option__text">
+                                <strong>
+                                    {{ option.label }}
+                                </strong>
+                                <span class="t-muted">
+                                    {{ option.help }}
+                                </span>
+                            </span>
+                        </label>
+                    {% endfor %}
+                </fieldset>
+                <p class="t-muted scope-note">
+                    Turning attendance off on an enrollment stops that person's punches on that device under every option. Changing this does not change punches already stored — re-check them below.
+                </p>
+                {% if overrides.branches or overrides.employee_count %}
+                    <div class="alert alert--info">
+                        Some people follow their own rule instead:
+                        {% for branch, label in overrides.branches %}
+                            <strong>{{ branch.name }}</strong> — {{ label }}{% if not forloop.last %}; {% endif %}
+                        {% endfor %}
+                        {% if overrides.branches and overrides.employee_count %}; {% endif %}
+                        {% if overrides.employee_count %}
+                            {{ overrides.employee_count }} employee{{ overrides.employee_count|pluralize }} with a rule of their own
+                        {% endif %}.
+                    </div>
+                {% endif %}
+            </div>
+            <div class="card__foot">
+                <button class="btn btn--primary" type="submit">
+                    Save
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Punches that don't count
+            </h2>
+            <span class="badge badge--neutral">
+                {{ excluded_total }}
+            </span>
+        </div>
+        <form class="card__body recheck-range" method="get" action="{% url 'devices:attendance_rules' %}">
+            {% for field in range_form %}
+                <div class="field">
+                    <label class="field__label" for="{{ field.id_for_label }}">
+                        {{ field.label }}
+                    </label>
+                    {{ field }}
+                    {% for error in field.errors %}
+                        <p class="field__error">
+                            {{ error }}
+                        </p>
+                    {% endfor %}
+                </div>
+            {% endfor %}
+            <div class="recheck-range__action">
+                <button class="btn btn--ghost" type="submit">
+                    Show
+                </button>
+            </div>
+        </form>
+        {% if summary %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Why it doesn't count
+                            </th>
+                            <th class="recheck-fix">
+                                What fixes it
+                            </th>
+                            <th class="numeric">
+                                Punches
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for status, label, fix, count in summary %}
+                            <tr>
+                                <td>
+                                    {{ label }}
+                                    <span class="recheck-fix-inline t-muted">
+                                        {{ fix }}
+                                    </span>
+                                </td>
+                                <td class="t-muted recheck-fix">
+                                    {{ fix }}
+                                </td>
+                                <td class="numeric">
+                                    <a href="{% url 'devices:punch_list' %}?authorization={{ status }}">
+                                        {{ count }}
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <p class="empty__title">
+                    Every punch counts
+                </p>
+                <p class="empty__text">
+                    Nothing between {{ start|date:"d M" }} and {{ end|date:"d M Y" }} was left out of attendance.
+                </p>
+            </div>
+        {% endif %}
+        <form class="card__foot recheck-foot" method="post" action="{% url 'devices:attendance_recheck' %}">
+            {% csrf_token %}
+            <input type="hidden" name="start" value="{{ start|date:'Y-m-d' }}">
+            <input type="hidden" name="end" value="{{ end|date:'Y-m-d' }}">
+            <p class="t-muted">
+                Re-checking judges these punches again under the rule as it is now, from {{ start|date:"d M" }} to {{ end|date:"d M Y" }}. Punches that already count are not touched, days in a finalised salary month are left alone, and every re-check is recorded. Up to {{ max_days }} days at a time.
+            </p>
+            <button class="btn btn--primary" type="submit" {% if not excluded_total %}disabled{% endif %}>
+                Re-check {{ excluded_total }} punch{{ excluded_total|pluralize:"es" }}
+            </button>
+        </form>
+    </div>
+{% endblock %}

@@ -46,8 +46,13 @@ def _processing_status(*, authorization_status, dedupe_status):
     return PunchEvent.ProcessingStatus.PENDING
 
 
-def resolve_and_authorize(punch):
-    """Resolve the employee and evaluate the policy for one stored punch."""
+def resolve_and_authorize(punch, *, policy_at=None, note=None):
+    """Resolve the employee and evaluate the policy for one stored punch.
+
+    Identity is always resolved at the punch time — device user numbers are
+    reused. ``policy_at`` and ``note`` are for a re-check: the moment whose
+    settings to judge by, and what to record about who asked for it.
+    """
     outcome = resolution.resolve_enrollment(
         device=punch.device,
         device_user_id=punch.device_user_id,
@@ -65,11 +70,16 @@ def resolve_and_authorize(punch):
             "decision_reason": outcome.reason,
         }
     else:
-        decision = authorization.evaluate(punch=punch, enrollment=outcome.enrollment)
+        decision = authorization.evaluate(
+            punch=punch, enrollment=outcome.enrollment, policy_at=policy_at
+        )
         punch.device_enrollment = outcome.enrollment
         punch.employee_id = outcome.enrollment.employee_id
         punch.authorization_status = decision.status
         punch.authorization_snapshot = decision.snapshot
+
+    if note:
+        punch.authorization_snapshot["recheck"] = note
 
     punch.processing_status = _processing_status(
         authorization_status=punch.authorization_status,
