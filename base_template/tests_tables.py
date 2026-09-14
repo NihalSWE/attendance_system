@@ -18,6 +18,7 @@ from payroll.services import generate_payroll
 from payroll.table_views import overtime_queryset
 from payroll.tests_overtime import OvertimeBase, rules
 from payroll.tests_penalties import rule
+from scheduling import services as schedule
 from scheduling.models import Holiday
 from tenants.services import onboard_company
 
@@ -161,3 +162,43 @@ class TableTests(OvertimeBase):
         self.assertEqual(self.draw("payroll:overtime_list", show="rejected")["recordsFiltered"], 1)
         self.assertEqual(self.draw("payroll:overtime_list", employee=self.employee.pk, branch=self.branch.pk)["recordsFiltered"], 5)
         self.assertEqual(self.draw("payroll:overtime_list", employee=999999)["recordsFiltered"], 0)
+
+    def test_shift_page_lists_are_named_and_page_independently(self):
+        for index in range(11):
+            schedule.create_shift(actor=self.admin, company_id=self.company.pk, values={
+                "code": f"S{index:02}", "name": f"Shift {index:02}",
+                "start_time": datetime.time(9), "end_time": datetime.time(17), "spans_next_day": False,
+                "grace_in_minutes": 0, "minimum_full_day_minutes": 400, "minimum_half_day_minutes": 200})
+        schedule.add_weekly_offs(actor=self.admin, company_id=self.company.pk, values={
+            "weekdays": [4, 5], "branch": None, "is_paid": True, "effective_from": datetime.date(2026, 1, 1)})
+        name = "scheduling:schedule_overview"
+        shifts = self.draw(name, table="shifts", **{"order[0][column]": 0, "order[0][dir]": "desc"})
+        self.assertEqual((shifts["recordsTotal"], len(shifts["data"]), len(shifts["data"][0]) - 2), (12, 10, 10))
+        self.assertIn("S10", shifts["data"][0]["0"])
+        offs = self.draw(name, table="weekly_offs", **{"search[value]": "friday"})
+        self.assertEqual((offs["recordsTotal"], offs["recordsFiltered"], len(offs["data"][0]) - 2), (2, 1, 6))
+        departments = self.draw(name, table="department_shifts")
+        self.assertEqual((departments["recordsTotal"], len(departments["data"][0]) - 2), (1, 5))
+        self.assertIn("Software", departments["data"][0]["0"])
+        # The counted fallback keeps a separate page parameter for each list.
+        html = self.client.get(reverse(name), {"shifts_per_page": 10, "shifts_page": 2})
+        self.assertContains(html, 'data-server-table="shifts"')
+        self.assertContains(html, 'name="shifts_page" type="number"')
+        self.assertContains(html, "shifts_page=1")
+        self.assertContains(html, "Showing 11–12 of 12")
+        self.assertContains(html, "Showing 1–2 of 2")
+        self.assertContains(html, "Showing 1–1 of 1")
+
+    def test_company_and_platform_department_lists_are_server_side(self):
+        data = self.draw("department_list", **{"order[0][column]": 4, "order[0][dir]": "desc"})
+        self.assertEqual((data["recordsTotal"], len(data["data"][0]) - 2), (1, 5))
+        self.assertIn("Software", data["data"][0]["1"])
+        self.client.force_login(User.objects.create_superuser(email="root@tables.test", password="pw-12345678"))
+        for name, columns in (("catalogue:department_list", 6), ("catalogue:designation_list", 5)):
+            with self.subTest(screen=name):
+                data = self.draw(name)
+                self.assertGreater(data["recordsTotal"], 0)
+                self.assertEqual(len(data["data"][0]) - 2, columns)
+                for column in range(columns):
+                    self.draw(name, **{"order[0][column]": column, "order[0][dir]": "desc"})
+                self.assertEqual(self.draw(name, **{"search[value]": "NeverMatchesAnything"})["data"], [])

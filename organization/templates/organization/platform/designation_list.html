@@ -69,9 +69,9 @@
                 Apply
             </button>
         </form>
-        {% if page.object_list %}
+        {% if server_table.total %}
             <div class="table-scroll">
-                <table class="table" data-enhance>
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th>
@@ -127,23 +127,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="pagination">
-                <span class="pagination__info">
-                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
-                </span>
-                <div class="pagination__links">
-                    {% if page.has_previous %}
-                        <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}&q={{ query }}&status={{ status }}">
-                            Previous
-                        </a>
-                    {% endif %}
-                    {% if page.has_next %}
-                        <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}&q={{ query }}&status={{ status }}">
-                            Next
-                        </a>
-                    {% endif %}
-                </div>
-            </div>
+            {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">

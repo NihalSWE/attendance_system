@@ -1,9 +1,14 @@
 """Server-side tables over existing, escaped Django row templates.
 
 Call paginate() on an already authorised/scoped queryset, then render() as
-usual. Mark ONE table with data-server-table. HTML remains a usable fallback;
+usual. Mark the table with data-server-table. HTML remains a usable fallback;
 DataTables draws receive only that table's cells, using the same access guards
 and action markup. Search fields and column ordering are server-owned lists.
+
+A page with several lists names each one: paginate(..., name="shifts") and
+data-server-table="shifts". Its draws send table=shifts and its HTML fallback
+uses shifts_page / shifts_per_page / shifts_table_q, so the lists page
+independently. An unnamed table keeps table=1 and page / per_page / table_q.
 """
 
 from html.parser import HTMLParser
@@ -21,7 +26,7 @@ def integer(value, default, low=0, high=2_147_483_647):
         return default
 
 
-def paginate(request, queryset, *, search=(), order=(), total=None):
+def paginate(request, queryset, *, search=(), order=(), total=None, name=""):
     """Count/filter/order in SQL and fetch at most 100 rows (including fallback).
 
     An order entry is a field, a tuple of fields, or None for a computed/action
@@ -29,23 +34,27 @@ def paginate(request, queryset, *, search=(), order=(), total=None):
     Counts describe the authorised queryset after the page's explicit filters,
     before and after the additional table search, respectively.
     """
-    ajax = request.method == "GET" and request.GET.get("table") == "1"
-    length = integer(request.GET.get("length" if ajax else "per_page"), 25, 10, 100)
+    prefix = f"{name}_" if name else ""
+    params = {"page": f"{prefix}page", "per_page": f"{prefix}per_page", "query": f"{prefix}table_q"}
+    ajax = request.method == "GET" and request.GET.get("table") == (name or "1")
+    length = integer(request.GET.get("length" if ajax else params["per_page"]), 25, 10, 100)
     total = queryset.count() if total is None else total
-    query = request.GET.get("search[value]" if ajax else "table_q", "").strip()[:200]
+    query = request.GET.get("search[value]" if ajax else params["query"], "").strip()[:200]
     if query and search:
         clause = Q()
         for field in search:
             clause |= Q(**{f"{field}__icontains": query})
         queryset = queryset.filter(clause).distinct()
     ordering = []
-    for index in range(min(len(order), 8)):
-        column = integer(request.GET.get(f"order[{index}][column]"), -1)
-        if 0 <= column < len(order) and order[column]:
-            fields = order[column]
-            fields = (fields,) if isinstance(fields, str) else fields
-            descending = request.GET.get(f"order[{index}][dir]") == "desc"
-            ordering.extend(("-" if descending else "") + field for field in fields)
+    if ajax:
+        # Another list's draw on the same page must not reorder this one.
+        for index in range(min(len(order), 8)):
+            column = integer(request.GET.get(f"order[{index}][column]"), -1)
+            if 0 <= column < len(order) and order[column]:
+                fields = order[column]
+                fields = (fields,) if isinstance(fields, str) else fields
+                descending = request.GET.get(f"order[{index}][dir]") == "desc"
+                ordering.extend(("-" if descending else "") + field for field in fields)
     if ordering:
         queryset = queryset.order_by(*ordering, "pk")
     else:
@@ -56,22 +65,42 @@ def paginate(request, queryset, *, search=(), order=(), total=None):
         start = integer(request.GET.get("start"), 0)
         page = Page(queryset[start:start + length], start // length + 1, paginator)
     else:
-        page = paginator.get_page(request.GET.get("page"))
-    request.server_table = {
-        "ajax": ajax, "draw": integer(request.GET.get("draw"), 0),
-        "total": total, "page": page, "query": query,
+        page = paginator.get_page(request.GET.get(params["page"]))
+
+    def link(number):
+        values = request.GET.copy()
+        values.pop("table", None)
+        values[params["page"]] = number
+        return f"?{values.urlencode()}"
+
+    numbers = []
+    if not ajax:
+        for number in paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1):
+            current, dots = number == page.number, number == paginator.ELLIPSIS
+            numbers.append({"number": number, "current": current, "dots": dots,
+                            "url": None if current or dots else link(number)})
+    table = {
+        "ajax": ajax, "draw": integer(request.GET.get("draw"), 0), "name": name,
+        "total": total, "page": page, "query": query, "params": params,
         "orderable": ",".join(str(i) for i, field in enumerate(order) if field),
-        "columns": len(order), "start": max(0, page.start_index() - 1),
-        "numbers": list(paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1)) if not ajax else [],
+        "columns": len(order), "start": max(0, page.start_index() - 1), "numbers": numbers,
+        "previous": link(page.previous_page_number()) if not ajax and page.has_previous() else None,
+        "next": link(page.next_page_number()) if not ajax and page.has_next() else None,
     }
+    tables = getattr(request, "server_tables", {})
+    tables[name] = table
+    request.server_tables = tables
+    if not name:
+        request.server_table = table
     return page
 
 
 class TableRows(HTMLParser):
     """Keep trusted template markup, including escaping and row data attributes."""
 
-    def __init__(self):
+    def __init__(self, name=""):
         super().__init__(convert_charrefs=False)
+        self.name = name
         self.active = self.body = self.cell = False
         self.rows, self.cells, self.parts = [], [], []
         self.attrs, self.cell_attrs = {}, []
@@ -80,7 +109,7 @@ class TableRows(HTMLParser):
     def handle_starttag(self, tag, attrs):
         attrs_dict = dict(attrs)
         if tag == "table" and "data-server-table" in attrs_dict:
-            self.active = True
+            self.active = (attrs_dict["data-server-table"] or "") == self.name
         elif self.active and tag == "tbody":
             self.body = True
         elif self.body and tag == "tr":
@@ -123,14 +152,17 @@ class TableRows(HTMLParser):
 
 
 def render(request, template_name, context=None, **kwargs):
-    table = getattr(request, "server_table", None)
+    tables = getattr(request, "server_tables", {})
     context = dict(context or {})
-    if table:
-        context["server_table"] = table
+    if tables:
+        context["server_tables"] = tables
+    if "" in tables:
+        context["server_table"] = tables[""]
     response = django_render(request, template_name, context, **kwargs)
-    if not table or not table["ajax"] or response.status_code != 200:
+    table = next((table for table in tables.values() if table["ajax"]), None)
+    if not table or response.status_code != 200:
         return response
-    parser = TableRows()
+    parser = TableRows(table["name"])
     parser.feed(response.content.decode(response.charset))
     if any(sum(key.isdigit() for key in row) != table["columns"] for row in parser.rows):
         raise ValueError("Server table headers and row cells must have the same length.")

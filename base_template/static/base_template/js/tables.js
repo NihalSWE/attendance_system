@@ -72,7 +72,8 @@ document.addEventListener("DOMContentLoaded", function () {
             ajax: function (data, callback) {
                 const url = new URL(window.location.href);
                 url.hash = "";
-                url.searchParams.set("table", "1");
+                // A named list (data-server-table="shifts") draws only itself.
+                url.searchParams.set("table", table.dataset.serverTable || "1");
                 url.searchParams.set("draw", data.draw);
                 url.searchParams.set("start", data.start);
                 url.searchParams.set("length", data.length);

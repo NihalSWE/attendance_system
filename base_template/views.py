@@ -11,7 +11,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LogoutView
-from django.db.models import OuterRef, Q, Subquery
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.shortcuts import redirect
 from base_template.tables import paginate, render
 from django.views.decorators.http import require_POST
@@ -146,9 +146,13 @@ def employee_list(request):
 def department_list(request):
     if not request.company_id:
         return _no_company(request)
-    departments = (
+    departments = paginate(
+        request,
         CompanyDepartment.objects.select_related("branch", "department", "head")
-        .order_by("branch__name", "department__name")
+        .annotate(table_designations=Count("designations", distinct=True))
+        .order_by("branch__name", "department__name"),
+        search=("department__code", "department__name", "branch__name", "status"),
+        order=("department__code", "department__name", "branch__name", "status", "table_designations"),
     )
     return render(request, "base_template/department_list.html",
                   {"departments": departments})

@@ -12,6 +12,7 @@ from collections import defaultdict
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db.models import Case, CharField, Value, When
 from django.shortcuts import redirect
 from base_template.tables import paginate, render
 from django.urls import reverse
@@ -79,11 +80,28 @@ def schedule_overview(request):
         settings = (
             CompanyAttendanceSettings.objects.select_related("company_shift").first()
         )
-        shifts = list(Shift.objects.order_by("status", "name"))
-        weekly_offs = list(
-            WeeklyOffRule.objects.select_related("branch").order_by(
-                "status", "weekday", "branch__name"
-            )
+        # Three independent server-side lists on one page, named so each
+        # draws, searches and pages on its own.
+        shifts = paginate(
+            request, Shift.objects.order_by("status", "name"), name="shifts",
+            search=("code", "name", "status"),
+            order=("code", "name", "start_time", "end_time", "scheduled_minutes",
+                   "grace_in_minutes", "minimum_full_day_minutes",
+                   "minimum_half_day_minutes", "status", None),
+        )
+        day_names = Case(
+            *(When(weekday=value, then=Value(label))
+              for value, label in WeeklyOffRule.Weekday.choices),
+            output_field=CharField(),
+        )
+        weekly_offs = paginate(
+            request,
+            WeeklyOffRule.objects.select_related("branch")
+            .annotate(table_day=day_names)
+            .order_by("status", "weekday", "branch__name"),
+            name="weekly_offs",
+            search=("table_day", "branch__name", "status"),
+            order=("weekday", "branch__name", "effective_from", "effective_to", "status", None),
         )
         today = timezone.localdate()
         upcoming = list(
@@ -100,23 +118,29 @@ def schedule_overview(request):
             and settings.shift_mode == CompanyAttendanceSettings.ShiftMode.DEPARTMENT_SHIFTS
         )
         current = services.current_department_shifts(company_id, today)
+        active_departments = CompanyDepartment.objects.select_related(
+            "branch", "department"
+        ).filter(status=ActiveStatus.ACTIVE)
+        departments = paginate(
+            request, active_departments.order_by("branch__name", "department__name"),
+            name="department_shifts",
+            search=("department__name", "department__code", "branch__name"),
+            order=("department__name", "branch__name", None, None, None),
+        )
         department_rows = [
-            {
-                "department": adoption,
-                "link": current.get(adoption.pk),
-            }
-            for adoption in CompanyDepartment.objects.select_related("branch", "department")
-            .filter(status=ActiveStatus.ACTIVE)
-            .order_by("branch__name", "department__name")
+            {"department": adoption, "link": current.get(adoption.pk)}
+            for adoption in departments
         ]
 
-    company_shift = settings.company_shift if settings else None
-    uncovered = [
-        row["department"] for row in department_rows
-        if row["link"] is None and company_shift is None
-    ] if by_department else []
+        # Readiness looks at every active department, not only this page.
+        company_shift = settings.company_shift if settings else None
+        uncovered = list(
+            active_departments.exclude(pk__in=list(current))
+            .order_by("branch__name", "department__name")
+        ) if by_department and company_shift is None else []
+        linked = active_departments.filter(pk__in=list(current)).exists()
     ready = bool(company_shift) if not by_department else not uncovered and (
-        bool(company_shift) or any(row["link"] for row in department_rows)
+        bool(company_shift) or linked
     )
     return render(request, "scheduling/overview.html", {
         "settings": settings,
