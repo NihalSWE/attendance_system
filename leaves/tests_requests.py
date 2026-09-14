@@ -11,7 +11,7 @@ from accounts.models import CompanyMembership, User
 from attendance.tests_live import LiveTestCase
 from common.tenant import use_company
 from leaves.models import LeaveRequest, LeaveDay
-from leaves.services import create_leave_type
+from leaves.services import create_leave_type, update_leave_type
 from leaves import workflow
 from organization.models import Branch
 from payroll.services import calculate_pay
@@ -99,6 +99,25 @@ class RequestTests(LiveTestCase):
         with self.assertRaises(ValidationError):
             self.submit(duration='half_day', start_date=DAY + datetime.timedelta(days=1),
                         end_date=DAY + datetime.timedelta(days=2))
+
+    def test_yearly_allowance_is_checked_at_request_and_approval(self):
+        update_leave_type(actor=self.admin, company_id=self.company.pk, leave_type_id=self.leave_type.pk,
+                          values={'code': 'CAS', 'name': 'Casual', 'days_per_year': Decimal('1'), 'description': ''})
+        self.leave_type.refresh_from_db()
+        first = self.submit()
+        # Pending requests do not use the allowance; approval does.
+        second = self.submit(start_date=DAY + datetime.timedelta(days=1), end_date=DAY + datetime.timedelta(days=1))
+        self.decide(first)
+        self.client.force_login(self.manager)
+        page = self.client.get(reverse('me:leave_decide', args=[second.pk]))
+        self.assertContains(page, 'Casual: 0 of 1 days left in 2026')
+        with self.assertRaises(ValidationError):
+            self.decide(second)
+        with self.assertRaises(ValidationError):
+            self.submit(start_date=DAY + datetime.timedelta(days=2), end_date=DAY + datetime.timedelta(days=2))
+        self.client.force_login(self.worker)
+        page = self.client.get(reverse('me:leave'), {'year': 2026})
+        self.assertContains(page, 'Allowance in 2026')
 
     def test_employee_withdraws_only_their_own_pending_request(self):
         request = self.submit()

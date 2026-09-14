@@ -17,6 +17,9 @@
                     <p>{{ segment.requested_units|floatformat:"-1" }} working day(s) · Requested {{ segment.get_requested_pay_type_display|lower }}</p>
                     <p>{{ leave.reason }}</p>
                     <p>Status: {{ leave.get_status_display }}</p>
+                    {% if allowance_left is not None %}
+                        <p>{{ segment.leave_type.name }}: {{ allowance_left|floatformat:"-1" }} of {{ segment.leave_type.days_per_year|floatformat:"-1" }} days left in {{ segment.start_date.year }}</p>
+                    {% endif %}
                 {% else %}
                     <p class="field__help">Request full working days, or a half day on one date. Holidays and weekly off days are skipped. Your branch manager reviews the request; managers' requests and branches without a manager go to the company administrator.</p>
                 {% endif %}

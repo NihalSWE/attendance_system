@@ -14,11 +14,12 @@ cancelled, and its days stop counting when attendance is recalculated.
 
 import datetime
 import zoneinfo
+from collections import Counter
 from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.utils import timezone
 
 from accounts.models import CompanyMembership
@@ -35,7 +36,7 @@ from organization.services import (
 )
 from scheduling.calendar import WORKING, WorkCalendar
 
-LEAVE_TYPE_FIELDS = ("code", "name", "description")
+LEAVE_TYPE_FIELDS = ("code", "name", "days_per_year", "description")
 RECORD_FIELDS = ("employee", "leave_type", "start_date", "end_date", "duration", "pay_type", "reason")
 
 # A leave longer than this is almost certainly a typo in the year.
@@ -52,6 +53,49 @@ DEFAULT_LEAVE_TYPES = (
     ("EL", "Earned leave", "Annual leave earned through service."),
     ("ML", "Maternity leave", "Leave before and after childbirth."),
 )
+
+
+def _plain(value):
+    # Audit rows are JSON: keep a decimal allowance as text.
+    return str(value) if isinstance(value, Decimal) else value
+
+
+def _days_text(value):
+    return f"{value:.1f}".rstrip("0").rstrip(".")
+
+
+LIVE_LEAVE_DAYS = (LeaveDay.Status.RESERVED, LeaveDay.Status.APPROVED, LeaveDay.Status.CONSUMED)
+
+
+def allowance_left(employee, leave_type, year):
+    """Days per year minus approved leave of this type in that year; None if unlimited.
+
+    Call inside the company's tenant context.
+    """
+    if leave_type.days_per_year is None:
+        return None
+    used = LeaveDay.objects.filter(
+        employee=employee, request_segment__leave_type=leave_type,
+        work_date__year=year, status__in=LIVE_LEAVE_DAYS,
+    ).aggregate(total=Sum("balance_units"))["total"] or Decimal("0")
+    return leave_type.days_per_year - used
+
+
+def check_allowance(employee, leave_type, days, half=False):
+    """Refuse leave that would take the employee over the type's yearly allowance."""
+    if leave_type.days_per_year is None:
+        return
+    wanted = Counter()
+    for on, *_ in days:
+        wanted[on.year] += Decimal("0.5") if half else Decimal("1")
+    for year, units in sorted(wanted.items()):
+        left = allowance_left(employee, leave_type, year)
+        if units > left:
+            raise ValidationError({"leave_type": (
+                f"{leave_type.name}: {_days_text(max(left, Decimal('0')))} of "
+                f"{_days_text(leave_type.days_per_year)} days left in {year}; "
+                f"this leave needs {_days_text(units)}."
+            )})
 
 
 def is_half_day(values):
@@ -117,7 +161,7 @@ def create_leave_type(*, actor, company_id, values):
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="leave_type.created", obj=leave_type,
-            after={field: getattr(leave_type, field) for field in LEAVE_TYPE_FIELDS},
+            after={field: _plain(getattr(leave_type, field)) for field in LEAVE_TYPE_FIELDS},
         )
     return leave_type
 
@@ -138,7 +182,7 @@ def update_leave_type(*, actor, company_id, leave_type_id, values):
     )
     values = _writable(values, LEAVE_TYPE_FIELDS)
     with use_company(company_id):
-        before = {field: getattr(leave_type, field) for field in LEAVE_TYPE_FIELDS}
+        before = {field: _plain(getattr(leave_type, field)) for field in LEAVE_TYPE_FIELDS}
         for field, value in values.items():
             setattr(leave_type, field, value)
         leave_type.updated_by = actor
@@ -147,7 +191,7 @@ def update_leave_type(*, actor, company_id, leave_type_id, values):
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="leave_type.updated", obj=leave_type, before=before,
-            after={field: getattr(leave_type, field) for field in LEAVE_TYPE_FIELDS},
+            after={field: _plain(getattr(leave_type, field)) for field in LEAVE_TYPE_FIELDS},
         )
     return leave_type
 
@@ -196,7 +240,7 @@ def add_default_leave_types(*, actor, company_id):
             record_company_event(
                 actor=actor, membership=membership, company=membership.company,
                 action="leave_type.created", obj=leave_type,
-                after={field: getattr(leave_type, field) for field in LEAVE_TYPE_FIELDS},
+                after={field: _plain(getattr(leave_type, field)) for field in LEAVE_TYPE_FIELDS},
             )
     return created
 
@@ -352,6 +396,8 @@ def record_leave(*, actor, company_id, values):
                     + ", ".join(f"{d:%d %b}" for d in clashes) + "."
                 )
             })
+
+        check_allowance(employee, leave_type, days, half)
 
         now = timezone.now()
         first_assignment = days[0][1]

@@ -213,7 +213,7 @@ def leave_type_list(request):
     with use_company(company_id):
         leave_types = paginate(request, LeaveType.objects.order_by("status", "name"),
             search=("code", "name", "description", "status"),
-            order=("code", "name", "description", "status", None))
+            order=("code", "name", "days_per_year", "description", "status", None))
         default_codes = [code for code, *_ in services.DEFAULT_LEAVE_TYPES]
         missing_defaults = LeaveType.objects.filter(code__in=default_codes).count() < len(default_codes)
     return render(request, "leaves/leave_type_list.html", {

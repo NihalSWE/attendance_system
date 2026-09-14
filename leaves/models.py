@@ -17,9 +17,11 @@ Weekly offs and holidays inside a leave range are not leave days.
 """
 
 import uuid
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 
 from common.choices import ActiveStatus
@@ -41,6 +43,12 @@ class LeaveType(TenantOwned, ActorTracked):
     code = models.CharField(max_length=32)
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
+    # Optional yearly allowance in days (kept simple: no accrual or carry-forward).
+    # Blank means no limit. Approved leave in a calendar year counts; a half day is 0.5.
+    days_per_year = models.DecimalField(
+        max_digits=5, decimal_places=1, null=True, blank=True,
+        validators=[MinValueValidator(Decimal("0.5"))],
+    )
     default_balance_unit = models.CharField(
         max_length=16, choices=BalanceUnit.choices, default=BalanceUnit.DAYS
     )

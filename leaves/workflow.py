@@ -14,7 +14,7 @@ from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
-from leaves.services import is_half_day, plan_leave_days, write_approved_days, _writable
+from leaves.services import check_allowance, is_half_day, plan_leave_days, write_approved_days, _writable
 from organization.services import require_company_membership, STRUCTURE_ROLES
 
 
@@ -102,6 +102,7 @@ def submit_request(*, actor, company_id, values):
         if not reason:
             raise ValidationError({'reason': 'Give a reason for your request.'})
         days, skipped = _plan(company_id, employee, values['start_date'], values['end_date'])
+        check_allowance(employee, leave_type, days, half)
         request = create_validated(
             LeaveRequest, company=member.company, employee=employee,
             submission_assignment=days[0][1], reason=reason, status='pending',
@@ -173,6 +174,9 @@ def decide_request(*, actor, company_id, request_id, approve, pay_type='paid', r
             if any(assignment.branch_id != request.submission_assignment.branch_id
                    for _, assignment, *_ in days):
                 raise ValidationError('The employee changed branch. Ask them to submit a new request.')
+            # Rechecked here: other leave may have been approved since the request.
+            check_allowance(employee, segment.leave_type, days,
+                            segment.duration_type == LeaveRequestSegment.DurationType.HALF_DAY)
             write_approved_days(company=member.company, employee=employee, segment=segment,
                                 days=days, pay_type=pay_type)
         request.status = 'approved' if approve else 'rejected'

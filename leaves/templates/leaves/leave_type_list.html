@@ -76,6 +76,9 @@
                             <th>
                                 Leave type
                             </th>
+                            <th class="numeric">
+                                Days per year
+                            </th>
                             <th>
                                 Description
                             </th>
@@ -95,6 +98,9 @@
                                 </td>
                                 <td>
                                     {{ leave_type.name }}
+                                </td>
+                                <td class="numeric">
+                                    {{ leave_type.days_per_year|floatformat:"-1"|default:"No limit" }}
                                 </td>
                                 <td>
                                     {{ leave_type.description|default:"—" }}

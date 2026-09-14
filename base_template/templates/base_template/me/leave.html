@@ -21,6 +21,54 @@
         Requests wait for approval. Pending and rejected requests do not count as leave taken.
     </div>
 
+    {% if allowances %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Allowance in {{ year }}
+                </h2>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Leave type
+                            </th>
+                            <th class="numeric">
+                                Days per year
+                            </th>
+                            <th class="numeric">
+                                Used
+                            </th>
+                            <th class="numeric">
+                                Left
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in allowances %}
+                            <tr>
+                                <td>
+                                    {{ item.type }}
+                                </td>
+                                <td class="numeric">
+                                    {{ item.allowance|floatformat:"-1" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ item.used|floatformat:"-1" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ item.left|floatformat:"-1" }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
     <div class="card">
         <div class="card__head">
             <h2>

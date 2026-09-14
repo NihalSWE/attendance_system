@@ -32,7 +32,8 @@ from attendance.views import _month_steps, month_context, read_month
 from common.forms import StyledFormMixin
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
-from leaves.models import LeaveDay, LeaveRequest
+from leaves.models import LeaveDay, LeaveRequest, LeaveType
+from leaves.services import allowance_left
 from organization.employee_login import ROLE_LABELS
 from payroll.models import PayrollRun
 from payroll.views import payslip_context, payslip_records
@@ -197,6 +198,13 @@ def my_leave(request):
             work_date__gte=datetime.date(year, 1, 1), work_date__lte=datetime.date(year, 12, 31),
         ).values_list("request_segment__leave_type__name", "approved_pay_type", "balance_units"):
             taken[(name, pay_type)] += units or Decimal("1")
+        allowances = []
+        for leave_type in LeaveType.objects.filter(
+            status="active", days_per_year__isnull=False
+        ).order_by("name"):
+            left = allowance_left(employee, leave_type, year)
+            allowances.append({"type": leave_type.name, "allowance": leave_type.days_per_year,
+                               "used": leave_type.days_per_year - left, "left": left})
     rows = []
     for leave in requests:
         segments = [s for s in leave.segments.all()]
@@ -216,6 +224,7 @@ def my_leave(request):
     return render(request, "base_template/me/leave.html", {
         "employee": employee,
         "rows": rows,
+        "allowances": allowances,
         "taken": [
             {"type": name, "pay_type": pay_type, "days": days}
             for (name, pay_type), days in sorted(taken.items())

@@ -22,6 +22,7 @@ from employees.models import EmployeeAssignment
 from leaves.forms import RequestLeaveForm, DecideLeaveForm
 from leaves.models import LeaveRequest, LeaveType
 from leaves import workflow
+from leaves.services import allowance_left
 
 
 @login_required
@@ -89,6 +90,7 @@ def leave_decide(request, pk):
     with use_company(request.company_id):
         leave = get_object_or_404(workflow.reviewable(member).select_related('employee'), pk=pk)
         segment = leave.segments.select_related('leave_type').get(status='active')
+        left = allowance_left(leave.employee, segment.leave_type, segment.start_date.year)
         form = DecideLeaveForm(request.POST or None, initial={'decision': 'approve', 'pay_type': segment.requested_pay_type})
         if request.method == 'POST' and form.is_valid():
             try:
@@ -103,6 +105,7 @@ def leave_decide(request, pk):
         return render(request, 'leaves/request_form.html', {
             'form': form, 'title': 'Review leave request', 'submit_label': 'Save decision',
             'back_url': 'me:leave_inbox', 'leave': leave, 'segment': segment,
+            'allowance_left': left,
         })
 
 

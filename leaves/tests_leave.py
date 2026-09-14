@@ -200,6 +200,23 @@ class RecordLeaveTests(LeaveBase):
         with self.assertRaises(ValidationError):
             self._record(start=SAT, end=SAT, duration="hourly")
 
+    def test_yearly_allowance_counts_half_days_and_refuses_going_over(self):
+        services.update_leave_type(
+            actor=self.admin, company_id=self.company.pk, leave_type_id=self.casual.pk,
+            values={"code": "CL", "name": "Casual leave", "days_per_year": Decimal("1.5"), "description": ""},
+        )
+        self.casual.refresh_from_db()
+        self._record(start=THU, end=THU, pay="paid")
+        self._record(start=SAT, end=SAT, pay="paid", duration="half_day")
+        monday = datetime.date(2026, 9, 21)
+        with self.assertRaises(ValidationError) as refused:
+            self._record(start=monday, end=monday, duration="half_day")
+        self.assertIn("0 of 1.5 days left in 2026", str(refused.exception))
+        # A new calendar year starts again.
+        self._record(start=datetime.date(2027, 1, 4), end=datetime.date(2027, 1, 4))
+        self.client.force_login(self.admin)
+        self.assertContains(self.client.get(reverse("leaves:leave_type_list")), "1.5")
+
     def test_inactive_leave_type_is_refused(self):
         services.set_leave_type_status(
             actor=self.admin, company_id=self.company.pk,
