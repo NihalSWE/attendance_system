@@ -12,8 +12,8 @@ from collections import defaultdict
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -392,9 +392,9 @@ def holiday_list(request):
         if status in dict(Holiday.Status.choices):
             queryset = queryset.filter(status=status)
         filtered_total = queryset.count()
-        page = Paginator(
-            queryset.order_by("holiday_date", "name"), 25
-        ).get_page(request.GET.get("page"))
+        page = paginate(request, queryset.order_by("holiday_date", "name"),
+            search=("name", "branch__name", "status"),
+            order=("holiday_date", "name", "branch__name", "status", None))
         years = sorted(
             {d.year for d in Holiday.objects.dates("holiday_date", "year")}
             | {today.year, today.year + 1},

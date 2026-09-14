@@ -7,8 +7,11 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Q
-from django.shortcuts import redirect, render
+from django.db.models import DecimalField, Exists, IntegerField, OuterRef, Q
+from django.db.models.fields.json import KT
+from django.db.models.functions import Cast, Coalesce
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -60,14 +63,16 @@ def payroll_home(request):
             PayrollRun.objects.filter(payroll_period=period).order_by("-pk").first()
             if period else None
         )
-        records = (
-            list(
-                run.records.select_related("employee")
-                .prefetch_related("lines")
-                .order_by("employee__first_name", "employee__last_name")
-            )
-            if run else []
-        )
+        records = paginate(request,
+            (run.records.all() if run else PayrollRecord.objects.none()).select_related("employee")
+            .annotate(table_rate=Cast(KT("calculation_snapshot__base_rate"), DecimalField(max_digits=18, decimal_places=2)),
+                **{f"table_{key}": Coalesce(Cast(KT(f"calculation_snapshot__counts__{key}"), IntegerField()), 0)
+                   for key in ("present", "half_day", "absent", "unpaid_leave")})
+            .order_by("employee__first_name", "employee__last_name"),
+            search=("employee__first_name", "employee__last_name", "calculation_snapshot__pay_basis"),
+            order=(("employee__first_name", "employee__last_name"), "calculation_snapshot__pay_basis", "table_rate",
+                   "table_present", "table_half_day", "table_absent",
+                   "table_unpaid_leave", "gross_earnings", "total_deductions", "net_pay", None))
 
     decides_overtime = membership.role in overtime.OVERTIME_ROLES
     return render(request, "payroll/payroll_home.html", {
@@ -190,22 +195,23 @@ def salary_settings(request):
         "summary": rules_summary(page["rules"]),
         "rules_form": rules_form,
         "general_form": general_form,
-        "penalty_rules": _penalty_rows(company_id, today, page["currency"]),
+        "penalty_rules": _penalty_rows(company_id, today, page["currency"], request=request),
     })
 
 
-def _penalty_rows(company_id, today, currency):
+def _penalty_rows(company_id, today, currency, *, request=None):
     """Penalty rules in use now or saved for a later month, as table rows."""
     Rule = AttendancePenaltyRule
     with use_company(company_id):
-        versions = list(
-            Rule.objects.filter(status=Rule.Status.ACTIVE)
-            .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=today))
-            .order_by("name", "effective_from")
-        )
-    newest = {}
-    for rule in versions:
-        newest[rule.code] = rule  # ordered by start: the last one is the newest
+        later = Rule.objects.filter(code=OuterRef("code"), status=Rule.Status.ACTIVE,
+                                    effective_from__gt=OuterRef("effective_from"))
+        versions = Rule.objects.filter(status=Rule.Status.ACTIVE).filter(
+            Q(effective_to__isnull=True) | Q(effective_to__gt=today)
+        ).annotate(table_has_later=Exists(later)).order_by("name", "effective_from")
+        if request is not None:
+            versions = paginate(request, versions, search=("name", "code", "metric", "deduction_method"),
+                order=("name", "metric", "deduction_method", "effective_from", None))
+        versions = list(versions)
     rows = []
     for rule in versions:
         if rule.effective_from > today:
@@ -218,7 +224,7 @@ def _penalty_rows(company_id, today, currency):
             "deducts": penalties.describe_deduction(rule, currency),
             "state": state,
             "last_day": rule.effective_to - datetime.timedelta(days=1) if rule.effective_to else None,
-            "can_change": newest[rule.code] is rule,
+            "can_change": not rule.table_has_later,
         })
     return rows
 
@@ -422,15 +428,13 @@ def overtime_list(request):
     show = request.GET.get("show", "all")
     if show not in dict(OVERTIME_TABS):
         show = "all"
-    page = overtime.overtime_month(actor=request.user, company_id=company_id, year=year, month=month)
-    counts = {
-        key: len([row for row in page["rows"] if row.state in states])
-        for key, states in OVERTIME_FILTERS.items()
-    }
-    counts["all"] = len(page["rows"])
-    rows = page["rows"] if show == "all" else [
-        row for row in page["rows"] if row.state in OVERTIME_FILTERS[show]
-    ]
+    from payroll.table_views import overtime_table
+    page = overtime_table(request, company_id=company_id, year=year, month=month,
+                          states=OVERTIME_FILTERS.get(show))
+    counts = {key: sum(page["counts"].get(state, 0) for state in states)
+              for key, states in OVERTIME_FILTERS.items()}
+    counts["all"] = sum(page["counts"].values())
+    rows = page["rows"]
     return render(request, "payroll/overtime_list.html", {
         **month_context(year, month),
         **page,

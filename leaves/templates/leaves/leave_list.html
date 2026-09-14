@@ -103,9 +103,23 @@
                 Apply
             </button>
         </form>
-        {% if page.object_list %}
+        {% if not page.object_list %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    {% if query or status %}
+                        Nothing matches that filter
+                    {% else %}
+                        No leave in {{ month_name }} {{ year }}
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    Recorded leave appears here for every month it touches.
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or page.object_list %}
             <div class="table-wrap">
-                <table class="table" data-enhance>
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th>
@@ -136,31 +150,25 @@
                     </thead>
                     <tbody>
                         {% for leave in page.object_list %}
-                            {% for segment in leave.segments.all %}
+                            {% with segment=leave.segments.first %}
                                 <tr>
                                     <td>
                                         {{ leave.employee.full_name }}
                                     </td>
                                     <td>
-                                        {{ segment.leave_type.name }}
+                                        {% for part in leave.segments.all %}{{ part.leave_type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
                                     </td>
                                     <td class="numeric">
-                                        {{ segment.start_date|date:"d M Y" }}
+                                        {{ leave.first_day|date:"d M Y" }}
                                     </td>
                                     <td class="numeric">
-                                        {{ segment.end_date|date:"d M Y" }}
+                                        {{ leave.last_day|date:"d M Y" }}
                                     </td>
                                     <td class="numeric">
-                                        {{ segment.requested_units|floatformat:"-2" }}
+                                        {{ leave.table_units|floatformat:"-2" }}
                                     </td>
                                     <td>
-                                        {% if segment.requested_pay_type == 'paid' %}
-                                            Paid
-                                        {% else %}
-                                            <span class="badge badge--warning">
-                                                Unpaid
-                                            </span>
-                                        {% endif %}
+                                        {% for part in leave.segments.all %}{{ part.get_requested_pay_type_display }}{% if not forloop.last %}, {% endif %}{% endfor %}
                                     </td>
                                     <td>
                                         {% if leave.status == 'approved' %}
@@ -185,28 +193,13 @@
                                         {% endif %}
                                     </td>
                                 </tr>
-                            {% endfor %}
+                            {% endwith %}
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            <div class="pagination">
-                <span class="pagination__info">
-                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
-                </span>
-                <div class="pagination__links">
-                    {% if page.has_previous %}
-                        <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}&month={{ month }}&year={{ year }}&status={{ status }}&q={{ query }}">
-                            Previous
-                        </a>
-                    {% endif %}
-                    {% if page.has_next %}
-                        <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}&month={{ month }}&year={{ year }}&status={{ status }}&q={{ query }}">
-                            Next
-                        </a>
-                    {% endif %}
-                </div>
-            </div>
+        {% include "base_template/includes/table_pagination.html" %}
+
         {% else %}
             <div class="empty">
                 <div class="empty__title">
@@ -224,8 +217,6 @@
     </div>
 {% endblock %}
 {% block extra_js %}
-    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
-    </script>
     <script defer src="{% static 'base_template/js/platform.js' %}">
     </script>
 {% endblock %}

@@ -86,9 +86,19 @@
                     Add penalty rule
                 </a>
             </div>
-            {% if penalty_rules %}
+            {% if not penalty_rules %}
+                <div class="empty server-table-empty">
+                    <div class="empty__title">
+                        No penalty rules
+                    </div>
+                    <div class="empty__text">
+                        Arriving late, leaving early, working short or an absent day cost nothing extra until you add a rule.
+                    </div>
+                </div>
+            {% endif %}
+        {% if server_table or penalty_rules %}
                 <div class="table-wrap">
-                    <table class="table">
+                    <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                         <colgroup>
                             <col style="width: 20%">
                             <col style="width: 30%">
@@ -154,6 +164,7 @@
                         </tbody>
                     </table>
                 </div>
+        {% include "base_template/includes/table_pagination.html" %}
             {% else %}
                 <div class="empty">
                     <div class="empty__title">

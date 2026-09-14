@@ -7,9 +7,9 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.paginator import Paginator
-from django.db.models import Q
-from django.shortcuts import get_object_or_404, redirect, render
+from django.db.models import Min, Q
+from django.shortcuts import get_object_or_404, redirect
+from base_template.tables import paginate, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -57,7 +57,9 @@ def leave_inbox(request):
             'employee', 'submission_assignment__branch').prefetch_related('segments__leave_type')
         if query:
             items = items.filter(Q(employee__first_name__icontains=query) | Q(employee__last_name__icontains=query))
-        page = Paginator(items.order_by('-submitted_at', '-pk'), 25).get_page(request.GET.get('page'))
+        page = paginate(request, items.annotate(table_date=Min("segments__start_date"), table_type=Min("segments__leave_type__name")).order_by('-submitted_at', '-pk'),
+            search=("employee__first_name", "employee__last_name", "submission_assignment__branch__name", "table_type"),
+            order=(("employee__first_name", "employee__last_name"), "submission_assignment__branch__name", "table_date", "status", None))
         return render(request, 'leaves/inbox.html', {'page_obj': page, 'status': status, 'q': query})
 
 
@@ -103,7 +105,10 @@ def branch_attendance(request):
     if member.role != 'manager':
         raise PermissionDenied('This page is for branch managers.')
     today = timezone.now().astimezone(ZoneInfo(member.company.timezone or 'UTC')).date()
-    form = BranchAttendanceForm(request.GET or None, initial={'date': today})
+    params = request.GET.copy()
+    if params and 'date' not in params:
+        params['date'] = today.isoformat()
+    form = BranchAttendanceForm(params or None, initial={'date': today})
     valid = not request.GET or form.is_valid()
     on = form.cleaned_data['date'] if request.GET and valid else today
     query = form.cleaned_data.get('q', '') if request.GET and valid else ''
@@ -121,7 +126,9 @@ def branch_attendance(request):
                 placements = placements.filter(department_id__in=departments)
             if query:
                 placements = placements.filter(Q(employee__first_name__icontains=query) | Q(employee__last_name__icontains=query))
-            page = Paginator(placements.order_by('employee__first_name', 'employee_id'), 25).get_page(request.GET.get('page'))
+            page = paginate(request, placements.order_by('employee__first_name', 'employee_id'),
+                search=("employee__first_name", "employee__last_name", "employee_code", "branch__name"),
+                order=(("employee__first_name", "employee__last_name"), "branch__name", None, None, None))
             ids = [placement.employee_id for placement in page]
             if ids:
                 recalculate(request.company_id, start=on, end=on, employee_ids=ids)

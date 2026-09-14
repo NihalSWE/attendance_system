@@ -43,12 +43,23 @@
                 Leave types
             </h2>
             <span class="badge badge--neutral">
-                {{ leave_types|length }}
+                {{ server_table.page.paginator.count }}
             </span>
         </div>
-        {% if leave_types %}
+        {% if not leave_types %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    No leave types yet
+                </div>
+                <div class="empty__text">
+                    Add the kinds of leave employees take, for example Casual,
+                    Sick and Annual leave.
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or leave_types %}
             <div class="table-wrap">
-                <table class="table" data-enhance>
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th>
@@ -110,6 +121,7 @@
                     </tbody>
                 </table>
             </div>
+        {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">
@@ -124,8 +136,6 @@
     </div>
 {% endblock %}
 {% block extra_js %}
-    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
-    </script>
     <script defer src="{% static 'base_template/js/platform.js' %}">
     </script>
 {% endblock %}

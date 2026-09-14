@@ -1,0 +1,36 @@
+{% if server_table and not server_table.ajax %}
+    <div class="server-table-fallback">
+        <form method="get" class="toolbar">
+            {% for key, value in request.GET.items %}
+                {% if key != 'page' and key != 'per_page' and key != 'table_q' and key != 'table' %}
+                    <input type="hidden" name="{{ key }}" value="{{ value }}">
+                {% endif %}
+            {% endfor %}
+            <label>Search all results <input class="input" name="table_q" value="{{ server_table.query }}" maxlength="200"></label>
+            <label>Rows <select class="input" name="per_page">
+                <option value="10" {% if server_table.page.paginator.per_page == 10 %}selected{% endif %}>10</option>
+                <option value="25" {% if server_table.page.paginator.per_page == 25 %}selected{% endif %}>25</option>
+                <option value="50" {% if server_table.page.paginator.per_page == 50 %}selected{% endif %}>50</option>
+                <option value="100" {% if server_table.page.paginator.per_page == 100 %}selected{% endif %}>100</option>
+            </select></label>
+            <label>Page <input class="input" name="page" type="number" min="1" max="{{ server_table.page.paginator.num_pages }}" value="{{ server_table.page.number }}"></label>
+            <button class="btn btn--ghost" type="submit">Go</button>
+        </form>
+        <div class="pagination">
+            <span class="pagination__info">Showing {{ server_table.page.start_index }}–{{ server_table.page.end_index }} of {{ server_table.page.paginator.count }}</span>
+            {% if server_table.page.has_previous %}<a class="btn btn--ghost btn--sm" href="{% querystring page=server_table.page.previous_page_number %}">Previous</a>{% endif %}
+            <nav class="pagination__pages" aria-label="Result pages">
+                {% for number in server_table.numbers %}
+                    {% if number == server_table.page.paginator.ELLIPSIS %}
+                        <span class="pagination__dots">{{ number }}</span>
+                    {% elif number == server_table.page.number %}
+                        <span class="pagination__page is-on" aria-current="page">{{ number }}</span>
+                    {% else %}
+                        <a class="pagination__page" href="{% querystring page=number %}">{{ number }}</a>
+                    {% endif %}
+                {% endfor %}
+            </nav>
+            {% if server_table.page.has_next %}<a class="btn btn--ghost btn--sm" href="{% querystring page=server_table.page.next_page_number %}">Next</a>{% endif %}
+        </div>
+    </div>
+{% endif %}

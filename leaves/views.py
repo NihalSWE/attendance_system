@@ -5,9 +5,9 @@ import datetime
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
-from django.db.models import Exists, Min, OuterRef, Q
-from django.shortcuts import redirect, render
+from django.db.models import Max, Sum, Exists, Min, OuterRef, Q
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
@@ -83,7 +83,9 @@ def leave_list(request):
             LeaveRequest.objects.select_related("employee", "submitted_by")
             .prefetch_related("segments__leave_type")
             .filter(Exists(in_month))
-            .annotate(first_day=Min("segments__start_date"))
+            .annotate(first_day=Min("segments__start_date"), last_day=Max("segments__end_date"),
+                      table_type=Min("segments__leave_type__name"), table_pay=Min("segments__requested_pay_type"),
+                      table_units=Sum("segments__requested_units"))
         )
         total = queryset.count()
         if status in dict(LeaveRequest.Status.choices):
@@ -98,9 +100,9 @@ def leave_list(request):
                 | Exists(of_type)
             )
         filtered_total = queryset.count()
-        page = Paginator(
-            queryset.order_by("-first_day", "-pk"), 25
-        ).get_page(request.GET.get("page"))
+        page = paginate(request, queryset.order_by("-first_day", "-pk"),
+            search=("employee__first_name", "employee__last_name", "table_type", "status"),
+            order=(("employee__first_name", "employee__last_name"), "table_type", "first_day", "last_day", "table_units", "table_pay", "status", None))
         has_types = LeaveType.objects.filter(status=ActiveStatus.ACTIVE).exists()
 
     return render(request, "leaves/leave_list.html", {
@@ -207,7 +209,9 @@ def leave_type_list(request):
         return bail
     membership = require_company_membership(request.user, company_id)
     with use_company(company_id):
-        leave_types = list(LeaveType.objects.order_by("status", "name"))
+        leave_types = paginate(request, LeaveType.objects.order_by("status", "name"),
+            search=("code", "name", "description", "status"),
+            order=("code", "name", "description", "status", None))
     return render(request, "leaves/leave_type_list.html", {
         "leave_types": leave_types,
         "can_manage": membership.role in STRUCTURE_ROLES,

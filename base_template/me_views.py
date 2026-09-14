@@ -16,7 +16,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.views import PasswordChangeView
 from django.http import Http404
-from django.shortcuts import redirect, render
+from django.db.models import Min
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -181,12 +183,14 @@ def my_leave(request):
     raw_year = request.GET.get("year", "").strip()
     year = int(raw_year) if raw_year.isdigit() and 2000 <= int(raw_year) <= 2100 else today.year
     with use_company(request.company_id):
-        requests = list(
+        requests = paginate(request,
             LeaveRequest.objects.prefetch_related("segments__leave_type", "segments__days")
             .filter(employee=employee, segments__start_date__lte=datetime.date(year, 12, 31),
                     segments__end_date__gte=datetime.date(year, 1, 1))
-            .distinct().order_by("-pk")
-        )
+            .annotate(table_date=Min("segments__start_date"), table_type=Min("segments__leave_type__name"))
+            .distinct().order_by("-pk"),
+            search=("table_type", "status", "reason"),
+            order=("table_date", "table_type", None, None, "status", "reason"))
         taken = Counter()
         for name, pay_type, units in LeaveDay.objects.filter(
             employee=employee, status__in=LEAVE_TAKEN,
@@ -235,7 +239,9 @@ def my_payslips(request):
     if employee is None:
         return _no_employee(request, "My payslips")
     with use_company(request.company_id):
-        payslips = list(_my_payslips(employee))
+        payslips = paginate(request, _my_payslips(employee),
+            search=("payroll_run__payroll_period__name",),
+            order=("payroll_run__payroll_period__start_date", "gross_earnings", "total_deductions", "net_pay", None))
     return render(request, "base_template/me/payslips.html", {
         "employee": employee, "payslips": payslips,
     })

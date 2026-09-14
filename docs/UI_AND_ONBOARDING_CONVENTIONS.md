@@ -176,3 +176,18 @@ resize.
 - At 1024 px and below, the shared Menu button opens a labelled, scrollable
   drawer. Keep Close, Escape, focus wrapping/return and backdrop dismissal.
   Root, company and self-service menus retain separate destinations.
+
+
+## Server-side tables (A15, 2026-09-15)
+
+Keep the existing table/row/badge/button styling. Ajay explicitly requested
+pagination without a table redesign, and rejected Next/Previous-only paging.
+Use numbered pages, first/last controls, page size, a direct page jump and the
+real result count. Keep page-level filters and links. Reuse the Paper/Ink
+rules in `vendor-controls.css`; do not import a stock DataTables theme.
+
+Company and employee lists use `base_template.tables.paginate/render` and
+`base_template/js/tables.js`. Search and ordering run against the authorised
+queryset before slicing, never only against the browser’s current page. Action
+and live/composite columns without a faithful database ordering are explicitly
+not sortable. See `SERVER_SIDE_TABLES.md` for integration and the N9 boundary.

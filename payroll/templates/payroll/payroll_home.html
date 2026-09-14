@@ -96,9 +96,20 @@
             </button>
         </form>
 
-        {% if records %}
+        {% if not records %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    No salary generated for {{ month_name }} {{ year }}
+                </div>
+                <div class="empty__text">
+                    Press Generate. Attendance for the month is calculated first, then
+                    each employee's salary.
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or records %}
             <div class="table-wrap">
-                <table class="table">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <colgroup>
                         <col style="width: 17%">
                         <col style="width: 9%">
@@ -212,6 +223,7 @@
                     </tfoot>
                 </table>
             </div>
+        {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">

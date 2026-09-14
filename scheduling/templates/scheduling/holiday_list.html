@@ -81,9 +81,23 @@
                 Apply
             </button>
         </form>
-        {% if page.object_list %}
+        {% if not page.object_list %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    {% if status %}
+                        Nothing matches that filter
+                    {% else %}
+                        No holidays in {{ year }}
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    Add public or company holidays so they are not counted as absences.
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or page.object_list %}
             <div class="table-wrap">
-                <table class="table" data-enhance>
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th class="numeric">
@@ -149,23 +163,8 @@
                     </tbody>
                 </table>
             </div>
-            <div class="pagination">
-                <span class="pagination__info">
-                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
-                </span>
-                <div class="pagination__links">
-                    {% if page.has_previous %}
-                        <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}&year={{ year }}&status={{ status }}">
-                            Previous
-                        </a>
-                    {% endif %}
-                    {% if page.has_next %}
-                        <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}&year={{ year }}&status={{ status }}">
-                            Next
-                        </a>
-                    {% endif %}
-                </div>
-            </div>
+        {% include "base_template/includes/table_pagination.html" %}
+
         {% else %}
             <div class="empty">
                 <div class="empty__title">
@@ -183,8 +182,6 @@
     </div>
 {% endblock %}
 {% block extra_js %}
-    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
-    </script>
     <script defer src="{% static 'base_template/js/platform.js' %}">
     </script>
 {% endblock %}

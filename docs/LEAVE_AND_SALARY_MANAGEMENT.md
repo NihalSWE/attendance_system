@@ -392,3 +392,14 @@ working calendar, conflicts and finalised salary ranges, creates existing
 LeaveDay records, records an audit event and refreshes attendance atomically.
 Regenerate draft salary to pick up the approved leave. Partial pay, half-day/
 hourly leave, balances, attachments and withdrawal/amendment remain A10.
+
+
+## A15 list navigation — 2026-09-15
+
+Salary month, Overtime, Penalty rules, Leave, Leave types, Holidays, My leave,
+My payslips and Approval inbox now use the shared server-side table controls.
+The existing appearance and action links remain. Use numbered pages, page size,
+page jump and search across all results; overtime also has Employee and Branch
+filters. Month/status filters continue to apply before table search and paging.
+My payslips still shows only finalised salary; these navigation changes do not
+finalise salary or change its calculation. A10 is the next implementation.

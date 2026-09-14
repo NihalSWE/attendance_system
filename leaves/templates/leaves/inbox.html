@@ -20,7 +20,7 @@
             <button class="btn btn--ghost" type="submit">Show</button>
         </form>
         <div class="table-wrap">
-            <table class="table">
+            <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                 <thead>
                     <tr>
                         <th>Employee</th>
@@ -49,6 +49,7 @@
                 </tbody>
             </table>
         </div>
-        {% include "leaves/includes/workflow_pagination.html" %}
+        {% include "base_template/includes/table_pagination.html" %}
+
     </div>
 {% endblock %}
