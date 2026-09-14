@@ -38,7 +38,9 @@
 > lines → 3 joining/leaving proration by calendar days → 4 mid-month salary change
 > → 5 print-layout payslip PDF. **Part 1 done (2026-09-15):** Salary by month →
 > Finalise (owner/admin; refused if overtime changed after generating) and Undo
-> finalise with a reason. Next: part 2.
+> finalise with a reason. **Part 2 done:** payslip → Bonus and deductions (draft
+> only, owner/admin), kept across regeneration; migration `payroll.0006` — Ajay
+> runs migrate. Next: part 3.
 
 ## 0. First instruction: review and report, do not implement
 

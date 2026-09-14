@@ -1613,6 +1613,14 @@ Constraints: repayment and installment belong to the same loan/company/currency;
 
 An approved one-time earning, deduction, balance correction, waiver, or carry-forward instruction. It becomes financial only when a PayrollLine posts it or when its explicitly selected non-payroll balance action is applied.
 
+**Built 2026-09-15 (A11 part 2, simple subset), table `payroll_adjustment`:**
+`employee` (FK PROTECT), `target_payroll_period` (FK PROTECT, required),
+`adjustment_type` (earning shown as Bonus / deduction), `amount` (> 0, check
+constraint), `reason` (CharField 255), `status` (active / cancelled shown as
+Removed), plus actor tracking. `PayrollLine.payroll_adjustment` (nullable FK
+PROTECT) links the manual line (`source_type="adjustment"`, `is_manual=True`).
+The remaining fields below are not built.
+
 Common fields: TenantOwned plus actor tracking.
 
 - `employee` — FK -> Employee, PROTECT.

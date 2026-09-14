@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **part 1, Finalise month / Undo finalise, is done**. Next is **A11 part 2: bonus and deduction lines** (small migration). Ajay must have run `python manage.py migrate` for `leaves.0002`. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **parts 1 (Finalise / Undo finalise) and 2 (bonus and deduction lines) are done**. **Ajay must run `python manage.py migrate`** for `payroll.0006` (and `leaves.0002` if not yet). Next is **A11 part 3: joining/leaving mid-month**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2384,7 +2384,7 @@ leave to stay simple.
 | Part | Scope | Migration |
 |---|---|---|
 | **1 — done** | Finalise month (owner/admin) and Undo finalise with a reason | No |
-| 2 | Add bonus / Add deduction lines on a draft payslip (amount + reason); kept on regenerate; removable only while draft | Small |
+| **2 — done** | Add bonus / Add deduction lines on a draft payslip (amount + reason); kept on regenerate; removable only while draft | Yes: `payroll.0006` |
 | 3 | Joining/leaving mid-month: monthly salary for the employed days, calendar days of the month | No |
 | 4 | Salary change mid-month: days before at the old rate, the rest at the new rate (two Basic lines) | No |
 | 5 | Payslip PDF as a print layout (browser Save as PDF); no new package | No |
@@ -2414,4 +2414,28 @@ tax, bank files (payments/advances/dues are A13).
   an overtime decision refused, page buttons and confirmation pages); **full
   suite 946 tests OK**. Not browser-verified by Claude (needs Ajay's sign-in).
 - No migrations, dependencies or `.env.example` changes.
+
+## A11 part 2 done — bonus and deduction lines — 2026-09-15 (Claude, Ajay's session)
+
+- **Salary → Salary by month → an employee's payslip → Bonus and deductions**
+  (owner/company admin, draft month only): choose **Bonus** or **Deduction**,
+  amount above zero, reason (shown on the payslip) → **Add line**. The month is
+  regenerated and the payslip shows the line in Earnings or Deductions.
+- Kept across every regeneration; **Remove** marks it removed (nothing deleted)
+  and regenerates. On a finalised month the card says to Undo finalise first.
+  Employees see the lines on their finalised payslip but not the card.
+- Deductions still respect "never below zero" unless Salary settings allow
+  negative salary.
+- Model `PayrollAdjustment` (`payroll_adjustment`: employee, target period, type,
+  amount > 0, reason, status) and `PayrollLine.payroll_adjustment`
+  (`source_type="adjustment"`, `is_manual=True`). Audited as
+  `payroll.adjustment_added` / `payroll.adjustment_removed`.
+- **Migration `payroll/0006_payroll_adjustment.py` — Ajay runs `python manage.py migrate`.**
+- Tests: `makemigrations --check` → no changes. Full suite on fresh databases:
+  949 tests, 948 passed; the one failure was the new test expecting a negative
+  net after removing a bonus (the standard rules cap at zero). Test corrected;
+  `payroll` app rerun fresh: **103 tests OK**. New `payroll/tests_adjustments.py`
+  covers net and regeneration, removal, invalid values, HR refused, finalised
+  month refused, and the payslip page add/remove. Not browser-verified by Claude.
+- No `.env.example` changes or dependencies.
 - No migrations, dependencies or `.env.example` changes.
