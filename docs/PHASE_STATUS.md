@@ -995,7 +995,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14, home):** Home setup checks and A5c are complete (see progress below). Continue with **A14 sidebar menus**, then A8; do not repeat A5c. [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md) remains the office context; A16 (the SenseFace 3A, Push protocol 3.x experiment) is tested in the office with the device. The salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-14, home):** Home setup, A5c, September salary simulation and the paid-break correction are complete (see progress below). Nihal is paused; generate his prompt only when Ajay explicitly asks. Continue with **A14 sidebar menus**, then A8; do not repeat A5c. [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md) remains the office context; A16 (the SenseFace 3A, Push protocol 3.x experiment) is tested in the office with the device. The salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2072,5 +2072,50 @@ reset or assistant-run development migration.
   After the summary-label follow-up, all 26 salary-settings tests also pass.
 
 Next at home: **A14**, then **A8**, then A15. Office A16 still needs the physical
-SenseFace 3A. Nihal continues N5, N6, N8; N9 waits for A15. Keep his attendance
+SenseFace 3A. Nihal's planned work is N5, N6, N8; N9 waits for A15. Keep his attendance
 recalculation API, overtime hook and finalised-month guard when merging N5.
+
+## 2026-09-14 — Home salary simulation and paid-break correction
+
+Ajay completed local database/migration/account setup and configured his company,
+Head Office, shifts, days off, holidays, salary/attendance/overtime rules,
+departments, designations and dummy device. The assistant did not open `.env`
+or handle the database password.
+
+- Seeded September 2026 as a full-month simulation, including future dates,
+  through the real device ingestion and attendance/payroll services. Preserved
+  the four existing employees, their salaries/placements and company settings.
+  Ajay explicitly approved two extra demo employees: daily BDT 1,500 and hourly
+  BDT 200. Six device users are mapped; 397 punches include two intentional
+  duplicate scans. There are 180 attendance days, 17 approved leave days, a
+  cancelled leave example, seven overtime decisions and one waived penalty.
+- Six draft salaries match independent scan-based arithmetic and every earning
+  and deduction code. Total net is **BDT 177,047**. The daily demo's negative
+  net intentionally exercises additive penalties with no deduction cap.
+  This is synthetic data, not evidence from the physical device.
+- Fixed `attendance/pairing.py` on `fix/paid-break-outside-shift`: `_account`
+  previously credited all outside minutes as paid breaks, including time before
+  or after the shift. Each gap is now intersected with the scheduled shift
+  before applying the paid-break allowance. Raw outside time and overtime
+  calculations remain intact.
+- Reproduced Dia's September 28 defect before fixing it. After recalculation,
+  scans 09:00, 18:00, 19:15, 21:15 produce **540 regular minutes**, not 615,
+  and 120 approved overtime minutes. At BDT 200/hour the read-only equivalent
+  now pays **BDT 2,600**, removing the BDT 250 overpayment. Her monthly salary
+  and all six seeded net salaries remain unchanged. All 180 attendance days
+  now match the independent reference. No employee compensation was changed.
+- Regression cases cover gaps before/after shifts, crossing either boundary,
+  paid lunch mixed with overtime, allowance caps, open overtime and overnight
+  shifts, plus persisted attendance feeding an hourly salary calculation.
+- Validation: **229 attendance/payroll tests pass** (78.865 seconds). All eight
+  inspected app pages and six payslips render; posting Generate salary preserves
+  the draft totals. `git diff --check` passes. No schema changes.
+- No migration or environment-variable change. Review the simulated month in
+  **Payroll → September 2026** and **Attendance → Calendar → Dia → September 28**.
+  The local detailed report and seed scripts are in ignored `.qa/salary-seed/`;
+  local data and reports are not shipped to other computers by a git pull.
+
+**Coordination override:** Nihal is not making changes now. Generate his prompt
+only when Ajay explicitly asks. His remaining plan is N5, N6, N8, then N9 after
+A15; these are not active assignments. Ajay's next build remains **A14 → A8 →
+A15 → A10 → A11 → A12 → A13**. A16 awaits the physical SenseFace 3A in the office.

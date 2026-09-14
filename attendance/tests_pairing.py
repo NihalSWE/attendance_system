@@ -190,6 +190,40 @@ class MinuteTests(TestCase):
 class PaidBreakTests(TestCase):
     """Shift.default_break_minutes and Shift.break_is_paid."""
 
+    def test_paid_breaks_are_limited_to_the_scheduled_shift(self):
+        cases = (
+            # scans, paid regular minutes, all outside minutes, overtime
+            ([at(9), at(18), at(19, 15), at(21, 15)], 540, 75, 120),
+            ([at(7), at(8), at(9), at(18)], 540, 60, 0),
+            ([at(8), at(8, 30), at(9, 30), at(18)], 540, 60, 0),
+            ([at(9), at(17, 30), at(19, 15), at(21, 15)], 540, 105, 120),
+            ([at(9), at(13), at(14), at(18), at(19, 15), at(21, 15)], 540, 135, 120),
+            ([at(9), at(11), at(12, 30), at(14), at(15), at(18)], 510, 150, 0),
+            # An open overtime session does not turn its preceding gap into pay.
+            ([at(9), at(18), at(19, 15)], 540, 75, 0),
+        )
+        for scans, regular, outside, overtime in cases:
+            with self.subTest(scans=scans):
+                day = pairing.build_day(
+                    scans, scheduled_start=at(9), scheduled_end=at(18),
+                    break_minutes=120, break_is_paid=True, overtime_after_minutes=60,
+                )
+                self.assertEqual(day.worked_minutes, regular)
+                self.assertEqual(day.outside_minutes, outside)
+                self.assertEqual(day.overtime_minutes, overtime)
+
+    def test_paid_break_clipping_works_across_midnight(self):
+        tomorrow = datetime.timedelta(days=1)
+        day = pairing.build_day(
+            [at(22), at(1) + tomorrow, at(2) + tomorrow,
+             at(7) + tomorrow, at(8) + tomorrow, at(10) + tomorrow],
+            scheduled_start=at(22), scheduled_end=at(7) + tomorrow,
+            break_minutes=120, break_is_paid=True,
+        )
+        self.assertEqual(day.worked_minutes, 540)
+        self.assertEqual(day.outside_minutes, 120)
+        self.assertEqual(day.overtime_minutes, 120)
+
     def test_an_unpaid_break_is_not_worked_time(self):
         day = pairing.build_day(
             [at(9), at(13), at(14), at(18)],
