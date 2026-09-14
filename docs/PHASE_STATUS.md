@@ -532,9 +532,9 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 |---|---|---|---|---|
 | N0 | **Button and calendar fix** — ✅ done 2026-09-13, on main | The 8 `btn--secondary` buttons (a class that does not exist), all on his device and adoption pages, become `btn--ghost`. The five `datetime-local` fields in `devices/forms.py` (device installed at; enrollment and device-department effective from/to) show the browser's own calendar: date on the project calendar + `HH:MM` time text. A test fails if any project form has a date field without the project calendar. Device register/edit changes stay with Nihal | — | (loose ends below) |
 | N1 | **Pairing and daily totals** — ✅ done 2026-09-13, on main | `AttendanceSession` + `PunchAllocation`; every scan labelled check-in / break-out / break-in / check-out (DEVICE_ATTENDANCE_POLICY.md step 7); total, in-office and out-of-office minutes and break count per day; repeat-scan window. `worked_minutes` becomes in-office time | 3 | Breaks and multiple IN/OUT sessions; attendance settings punch pairing, duplicate window, attendance windows, rounding |
-| N1b | **Day close, check-out rule, live attendance** (added 2026-09-14) | DEVICE_ATTENDANCE_POLICY.md step 7 "When a day closes, and the check-out": a day runs until the next shift start or 24 h; a trailing OUT stays a break-out until the day closes; a day ending on an IN is checked out at the shift end with `review_status = needs_review`; arriving early is not paid (worked time from the shift start); time after the end is `calculated_overtime_minutes`, an open overtime session is blank, in review and unpaid; attendance recalculates itself on punches and on read, no Calculate button; `attendance.services.recalculate()` for Ajay's apps | 3 | Attendance settings attendance windows; the Incomplete decision |
+| N1b | **Day close, check-out rule, live attendance** - done 2026-09-14, branch `feature/n1b-day-close` | DEVICE_ATTENDANCE_POLICY.md step 7 "When a day closes, and the check-out": a day runs until the next shift start or 24 h; a trailing OUT stays a break-out until the day closes; a day ending on an IN is checked out at the shift end with `review_status = needs_review`; arriving early is not paid (worked time from the shift start); time after the end is `calculated_overtime_minutes`, an open overtime session is blank, in review and unpaid; attendance recalculates itself on punches and on read, no Calculate button; `attendance.services.recalculate()` for Ajay's apps | 3 | Attendance settings attendance windows; the Incomplete decision |
 | N2 | **Attendance calendar** ⬆ — ✅ done 2026-09-13, on main | **A planner-style month view, not the small date-picker grid** (Ajay, 2026-09-13): one big square per day holding a brief summary — status, check-in → check-out, in-office time, breaks — with a month summary above. Clicking a date opens that day's history: every check-in, break-out, break-in and check-out with time and device, plus total, in-office and out-of-office time. On a phone the month becomes a day-by-day list with the same summary. Built as a reusable piece so the employee panel (A7) shows the same calendar for "my attendance" | 3 | (new) |
-| N3 | **In-office badge on the Employees page** ⬆ — after N1b | "Now" column: In office (green), On break (amber), Left (grey), Not in yet (grey), Absent (red, after shift start plus grace), On leave (blue), Off today (grey); refreshes every minute | 5 | (new) |
+| N3 | **In-office badge on the Employees page** - done 2026-09-14, branch `feature/n3-in-office-badge` | "Now" column: In office (green), On break (amber), Left (grey), Not in yet (grey), Absent (red, after shift start plus grace), On leave (blue), Off today (grey); refreshes every minute | 5 | (new) |
 | N4 | **Which devices count + Re-check punches** | Attendance settings: all company devices / branch devices / department devices / assigned devices. "Re-check punches" for a date range re-runs authorisation on excluded punches, audited, then attendance is recalculated | 4 | (new) |
 | N5 | **Attendance corrections** | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b) | — | Attendance corrections; attendance review status and the Incomplete decision |
 | N6 | **Employee detail page + terminate screen** | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
@@ -859,7 +859,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1–A6 and N0–N2 done (2026-09-14). Ajay's session: A7 (employee panel) next; A9 (overtime) as soon as Nihal's N1b lands; A14 (sidebar menus) is on the plan. Nihal: N1b (day close, check-out rule, live attendance), then N3. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A6 and N0–N3 (N1b day close / live attendance and N3 in-office badge merged 2026-09-14). Ajay's session: A9 (overtime approval and pay — N1b gives it `calculated_overtime_minutes` and the open overtime session), then A7. Nihal: N7 (payslip redesign), then N4 (device attendance scope + Re-check punches), N5, N6. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -1655,3 +1655,109 @@ New model `DeviceServerAddressChange` and three columns on `BiometricDevice`
 - Devices whose address was typed in by hand show "not confirmed yet" until
   their first change; there is no backfill, deliberately, because we have no
   evidence of where they point until a request arrives.
+
+
+## 2026-09-14 — N1b: a day closes on a rule, and attendance is live (Nihal)
+
+Branch `feature/n1b-day-close`, on top of `main` (A5 merged in).
+
+**A day owns the scans between its own opening and its close** — the next shift
+start, or 24 hours after this shift started, whichever comes first
+(`attendance/day_window.py`, `build_windows()`). The windows are built as one
+contiguous chain across the range, so no scan falls in a gap and none lands in
+two days. One rule covers three cases: a second shift the same day ends the
+first, a night shift keeps the 06:00 check-out it began, and a day off owns its
+own scans instead of extending the day before.
+
+**While a day is open, a trailing OUT is a break-out, not a check-out.** That
+was the bug that made somebody's lunch read as going home. When the day closes,
+a trailing OUT becomes the check-out; a day that closes on an IN is checked out
+at the shift's scheduled end with `review_status = needs_review` and the reason
+"check-out by rule, no scan", and counts up to that end. Those days are the
+review list N5 will show.
+
+**Minutes are measured against the shift, not the scans:**
+
+| | |
+|---|---|
+| `worked_minutes` | in-office time between the scheduled start and end, plus the paid part of the break. No overtime in it. |
+| `calculated_overtime_minutes` | in-office time after the scheduled end, delayed by `Shift.overtime_after_minutes` |
+| (neither) | time before the scheduled start — arriving early is normal, not overtime, and not paid. The real check-in time is still shown. |
+
+**Attendance is live.** There is no Calculate button. `attendance.services`
+exposes `recalculate()` (a date range), `refresh()` (bring a range up to date
+only where it can have moved) and `recalculate_for_punches()`; device ingestion
+calls the last one after a punch batch lands, and every read path calls
+`refresh()`. `calculate_attendance()` is kept as a month wrapper so payroll's
+call sites are unchanged. A day inside a **posted** `PayrollRun` is never
+rewritten — `locked_ranges()` reads `PayrollPeriod.start_date`/`end_date`
+(the model has no year/month columns).
+
+Taking A5 in: an employee's own shift wins, and `shift_for` ignores it unless
+the employee is named, so both lookups pass `employee_id=` now. The same
+14:00–22:00 day reads 480 regular minutes on the employee's evening shift and
+240 regular plus overtime on the company's 09:00–18:00 one.
+
+### Things this cost
+
+- A duplicate-scan window that compared each scan only to the last **kept** one
+  let a steady stutter through as a phantom break-out. It chains from the
+  previous scan now, kept or dropped.
+- `refresh()` treated "nothing stored" as "settled history" and skipped a range
+  that had never been built. It now requires `anything_stored and not
+  open_days and not reaches_today` before it skips.
+- `AttendanceRecord.delete()` hit `ProtectedError` — sessions PROTECT
+  allocations. The override clears sessions, then allocations.
+- `--parallel` needs `tblib` (added to requirements.txt), and `--parallel`
+  with `--keepdb` reuses stale worker clones after a migration.
+
+## 2026-09-14 — N3: the "Now" badge on the Employees page (Nihal)
+
+Branch `feature/n3-in-office-badge`, on top of `feature/n1b-day-close`.
+
+A **Now** column on the Employees page says where each person is, from today's
+scans. `attendance/live_status.py` (`statuses_for(company_id, employee_ids=,
+now=)`) derives it on read through the same `day_window` + `pairing` code the
+calendar uses, so the badge and the calendar can never tell different stories
+about the same day. **It writes nothing** — there is a test asserting no
+`AttendanceRecord` appears from rendering the list.
+
+| Badge | Tone | When |
+|---|---|---|
+| In office | success | the last scan today was an IN |
+| On break | warning | the last scan was an OUT and the shift is still running |
+| Left | neutral | the last scan was an OUT and the shift has ended (or the day has closed) |
+| Not in yet | neutral | no scans, and the grace has not run out |
+| Absent | danger | no scans, and shift start + `grace_in_minutes` has passed |
+| On leave | info | an approved/reserved/consumed `LeaveDay` for today |
+| Off today | neutral | a weekly off or a holiday — unless they scanned in anyway, in which case it says where they are |
+| No shift | neutral | a working day with no shift to judge against |
+
+"Absent" here is a **live reading, not the stored one**. The record does not
+call a day absent until it closes (DEVICE_ATTENDANCE_POLICY.md step 7); the
+badge says so as soon as somebody is late enough to be missing, which is the
+question the page is being asked. Splitting "Left" from "On break" by the shift
+end is the same kind of choice: the stored record keeps the day open until it
+closes, which is right for deciding a check-out, but a badge answering "where
+are they now" must not read "On break" all evening because somebody left at six.
+The next day starts fresh — yesterday's check-out says nothing about this
+morning.
+
+`attendance/static/attendance/js/now_badge.js` repolls
+`attendance:attendance_now` once a minute and repaints only the cells. Once a
+minute, not once a second: the data only moves when somebody walks past a
+terminal. Cells are rebuilt as elements, not `innerHTML` — the label is ours,
+but this rewrites sixty times an hour and a template string here would be the
+one place an injection could hide. A failed poll is silent; the column on
+screen is still the last good answer.
+
+The column is correct **before any script runs** — `base_template/views.py`
+fills it server-side in one pass for the whole page (punches, placements, leave
+and calendar fetched once, not per row). The endpoint is login-gated and
+tenant-scoped: another company asking for these employee ids gets `{}`.
+
+`employee_list.html` and `base_template/views.py` are shared files; `main` was
+pulled immediately before touching them.
+
+**No new migration, no new environment variable.** 21 tests in
+`attendance/tests_now_badge.py`; checked at 1440, 768 and 375 px.

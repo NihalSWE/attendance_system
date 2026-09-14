@@ -390,6 +390,42 @@ def _touch_sync_state(*, device, message, punch_count, error_message=""):
     return state
 
 
+def _recalculate_attendance(device, extraction):
+    """Rebuild attendance for the employee-days this batch touched.
+
+    Attendance is live: nobody presses Calculate. A device returning from a
+    week offline sends a backlog, so this covers whatever days its punches
+    actually landed on rather than assuming today.
+
+    Wrapped because a punch is evidence first. If attendance cannot be worked
+    out — no shift configured yet, a half-built company — the punch is still
+    stored and acknowledged, and the day is rebuilt next time anything reads
+    it.
+    """
+    if extraction is None or not extraction.created:
+        return
+    from attendance.services import recalculate_for_punches
+
+    zone = _company_zone(device)
+    employee_days = {
+        (punch.employee_id, punch.punched_at_utc.astimezone(zone).date())
+        for punch in extraction.created
+        if punch.employee_id
+    }
+    if employee_days:
+        recalculate_for_punches(device.company_id, employee_days)
+
+
+def _company_zone(device):
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    name = getattr(device.company, "timezone", None) or "UTC"
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        return ZoneInfo("UTC")
+
+
 def ingest(*, device, parsed, raw_body, source_ip=None, headers=None,
            content_type="", encoding="utf-8"):
     """Capture one message durably, then best-effort extract its punches.
@@ -461,6 +497,8 @@ def ingest(*, device, parsed, raw_body, source_ip=None, headers=None,
             punch_count=extraction.accepted_count if extraction else 0,
             error_message=extraction_error,
         )
+
+    _recalculate_attendance(device, extraction)
 
     return IngestionResult(
         device=device,

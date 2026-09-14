@@ -17,6 +17,7 @@ from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
 from accounts.services import ACTIVE_COMPANY_SESSION_KEY, get_active_memberships
+from attendance import live_status
 from employees.models import Employee
 from organization.models import Branch, CompanyDepartment
 
@@ -111,8 +112,19 @@ def employee_list(request):
         )
         rows.append({"e": employee, "a": assignment, "c": compensation})
 
+    # Where each person is right now, derived from today's scans. Rendered
+    # server-side so the column is correct before any script runs; the page
+    # then refreshes it once a minute.
+    now_by_employee = live_status.statuses_for(
+        request.company_id,
+        employee_ids=[row["e"].pk for row in rows],
+    )
+    for row in rows:
+        row["now"] = now_by_employee.get(row["e"].pk)
+
     return render(request, "base_template/employee_list.html", {
         "rows": rows,
+        "employee_ids": ",".join(str(row["e"].pk) for row in rows),
         "page": page,
         "paginator": paginator,
         "search": search,

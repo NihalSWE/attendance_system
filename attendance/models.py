@@ -148,7 +148,15 @@ class AttendanceSession(TenantOwned):
         return f"session {self.sequence_number} of {self.attendance_record_id}"
 
 
+class ReviewStatus(models.TextChoices):
+    CLEAN = "clean", "Clean"
+    NEEDS_REVIEW = "needs_review", "Needs review"
+    REVIEWED = "reviewed", "Reviewed"
+
+
 class AttendanceRecord(TenantOwned):
+    ReviewStatus = ReviewStatus
+
     class AttendanceStatus(models.TextChoices):
         PRESENT = "present", "Present"
         HALF_DAY = "half_day", "Half day"
@@ -195,7 +203,13 @@ class AttendanceRecord(TenantOwned):
     break_minutes = models.PositiveIntegerField(default=0)
     outside_minutes = models.PositiveIntegerField(default=0)
     break_count = models.PositiveIntegerField(default=0)
+    # Time after the scheduled end. Kept apart from worked_minutes because
+    # salary pays it at a different rate and only once it is approved
+    # (plan step A9); until then approved_overtime_minutes stays 0.
+    calculated_overtime_minutes = models.PositiveIntegerField(default=0)
+    approved_overtime_minutes = models.PositiveIntegerField(default=0)
     late_minutes = models.PositiveIntegerField(default=0)
+    early_out_minutes = models.PositiveIntegerField(default=0)
     attendance_status = models.CharField(max_length=16, choices=AttendanceStatus.choices)
     punch_status = models.CharField(max_length=16, choices=PunchStatus.choices)
     # How much of the day is payable: 1 present/paid, 0.5 half day, 0 absent or
@@ -206,6 +220,17 @@ class AttendanceRecord(TenantOwned):
         related_name="attendance_records",
     )
     note = models.CharField(max_length=255, blank=True)
+    # Set by the rule, not by a person: a day closed at its shift end because
+    # nobody scanned out, or an overtime session left open, both need somebody
+    # to look. The reason is stored so the review list can say which.
+    review_status = models.CharField(
+        max_length=16, choices=ReviewStatus.choices, default=ReviewStatus.CLEAN
+    )
+    review_reason = models.CharField(max_length=120, blank=True)
+    # True when last_out_at was decided by the shift end rather than a scan.
+    check_out_by_rule = models.BooleanField(default=False)
+    # The day has not finished yet, so its figures are provisional.
+    is_open = models.BooleanField(default=False)
     calculated_at = models.DateTimeField()
 
     class Meta:

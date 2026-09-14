@@ -149,7 +149,10 @@ class Command(BaseCommand):
                 if calendar.day(branch.pk, day).kind != WORKING or (employee.pk, day) in on_leave:
                     continue
                 pattern = day_pattern(index, day_index)
-                shift = calendar.shift_for(department_of.get(employee.pk), day)
+                shift = calendar.shift_for(
+                    department_of.get(employee.pk), day,
+                    employee_id=employee.pk,
+                )
                 if pattern is None or shift is None:
                     continue
                 start = datetime.datetime.combine(day, shift.start_time)
