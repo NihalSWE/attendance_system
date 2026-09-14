@@ -126,5 +126,11 @@ class MyPayslipTests(PanelBase):
         page = self.client.get(reverse("me:payslip", args=[self.mine.pk]))
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Net pay")
+        self.assertContains(page, "Finalised")
         self.assertNotContains(page, "Waive")
+        # Only the employee's own pages are linked from their payslip.
+        self.assertContains(page, f'href="{reverse("me:payslips")}"')
+        self.assertContains(page, f'href="{reverse("me:attendance")}?year=2026&month=8"')
+        self.assertNotContains(page, 'href="/salary/')
+        self.assertNotContains(page, 'href="/attendance/')
         self.assertEqual(self.client.get(reverse("me:payslip", args=[self.theirs.pk])).status_code, 404)

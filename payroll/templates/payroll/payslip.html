@@ -9,15 +9,22 @@
 {% endblock %}
 {% block page %}
     <div class="crumbs">
-        <a href="{% url 'dashboard' %}">
-            Dashboard
-        </a>
-        <span class="crumbs__sep" aria-hidden="true">
-            /
-        </span>
-        <a href="{% url 'payroll:payroll_home' %}?month={{ period.start_date.month }}&year={{ period.start_date.year }}">
-            Salary
-        </a>
+        {% if for_employee %}
+            {# The employee's own payslip (A7): only their own pages are linked. #}
+            <a href="{% url 'me:payslips' %}">
+                My payslips
+            </a>
+        {% else %}
+            <a href="{% url 'dashboard' %}">
+                Dashboard
+            </a>
+            <span class="crumbs__sep" aria-hidden="true">
+                /
+            </span>
+            <a href="{% url 'payroll:payroll_home' %}?month={{ period.start_date.month }}&year={{ period.start_date.year }}">
+                Salary
+            </a>
+        {% endif %}
         <span class="crumbs__sep" aria-hidden="true">
             /
         </span>
@@ -282,7 +289,7 @@
             <h2>
                 Attendance in {{ period.name }}
             </h2>
-            <a class="btn btn--ghost btn--sm slip-head-action" href="{% url 'attendance:attendance_calendar' %}?employee={{ record.employee.pk }}&year={{ period.start_date.year }}&month={{ period.start_date.month }}">
+            <a class="btn btn--ghost btn--sm slip-head-action" href="{% if for_employee %}{% url 'me:attendance' %}?year={{ period.start_date.year }}&month={{ period.start_date.month }}{% else %}{% url 'attendance:attendance_calendar' %}?employee={{ record.employee.pk }}&year={{ period.start_date.year }}&month={{ period.start_date.month }}{% endif %}">
                 Calendar view
             </a>
         </div>
