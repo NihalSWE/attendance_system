@@ -55,11 +55,6 @@ def _periods_overlap(start_a, end_a, start_b, end_b):
     return True
 
 
-def generate_comm_key():
-    """A device secret the administrator types into the terminal once."""
-    return secrets.token_hex(8)
-
-
 class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
     """Register or edit one device.
 
@@ -74,9 +69,18 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         required=False,
         label="Communication key",
         help_text=(
-            "The secret the device presents when it pushes. Leave blank to "
-            "generate one. It is shown once after saving and stored only as a "
-            "hash, so it cannot be displayed again."
+            "Leave blank for a ZKTeco device: it is recognised by its serial "
+            "number and cannot send a key. Only fill this in for a device or "
+            "integration that sends a key with every request; a key the device "
+            "does not send locks it out."
+        ),
+    )
+    remove_comm_key = forms.BooleanField(
+        required=False,
+        label="Remove the communication key",
+        help_text=(
+            "The device is then recognised by its serial number alone, as a "
+            "ZKTeco push device needs."
         ),
     )
     timezone = forms.ChoiceField(
@@ -178,10 +182,16 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
                 "error_delay_seconds", 30
             )
             self.fields["realtime"].initial = settings.get("realtime", True)
-            self.fields["comm_key"].help_text = (
-                "Leave blank to keep the current key. Entering a new value "
-                "replaces it, and the device must be updated to match."
-            )
+            if self.instance.authentication_secret_hash:
+                self.fields["comm_key"].help_text = (
+                    "This device has a key: it is refused unless it sends that key "
+                    "with every request, which a ZKTeco push device cannot do. "
+                    "Leave blank to keep it, enter a new one to replace it, or "
+                    "remove it below."
+                )
+        if not (self.instance.pk and self.instance.authentication_secret_hash):
+            # Only a device that has a key can have it removed.
+            del self.fields["remove_comm_key"]
 
     def clean(self):
         """Validate the address format here; the round trip is the view's job.
@@ -238,7 +248,6 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         return serial
 
     def save(self, commit=True):
-        is_new = self.instance.pk is None
         device = super().save(commit=False)
         device.settings = {
             **(device.settings or {}),
@@ -250,22 +259,20 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         # Returned to the view so it can be shown exactly once.
         self.issued_comm_key = ""
         entered = (self.cleaned_data.get("comm_key") or "").strip()
+        # A key is only ever set because somebody typed one. It used to be
+        # invented for every new device, and a ZKTeco push device cannot send
+        # a key — its requests carry the serial number and nothing else — so
+        # every device registered that way was refused with 401 from its first
+        # request (the SenseFace 3A, 2026-09-14). The same trap had already
+        # been closed for edits.
         if entered:
             self.issued_comm_key = entered
-        elif is_new and not device.authentication_secret_hash:
-            # Only ever generated for a device being registered. Doing it on an
-            # edit locked a live terminal out: the device had been pushing
-            # without a key for weeks, somebody opened this form to change the
-            # server address, and saving it invented a key nobody had typed
-            # into the device. Every push after that was refused with 401, and
-            # nothing on screen said why. A device already in service keeps
-            # whatever it has unless a key is typed here on purpose.
-            self.issued_comm_key = generate_comm_key()
-
-        if self.issued_comm_key:
-            device.authentication_secret_hash = make_password(self.issued_comm_key)
+            device.authentication_secret_hash = make_password(entered)
             if not device.authentication_key_id:
                 device.authentication_key_id = f"key-{secrets.token_hex(4)}"
+        elif self.cleaned_data.get("remove_comm_key"):
+            device.authentication_secret_hash = ""
+            device.authentication_key_id = ""
 
         if commit:
             device.save()
