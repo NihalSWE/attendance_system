@@ -69,6 +69,39 @@ def _compensation_at(employee, at):
     )
 
 
+def _monthly_segments(employee, start, end):
+    """(rate, first day, last day) for each monthly salary in force between two dates.
+
+    A11 part 4, kept simple: None unless the salary changed inside the range and
+    every salary in it is monthly. Daily/hourly changes keep the month-end rate.
+    ``revise_compensation`` closes the old row at the instant the new one starts.
+    Call inside the company's tenant context.
+    """
+    begin = timezone.make_aware(datetime.datetime.combine(start, datetime.time.min))
+    finish = timezone.make_aware(datetime.datetime.combine(end, datetime.time.max))
+    compensations = list(
+        EmployeeCompensation.objects.filter(employee=employee, effective_from__lte=finish)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=begin))
+        .exclude(status__in=["cancelled", "draft"])
+        .order_by("effective_from")
+    )
+    if len(compensations) < 2 or any(
+        c.pay_basis != EmployeeCompensation.PayBasis.MONTHLY for c in compensations
+    ):
+        return None
+    segments, next_free = [], start
+    for compensation in compensations:
+        first = max(next_free, timezone.localtime(compensation.effective_from).date())
+        last = end
+        if compensation.effective_to is not None:
+            ends = timezone.localtime(compensation.effective_to) - datetime.timedelta(microseconds=1)
+            last = min(end, ends.date())
+        if last >= first:
+            segments.append((compensation.base_rate, first, last))
+            next_free = last + datetime.timedelta(days=1)
+    return segments if len(segments) > 1 else None
+
+
 def summarise(records):
     """Day counts for one employee's month, as shown on the payslip."""
     counts = Counter()
@@ -266,7 +299,7 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                   penalty_rules=(), waived=frozenset(), employee_key="", adjustments=(),
-                  employed_days=None):
+                  employed_days=None, basic_segments=None):
     """Lines and totals for one employee. Pure: no database writes.
 
     ``penalty_rules`` add one deduction line per penalty found; the
@@ -285,7 +318,20 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     ]
 
     if pay_basis == EmployeeCompensation.PayBasis.MONTHLY:
-        if employed_days is not None and employed_days < days_in_month:
+        if basic_segments:
+            # The monthly salary changed inside the month (A11 part 4): one Basic
+            # line per rate for the calendar days it was in force.
+            for segment_rate, segment_first, segment_last in basic_segments:
+                days = (segment_last - segment_first).days + 1
+                share = Decimal(days) / Decimal(days_in_month)
+                segment_rate = Decimal(segment_rate)
+                lines.append((
+                    "earning", "BASIC",
+                    f"Basic salary {segment_rate:,.2f} ({segment_first:%d %b}–{segment_last:%d %b}, "
+                    f"{days} of {days_in_month} days)",
+                    share, segment_rate, money(segment_rate * share),
+                ))
+        elif employed_days is not None and employed_days < days_in_month:
             # Joined or left inside the month (A11 part 3): pay the employed
             # calendar days only.
             share = Decimal(employed_days) / Decimal(days_in_month)
@@ -546,12 +592,17 @@ def generate_payroll(*, actor, company_id, year, month):
             if compensation is None:
                 skipped.append(employee.full_name)
                 continue
+            basic_segments = (
+                _monthly_segments(employee, start, end)
+                if compensation.pay_basis == EmployeeCompensation.PayBasis.MONTHLY else None
+            )
             result = calculate_pay(
                 compensation.pay_basis, compensation.base_rate, records,
                 rules=rules, days_in_month=last.day,
                 penalty_rules=penalty_rules, waived=waived, employee_key=f"{employee.pk}:",
                 adjustments=adjustments_by_employee.get(employee.pk, ()),
                 employed_days=employed_days,
+                basic_segments=basic_segments,
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,
@@ -564,6 +615,10 @@ def generate_payroll(*, actor, company_id, year, month):
                     "base_rate": str(compensation.base_rate),
                     "compensation_id": compensation.pk,
                     "employed_days": employed_days,
+                    "basic_segments": [
+                        [str(rate), first_day.isoformat(), last_day.isoformat()]
+                        for rate, first_day, last_day in (basic_segments or [])
+                    ],
                     "counts": result["counts"],
                     "rules": result["rules"],
                     "overtime": result["overtime"],
