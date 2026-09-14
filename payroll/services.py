@@ -265,7 +265,8 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 
 
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
-                  penalty_rules=(), waived=frozenset(), employee_key="", adjustments=()):
+                  penalty_rules=(), waived=frozenset(), employee_key="", adjustments=(),
+                  employed_days=None):
     """Lines and totals for one employee. Pure: no database writes.
 
     ``penalty_rules`` add one deduction line per penalty found; the
@@ -284,7 +285,17 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     ]
 
     if pay_basis == EmployeeCompensation.PayBasis.MONTHLY:
-        lines.append(("earning", "BASIC", "Basic salary", ONE, rate, money(rate)))
+        if employed_days is not None and employed_days < days_in_month:
+            # Joined or left inside the month (A11 part 3): pay the employed
+            # calendar days only.
+            share = Decimal(employed_days) / Decimal(days_in_month)
+            lines.append((
+                "earning", "BASIC",
+                f"Basic salary ({employed_days} of {days_in_month} days employed)",
+                share, rate, money(rate * share),
+            ))
+        else:
+            lines.append(("earning", "BASIC", "Basic salary", ONE, rate, money(rate)))
         per_day = _per_day(rules, rate, records, days_in_month)
         if per_day:
             lines.extend(_monthly_deductions(rules, per_day, records))
@@ -521,6 +532,14 @@ def generate_payroll(*, actor, company_id, year, month):
         totals = Counter()
         skipped = []
         for employee, records in records_by_employee.items():
+            # Only days inside the employment count; a monthly salary is paid
+            # for the employed calendar days of the month.
+            start = max(first, employee.joining_date or first)
+            end = min(last, employee.leaving_date or last)
+            records = [record for record in records if start <= record.work_date <= end]
+            if not records:
+                continue
+            employed_days = (end - start).days + 1
             compensation = _compensation_at(employee, period_end) or _compensation_at(
                 employee, timezone.make_aware(datetime.datetime.combine(records[-1].work_date, datetime.time.max))
             )
@@ -532,6 +551,7 @@ def generate_payroll(*, actor, company_id, year, month):
                 rules=rules, days_in_month=last.day,
                 penalty_rules=penalty_rules, waived=waived, employee_key=f"{employee.pk}:",
                 adjustments=adjustments_by_employee.get(employee.pk, ()),
+                employed_days=employed_days,
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,
@@ -543,6 +563,7 @@ def generate_payroll(*, actor, company_id, year, month):
                     "pay_basis": compensation.pay_basis,
                     "base_rate": str(compensation.base_rate),
                     "compensation_id": compensation.pk,
+                    "employed_days": employed_days,
                     "counts": result["counts"],
                     "rules": result["rules"],
                     "overtime": result["overtime"],
