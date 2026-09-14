@@ -1,21 +1,26 @@
-"""Overtime: deciding it, day by day (plan step A9).
+"""Overtime: approving it, day by day (plan step A9).
 
 Attendance counts overtime on its own (``AttendanceRecord.
 calculated_overtime_minutes``: in-office time after the shift's end, delayed by
-the shift's "overtime after" minutes). Nothing is paid until somebody with the
-right decides it here:
+the shift's "overtime after" minutes). What happens to it (Ajay, 2026-09-14):
 
-- **approve** — all of it or fewer minutes; for a session nobody scanned out
-  of, the approver sets the time they left and the minutes follow from it;
-- **reject** — nothing is paid;
-- **undo** — back to waiting.
+- **approved automatically** — the person scanned out, so the time is known;
+  everything counted is approved and salary pays it;
+- **waiting** — nobody scanned out of it (came back after the shift and never
+  scanned out, or a check-out set by rule): nothing is paid until somebody
+  with the right sets the time they left, or rejects it;
+- **too short to pay** — the company's minimum or blocks leave nothing to pay.
 
-Work on a holiday or weekly off is decided the same way: every minute in the
+On any day admin or HR can still step in: approve fewer minutes, reject, or
+undo their decision (back to automatic, or waiting).
+
+Work on a holiday or weekly off works the same way: every minute in the
 office counts, and salary pays it at the day-off rate.
 
-Decisions are kept in ``OvertimeDecision``. Attendance copies the approved
-minutes onto the day whenever it recalculates, and salary reads them from
-there (``payroll.services``). A month whose salary is finalised is closed.
+Decisions are kept in ``OvertimeDecision``. Attendance puts the approved
+minutes on the day whenever it recalculates (``approved_minutes`` below), and
+salary reads them from there (``payroll.services``). A month whose salary is
+finalised is closed.
 """
 
 import datetime
@@ -29,8 +34,8 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.models import CompanyMembership
-from attendance.models import AttendanceRecord, ReviewStatus
-from attendance.services import locked_ranges, month_bounds, refresh
+from attendance.models import AttendanceRecord
+from attendance.services import locked_ranges, month_bounds, recalculate, refresh
 from auditlog.services import record_company_event
 from common.tenant import use_company
 from organization.services import (
@@ -48,11 +53,13 @@ DAYS_OFF = (Status.HOLIDAY, Status.WEEKLY_OFF)
 OVERTIME_ROLES = (*STRUCTURE_ROLES, CompanyMembership.Role.HR)
 
 WAITING = "waiting"
-# Counted, but the company's minimum or rounding leaves nothing to pay, so
-# nobody is asked to decide it (Ajay, 2026-09-14: 26 days of 1–59 minutes were
-# "waiting" under a 60-minute minimum).
+# Scanned out, so approved without anybody pressing anything (Ajay, 2026-09-14).
+AUTOMATIC = "automatic"
+# Counted, but the company's minimum or blocks leave nothing to pay, so nobody
+# is asked about it (Ajay, 2026-09-14: 26 days of 1–59 minutes were "waiting"
+# under a 60-minute minimum).
 TOO_SHORT = "too_short"
-STATES = (WAITING, OvertimeDecision.Status.APPROVED, OvertimeDecision.Status.REJECTED, TOO_SHORT)
+APPROVED_STATES = (AUTOMATIC, OvertimeDecision.Status.APPROVED)
 
 # A day that could hold overtime: minutes counted after the shift, a day off
 # somebody came in on, or a session nobody scanned out of.
@@ -84,6 +91,11 @@ class Claim:
     def exists(self):
         return self.minutes > 0 or self.open_from is not None
 
+    @property
+    def needs_decision(self):
+        """Nobody scanned out, so nobody knows when it ended."""
+        return self.open_from is not None or self.record.check_out_by_rule
+
     def pays_nothing(self, rules):
         """True when the rules would pay none of it even if it were approved.
 
@@ -96,7 +108,29 @@ class Claim:
 def state_of(claim, decision, rules):
     if decision is not None:
         return decision.status
-    return TOO_SHORT if claim.pays_nothing(rules) else WAITING
+    if claim.pays_nothing(rules):
+        return TOO_SHORT
+    return WAITING if claim.needs_decision else AUTOMATIC
+
+
+def approved_minutes(paired, *, day_off, decided):
+    """The overtime minutes a day carries as approved.
+
+    Called by attendance each time it writes a day (``_write_day``), so the
+    rule lives here, with the rest of overtime. ``paired`` is the
+    ``attendance.pairing.Day``; ``decided`` is a decision's approved minutes,
+    or None when nobody has decided the day.
+
+    A decision wins. Otherwise a finished day whose overtime ends in a real
+    scan is approved automatically: the time after the shift on a working day,
+    every minute in the office on a day off. A day nobody scanned out of
+    carries nothing until somebody sets when it ended.
+    """
+    if decided is not None:
+        return decided
+    if not paired.is_closed or paired.open_overtime or paired.check_out_by_rule:
+        return 0
+    return paired.in_office_minutes if day_off else paired.overtime_minutes
 
 
 def claim_for(record):
@@ -153,7 +187,7 @@ def _is_locked(company_id, day):
 
 def _snapshot(decision):
     if decision is None:
-        return {"status": WAITING}
+        return {"status": "not decided"}
     return {
         "work_date": decision.work_date.isoformat(),
         "status": decision.status,
@@ -185,6 +219,14 @@ class Row:
     state: str
     paid_minutes: int = 0
     changed: bool = False
+
+    @property
+    def approved_minutes(self):
+        if self.state == AUTOMATIC:
+            return self.claim.minutes
+        if self.state == OvertimeDecision.Status.APPROVED:
+            return self.decision.approved_minutes
+        return 0
 
 
 def overtime_month(*, actor, company_id, year, month):
@@ -218,9 +260,8 @@ def overtime_month(*, actor, company_id, year, month):
         decision = decisions.get((record.employee_id, record.work_date))
         row = Row(record=record, claim=claim, decision=decision,
                   state=state_of(claim, decision, rules))
+        row.paid_minutes = rules.payable_overtime(row.approved_minutes)
         if decision is not None:
-            if decision.status == OvertimeDecision.Status.APPROVED:
-                row.paid_minutes = rules.payable_overtime(decision.approved_minutes)
             # A scan that arrived after the decision changed what the day counts.
             row.changed = claim.open_from is None and decision.calculated_minutes != claim.minutes
         rows.append(row)
@@ -258,13 +299,18 @@ def overtime_day(*, actor, company_id, record_id):
             record.allocations.select_related("punch_event__device")
             .filter(is_included=True).order_by("sequence_number")
         )
+    claim = claim_for(record)
+    rules = rules_for(company_id, record.work_date.replace(day=1))
+    state = state_of(claim, decision, rules)
     return {
         "membership": membership,
         "record": record,
-        "claim": claim_for(record),
+        "claim": claim,
         "decision": decision,
+        "state": state,
+        "paid_minutes": rules.payable_overtime(claim.minutes),
         "scans": scans,
-        "rules": rules_for(company_id, record.work_date.replace(day=1)),
+        "rules": rules,
         "locked": _is_locked(company_id, record.work_date),
     }
 
@@ -336,12 +382,7 @@ def decide_overtime(*, actor, company_id, record_id, approve, minutes=None,
         decision.decided_at = timezone.now()
         decision.full_clean()
         decision.save()
-
-        # Mirror it onto the day now; attendance keeps it on every recalculation.
-        updates = {"approved_overtime_minutes": approved}
-        if claim.open_from is not None:
-            updates["review_status"] = ReviewStatus.REVIEWED
-        AttendanceRecord.objects.filter(pk=record.pk).update(**updates)
+        _rewrite_day(company_id, record)
 
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
@@ -351,9 +392,18 @@ def decide_overtime(*, actor, company_id, record_id, approve, minutes=None,
     return decision
 
 
+def _rewrite_day(company_id, record):
+    """Let attendance rewrite the day, so it carries the decision (or its
+    absence) exactly as every later recalculation will."""
+    recalculate(
+        company_id, employee_ids=[record.employee_id],
+        start=record.work_date, end=record.work_date,
+    )
+
+
 @transaction.atomic
 def undo_overtime_decision(*, actor, company_id, record_id):
-    """Put a day's overtime back to waiting."""
+    """Drop a decision: the day goes back to automatic, or to waiting."""
     membership = require_overtime_approver(actor, company_id)
     with use_company(company_id):
         record = _record_in_scope(membership, record_id)
@@ -368,14 +418,13 @@ def undo_overtime_decision(*, actor, company_id, record_id):
             raise ValidationError("This day's overtime has not been decided.")
         before = _snapshot(decision)
         decision.delete()
-        updates = {"approved_overtime_minutes": 0}
-        if claim_for(record).open_from is not None:
-            updates["review_status"] = ReviewStatus.NEEDS_REVIEW
-        AttendanceRecord.objects.filter(pk=record.pk).update(**updates)
+        _rewrite_day(company_id, record)
+        after = WAITING if claim_for(record).needs_decision else AUTOMATIC
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
-            action="overtime.undone", obj=record, before=before, after={"status": WAITING},
+            action="overtime.undone", obj=record, before=before, after={"status": after},
         )
+    return after
 
 
 def decided_after(company_id, first, last, moment):
@@ -391,7 +440,8 @@ def decided_after(company_id, first, last, moment):
 def undecided_count(company_id, first, last):
     """Days of a month still waiting for a decision (without recalculating).
 
-    Overtime too short to pay under the month's rules is not waiting.
+    Only a day nobody scanned out of waits: the rest is approved automatically
+    or too short to pay.
     """
     rules = rules_for(company_id, first)
     with use_company(company_id):
@@ -410,6 +460,6 @@ def undecided_count(company_id, first, last):
         if (record.employee_id, record.work_date) in decided:
             continue
         claim = claim_for(record)
-        if claim.exists and not claim.pays_nothing(rules):
+        if claim.exists and state_of(claim, None, rules) == WAITING:
             waiting += 1
     return waiting

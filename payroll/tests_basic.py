@@ -147,9 +147,13 @@ class EndToEndTests(TestCase):
                 counts.get("absent", 0) + counts.get("unpaid_leave", 0)
                 + Decimal(counts.get("half_day", 0)) / 2
             )
+            # Demo scans after 18:00 are overtime, approved automatically (A9).
+            overtime = sum(
+                (line.amount for line in monthly.lines.filter(code="OVERTIME")), Decimal("0")
+            )
             self.assertEqual(
                 monthly.net_pay,
-                (Decimal("30000") - Decimal(deducted_days) * 1000).quantize(Decimal("0.01")),
+                (Decimal("30000") + overtime - Decimal(deducted_days) * 1000).quantize(Decimal("0.01")),
             )
             self.assertEqual(counts["unpaid_leave"], 2)
             daily = PayrollRecord.objects.get(payroll_run=run, employee=self.daily)
@@ -194,11 +198,15 @@ class EndToEndTests(TestCase):
         with use_company(self.company):
             record = PayrollRecord.objects.get(payroll_run=run, employee=self.monthly)
             deductions = list(record.lines.filter(line_type="deduction"))
+            earnings = list(record.lines.filter(line_type="earning"))
         self.assertTrue(deductions)
         for line in deductions:
             with self.subTest(line=line.code):
                 self.assertEqual(line.rate, (Decimal("30000") / 31).quantize(Decimal("0.0001")))
-        self.assertEqual(record.net_pay, Decimal("30000.00") - sum(line.amount for line in deductions))
+        self.assertEqual(
+            record.net_pay,
+            sum(line.amount for line in earnings) - sum(line.amount for line in deductions),
+        )
         self.assertGreater(record.net_pay, before)
 
         # July keeps the standard rules.

@@ -388,12 +388,18 @@ def overtime_summary(rules):
 
 
 OVERTIME_TABS = (
-    ("waiting", "Waiting"),
+    ("all", "All"),
+    ("waiting", "Waiting for you"),
     ("approved", "Approved"),
     ("rejected", "Rejected"),
     ("too_short", "Too short to pay"),
-    ("all", "All"),
 )
+OVERTIME_FILTERS = {
+    "waiting": (overtime.WAITING,),
+    "approved": overtime.APPROVED_STATES,
+    "rejected": (OvertimeDecision.Status.REJECTED,),
+    "too_short": (overtime.TOO_SHORT,),
+}
 
 
 def _draft_run_exists(company_id, day):
@@ -413,27 +419,31 @@ def overtime_list(request):
     if bail:
         return bail
     year, month = read_month(request.GET)
-    show = request.GET.get("show", "waiting")
+    show = request.GET.get("show", "all")
     if show not in dict(OVERTIME_TABS):
-        show = "waiting"
+        show = "all"
     page = overtime.overtime_month(actor=request.user, company_id=company_id, year=year, month=month)
-    rows = page["rows"] if show == "all" else [row for row in page["rows"] if row.state == show]
+    counts = {
+        key: len([row for row in page["rows"] if row.state in states])
+        for key, states in OVERTIME_FILTERS.items()
+    }
+    counts["all"] = len(page["rows"])
+    rows = page["rows"] if show == "all" else [
+        row for row in page["rows"] if row.state in OVERTIME_FILTERS[show]
+    ]
     return render(request, "payroll/overtime_list.html", {
         **month_context(year, month),
         **page,
         "shown": rows,
         "show": show,
-        "tabs": [
-            (key, label, len(page["rows"]) if key == "all" else page["counts"].get(key, 0))
-            for key, label in OVERTIME_TABS
-        ],
+        "tabs": [(key, label, counts[key]) for key, label in OVERTIME_TABS],
         "summary": overtime_summary(page["rules"]),
         "can_manage": page["membership"].role in STRUCTURE_ROLES,
         "company_tz": page["membership"].company.timezone or "UTC",
     })
 
 
-def _overtime_list_url(day, show="waiting"):
+def _overtime_list_url(day, show="all"):
     return f"{reverse('payroll:overtime_list')}?month={day.month}&year={day.year}&show={show}"
 
 
@@ -491,14 +501,20 @@ def overtime_undo(request, pk):
     if bail:
         return bail
     try:
-        overtime.undo_overtime_decision(actor=request.user, company_id=company_id, record_id=pk)
+        state = overtime.undo_overtime_decision(
+            actor=request.user, company_id=company_id, record_id=pk
+        )
     except ValidationError as exc:
         messages.error(request, " ".join(exc.messages))
         return redirect("payroll:overtime_decide", pk)
     with use_company(company_id):
         day = AttendanceRecord.objects.filter(pk=pk).values_list("work_date", flat=True).first()
     day = day or timezone.localdate()
-    message = "Decision undone; the overtime is waiting again."
+    message = (
+        "Decision undone; the overtime is waiting for a decision again."
+        if state == overtime.WAITING
+        else "Decision undone; the overtime is approved automatically again."
+    )
     if _draft_run_exists(company_id, day):
         message += f" Generate {day:%B} salary again to include the change."
     messages.success(request, message)

@@ -25,7 +25,9 @@
                 Overtime
             </h1>
             <p class="page__sub">
-                Time after a shift's end, and work on a day off. Nothing is paid until it is approved here.
+                Time after a shift's end, and work on a day off. Scanned out: approved
+                automatically. Never scanned out: waits for you to set when they left.
+                You can change any day: pay fewer minutes, or reject it.
             </p>
         </div>
         <div class="page__actions">
@@ -174,7 +176,11 @@
                                 <td>
                                     {% if row.state == "waiting" %}
                                         <span class="badge badge--warning">
-                                            Waiting
+                                            Waiting for you
+                                        </span>
+                                    {% elif row.state == "automatic" %}
+                                        <span class="badge badge--success">
+                                            Approved automatically
                                         </span>
                                     {% elif row.state == "approved" %}
                                         <span class="badge badge--success">
@@ -199,9 +205,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if row.state == "approved" %}
-                                        {{ row.decision.approved_minutes|hm }}
-                                        {% if row.paid_minutes != row.decision.approved_minutes %}
+                                    {% if row.approved_minutes %}
+                                        {{ row.approved_minutes|hm }}
+                                        {% if row.paid_minutes != row.approved_minutes %}
                                             <div class="t-faint">
                                                 Pays {{ row.paid_minutes|hm }}
                                             </div>
@@ -237,7 +243,7 @@
             <div class="empty">
                 <div class="empty__title">
                     {% if show == "waiting" %}
-                        Nothing waiting in {{ month_name }} {{ year }}
+                        Nothing waiting for you in {{ month_name }} {{ year }}
                     {% else %}
                         No overtime to show
                     {% endif %}

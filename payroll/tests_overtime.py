@@ -108,25 +108,35 @@ class OvertimeBase(LiveTestCase):
 
 
 class DecidingTests(OvertimeBase):
-    def test_staying_late_waits_for_a_decision(self):
+    def test_staying_late_and_scanning_out_is_approved_automatically(self):
+        # Ajay, 2026-09-14: scanned out means the time is known; nobody approves it.
         record = self.work(MONDAY, (9, 0), (20, 0))
-        self.assertEqual(record.calculated_overtime_minutes, 120)
+        self.assertEqual(
+            (record.calculated_overtime_minutes, record.approved_overtime_minutes), (120, 120)
+        )
         page = overtime.overtime_month(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
         [row] = page["rows"]
-        self.assertEqual((row.state, row.claim.minutes), ("waiting", 120))
+        self.assertEqual((row.state, row.approved_minutes, row.paid_minutes), ("automatic", 120, 120))
         self.assertEqual(overtime.undecided_count(self.company.pk, MONDAY.replace(day=1),
-                                                  datetime.date(2026, 8, 31)), 1)
+                                                  datetime.date(2026, 8, 31)), 0)
+
+    def test_a_day_still_running_approves_nothing_yet(self):
+        self.punch(MONDAY, 9)
+        self.punch(MONDAY, 20)
+        recalculate(self.company.pk, start=MONDAY, end=MONDAY,
+                    now=datetime.datetime(2026, 8, 10, 21, tzinfo=DHAKA))
+        self.assertEqual(self.record(MONDAY).approved_overtime_minutes, 0)
 
     def test_overtime_too_short_to_pay_does_not_wait(self):
         change_salary_rules(actor=self.admin, company_id=self.company.pk, values={
             "effective_from": datetime.date(2026, 8, 1), "minimum_overtime_minutes": 60,
         })
         self.work(MONDAY, (9, 0), (18, 40))              # 40 min: under the minimum
-        self.work(datetime.date(2026, 8, 11), (9, 0), (19, 30))  # 90 min: waits
+        self.work(datetime.date(2026, 8, 11), (9, 0), (19, 30))  # 90 min: paid
         page = overtime.overtime_month(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
-        self.assertEqual(sorted(row.state for row in page["rows"]), ["too_short", "waiting"])
+        self.assertEqual(sorted(row.state for row in page["rows"]), ["automatic", "too_short"])
         self.assertEqual(overtime.undecided_count(self.company.pk, datetime.date(2026, 8, 1),
-                                                  datetime.date(2026, 8, 31)), 1)
+                                                  datetime.date(2026, 8, 31)), 0)
 
     def test_approving_fewer_minutes_survives_recalculation(self):
         record = self.work(MONDAY, (9, 0), (20, 0))
@@ -144,14 +154,17 @@ class DecidingTests(OvertimeBase):
             self.decide(record, minutes=121)
         self.assertIn("minutes", caught.exception.error_dict)
 
-    def test_rejecting_pays_nothing_and_undo_puts_it_back(self):
+    def test_rejecting_pays_nothing_and_undo_goes_back_to_automatic(self):
         record = self.work(MONDAY, (9, 0), (20, 0))
-        self.decide(record, minutes=120)
         self.decide(record, approve=False)
         self.assertEqual(self.record(MONDAY).approved_overtime_minutes, 0)
         with use_company(self.company):
             self.assertEqual(OvertimeDecision.objects.get().status, "rejected")
-        overtime.undo_overtime_decision(actor=self.admin, company_id=self.company.pk, record_id=record.pk)
+        state = overtime.undo_overtime_decision(
+            actor=self.admin, company_id=self.company.pk, record_id=record.pk
+        )
+        self.assertEqual(state, "automatic")
+        self.assertEqual(self.record(MONDAY).approved_overtime_minutes, 120)
         with use_company(self.company):
             self.assertFalse(OvertimeDecision.objects.exists())
 
@@ -222,8 +235,10 @@ class DayOffTests(OvertimeBase):
         with use_company(self.company):
             claim = overtime.claim_for(record)
         self.assertEqual((claim.day_off, claim.minutes), (True, 240))
-        self.decide(record, minutes=240)
-        self.assertEqual(self.record(FRIDAY).approved_overtime_minutes, 240)
+        # Scanned in and out: approved automatically, like any overtime.
+        self.assertEqual(record.approved_overtime_minutes, 240)
+        self.decide(record, minutes=180)
+        self.assertEqual(self.record(FRIDAY).approved_overtime_minutes, 180)
 
 
 class SalaryTests(OvertimeBase):
@@ -237,6 +252,24 @@ class SalaryTests(OvertimeBase):
         # 30,000 / 30 = 1,000 a day; a 9-hour shift -> 111.11 an hour; 1.5 h x2.
         self.assertEqual(lines["OVERTIME"].amount, Decimal("333.33"))
         self.assertEqual(payslip.calculation_snapshot["overtime"][0]["paid_minutes"], 90)
+
+    def test_salary_pays_automatic_overtime_without_anyone_approving(self):
+        self.work(MONDAY, (9, 0), (20, 0))
+        run = generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        with use_company(self.company):
+            line = run.records.get(employee=self.employee).lines.get(code="OVERTIME")
+        # 2 h x 111.11 x 2.
+        self.assertEqual(line.amount, Decimal("444.44"))
+
+    def test_an_open_session_pays_nothing_until_decided(self):
+        self.work(MONDAY, (9, 0), (18, 0), (19, 0))
+        run = generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        with use_company(self.company):
+            self.assertFalse(
+                run.records.get(employee=self.employee).lines.filter(code="OVERTIME").exists()
+            )
+        self.assertEqual(overtime.undecided_count(self.company.pk, datetime.date(2026, 8, 1),
+                                                  datetime.date(2026, 8, 31)), 1)
 
     def test_a_finalised_month_is_closed(self):
         record = self.work(MONDAY, (9, 0), (20, 0))
@@ -295,13 +328,16 @@ class ScreenTests(OvertimeBase):
         page = self.client.get(reverse("payroll:overtime_list"), {"month": 8, "year": 2026})
         self.assertContains(page, "Rahim")
         self.assertContains(page, "2h 0m")
+        self.assertContains(page, "Approved automatically")
+        day_page = self.client.get(reverse("payroll:overtime_decide", args=[record.pk]))
+        self.assertContains(day_page, "Nobody needs to approve it")
 
         generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
         response = self.client.post(
             reverse("payroll:overtime_decide", args=[record.pk]),
             {"decision": "approve", "minutes": "60", "note": ""},
         )
-        self.assertRedirects(response, reverse("payroll:overtime_list") + "?month=8&year=2026&show=waiting")
+        self.assertRedirects(response, reverse("payroll:overtime_list") + "?month=8&year=2026&show=all")
         salary = self.client.get(reverse("payroll:payroll_home"), {"month": 8, "year": 2026})
         self.assertContains(salary, "after this")
 

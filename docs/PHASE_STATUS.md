@@ -816,26 +816,37 @@ merge).**
 **A9 — overtime (done 2026-09-14, branch `feature/a9-overtime`, worktree
 `D:\\attendance_device_a5`). Migration `payroll/0005_overtime`.**
 
-- **Where:** sidebar → **Overtime** (also Salary → **Overtime (N waiting)**).
-  A month's list: date, employee, shift end, what attendance counted, the
-  decision and the approved minutes; Show = Waiting / Approved / Rejected /
-  All. **Decide** opens the day: shift, check-in/out, when overtime starts,
-  every scan with its device, and **Approve** / **Reject** with an optional
-  note. A decided day has **Change** and **Undo the decision**.
+- **Approved automatically when scanned out (Ajay, 2026-09-14: "Automatic").**
+  Overtime that ends in a real scan (stayed late and scanned out; worked a
+  day off and scanned out) is approved by itself and salary pays it. Only a
+  day nobody scanned out of **waits for you**: came back after the shift and
+  never scanned out, or a check-out set by rule. Admin/HR can still change
+  any day — approve fewer minutes or reject — and undo that (back to
+  automatic, or waiting). The rule is `payroll.overtime.approved_minutes`,
+  which attendance calls each time it writes a day.
+- **Where:** sidebar → **Overtime** (also Salary → **Overtime**, "(N
+  waiting)" when a day waits). A month's list: date, employee, shift end,
+  what attendance counted, the state (Approved automatically / Waiting for
+  you / Approved / Rejected / Too short to pay) and the minutes approved and
+  paid; Show filters by state. **Decide** (waiting) or **Change** opens the
+  day: shift, check-in/out, when overtime starts, every scan with its device,
+  and **Approve** / **Reject** with an optional note. A decided day has
+  **Undo the decision**.
 - **What counts** (attendance, N1b): time after the shift's end, delayed by
   the shift's "overtime after" minutes. **Came back after the shift and never
   scanned out:** the approver types the time they left (time picker; a time
   earlier than the return is the next morning) and the minutes follow from
   it — the day's review flag clears. **Work on a holiday or weekly off:**
-  every minute in the office counts, paid at the day-off rate. Otherwise the
-  approver approves all of it or fewer minutes, never more than was counted.
+  every minute in the office counts, paid at the day-off rate. Changing a
+  day approves all of it or fewer minutes, never more than was counted.
 - **Who:** owner, company administrator or **HR** ("the admin or HR"),
   within their branches. A month whose salary is finalised is closed.
 - **Kept through recalculation:** decisions live in `OvertimeDecision`
   (payroll app, one per employee-day). Attendance rewrites its days live, so
   `attendance.services.recalculate` reads the decisions back and puts the
-  approved minutes on `AttendanceRecord.approved_overtime_minutes` (and marks
-  an approved open session reviewed) — the only change in the attendance app.
+  approved minutes (a decision's, or the automatic ones) on
+  `AttendanceRecord.approved_overtime_minutes`, and marks an approved open
+  session reviewed — the only change in the attendance app.
   A scan arriving after a decision shows "The day changed after the decision".
 - **Pay** (`payroll/services.py`): each day's approved minutes, after the
   minimum and rounding, × the hourly rate × the multiplier. Hourly rate:
@@ -845,9 +856,10 @@ merge).**
   hourly rate)" and "Work on holidays / weekly offs (…)"; the per-day working
   is kept in the payslip's calculation snapshot.
 - **Salary settings → Overtime:** "Overtime pays (× the hourly rate)",
-  default **2**; "Work on a day off pays", default **2**; "Ignore overtime
-  shorter than (minutes)", default 0; "Round overtime down to" exact / 15 /
-  30 / 60 minutes. Dated like every other salary rule. The migration gives
+  default **2**; "Work on a day off pays", default **2**; "Don't pay
+  overtime shorter than (minutes)", default 0; "Pay overtime in blocks of"
+  every minute / 15 / 30 / 60 minutes (leftover minutes after the last full
+  block are not paid). Dated like every other salary rule. The migration gives
   already-saved rules these defaults (the columns were placeholders nothing
   read: no overtime pay, 1×).
 - **Too short to pay (fix after Ajay's review, 2026-09-14):** a day whose
@@ -861,8 +873,9 @@ merge).**
 - **Salary page notices:** days still waiting ("will not be paid until
   approved") and decisions made after the draft was generated ("Generate
   again to include it"). Approving does not regenerate salary by itself.
-- 26 tests (`payroll/tests_overtime.py`); two salary settings tests post the
-  new fields. **No new .env variables.**
+- 30 tests (`payroll/tests_overtime.py`); two salary settings tests post the
+  new fields; two end-to-end salary tests now include the demo month's
+  automatic overtime. **No new .env variables.**
 
 #### Keeping the two sides apart
 

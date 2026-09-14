@@ -566,9 +566,15 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         )
         values["is_open"] = not is_closed
 
-    if overtime is not None and paired is not None:
-        values["approved_overtime_minutes"] = overtime
-        if paired.open_overtime:
+    if paired is not None:
+        # Overtime's approval rule lives with overtime (payroll, plan step A9):
+        # a decision if there is one, otherwise automatic when scanned out.
+        from payroll.overtime import approved_minutes
+
+        values["approved_overtime_minutes"] = approved_minutes(
+            paired, day_off=info.kind in (HOLIDAY, WEEKLY_OFF), decided=overtime,
+        )
+        if overtime is not None and paired.open_overtime:
             # The open overtime session was what needed a look, and it has had one.
             values["review_status"] = ReviewStatus.REVIEWED
 

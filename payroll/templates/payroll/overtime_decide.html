@@ -223,6 +223,21 @@
             </div>
         {% endif %}
 
+        {% if not decision %}
+            {% if state == "automatic" %}
+                <div class="alert alert--success">
+                    <strong>Approved automatically.</strong> They scanned out, so the time is known:
+                    {{ claim.minutes|hm }} counted{% if paid_minutes != claim.minutes %}, {{ paid_minutes|hm }} paid under this month's rules{% endif %}.
+                    Nobody needs to approve it. Change it below only to pay fewer minutes or to reject it.
+                </div>
+            {% elif state == "too_short" %}
+                <div class="alert alert--info">
+                    <strong>Too short to pay.</strong> {{ claim.minutes|hm }} counted, which this month's
+                    overtime rules do not pay. Nothing to decide.
+                </div>
+            {% endif %}
+        {% endif %}
+
         {% if locked %}
             <div class="alert alert--info">
                 This month's salary is finalised, so this overtime can no longer change.
@@ -231,11 +246,12 @@
             <div class="alert alert--info">
                 This day has not finished yet. Its overtime can be decided once it has.
             </div>
+        {% elif state == "too_short" %}
         {% else %}
             <div class="card">
                 <div class="card__head">
                     <h2>
-                        {% if decision %}Change the decision{% else %}Decide{% endif %}
+                        {% if decision %}Change the decision{% elif state == "waiting" %}Decide{% else %}Change it{% endif %}
                     </h2>
                 </div>
                 <form method="post" novalidate>
