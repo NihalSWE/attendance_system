@@ -160,6 +160,9 @@ class _LoginRoleFields(forms.Form):
         super().__init__(*args, **kwargs)
         if branches is not None:
             self.fields["login_branches"].queryset = branches
+        # Only a branch manager has branches (dependent.js).
+        self.fields["login_branches"].widget.attrs["data-show-when"] = "login_role:manager"
+        self.fields["login_branches"].help_text = ""
 
     def role_values(self):
         return {

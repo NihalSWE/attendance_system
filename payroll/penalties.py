@@ -461,9 +461,9 @@ def describe_deduction(rule, currency=""):
     elif method == Rule.DeductionMethod.FULL_DAY:
         text = "A full day's pay"
     else:
-        text = f"{value} {currency}".strip()
+        text = f"{Decimal(rule.deduction_value):,.2f} {currency}".strip()
     if rule.maximum_deduction:
-        text += f", at most {format(Decimal(rule.maximum_deduction).normalize(), 'f')} {currency} a month".rstrip()
+        text += f", at most {Decimal(rule.maximum_deduction):,.2f} {currency} a month".rstrip()
     if rule.exclusive_group:
         text += f" (group {rule.exclusive_group})"
     return text

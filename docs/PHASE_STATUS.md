@@ -538,6 +538,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N4 | **Which devices count + Re-check punches** | Attendance settings: all company devices / branch devices / department devices / assigned devices. "Re-check punches" for a date range re-runs authorisation on excluded punches, audited, then attendance is recalculated | 4 | (new) |
 | N5 | **Attendance corrections** | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b) | — | Attendance corrections; attendance review status and the Incomplete decision |
 | N6 | **Employee detail page + terminate screen** | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
+| N7 | **Payslip redesign** (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/ | — | (new) |
 
 #### Ajay's session
 
@@ -779,6 +780,24 @@ worktree `D:\\attendance_device_a5`).** No migration: `User`,
   rules, the gate on seven company pages and a form post, a real sign-in,
   changing their own password, a disabled login, and the Login card.
   **No new .env variables.**
+
+**UI fixes from Ajay's review (2026-09-14, branch
+`feature/ui-dependent-fields-amounts`).**
+
+- **Dependent fields** (`dependent.js`, see UI conventions): Salary settings
+  shows "Fixed number of days" only for "a fixed number of days". Penalty
+  rule: "By" and "Minutes" only for minute measures (not an absent day);
+  "How many days" only for "every so many days" / "in a row"; "Amount" only
+  for fixed minutes, part of a day or a fixed amount, relabelled "Minutes to
+  deduct" / "Days of pay" / "Amount to deduct". Login: "Branches they manage"
+  only for a branch manager.
+- `[hidden]` now always hides (base.css); it was only in platform.css, so a
+  hidden `.field` stayed on screen on pages without it.
+- **Thousands separators** on every amount shown: the `money` template
+  filter (`base_template/templatetags/money.py`) on the salary page, the
+  Employees list, the Edit employee salary badge and the penalty rule
+  descriptions. The payslip gets it in Nihal's N7 redesign.
+- 6 tests (`base_template/tests_display.py`).
 
 #### Keeping the two sides apart
 

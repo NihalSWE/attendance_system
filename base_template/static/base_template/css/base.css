@@ -5,6 +5,12 @@ Type scale is WARM_PAPER_INK_SPEC.md §3, verbatim.
 *, *::before, *::after {
     box-sizing: border-box;
 }
+/* The hidden attribute always hides, even on components that set their own
+   display (.field is display:flex). Without this, a field hidden by script
+   stays on screen. It used to live only in platform.css. */
+[hidden] {
+    display: none !important;
+}
 html {
     -webkit-text-size-adjust: 100%;
 }

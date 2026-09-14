@@ -1,5 +1,6 @@
 {% extends "base_template/base.html" %}
 {% load static %}
+{% load money %}
 {% block title %}
     Edit {{ employee.full_name }} · Attendance
 {% endblock %}
@@ -235,7 +236,7 @@
                 </h2>
                 {% if compensation %}
                     <span class="badge badge--neutral">
-                        {{ compensation.get_pay_basis_display }}, {{ compensation.base_rate }} {{ compensation.currency }} since {{ salary_since|date:"d M Y" }}
+                        {{ compensation.get_pay_basis_display }}, {{ compensation.base_rate|money }} {{ compensation.currency }} since {{ salary_since|date:"d M Y" }}
                     </span>
                 {% endif %}
             </div>

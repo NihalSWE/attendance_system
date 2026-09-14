@@ -1,4 +1,5 @@
 {% extends "base_template/base.html" %}
+{% load money %}
 {% block title %}
     Salary · Attendance
 {% endblock %}
@@ -139,7 +140,7 @@
                                     {{ record.calculation_snapshot.pay_basis|title }}
                                 </td>
                                 <td class="numeric">
-                                    {{ record.calculation_snapshot.base_rate }}
+                                    {{ record.calculation_snapshot.base_rate|money }}
                                 </td>
                                 <td class="numeric">
                                     {{ record.calculation_snapshot.counts.present|default:0 }}
@@ -154,14 +155,14 @@
                                     {{ record.calculation_snapshot.counts.unpaid_leave|default:0 }}
                                 </td>
                                 <td class="numeric">
-                                    {{ record.gross_earnings }}
+                                    {{ record.gross_earnings|money }}
                                 </td>
                                 <td class="numeric">
-                                    {{ record.total_deductions }}
+                                    {{ record.total_deductions|money }}
                                 </td>
                                 <td class="numeric">
                                     <strong>
-                                        {{ record.net_pay }}
+                                        {{ record.net_pay|money }}
                                     </strong>
                                 </td>
                                 <td>
@@ -178,13 +179,13 @@
                                 {{ run.totals_snapshot.employees }} employee(s), {{ records.0.currency }}
                             </th>
                             <th class="numeric">
-                                {{ run.totals_snapshot.gross }}
+                                {{ run.totals_snapshot.gross|money }}
                             </th>
                             <th class="numeric">
-                                {{ run.totals_snapshot.deductions }}
+                                {{ run.totals_snapshot.deductions|money }}
                             </th>
                             <th class="numeric">
-                                {{ run.totals_snapshot.net }}
+                                {{ run.totals_snapshot.net|money }}
                             </th>
                             <th>
                             </th>

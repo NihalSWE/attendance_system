@@ -83,6 +83,10 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
 
     def __init__(self, *args, years=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # Only for "a fixed number of days" (dependent.js shows/hides it).
+        self.fields["monthly_divisor"].widget.attrs["data-show-when"] = (
+            f"monthly_proration_method:{Version.MonthlyProration.FIXED_DIVISOR}"
+        )
         today = timezone.localdate()
         years = set(years or range(today.year - 1, today.year + 3))
         # A change already saved further ahead must still be selectable.
@@ -182,6 +186,22 @@ class PenaltyRuleForm(StyledFormMixin, forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         _set_month_choices(self, "applies_month", "applies_year")
+        # Fields that only apply to some choices (dependent.js shows/hides them;
+        # the service ignores a value that does not apply).
+        minutes = ",".join(m for m in penalties.AVAILABLE_METRICS if m != AttendancePenaltyRule.Metric.ABSENCE)
+        for name in ("operator", "threshold_minutes"):
+            self.fields[name].widget.attrs["data-show-when"] = f"metric:{minutes}"
+        self.fields["required_occurrences"].widget.attrs["data-show-when"] = (
+            "occurrence_mode:within_period,consecutive_workdays"
+        )
+        amount = self.fields["deduction_value"].widget.attrs
+        amount["data-show-when"] = "deduction_method:fixed_minutes,day_fraction,fixed_amount"
+        amount["data-label-when"] = (
+            "deduction_method:fixed_minutes=Minutes to deduct"
+            "|day_fraction=Days of pay (0.5 = half a day)"
+            "|fixed_amount=Amount to deduct"
+        )
+        self.fields["deduction_value"].help_text = ""
 
     @classmethod
     def initial_from(cls, rule, today):
