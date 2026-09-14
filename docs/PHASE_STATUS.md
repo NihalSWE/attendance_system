@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after Claude finished A15):** A15 is finished on Ajay's side (see "A15 finished" at the end). Ajay decides who converts the N9 lists (main attendance list and device lists): Claude now, or Nihal when he resumes. Then A10 full leave. Ajay's in-browser acceptance of the table pages is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A10a):** A10 is split into A10a–A10e (see "A10a" at the end). A10a is done; next is **A10b half-day, hourly and partial-pay leave**. N9 (main attendance list and device lists) stays with Nihal — Ajay confirmed Ajay's session does not build Nihal's steps. Ajay's in-browser acceptance of A15 and A10a is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2285,3 +2285,41 @@ Ajay disputed the A15 completion above. Claude reviewed it read-only, then finis
   app without his password, so the rendered pager was not screenshot-verified
   in this step.
 - No migrations, dependencies or `.env.example` changes.
+- Ajay then pointed at `/attendance/`; it is N9 (Nihal's). Ajay decided: **Nihal's
+  parts are not built by Ajay's session** — it stays as is for N9.
+
+## A10 split into sub-steps — 2026-09-15 (Claude, Ajay's session)
+
+| Step | Scope | Needs migration |
+|---|---|---|
+| **A10a — done** | HR records/cancels leave; default leave types; employee code in the Record leave picker; employee withdraws a pending request | No |
+| A10b | Half-day and hourly leave; partial pay percentage (fields already exist on segments and leave days); attendance and salary read the leave minutes/percentage | Probably not; attendance reads LeaveDay (Nihal's app) — coordinate before changing its reading |
+| A10c | Leave policies and versions, entitlements, balance ledger (reserve on request, debit on approval, release on reject/withdraw/cancel), balances on My leave and the Record leave form | Yes |
+| A10d | Attachments on requests and recorded leave, private storage | Yes |
+| A10e | Amend a pending request; employee asks to cancel approved leave (approver decides); partial cancellation | Maybe |
+
+## A10a done — 2026-09-15 (Claude, Ajay's session)
+
+- **HR records leave.** `leaves.services.require_leave_recorder` (owner, company
+  admin, HR) guards Record leave and Cancel. Nobody records or cancels their own
+  leave. Recording or cancelling inside a finalised salary month is refused
+  (record previously did not check). Leave types remain owner/admin only.
+  Sidebar: Leave → Record leave now also shows for HR (`record=True` item flag).
+- **Default leave types.** Casual (CL), Sick (SL), Earned (EL), Maternity (ML), no
+  allowances yet (A10c). Created by the platform's Create company screen
+  (`onboard_company(default_leave_types=True)`); seeds/tests are unchanged.
+  Existing companies: Leave → Leave types → **Add default leave types** adds only
+  missing codes, audited. The button hides once all four exist.
+- **Employee code in the picker.** Record leave lists "E1 · Rahim"; Select2 finds
+  people by code or name.
+- **Withdraw.** My leave → Action → **Withdraw** on a pending request → confirm.
+  Status becomes Withdrawn, its segment is cancelled, the dates can be requested
+  again; approved requests cannot be withdrawn. Audited as `leave.withdrawn`.
+- No migrations, dependencies or `.env.example` changes.
+- Tests: **full suite 936 tests OK** (`manage.py test --parallel 4 --keepdb`).
+  New/updated tests cover HR record/cancel and the own-leave refusal, default
+  types (new company, add-missing, admin only), the code in the picker, the HR
+  sidebar link, and withdraw (own pending only; approved refused; dates reusable).
+  Not browser-verified by Claude (the local app needs Ajay's sign-in).
+- Loose end noticed, not changed: Record/Cancel leave do not recalculate
+  attendance immediately (approval does); days update when attendance refreshes.

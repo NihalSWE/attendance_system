@@ -11,6 +11,16 @@
 > Remaining order: N9 decision → A10 → A11 → A12 → A13; A16 in the office.
 > Details: `PHASE_STATUS.md` → "A15 finished" and `SERVER_SIDE_TABLES.md`.
 > §0's "do not implement" applied to the first turn only.
+>
+> **Ajay's rule (2026-09-15):** Ajay's session does not build Nihal's steps
+> (attendance and device lists, N5/N6/N8/N9), even when a gap is pointed out on
+> one of those pages. `/attendance/` stays for N9.
+>
+> **A10a done (2026-09-15):** HR records/cancels leave (never their own, never in
+> a finalised month); default leave types for new companies plus "Add default
+> leave types" on Leave types; employee code in the Record leave picker;
+> employees withdraw pending requests from My leave. Next: A10b half-day, hourly
+> and partial-pay leave. Plan table: `PHASE_STATUS.md` → "A10 split into sub-steps".
 
 ## 0. First instruction: review and report, do not implement
 

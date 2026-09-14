@@ -393,6 +393,12 @@ LeaveDay records, records an audit event and refreshes attendance atomically.
 Regenerate draft salary to pick up the approved leave. Partial pay, half-day/
 hourly leave, balances, attachments and withdrawal/amendment remain A10.
 
+A10a (2026-09-15): HR records and cancels leave (not their own, not in a
+finalised month); default Casual/Sick/Earned/Maternity leave types; employee
+code in the Record leave picker; employees withdraw pending requests. Still
+A10b–A10e: half-day/hourly/partial pay, policies and balances, attachments,
+amendment and cancellation of approved leave.
+
 
 ## A15 list navigation — 2026-09-15
 
