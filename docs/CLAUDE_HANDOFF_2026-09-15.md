@@ -44,7 +44,10 @@
 > employed calendar days ÷ days in month; days outside employment ignored.
 > **Part 4 done:** a monthly salary changed inside the month pays each rate for
 > its calendar days (one Basic line per rate); daily/hourly and pay-basis changes
-> still use the month-end rate. Next: part 5 (print-layout payslip PDF).
+> still use the month-end rate. **Part 5 done:** payslip "Print or save as PDF"
+> with print rules hiding navigation, messages and the company-only card.
+> **A11 is complete. Next: A12 access (simple plan to Ajay first).** Open loose
+> end: Record/Cancel leave do not recalculate attendance immediately.
 
 ## 0. First instruction: review and report, do not implement
 

@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **parts 1 (Finalise / Undo finalise), 2 (bonus and deduction lines), 3 (joining/leaving mid-month) and 4 (salary change mid-month) are done**. Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. Next is **A11 part 5: payslip PDF (print layout)**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. Next is **A12 access and permissions** — Claude gives Ajay a short simple plan first. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2387,7 +2387,7 @@ leave to stay simple.
 | **2 — done** | Add bonus / Add deduction lines on a draft payslip (amount + reason); kept on regenerate; removable only while draft | Yes: `payroll.0006` |
 | **3 — done** | Joining/leaving mid-month: monthly salary for the employed days, calendar days of the month | No |
 | **4 — done** | Salary change mid-month: days before at the old rate, the rest at the new rate (one Basic line per rate); monthly salaries only | No |
-| 5 | Payslip PDF as a print layout (browser Save as PDF); no new package | No |
+| **5 — done** | Payslip PDF as a print layout (browser Save as PDF); no new package | No |
 
 Agreed choices: undo allowed for owner/admin with a reason; proration by calendar
 days; print-layout PDF; one part per turn. Not in A11: email, allowance formulas,
@@ -2477,4 +2477,34 @@ tax, bank files (payments/advances/dues are A13).
   raise plus joining on the 10th → 6 and 16 days; no change → one line);
   **full suite 955 tests OK**. Not browser-verified by Claude.
 - No migrations, dependencies or `.env.example` changes.
+
+## A11 part 5 done — printable payslip (PDF) — 2026-09-15 (Claude, Ajay's session)
+
+- Found already present: the payslip page (company and My payslips) had a
+  Print button and `payroll/static/payroll/css/payslip.css` print rules hiding
+  the sidebar, top bar, breadcrumbs and buttons.
+- Completed: the button is now **Print or save as PDF** (tooltip: choose Save as
+  PDF as the printer). Print rules also hide message banners, the footer and the
+  company-only **Bonus and deductions** card (`no-print`), and set 12 mm page
+  margins. The printed/PDF payslip keeps the header, earnings and deductions,
+  net pay and attendance summary. No new package.
+- Tests: payslip page test checks the button and the non-printed card;
+  `payroll` + employee panel tests **117 OK** (small template/CSS change, so
+  the affected apps only, per the testing agreement; full suite last ran at
+  955 OK for part 4). Printing itself is not browser-verified by Claude.
+- **A11 is complete.**
+- No migrations, dependencies or `.env.example` changes.
+
+## Attendance-related items check — 2026-09-15 (asked by Ajay)
+
+Nothing in the A steps is left partial because of Nihal's attendance code:
+- N9 (`/attendance/` Daily list and device lists on server-side tables) is not
+  started by Ajay's session, per Ajay's instruction; the discarded attempt left
+  nothing behind.
+- Half-day leave changed attendance with Ajay's permission and is complete.
+- Hourly and partly paid leave were dropped by Ajay's "keep leave simple"
+  decision, not left partial.
+- Loose end (leave side, not Nihal's code): Record leave and Cancel leave do not
+  recalculate attendance immediately (approving a request does); days update on
+  the next attendance refresh or salary generation. Small fix; awaits Ajay.
 - No migrations, dependencies or `.env.example` changes.
