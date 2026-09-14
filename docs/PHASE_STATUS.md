@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A10c):** Leave is kept **simple** (Ajay) and A10 is complete (A10a, A10b half-day, A10c yearly allowance). **Ajay must run `python manage.py migrate`** for A10c (`leaves.0002`). Next is **A11 salary completeness**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **part 1, Finalise month / Undo finalise, is done**. Next is **A11 part 2: bonus and deduction lines** (small migration). Ajay must have run `python manage.py migrate` for `leaves.0002`. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2378,4 +2378,40 @@ leave to stay simple.
   and a further request refused; approval page and My leave text. Not
   browser-verified by Claude (the local app needs Ajay's sign-in).
 - No `.env.example` changes or dependencies.
+
+## A11 plan — salary, kept simple — 2026-09-15 (agreed by Ajay)
+
+| Part | Scope | Migration |
+|---|---|---|
+| **1 — done** | Finalise month (owner/admin) and Undo finalise with a reason | No |
+| 2 | Add bonus / Add deduction lines on a draft payslip (amount + reason); kept on regenerate; removable only while draft | Small |
+| 3 | Joining/leaving mid-month: monthly salary for the employed days, calendar days of the month | No |
+| 4 | Salary change mid-month: days before at the old rate, the rest at the new rate (two Basic lines) | No |
+| 5 | Payslip PDF as a print layout (browser Save as PDF); no new package | No |
+
+Agreed choices: undo allowed for owner/admin with a reason; proration by calendar
+days; print-layout PDF; one part per turn. Not in A11: email, allowance formulas,
+tax, bank files (payments/advances/dues are A13).
+
+## A11 part 1 done — finalise salary — 2026-09-15 (Claude, Ajay's session)
+
+- **Salary → Salary by month**, with a generated draft: **Finalise {month}** →
+  confirmation → **Finalise**. Owner/company admin only (HR refused).
+  - Status becomes Finalised (badge with date); Generate/Regenerate disappears.
+  - Employees see the payslips under My payslips (already finalised-only).
+  - The month's attendance and overtime stop changing (`locked_ranges`).
+  - Proposed penalties become Posted. Audited as `payroll.finalised`.
+  - Refused when overtime was decided after the draft was generated
+    ("Generate the month again, then finalise"), so a stale draft is not locked.
+- **Undo finalise** (same page, when finalised) → reason required → month becomes
+  a draft; posted penalties return to proposed; audited as `payroll.reopened`
+  with the reason. Generate again after fixing, then finalise.
+- Code: `payroll.services.finalise_payroll` / `reopen_payroll`; views
+  `payroll_finalise` / `payroll_reopen` (`/salary/finalise/`, `/salary/finalise/undo/`);
+  template `payroll/run_action.html`; sidebar keeps Salary by month selected.
+- Tests: new `payroll/tests_finalise.py` (no draft refused, HR refused, lock and
+  no regenerate, reason required, undo unlocks and regenerates, stale draft after
+  an overtime decision refused, page buttons and confirmation pages); **full
+  suite 946 tests OK**. Not browser-verified by Claude (needs Ajay's sign-in).
+- No migrations, dependencies or `.env.example` changes.
 - No migrations, dependencies or `.env.example` changes.

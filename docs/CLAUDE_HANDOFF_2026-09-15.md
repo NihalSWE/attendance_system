@@ -32,7 +32,13 @@
 > **A10c done (2026-09-15):** optional Days per year on each leave type; approved
 > leave in the calendar year counts (half day 0.5); over-allowance refused;
 > left shown on My leave and the approval page. Migration `leaves.0002` — Ajay
-> runs migrate. **A10 (simple leave) is complete. Next: A11 salary.**
+> runs migrate. **A10 (simple leave) is complete.**
+>
+> **A11 plan (agreed, simple):** 1 finalise/undo finalise → 2 bonus and deduction
+> lines → 3 joining/leaving proration by calendar days → 4 mid-month salary change
+> → 5 print-layout payslip PDF. **Part 1 done (2026-09-15):** Salary by month →
+> Finalise (owner/admin; refused if overtime changed after generating) and Undo
+> finalise with a reason. Next: part 2.
 
 ## 0. First instruction: review and report, do not implement
 
