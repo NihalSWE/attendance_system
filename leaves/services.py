@@ -300,30 +300,8 @@ def record_leave(*, actor, company_id, values):
             requested_pay_type=pay_type,
             requested_pay_percentage=percentage,
         )
-        for on, assignment, covered_start, covered_end, shift in days:
-            create_validated(
-                LeaveDay,
-                company=membership.company,
-                request_segment=segment,
-                employee=employee,
-                employee_assignment=assignment,
-                work_date=on,
-                covered_start_at=covered_start,
-                covered_end_at=covered_end,
-                scheduled_minutes_snapshot=shift.scheduled_minutes,
-                leave_minutes=shift.scheduled_minutes,
-                balance_units=Decimal("1"),
-                approved_pay_type=pay_type,
-                approved_pay_percentage=percentage,
-                shift_snapshot={
-                    "shift_id": shift.pk,
-                    "code": shift.code,
-                    "start": shift.start_time.isoformat(),
-                    "end": shift.end_time.isoformat(),
-                    "spans_next_day": shift.spans_next_day,
-                },
-                status=LeaveDay.Status.APPROVED,
-            )
+        write_approved_days(company=membership.company, employee=employee,
+                            segment=segment, days=days, pay_type=pay_type)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="leave.recorded", obj=request,
@@ -379,3 +357,32 @@ def cancel_leave(*, actor, company_id, request_id, reason=""):
             before=before, after={"status": request.status, "reason": reason},
         )
     return request
+
+
+def write_approved_days(*, company, employee, segment, days, pay_type):
+    """Shared day expansion for recorded leave and approved employee requests."""
+    percentage = Decimal("100") if pay_type == PayType.PAID else Decimal("0")
+    for on, assignment, covered_start, covered_end, shift in days:
+        create_validated(
+            LeaveDay,
+            company=company,
+            request_segment=segment,
+            employee=employee,
+            employee_assignment=assignment,
+            work_date=on,
+            covered_start_at=covered_start,
+            covered_end_at=covered_end,
+            scheduled_minutes_snapshot=shift.scheduled_minutes,
+            leave_minutes=shift.scheduled_minutes,
+            balance_units=Decimal("1"),
+            approved_pay_type=pay_type,
+            approved_pay_percentage=percentage,
+            shift_snapshot={
+                "shift_id": shift.pk,
+                "code": shift.code,
+                "start": shift.start_time.isoformat(),
+                "end": shift.end_time.isoformat(),
+                "spans_next_day": shift.spans_next_day,
+            },
+            status=LeaveDay.Status.APPROVED,
+        )

@@ -24,6 +24,7 @@ COMPANY_MENUS = (
     ("leave", "Leave", (
         item("Leave list", "leaves:leave_list", "leaves:leave_cancel"),
         item("Record leave", "leaves:leave_record", manage=True),
+        item("Approval inbox", "me:leave_inbox", "me:leave_decide", manage=True),
         item("Leave types", "leaves:leave_type_list", "leaves:leave_type_create",
              "leaves:leave_type_edit", "leaves:leave_type_status"),
     )),

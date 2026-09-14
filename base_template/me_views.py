@@ -199,6 +199,8 @@ def my_leave(request):
         days = sum(
             1 for segment in segments for day in segment.days.all() if day.status in LEAVE_TAKEN
         )
+        if leave.status in ('pending', 'rejected'):
+            days = sum(segment.requested_units for segment in segments)
         rows.append({
             "request": leave,
             "segments": segments,

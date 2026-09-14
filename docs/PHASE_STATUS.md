@@ -514,7 +514,7 @@ All five fit the current design:
 - **Leave requests are approved by the branch manager.** A branch manager is a
   login with role `manager` and `allowed_branches` set to their branch(es) —
   no new table. The approver is the active manager of the employee's branch.
-  *Default (proposed by Ajay's session, change if he says):* if the branch has
+  *Confirmed by Ajay on 2026-09-15:* if the branch has
   no manager, or the person asking is that manager, the request goes to the
   company admin, so no request is stuck.
 - **"User list" in point 5 is taken to mean the Employees page.** The same
@@ -554,7 +554,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A5 | **Shifts** — ✅ done 2026-09-14 (rotating shifts deferred by Ajay: "initially I want to keep it simple") | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
 | A6 | **Logins** — ✅ done 2026-09-14 | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
 | A7 | **Employee panel** — ✅ done 2026-09-14 | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
-| A8 | **Leave requests, branch-manager approval** | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 1 | Full leave: employee requests, approval step; salary and attendance pages for managers (branch manager part) |
+| A8 | **Done 2026-09-15 — leave requests, branch-manager approval**, branch `feature/a8-leave-requests` | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 1 | Full leave: employee requests, approval step; salary and attendance pages for managers (branch manager part) |
 | A10 | **Full leave** | Half-day and hourly leave, partial pay, policies and versions, balances / entitlements / ledger, attachments, withdraw, amend; default leave types at onboarding; HR records leave; employee code in the picker | — | Full leave (rest); leave fields not built; HR role recording leave; default leave types; employee code in picker |
 | A11 | **Salary completeness** | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
 | A12 | **Access** | Department heads, permissions, HR and payroll-manager pages | — | Department heads, permissions; salary and attendance pages for HR |
@@ -995,7 +995,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, home):** Home setup, A5c, September salary simulation, the paid-break correction and A14 sidebar menus are complete (see progress below). Nihal is paused; generate his prompt only when Ajay explicitly asks. Continue with **A8 leave requests and branch-manager approval**, then A15; do not repeat A5c or A14. [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md) remains the office context; A16 (the SenseFace 3A, Push protocol 3.x experiment) is tested in the office with the device. The salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-15, home):** Home setup, A5c, September salary simulation, the paid-break correction A14 sidebar menus and A8 leave requests are complete (see progress below). Nihal is paused; generate his prompt only when Ajay explicitly asks. Continue with **A15 shared server-side tables**; do not repeat A5c, A14 or A8. [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md) remains the office context; A16 (the SenseFace 3A, Push protocol 3.x experiment) is tested in the office with the device. The salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2117,7 +2117,7 @@ or handle the database password.
 
 **Coordination override:** Nihal is not making changes now. Generate his prompt
 only when Ajay explicitly asks. His remaining plan is N5, N6, N8, then N9 after
-A15; these are not active assignments. Ajay's next build (updated 2026-09-15) is **A8 → A15 → A10 → A11 → A12 → A13**; A14 is complete. A16 awaits the physical SenseFace 3A in the office.
+A15; these are not active assignments. Ajay's next build (updated 2026-09-15) is **A15 → A10 → A11 → A12 → A13**; A14 and A8 are complete. A16 awaits the physical SenseFace 3A in the office.
 
 
 ## 2026-09-15 — A14: sidebar menus and submenus (Ajay's session)
@@ -2167,7 +2167,57 @@ for an unrestricted company administrator:
   Normal reload picks up the versioned CSS/JS. No local salary or configuration
   changes in this step. QA logs/previews live in ignored `.qa/`.
 
-**Next:** A8 leave requests and branch-manager approval, then A15 shared
-server-side tables, A10 full leave, A11 salary completeness, A12 access, A13
+**Next (updated after A8):** A15 shared server-side tables, A10 full leave, A11 salary completeness, A12 access, A13
 payments. A16 still needs the physical SenseFace 3A in the office. Nihal remains
 paused; N5/N6/N8/N9 are planned only. Generate his prompt only when Ajay asks.
+
+
+## 2026-09-15 — A8: employee leave requests and branch-manager approval
+
+Built on `feature/a8-leave-requests`. A7's employee panel now includes the A8
+workflow. **Confirmed by Ajay:** the company administrator handles requests
+when there is no active assigned branch manager, and managers' own requests.
+Nobody may decide their own request. Routing uses current active memberships;
+an unassigned manager manages no branches, and inactive managers do not block
+the administrator fallback.
+
+- **Employee:** My leave → Request leave (`/me/leave/request/`). Choose a leave
+  type, full-day date range, requested paid/unpaid status and a reason. The
+  service gets the employee from the login; posted employee IDs grant no access.
+  Submission creates Pending request/segment rows and **no LeaveDay rows**.
+- **Manager:** My branches → Approval inbox (`/me/leave-inbox/`). Review requests
+  for assigned branches, approve as paid/unpaid or reject with a required note.
+  **Administrator fallback:** Leave → Approval inbox opens the same scoped page.
+  Employees see the status, decision note and approved pay in My leave.
+- Approval locks the request and employee, rechecks dates, placements, existing
+  leave and finalised salary ranges, then uses the same day-expansion helper as
+  admin-recorded leave. Days, decision and audit are atomic. Repeated decisions
+  are refused; failure rolls everything back. Approval refreshes affected
+  attendance. Draft salary is updated using the existing Generate salary flow.
+- Weekly offs/holidays are skipped; empty working-day ranges and overlapping
+  pending/approved leave are refused. Requests spanning branches must be split.
+  Approved pay may differ from requested pay without rewriting the request.
+- **Manager:** My branches → Branch attendance (`/me/branch-attendance/`). Date
+  and employee-name filters, scoped attendance and today's in-office badges.
+  Badges update on page refresh. No payroll amounts or company-wide employee
+  pages are opened to managers; the existing `/me/` gate remains in force.
+- Inbox and branch attendance use database pagination (25 rows), filters and
+  result counts. Shared DataTables paging/search/sorting/page-size integration
+  remains **A15**, the agreed next step; include both new lists in that work.
+- Half-day/hourly leave, partial pay, balances, attachments, amendments and
+  withdrawals remain A10. Existing admin Record leave and Cancel links remain.
+- **166 focused tests pass** (`leaves base_template payroll`, parallel 4,
+  keepdb; 47.121 seconds), including 11 new workflow tests. Coverage includes
+  employee ownership, branch/company refusal, manager/admin routing, replay,
+  audit rollback, posted-range guards, calendar skipping and unpaid salary
+  arithmetic. Brief synthetic browser checks verified request/decision forms,
+  pay-field hiding on rejection, inbox and branch list at 375/1440 px, with no
+  horizontal page overflow. Test fixtures were rolled back; local salaries and
+  company configuration were not changed.
+- **No migration, no new variable, `.env.example` unchanged.** Reused the
+  existing LeaveRequest/Segment/Day tables and statuses. No database password
+  was read or handled. Focused verification replaces a repeated full-suite run
+  for this step following Ajay's usage-cost feedback.
+
+**Next:** A15 → A10 → A11 → A12 → A13. A16 still needs the office SenseFace 3A.
+Nihal remains paused; N5, N6, N8 and N9 are planned only. No prompt until asked.

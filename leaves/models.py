@@ -5,8 +5,9 @@ administrator records leave that is already approved, full days only, paid or
 unpaid. The field names follow MODEL_FIELD_DICTIONARY.md §39 and §46-48 so the
 full workflow — employee requests, approval steps, half-day and hourly leave,
 policies, balances, attachments, amendment — extends these tables rather than
-replacing them. What is deliberately absent today is listed in
-docs/PHASE_STATUS.md under "Salary fast-track".
+replacing them. A8 (2026-09-15) adds employee requests and branch-manager
+decisions using these existing tables. Remaining full-leave features are
+listed under A10 in docs/PHASE_STATUS.md.
 
 Whether a leave is paid is decided per request, not fixed on the leave type:
 the design has a manager decide paid, unpaid or partial pay when approving.
@@ -63,7 +64,7 @@ class LeaveType(TenantOwned, ActorTracked):
 
 
 class LeaveRequest(TenantOwned, ActorTracked):
-    """One leave application. Today it is recorded already approved."""
+    """One leave application: pending a decision, or recorded already approved."""
 
     class ActionType(models.TextChoices):
         NEW = "new", "New"

@@ -379,3 +379,16 @@ The authoritative order is now in IMPLEMENTATION_ROADMAP.md:
 Ordinary mistakes and posted corrections cannot wait for P7. P4/P5 already need immutable posting, approved correction/reversal and accurate outstanding balances; only richer automation is deferred.
 
 Automatic bank transfers, tax filing connectors, general-ledger accounting, expense claim workflows, and subscription invoicing remain separate integration scopes. They are not implied by recording a payment, adjustment, or remittance.
+
+
+## Implemented A8 workflow — 2026-09-15
+
+Employees submit full-day paid/unpaid requests from My leave. Pending requests
+have no payable leave days. Active assigned branch managers decide requests;
+company administrators handle branches with no manager and managers' requests
+(confirmed by Ajay). Self-approval is forbidden. Reviewers may approve paid or
+unpaid, or reject with a note visible to the employee. Approval revalidates the
+working calendar, conflicts and finalised salary ranges, creates existing
+LeaveDay records, records an audit event and refreshes attendance atomically.
+Regenerate draft salary to pick up the approved leave. Partial pay, half-day/
+hourly leave, balances, attachments and withdrawal/amendment remain A10.

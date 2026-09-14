@@ -47,4 +47,5 @@ def shell(request):
         "self_service": self_service,
         "company_menus": menus,
         "sidebar_unrestricted_admin": unrestricted_admin,
+        "sidebar_branch_manager": bool(membership and membership.role == 'manager'),
     }

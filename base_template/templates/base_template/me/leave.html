@@ -12,10 +12,13 @@
                 {{ employee.full_name }} · {{ year }}
             </p>
         </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'me:leave_request' %}">Request leave</a>
+        </div>
     </div>
 
     <div class="alert alert--info">
-        Your leave is recorded by the company for now. Asking for leave from this page is being added next.
+        Requests wait for approval. Pending and rejected requests do not count as leave taken.
     </div>
 
     <div class="card">
@@ -128,7 +131,11 @@
                                     {{ row.days }}
                                 </td>
                                 <td>
-                                    {% for segment in row.segments %}{{ segment.get_requested_pay_type_display }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {% if row.request.status == 'approved' and row.request.decision_snapshot.pay_type %}
+                                        {{ row.request.decision_snapshot.pay_type|title }}
+                                    {% else %}
+                                        {% for segment in row.segments %}{{ segment.get_requested_pay_type_display }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% with status=row.request.status %}
@@ -139,6 +146,9 @@
                                 </td>
                                 <td>
                                     {{ row.request.reason|default:"—"|truncatechars:60 }}
+                                    {% if row.request.decision_snapshot.reason %}
+                                        <p class="field__help">Decision: {{ row.request.decision_snapshot.reason }}</p>
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}
