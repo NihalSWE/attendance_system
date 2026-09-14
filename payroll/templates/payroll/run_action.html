@@ -1,0 +1,65 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{{ back }}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ title }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }} · {{ month_name }} {{ year }}
+            </h1>
+        </div>
+    </div>
+    <div class="form-page">
+        <div class="card">
+            <div class="card__body stack">
+                {% if run %}
+                    <p>
+                        {{ run.totals_snapshot.employees|default:0 }} employee(s) ·
+                        Status: {{ run.get_status_display }}
+                    </p>
+                {% endif %}
+                {% if reopen %}
+                    <p class="field__help">
+                        The month becomes a draft again: its attendance and overtime can
+                        change, and employees stop seeing these payslips. Generate it
+                        again after fixing the mistake, then finalise.
+                    </p>
+                {% else %}
+                    <p class="field__help">
+                        Finalising locks the month's attendance and overtime, and employees
+                        see their payslips under My payslips. Check the salaries first.
+                    </p>
+                {% endif %}
+                <form method="post" class="stack" novalidate>
+                    {% csrf_token %}
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <input type="hidden" name="year" value="{{ year }}">
+                    {% if form %}
+                        {{ form.non_field_errors }}
+                        {% for field in form %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    {% endif %}
+                    <div class="row">
+                        <button class="btn {% if reopen %}btn--danger{% else %}btn--primary{% endif %}" type="submit">
+                            {{ submit_label }}
+                        </button>
+                        <a class="btn btn--ghost" href="{{ back }}">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}

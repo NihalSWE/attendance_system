@@ -30,7 +30,8 @@ COMPANY_MENUS = (
              "leaves:leave_type_edit", "leaves:leave_type_status"),
     )),
     ("salary", "Salary", (
-        item("Salary by month", "payroll:payroll_home", "payroll:payslip", "payroll:penalty_waive"),
+        item("Salary by month", "payroll:payroll_home", "payroll:payslip", "payroll:penalty_waive",
+             "payroll:payroll_finalise", "payroll:payroll_reopen"),
         item("Salary settings", "payroll:salary_settings", manage=True),
         item("Penalty rules", "payroll:salary_settings", "payroll:penalty_rule_create",
              "payroll:penalty_rule_change", "payroll:penalty_rule_stop",

@@ -577,3 +577,76 @@ def generate_payroll(*, actor, company_id, year, month):
             action="payroll.generated", obj=run, after=run.totals_snapshot,
         )
     return run
+
+
+def _run_for_month(company_id, year, month, status):
+    first, last = month_bounds(year, month)
+    return PayrollRun.objects.select_for_update(of=("self",)).select_related("payroll_period").filter(
+        payroll_period__start_date=first, payroll_period__end_date=last, status=status,
+    ).first()
+
+
+@transaction.atomic
+def finalise_payroll(*, actor, company_id, year, month):
+    """Finalise a month's draft salary (A11, kept simple).
+
+    Employees then see their payslips, and the month's attendance and overtime
+    stop changing (``attendance.services.locked_ranges`` reads the status).
+    """
+    from payroll import overtime
+
+    membership = require_structure_manager(actor, company_id)
+    first, last = month_bounds(year, month)
+    with use_company(company_id):
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.DRAFT)
+        if run is None:
+            raise ValidationError("Generate this month's salary before finalising it.")
+        if overtime.decided_after(company_id, first, last, run.calculation_finished_at):
+            raise ValidationError(
+                "Overtime was decided after this salary was generated. "
+                "Generate the month again, then finalise."
+            )
+        run.status = PayrollRun.Status.POSTED
+        run.posted_by = actor
+        run.posted_at = timezone.now()
+        run.updated_by = actor
+        run.save()
+        PenaltyAssessment.objects.filter(
+            payroll_period=run.payroll_period, status=PenaltyAssessment.Status.PROPOSED
+        ).update(status=PenaltyAssessment.Status.POSTED)
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.finalised", obj=run,
+            before={"status": PayrollRun.Status.DRAFT},
+            after={"status": PayrollRun.Status.POSTED, "net": run.totals_snapshot.get("net")},
+        )
+    return run
+
+
+@transaction.atomic
+def reopen_payroll(*, actor, company_id, year, month, reason):
+    """Undo a finalise, for a mistake: the month becomes a draft again. Audited with the reason."""
+    membership = require_structure_manager(actor, company_id)
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError({"reason": "Give a reason for undoing the finalise."})
+    with use_company(company_id):
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.POSTED)
+        if run is None:
+            raise ValidationError("This month's salary is not finalised.")
+        before = {"status": run.status, "posted_by": run.posted_by_id,
+                  "posted_at": run.posted_at.isoformat() if run.posted_at else None}
+        run.status = PayrollRun.Status.DRAFT
+        run.posted_by = None
+        run.posted_at = None
+        run.updated_by = actor
+        run.save()
+        PenaltyAssessment.objects.filter(
+            payroll_period=run.payroll_period, status=PenaltyAssessment.Status.POSTED
+        ).update(status=PenaltyAssessment.Status.PROPOSED)
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.reopened", obj=run, before=before,
+            after={"status": PayrollRun.Status.DRAFT, "reason": reason},
+        )
+    return run

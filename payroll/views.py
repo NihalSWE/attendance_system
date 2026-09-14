@@ -4,6 +4,7 @@ company's salary settings."""
 import datetime
 from decimal import Decimal
 
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -19,7 +20,7 @@ from django.views.decorators.http import require_http_methods
 from attendance.models import AttendanceRecord
 from attendance.services import month_bounds
 from attendance.views import month_context, read_month
-from common.forms import apply_service_errors
+from common.forms import StyledFormMixin, apply_service_errors
 from common.tenant import use_company
 from organization.services import (
     STRUCTURE_ROLES,
@@ -44,7 +45,13 @@ from payroll.models import (
     PayrollRun,
     PenaltyAssessment,
 )
-from payroll.services import generate_payroll, summarise, waive_penalty
+from payroll.services import (
+    finalise_payroll,
+    generate_payroll,
+    reopen_payroll,
+    summarise,
+    waive_penalty,
+)
 
 
 @login_required
@@ -115,6 +122,66 @@ def payroll_generate(request):
             message += f" Skipped, no salary set: {', '.join(skipped)}."
         messages.success(request, message)
     return redirect(f"{reverse('payroll:payroll_home')}?month={month}&year={year}")
+
+
+class ReopenForm(StyledFormMixin, forms.Form):
+    reason = forms.CharField(
+        label="Why is it being undone?", widget=forms.Textarea,
+        help_text="Recorded in the audit trail. Employees stop seeing these payslips until it is finalised again.",
+    )
+
+
+def _run_action(request, *, reopen):
+    """Confirmation page for Finalise month / Undo finalise (owner or company admin)."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    require_structure_manager(request.user, company_id)
+    year, month = read_month(request.POST if request.method == "POST" else request.GET)
+    back = f"{reverse('payroll:payroll_home')}?month={month}&year={year}"
+    form = ReopenForm(request.POST or None) if reopen else None
+    if request.method == "POST" and (form is None or form.is_valid()):
+        try:
+            if reopen:
+                reopen_payroll(actor=request.user, company_id=company_id, year=year, month=month,
+                               reason=form.cleaned_data["reason"])
+            else:
+                finalise_payroll(actor=request.user, company_id=company_id, year=year, month=month)
+        except ValidationError as exc:
+            if form is None:
+                messages.error(request, " ".join(exc.messages))
+                return redirect(back)
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, (
+                "Salary is a draft again. Fix what was wrong, generate it, then finalise."
+                if reopen else
+                "Salary finalised. Employees can now see their payslips; the month's attendance and overtime are locked."
+            ))
+            return redirect(back)
+    first, last = month_bounds(year, month)
+    with use_company(company_id):
+        run = PayrollRun.objects.filter(
+            payroll_period__start_date=first, payroll_period__end_date=last
+        ).order_by("-pk").first()
+    return render(request, "payroll/run_action.html", {
+        **month_context(year, month),
+        "run": run, "form": form, "reopen": reopen, "back": back,
+        "title": "Undo finalise" if reopen else "Finalise salary",
+        "submit_label": "Undo finalise" if reopen else "Finalise",
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def payroll_finalise(request):
+    return _run_action(request, reopen=False)
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def payroll_reopen(request):
+    return _run_action(request, reopen=True)
 
 
 @login_required
