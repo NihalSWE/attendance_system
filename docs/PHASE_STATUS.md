@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. Next is **A12 access and permissions** — Claude gives Ajay a short simple plan first. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). Next is **A12 part 2: Organisation → Access page**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2507,4 +2507,62 @@ Nothing in the A steps is left partial because of Nihal's attendance code:
 - Loose end (leave side, not Nihal's code): Record leave and Cancel leave do not
   recalculate attendance immediately (approving a request does); days update on
   the next attendance refresh or salary generation. Small fix; awaits Ajay.
+
+## A12 plan — branch access, handed out dynamically — 2026-09-15 (agreed by Ajay)
+
+Ajay's decisions: access is dynamic; a branch manager automatically controls
+everything for their branches and can give any access they hold to HR,
+department heads or anyone else in those branches; branch managers can create
+logins; salary settings are company-wide and untouchable by branches;
+attendance and device pages are left to Nihal. Claude's choices, accepted with
+"go": each branch prepares and reviews its own salary, the owner/admin finalises
+the whole company once; the existing HR role keeps company-wide leave recording
+and overtime.
+
+| Part | Scope | Migration |
+|---|---|---|
+| **1 — done** | Permission list and one access check (`access_control/branch_access.py`), grant/remove services | No |
+| 2 | Organisation → Access page: people in your branches, tick permissions per branch, create logins | No (expected) |
+| 3 | Branch managers and grantees open company pages; sidebar and dashboard by permission and branch | No |
+| 4 | Employees area branch-scoped (list, create/edit, logins) | No |
+| 5 | Leave and overtime branch-scoped (list, record/cancel, approval inbox, overtime) | No |
+| 6 | Salary branch-scoped: Salary by month and payslips by branch; generate only your branches inside the month; bonus/deductions; finalise and settings stay owner/admin | Possibly |
+| 7 | Written note for Nihal: apply `can`/`scope_queryset` to attendance and device pages | No |
+
+Permissions: employees view / create and edit / logins; leave view / record and
+cancel / approve; overtime view / decide; salary view / prepare (generate, bonus
+and deductions); access give to others. Not grantable: company-wide settings,
+branches/departments, finalising a month.
+
+## A12 part 1 done — permission list and access check — 2026-09-15 (Claude, Ajay's session)
+
+- `access_control/branch_access.py` answers "may this person do X, and in which
+  branches?": `branches_for`, `can`, `require`, `scope_queryset`.
+  - Owner / company admin → every branch. Branch manager → every branch
+    permission in their own branches (their login's branch list), automatically.
+  - Existing HR role → company-wide `leave.view`, `leave.record`,
+    `overtime.view`, `overtime.decide` (unchanged behaviour).
+  - Everyone else → only live grants: `EmployeePermissionOverride` rows with a
+    branch list (dated; removed grants are ended, not deleted).
+- `grant_access` / `revoke_access`: the granter needs `access.grant` and the
+  permission itself in every chosen branch; nobody changes their own access;
+  granting adds branches to an existing grant; removing keeps the other
+  branches. Audited as `access.granted` / `access.revoked`.
+- It does not use the older `has_permission` (department/designation rules and
+  company feature switches), which no page uses and would deny everything for
+  companies without feature rows.
+- **No migration.** A first attempt seeded the permissions and features in a
+  data migration; it broke 19 older `access_control` tests that create the
+  `leave`/`payroll` features themselves (duplicate feature code). It was removed
+  before pushing. Checking needs no rows; granting creates the permission row
+  (and its feature, if missing) on first use and keeps any existing row with the
+  same code.
+- No page changes yet; nothing visible until parts 2–6.
+- Tests: new `access_control/tests_branch_access.py` (permission row created on
+  first grant; owner everywhere, manager own branches, HR company-wide leave,
+  employee nothing, branch filter, unknown code; manager grants/removes in own
+  branch only with audit rows; a grantee hands on only what they hold, never to
+  themselves, HR cannot grant; grants add branches, removal keeps the rest).
+  **Full suite 960 tests OK** on fresh databases after removing the migration.
+- No `.env.example` changes or dependencies.
 - No migrations, dependencies or `.env.example` changes.

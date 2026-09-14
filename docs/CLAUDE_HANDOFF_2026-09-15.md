@@ -46,8 +46,16 @@
 > its calendar days (one Basic line per rate); daily/hourly and pay-basis changes
 > still use the month-end rate. **Part 5 done:** payslip "Print or save as PDF"
 > with print rules hiding navigation, messages and the company-only card.
-> **A11 is complete. Next: A12 access (simple plan to Ajay first).** Open loose
-> end: Record/Cancel leave do not recalculate attendance immediately.
+> **A11 is complete.** Open loose end: Record/Cancel leave do not recalculate
+> attendance immediately.
+>
+> **A12 (agreed): dynamic branch access.** Branch managers automatically control
+> their branches and hand out access (including logins) to anyone in them;
+> salary settings company-wide; each branch prepares salary, owner/admin
+> finalises; attendance/device pages left to Nihal. **Part 1 done:**
+> `access_control/branch_access.py` (`can`, `branches_for`, `scope_queryset`,
+> `grant_access`, `revoke_access`); no migration (permission rows are created
+> on first grant). Next: part 2, Organisation → Access page.
 
 ## 0. First instruction: review and report, do not implement
 
