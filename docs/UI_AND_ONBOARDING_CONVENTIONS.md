@@ -191,3 +191,8 @@ Company and employee lists use `base_template.tables.paginate/render` and
 queryset before slicing, never only against the browser’s current page. Action
 and live/composite columns without a faithful database ordering are explicitly
 not sortable. See `SERVER_SIDE_TABLES.md` for integration and the N9 boundary.
+
+A page with several lists gives each a name (`paginate(..., name="shifts")`,
+`data-server-table="shifts"`) so they page, search and sort independently; the
+Shifts page is the example. A list of 25 rows or fewer shows one page "1" at the
+default size — that is the pager working, not missing (2026-09-15).

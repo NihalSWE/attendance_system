@@ -1,5 +1,8 @@
 # Attendance implementation status
 
+> **2026-09-15 transfer update:** Read [CLAUDE_HANDOFF_2026-09-15.md](CLAUDE_HANDOFF_2026-09-15.md) first. Ajay disputes the A15 completion report; main attendance/device table conversions remain unfinished under N9. Claude must review and report done/pending/disputed work before implementing anything. Older completion and next-step claims below are historical, not acceptance.
+
+
 ## Platform corrections — 2026-09-07
 
 User feedback corrected the onboarding contract. Read [UI_AND_ONBOARDING_CONVENTIONS.md](UI_AND_ONBOARDING_CONVENTIONS.md) and [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md). Implemented one current master administrator per company with backend/database uniqueness, account editing, generated string codes/slugs, Bangladesh defaults, scoped Django admin forms, explicit `/platform/companies/`, centered responsive pages and readable four-space templates. No new environment variables. Existing data preserved; only the two shared demo memberships were ended with explicit user approval and audit entries. Full suite: 131 tests passed; the strengthened settings-admin valid-POST check also passed in the seven-test focused rerun. Browser creation/admin/feature flows and screenshots checked at 1440/768/375px. P1 remains in progress: next is company organization/scheduling writes and scoped authorization, then employee lifecycle pages. This supersedes earlier existing-account/role-picker examples.
@@ -995,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, home):** Build **A10 full leave**, then A11 salary completeness/finalisation, A12 access and A13 payments. Home setup, A5c, September simulation, the paid-break correction, A14 sidebar menus, A8 leave requests and **A15 server-side tables are complete**; do not restart them. The employee panel already exists. A16 needs the office SenseFace 3A. Nihal remains paused: his planned work is N5 corrections, N6 employee history/termination, N8 device monitoring, N9 conversion of his lists using the now-available A15 helper. Generate his prompt only when Ajay explicitly asks. See HANDOFF_2026-09-14.md for office context and SERVER_SIDE_TABLES.md for the shared table contract.
+- **Next action (2026-09-15, after Claude finished A15):** A15 is finished on Ajay's side (see "A15 finished" at the end). Ajay decides who converts the N9 lists (main attendance list and device lists): Claude now, or Nihal when he resumes. Then A10 full leave. Ajay's in-browser acceptance of the table pages is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2251,3 +2254,34 @@ Nihal remains paused; N5, N6, N8 and N9 are planned only. No prompt until asked.
 
 **Next:** A10 → A11 → A12 → A13. A16 stays office-only. Nihal is paused;
 N5/N6/N8/N9 are planned work, not active assignments.
+
+## A15 finished — 2026-09-15 (Claude, Ajay's session)
+
+Ajay disputed the A15 completion above. Claude reviewed it read-only, then finished it.
+
+- **Why the pages looked unchanged:** the 13 converted pages were probed against
+  Ajay's real local data with Django's test client (inside a rolled-back
+  transaction; no password used). Every page returned its table JSON, every
+  sortable column and search worked. Most lists are short (Employees 6, Salary by
+  month 6, Holidays 2, Branches/Departments/Leave types 1, Leave 18); only
+  Overtime (30) has more than one page at 25 rows, so the others show a single
+  page "1". The branch-manager pages could not be probed: no manager login exists.
+- **Named tables:** `paginate(..., name=...)` / `data-server-table="name"` lets
+  one page hold several independent lists (`table=<name>` draws, `<name>_page`
+  fallback). Unnamed tables are unchanged. The fallback pager builds its links
+  in Python so each list keeps the others' parameters.
+- **Converted lists A15 had missed:** Shifts → Shifts, Department shifts and
+  Weekly off days (all on the Shifts page; readiness still checks every active
+  department, not one page); the older company department list (designation
+  count now one SQL annotation); root Departments and Designations (their search
+  and status filters stay; browser-only `data-enhance` removed).
+- **Remaining:** N9 — Attendance → Daily list and the device lists. Owner to be
+  decided by Ajay.
+- **Tests:** `manage.py test base_template scheduling organization --parallel 4
+  --keepdb` → **319 tests OK**. Two new table tests cover the named Shifts-page
+  lists (separate counts, order, search by weekday name, per-list fallback page
+  parameters) and the company/root department lists. Not a full-suite run.
+- **Not yet done:** Ajay's in-browser check. Claude cannot sign in to the local
+  app without his password, so the rendered pager was not screenshot-verified
+  in this step.
+- No migrations, dependencies or `.env.example` changes.
