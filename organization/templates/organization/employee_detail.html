@@ -1,0 +1,422 @@
+{% extends "base_template/base.html" %}
+{% load static tz money %}
+{% block title %}
+    {{ employee.full_name }} · Employees
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+    <link rel="stylesheet" href="{% static 'organization/css/employee_detail.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'employee_list' %}">
+            Employees
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ employee.full_name }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ employee.full_name }}
+            </h1>
+            <p class="page__sub">
+                {% if assignment %}
+                    {{ assignment.employee_code }} · {{ assignment.designation.name }} · {{ assignment.department.name }} · {{ assignment.branch.name }}
+                {% else %}
+                    No current placement
+                {% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if not is_ended %}
+                <a class="btn btn--ghost" href="{% url 'organization:employee_end' employee.pk %}">
+                    End employment
+                </a>
+            {% endif %}
+            <a class="btn btn--primary" href="{% url 'organization:employee_edit' employee.pk %}">
+                Edit
+            </a>
+        </div>
+    </div>
+
+    {% if is_ended %}
+        <div class="alert alert--info">
+            {{ employee.get_employment_status_display }} — last working day {{ employee.leaving_date|date:"j M Y" }}. Their history is kept below.
+        </div>
+    {% endif %}
+
+    <div class="emp-summary">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Now
+                </h2>
+                {% if employee.employment_status == "active" %}
+                    <span class="badge badge--success">
+                        Active
+                    </span>
+                {% elif is_ended %}
+                    <span class="badge badge--neutral">
+                        {{ employee.get_employment_status_display }}
+                    </span>
+                {% else %}
+                    <span class="badge badge--warning">
+                        {{ employee.get_employment_status_display }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body">
+                <dl class="facts">
+                    <dt>
+                        Joined
+                    </dt>
+                    <dd>
+                        {{ employee.joining_date|date:"j M Y"|default:"—" }}
+                    </dd>
+                    <dt>
+                        Salary
+                    </dt>
+                    <dd>
+                        {% if compensation %}
+                            {{ compensation.base_rate|money }} {{ compensation.currency }}, {{ compensation.get_pay_basis_display|lower }}
+                        {% else %}
+                            None set
+                        {% endif %}
+                    </dd>
+                    <dt>
+                        Login
+                    </dt>
+                    <dd>
+                        {% if login %}
+                            {{ employee.user.email }}
+                            {% if login.status == "active" %}
+                                <span class="badge badge--success">
+                                    {{ login.get_role_display }}
+                                </span>
+                            {% else %}
+                                <span class="badge badge--neutral">
+                                    {{ login.get_status_display }}
+                                </span>
+                            {% endif %}
+                        {% else %}
+                            No login
+                        {% endif %}
+                    </dd>
+                    <dt>
+                        Contact
+                    </dt>
+                    <dd>
+                        {{ employee.work_email|default:employee.phone|default:"—" }}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Attendance this month
+                </h2>
+                <a class="btn btn--ghost btn--sm emp-head-action" href="{{ calendar_url }}">
+                    Calendar view
+                </a>
+            </div>
+            <div class="card__body">
+                <dl class="emp-counts">
+                    {% for label, count in month_rows %}
+                        <div class="emp-counts__item{% if label == 'Absent' and count %} emp-counts__item--alert{% endif %}">
+                            <dt>
+                                {{ label }}
+                            </dt>
+                            <dd>
+                                {{ count }}
+                            </dd>
+                        </div>
+                    {% endfor %}
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Placement history
+            </h2>
+            <span class="badge badge--neutral">
+                {{ placements|length }}
+            </span>
+        </div>
+        {% if placements %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                From
+                            </th>
+                            <th>
+                                To
+                            </th>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Designation
+                            </th>
+                            <th>
+                                Department
+                            </th>
+                            <th>
+                                Branch
+                            </th>
+                            <th class="emp-note">
+                                Note
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in placements %}
+                            <tr>
+                                <td class="emp-date">
+                                    {{ p.first_day|date:"j M Y" }}
+                                </td>
+                                <td class="emp-date">
+                                    {% if p.is_current %}
+                                        <span class="badge badge--success">
+                                            Now
+                                        </span>
+                                    {% else %}
+                                        {{ p.last_day|date:"j M Y" }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ p.row.employee_code }}
+                                </td>
+                                <td>
+                                    {{ p.row.designation.name }}
+                                </td>
+                                <td>
+                                    {{ p.row.department.name }}
+                                </td>
+                                <td>
+                                    {{ p.row.branch.name }}
+                                </td>
+                                <td class="t-muted emp-note">
+                                    {{ p.row.change_reason|default:"—" }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    Never placed
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Salary history
+            </h2>
+            <span class="badge badge--neutral">
+                {{ salaries|length }}
+            </span>
+        </div>
+        {% if salaries %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                From
+                            </th>
+                            <th>
+                                To
+                            </th>
+                            <th>
+                                Pay basis
+                            </th>
+                            <th class="numeric">
+                                Rate
+                            </th>
+                            <th class="emp-note">
+                                Note
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in salaries %}
+                            <tr>
+                                <td class="emp-date">
+                                    {{ s.first_day|date:"j M Y" }}
+                                </td>
+                                <td class="emp-date">
+                                    {% if s.is_current %}
+                                        <span class="badge badge--success">
+                                            Now
+                                        </span>
+                                    {% else %}
+                                        {{ s.last_day|date:"j M Y" }}
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ s.row.get_pay_basis_display }}
+                                </td>
+                                <td class="numeric">
+                                    {{ s.row.base_rate|money }}
+                                    <span class="t-faint">
+                                        {{ s.row.currency }}
+                                    </span>
+                                </td>
+                                <td class="t-muted emp-note">
+                                    {{ s.row.reason|default:"—" }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No salary yet
+                </div>
+                <div class="empty__text">
+                    Set one on Edit employee.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="emp-pair">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Devices
+                </h2>
+                <span class="badge badge--neutral">
+                    {{ devices|length }}
+                </span>
+            </div>
+            {% if devices %}
+                <ul class="emp-list">
+                    {% for d in devices %}
+                        <li class="emp-list__item">
+                            <div class="emp-list__main">
+                                <strong>
+                                    {{ d.row.device.name }}
+                                </strong>
+                                <span class="t-muted">
+                                    user {{ d.row.device_user_id }} · {{ d.row.device.branch.name }}
+                                </span>
+                                <span class="t-faint emp-list__dates">
+                                    {{ d.first_day|date:"j M Y" }} – {% if d.is_current %}now{% else %}{{ d.last_day|date:"j M Y" }}{% endif %}
+                                </span>
+                            </div>
+                            <div class="emp-list__badges">
+                                {% if not d.is_current %}
+                                    <span class="badge badge--neutral">
+                                        Ended
+                                    </span>
+                                {% elif not d.row.attendance_enabled %}
+                                    <span class="badge badge--danger">
+                                        Attendance off
+                                    </span>
+                                {% elif d.row.assigned_device_authorized %}
+                                    <span class="badge badge--success">
+                                        Assigned
+                                    </span>
+                                {% else %}
+                                    <span class="badge badge--warning">
+                                        Recognised only
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="empty">
+                    <div class="empty__title">
+                        Not enrolled on any device
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Shift of their own
+                </h2>
+            </div>
+            {% if own_shifts %}
+                <ul class="emp-list">
+                    {% for s in own_shifts %}
+                        <li class="emp-list__item">
+                            <div class="emp-list__main">
+                                <strong>
+                                    {{ s.shift.name }}
+                                </strong>
+                                <span class="t-faint emp-list__dates">
+                                    {{ s.first_day|date:"j M Y" }} – {% if s.last_day %}{{ s.last_day|date:"j M Y" }}{% else %}until changed{% endif %}
+                                </span>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="empty">
+                    <div class="empty__title">
+                        Works their department's shift
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Recent changes
+            </h2>
+        </div>
+        {% if events %}
+            <ul class="emp-list">
+                {% for event in events %}
+                    <li class="emp-list__item">
+                        <div class="emp-list__main">
+                            <strong>
+                                {{ event.label }}
+                            </strong>
+                            <span class="t-faint emp-list__dates">
+                                {{ event.occurred_at|timezone:company_tz|date:"j M Y, H:i" }} · {{ event.actor_user.email|default:"system" }}
+                            </span>
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    Nothing recorded yet
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

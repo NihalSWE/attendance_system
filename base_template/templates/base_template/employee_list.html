@@ -118,7 +118,9 @@
                                     {{ r.a.employee_code|default:"—" }}
                                 </td>
                                 <td>
-                                    {{ r.e.full_name }}
+                                    <a href="{% url 'organization:employee_detail' r.e.pk %}">
+                                        {{ r.e.full_name }}
+                                    </a>
                                 </td>
                                 <td>
                                     {{ r.a.branch.name|default:"—" }}
