@@ -27,8 +27,12 @@
 >
 > **A10b done (2026-09-15):** half-day leave (one date, 0.5 day). Came in → full
 > day, no late mark, unpaid half deducted; no scans → only the leave half.
-> Attendance and the Now badge were changed for this. Next: A10c yearly allowance
-> per leave type, then A11.
+> Attendance and the Now badge were changed for this.
+>
+> **A10c done (2026-09-15):** optional Days per year on each leave type; approved
+> leave in the calendar year counts (half day 0.5); over-allowance refused;
+> left shown on My leave and the approval page. Migration `leaves.0002` — Ajay
+> runs migrate. **A10 (simple leave) is complete. Next: A11 salary.**
 
 ## 0. First instruction: review and report, do not implement
 

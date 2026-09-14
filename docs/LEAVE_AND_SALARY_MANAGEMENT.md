@@ -399,8 +399,10 @@ code in the Record leave picker; employees withdraw pending requests.
 
 A10b (2026-09-15): half-day leave — one date, 0.5 day, paid or unpaid. Came in
 → full day with no late mark (unpaid half deducted); no scans → only the leave
-half counts. **Leave is kept simple (Ajay):** next only A10c, an optional yearly
-allowance per leave type. Partly paid and hourly leave, attachments, policies,
+half counts. **Leave is kept simple (Ajay):** A10c (2026-09-15) adds an optional
+Days per year per leave type — approved leave in the calendar year counts, a
+half day is 0.5, and leave over the allowance is refused. That completes the
+simple leave scope. Partly paid and hourly leave, attachments, policies,
 accrual ledgers and amendments are not planned for now; the larger design above
 remains reference only.
 

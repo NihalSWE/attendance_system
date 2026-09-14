@@ -827,6 +827,9 @@ Common fields: TenantOwned plus actor tracking.
 
 - `code`, `name` — CharField.
 - `description` — TextField.
+- `days_per_year` — optional DecimalField(5,1), minimum 0.5; blank = no limit.
+  Built 2026-09-15 (A10c, simple): approved leave days of the type in a calendar
+  year count against it; no accrual or carry-forward.
 - `default_balance_unit` — days or minutes.
 - `requires_attachment_by_default` — BooleanField.
 - `color` — optional CharField for calendar display.

@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A10b half-day leave):** Leave is kept **simple** (Ajay). A10a and A10b are done; next is **A10c yearly allowance per leave type**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A10c):** Leave is kept **simple** (Ajay) and A10 is complete (A10a, A10b half-day, A10c yearly allowance). **Ajay must run `python manage.py migrate`** for A10c (`leaves.0002`). Next is **A11 salary completeness**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2294,7 +2294,7 @@ Ajay disputed the A15 completion above. Claude reviewed it read-only, then finis
 |---|---|---|
 | **A10a — done** | HR records/cancels leave; default leave types; employee code in the Record leave picker; employee withdraws a pending request | No |
 | **A10b — done** | Half-day leave: Full day / Half day on Record leave and Request leave; paid or unpaid | No |
-| A10c | Optional **Days per year** on each leave type; used/remaining shown on My leave, Record leave and approval; over-allowance refused. No accrual, carry-forward or ledger | Yes (one field) |
+| **A10c — done** | Optional **Days per year** on each leave type; left shown on My leave and the approval page; over-allowance refused when recording, requesting and approving. No accrual, carry-forward or ledger | Yes: `leaves.0002_leave_type_days_per_year` |
 | — | Cancel approved leave: HR/admin use the existing Cancel. Nothing to build | — |
 
 **Simplified 2026-09-15 (Ajay: "keep leave simple").** Dropped: partly paid
@@ -2354,4 +2354,28 @@ leave to stay simple.
   scans through attendance and salary (paid/unpaid half day, came in / did not);
   leave tests cover one-date rule, 0.5 units, request/approval and My leave text.
   Not browser-verified by Claude (the local app needs Ajay's sign-in).
+
+## A10c done — yearly allowance per leave type — 2026-09-15 (Claude, Ajay's session)
+
+- **Setting:** Leave → Leave types → Add / Edit → **Days per year** (blank = no
+  limit, whole or half days). Leave types list shows the column ("No limit").
+- **Counting:** approved leave days of that type whose date falls in the calendar
+  year (reserved/approved/consumed leave days; a half day is 0.5). Pending
+  requests do not use the allowance. Leave crossing New Year counts per year.
+- **Refusal:** Record leave, Request leave and approval refuse leave that goes
+  over, e.g. "Casual leave: 0 of 1.5 days left in 2026; this leave needs 0.5."
+  Approval rechecks, because other leave may have been approved meanwhile.
+- **Shown:** My leave → **Allowance in {year}** (Days per year, Used, Left) for
+  active types with an allowance; the approval page shows "Casual: 3 of 10 days
+  left in 2026". Record leave shows the remaining days in its refusal message
+  (kept simple: no live balance on the form).
+- **Migration:** `leaves/migrations/0002_leave_type_days_per_year.py` adds the
+  nullable field. **Ajay runs `python manage.py migrate`.** Existing leave types
+  get no limit; no data changes.
+- Tests: `makemigrations --check` → no changes; **full suite 943 tests OK** on
+  fresh test databases (new migration, so no `--keepdb`). New tests: allowance
+  with half days and New Year reset; request allowed while pending, approval
+  and a further request refused; approval page and My leave text. Not
+  browser-verified by Claude (the local app needs Ajay's sign-in).
+- No `.env.example` changes or dependencies.
 - No migrations, dependencies or `.env.example` changes.
