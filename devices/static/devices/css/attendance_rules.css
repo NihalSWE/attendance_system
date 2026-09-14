@@ -1,0 +1,108 @@
+/* ============================================================================
+Which devices count
+The four options are read before they are chosen, so each is a card with its
+explanation rather than a bare radio label. Tokens only.
+========================================================================= */
+
+.scope-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s3);
+    margin: 0;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+}
+.scope-option {
+    padding: var(--s3) var(--s4);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    min-width: 0;
+}
+.scope-option:hover {
+    border-color: var(--field);
+}
+.scope-option--on,
+.scope-option:has(input:checked) {
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
+}
+.scope-option__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.scope-option__text .t-muted {
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+.scope-note {
+    margin: 0;
+    font-size: 12.5px;
+}
+
+/* From, To and Show on one line; the button sits level with the inputs. */
+.recheck-range {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 220px)) auto;
+    gap: var(--s3);
+    align-items: end;
+    border-bottom: 1px solid var(--border);
+}
+.recheck-range .field {
+    margin: 0;
+}
+.recheck-range__action {
+    padding-bottom: 1px;
+}
+.recheck-fix {
+    font-size: 12.5px;
+    line-height: 1.45;
+    min-width: 240px;
+}
+/* On a phone the fix moves under the reason, so the count stays on screen
+   instead of behind a sideways scroll. */
+.recheck-fix-inline {
+    display: none;
+    margin-top: var(--s1);
+    font-size: 12px;
+    line-height: 1.45;
+}
+.recheck-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+}
+.recheck-foot p {
+    margin: 0;
+    font-size: 12.5px;
+    max-width: 70ch;
+}
+.recheck-foot .btn {
+    flex: none;
+}
+
+@media (max-width: 680px) {
+    .recheck-fix {
+        display: none;
+    }
+    .recheck-fix-inline {
+        display: block;
+    }
+    .scope-options {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .recheck-range {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+    .recheck-range__action {
+        grid-column: 1 / -1;
+    }
+    .recheck-foot {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

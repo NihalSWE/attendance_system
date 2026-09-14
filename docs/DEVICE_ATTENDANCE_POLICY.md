@@ -85,6 +85,16 @@ This plan does not add a separate scope-version table. Historical company/branch
 
 Changing a scope or enablement flag must not overwrite earlier punch decisions silently. Re-evaluation must be audited and trigger the relevant attendance calculation revision. If payroll is already finalized, follow the existing correction/off-cycle process.
 
+**Re-check punches — built 2026-09-14 (N4).** Re-evaluation is an explicit administrator action on Devices → Which devices count, for a date range of at most 366 days in company time:
+
+- It re-judges only punches that do not count (every excluding status plus `policy_unresolved`), under the policy switches **as they are at the re-check** — the scope chain, `assigned_device_authorized` and `attendance_enabled`. Identity, the employee's assignment and device-department links are still read at the punch time.
+- A punch that already counts is never re-judged, so a narrower rule cannot remove attendance already credited.
+- Days inside a posted payroll run are skipped entirely.
+- Each punch keeps a `recheck` note (time, actor, previous status) in its `authorization_snapshot`; one `punches.rechecked` AuditLog row holds every punch's before and after status.
+- Attendance for the employee-days of punches that now count is recalculated after the commit.
+
+Without a re-check, stored decisions never change when a setting changes.
+
 ## Duplicate and clock handling
 
 Vendor event identifiers are device-scoped: Device 1's transaction 123 and Device 10's transaction 123 are different events. Same-employee punches close together across different devices may be rapid repeat scans, but proximity alone is not proof of duplication. Preserve both, use configured repeat filtering or review, and do not silently remove valid short intervals. Clock skew can reverse apparent order; retain raw time, clock interpretation, and review uncertainty instead of forcing a plausible sequence.

@@ -15,14 +15,15 @@ from django import forms
 from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
-from common.forms import CompanyDateTimeField, StyledFormMixin
+from common.choices import DeviceAttendanceScope
+from common.forms import CompanyDateTimeField, StyledFormMixin, date_widget
 from devices.models import (
     BiometricDevice,
     DeviceDepartment,
     DeviceEnrollment,
     DeviceModel,
 )
-from devices.services import server_address
+from devices.services import attendance_rules, server_address
 from employees.models import Employee
 from organization.models import Branch, CompanyDepartment
 
@@ -467,4 +468,50 @@ class DeviceDepartmentForm(StyledFormMixin, forms.ModelForm):
                         "mapping before adding an overlapping one.",
                     )
                     break
+        return data
+
+
+class DeviceScopeForm(StyledFormMixin, forms.Form):
+    """Which devices count for attendance, company-wide (plan step N4)."""
+
+    scope = forms.ChoiceField(
+        choices=DeviceAttendanceScope.choices,
+        widget=forms.RadioSelect,
+        label="Punches count on",
+    )
+
+    def options(self):
+        """Each choice with its explanation, for the option cards."""
+        current = self["scope"].value()
+        return [
+            {
+                "value": value,
+                "label": label,
+                "help": attendance_rules.SCOPE_HELP[value],
+                "checked": value == current,
+                "id": f"id_scope_{index}",
+            }
+            for index, (value, label) in enumerate(DeviceAttendanceScope.choices)
+        ]
+
+
+class RecheckPunchesForm(StyledFormMixin, forms.Form):
+    """The date range for "Re-check punches"."""
+
+    start = forms.DateField(label="From", widget=date_widget("Choose a date"))
+    end = forms.DateField(label="To", widget=date_widget("Choose a date"))
+
+    def clean(self):
+        data = super().clean()
+        start, end = data.get("start"), data.get("end")
+        if start and end:
+            try:
+                attendance_rules.validate_range(start, end)
+            except forms.ValidationError as exc:
+                if hasattr(exc, "error_dict"):
+                    for name, errors in exc.error_dict.items():
+                        for error in errors:
+                            self.add_error(name, error)
+                else:
+                    raise
         return data

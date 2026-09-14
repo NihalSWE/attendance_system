@@ -535,7 +535,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N1b | **Day close, check-out rule, live attendance** - done 2026-09-14, branch `feature/n1b-day-close` | DEVICE_ATTENDANCE_POLICY.md step 7 "When a day closes, and the check-out": a day runs until the next shift start or 24 h; a trailing OUT stays a break-out until the day closes; a day ending on an IN is checked out at the shift end with `review_status = needs_review`; arriving early is not paid (worked time from the shift start); time after the end is `calculated_overtime_minutes`, an open overtime session is blank, in review and unpaid; attendance recalculates itself on punches and on read, no Calculate button; `attendance.services.recalculate()` for Ajay's apps | 3 | Attendance settings attendance windows; the Incomplete decision |
 | N2 | **Attendance calendar** ⬆ — ✅ done 2026-09-13, on main | **A planner-style month view, not the small date-picker grid** (Ajay, 2026-09-13): one big square per day holding a brief summary — status, check-in → check-out, in-office time, breaks — with a month summary above. Clicking a date opens that day's history: every check-in, break-out, break-in and check-out with time and device, plus total, in-office and out-of-office time. On a phone the month becomes a day-by-day list with the same summary. Built as a reusable piece so the employee panel (A7) shows the same calendar for "my attendance" | 3 | (new) |
 | N3 | **In-office badge on the Employees page** - done 2026-09-14, branch `feature/n3-in-office-badge` | "Now" column: In office (green), On break (amber), Left (grey), Not in yet (grey), Absent (red, after shift start plus grace), On leave (blue), Off today (grey); refreshes every minute | 5 | (new) |
-| N4 | **Which devices count + Re-check punches** | Attendance settings: all company devices / branch devices / department devices / assigned devices. "Re-check punches" for a date range re-runs authorisation on excluded punches, audited, then attendance is recalculated | 4 | (new) |
+| N4 | **Which devices count + Re-check punches** - done 2026-09-14, branch `feature/n4-device-scope` | Attendance settings: all company devices / branch devices / department devices / assigned devices. "Re-check punches" for a date range re-runs authorisation on excluded punches, audited, then attendance is recalculated | 4 | (new) |
 | N5 | **Attendance corrections** | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b). Approving overtime (set the end time, approved minutes) and its pay are A9's; the list links to A9's approve action (agreed 2026-09-14) | — | Attendance corrections; attendance review status and the Incomplete decision |
 | N6 | **Employee detail page + terminate screen** | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
 | N7 | **Payslip redesign** (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/ | — | (new) |
@@ -878,7 +878,7 @@ merge).**
 |---|---|
 | `btn--secondary` buttons | The class does not exist, so 8 buttons render as a plain `.btn`: `devices/device_detail.html` (3), `devices/device_users.html` (2), `devices/message_detail.html`, `devices/punch_detail.html`, `organization/adoption_list.html`. Fix: `btn--ghost` — Nihal's N0. |
 | Browser-default calendars on the device pages | Five `datetime-local` fields in `devices/forms.py` (register/edit device, enrollment, device department). Every other date field uses the project calendar. Fix: Nihal's N0. |
-| Excluded punches on Nihal's server | The new default tick applies to new enrollments only. Existing enrollments need "Authorised for assigned-devices mode" ticked by hand; already-excluded punches stay excluded until N4's Re-check. |
+| Excluded punches on Nihal's server | The new default tick applies to new enrollments only. Existing enrollments need "Authorised for assigned-devices mode" ticked by hand. Already-excluded punches stay excluded until someone presses **Re-check** on Devices → Which devices count (N4, `feature/n4-device-scope`): on 2026-09-14 that page showed 23 "not an assigned device" and 25 "nobody enrolled with that number" for 1–14 Sep. Not pressed for him — it changes real punches. |
 | Felna Tech shift mode | Still single company shift (set 2026-09-12 so its attendance could be calculated). Switching to department shifts is a settings change in Shifts. |
 | Demo data in Ajay's local database | Simulated device `DEMO-SIM-FELNA` ("not real hardware") and its 1–12 Sep demo punches stay, at Ajay's request; they feed Felna's attendance and salary. |
 
@@ -916,7 +916,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A6, A9 (overtime approval and pay) and N0–N3 (N1b day close / live attendance and N3 in-office badge merged 2026-09-14). Ajay's session: A7 (employee panel), then A14 (sidebar menus), A8. Nihal: N7 (payslip redesign), then N4 (device attendance scope + Re-check punches), N5, N6. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A6, A9 (overtime approval and pay) and N0–N3. Ajay's session: A7 (employee panel), then A14 (sidebar menus), A8. Nihal: pushed and waiting to be merged — `fix/attendance-no-shift-day-off`, `feature/n7-payslip`, `feature/n4-device-scope`; next N5 (corrections + review list), then N6. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -1818,3 +1818,72 @@ pulled immediately before touching them.
 
 **No new migration, no new environment variable.** 21 tests in
 `attendance/tests_now_badge.py`; checked at 1440, 768 and 375 px.
+
+
+## 2026-09-14 — N4: which devices count, and Re-check punches (Nihal)
+
+Branch `feature/n4-device-scope`, from clean `main` (after A9). No migration:
+every column already existed — `CompanyAttendanceSettings.device_attendance_scope`,
+the branch and employee-assignment overrides, `assigned_device_authorized` —
+and so did the decision engine (`devices/services/authorization.py`). What was
+missing was a way to choose the rule and a way to apply a changed rule to past
+punches.
+
+**Page:** Devices → **Which devices count** (`/devices/attendance-rules/`),
+linked from the device list and the punch list. For A14's menu: add it under
+Devices.
+
+- **Punches count on** — the four options as cards, each with what it means:
+  assigned devices only / department devices / branch devices / company
+  devices. Saving goes through `attendance_rules.set_company_scope()`:
+  permission re-checked in the service, `settings_version` bumped, and an audit
+  record whose `before_data` carries the old scope. That previous value is what
+  lets a late punch from an offline device still be judged by the rule in force
+  when it was made — there is a test for exactly that. If a branch or employees
+  have their own rule, the card says so.
+- **Punches that don't count** — a From/To range (default: the last 30 days,
+  in company time), a table of why punches were left out and what fixes each
+  reason, with the count linking to the punch list.
+- **Re-check N punches** — a separate POST for exactly the range shown.
+
+**Where it lives.** The plan put the scope in Attendance settings, which is
+`scheduling/`. It is on a Devices page instead so `scheduling/` was not
+touched, and because choosing the rule and re-checking the punches it affects
+belong on one screen. The company column is the same one either way.
+
+**What a re-check does** (`attendance_rules.recheck_punches()`):
+
+- Takes every punch in the range whose status keeps it out of attendance
+  (`EXCLUDING_STATUSES` + `policy_unresolved`) and judges it again **under the
+  settings in force now** — `authorization.evaluate(..., policy_at=now)`.
+  Only the policy switches move to now: the scope chain, the device grant and
+  attendance enabled. Who the punch belongs to is still resolved at the punch's
+  own time (device user numbers are reused), and so are the employee's placement
+  and the device's department links.
+- **Never touches a punch that already counts.** Tightening a rule cannot
+  quietly take away a day somebody was credited for.
+- **Skips days inside a finalised salary month** — their punches are not even
+  re-judged.
+- Records `recheck` (when, who, previous status) in each punch's
+  `authorization_snapshot`, and one `punches.rechecked` audit row holding every
+  punch's before and after status.
+- After the commit, rebuilds attendance for the employee-days of punches that
+  now count (`recalculate_for_punches`).
+
+Ingestion is unchanged: `policy_at` defaults to the punch time.
+
+A punch from before a person's enrollment on that device started stays
+excluded after a re-check, and should: a re-check cannot attach a scan to
+someone the device did not know then. The page says the fix — set the
+enrollment's start date earlier, then re-check. That is most of the
+"nobody enrolled" punches on Nihal's server.
+
+**Tests:** 25 in `devices/tests_attendance_rules.py`. The fixture backdates
+the company's setup to January; without that every row is seconds old, a
+change a moment after creation reads as the original setup, and the re-check
+tests passed whether or not they judged by today's rules. Checked by breaking
+`policy_at` on purpose: 7 tests fail. Checked on D Company's real data at
+1440, 768 and 375 px (on a phone the "what fixes it" text moves under the
+reason so the count stays on screen).
+
+**No new migration, no new environment variable.**
