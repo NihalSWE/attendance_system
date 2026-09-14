@@ -88,6 +88,10 @@ def summarise(records):
                 counts["unpaid_off"] += 1
         else:
             counts[status] += 1
+        leave_day = getattr(record, "leave_day", None)
+        if status != Status.LEAVE and leave_day is not None and leave_day.approved_pay_type == "paid":
+            # A paid half-day leave on a day the employee also worked.
+            paid_leave_minutes += leave_day.leave_minutes
         counts["late_minutes"] += record.late_minutes
         counts["overtime_minutes"] += getattr(record, "approved_overtime_minutes", 0)
     counts["worked_minutes"] = worked_minutes
@@ -135,8 +139,10 @@ def _monthly_deductions(rules, per_day, records):
     absent = Decimal(sum(1 for r in records if r.attendance_status == Status.ABSENT))
     half_days = [r for r in records if r.attendance_status == Status.HALF_DAY]
     incomplete = Decimal(sum(1 for r in records if r.attendance_status == Status.INCOMPLETE))
+    # Leave days, and days worked with a half-day leave (unpaid half = 0.5).
     unpaid_leave = sum(
-        (ONE - r.payable_fraction for r in records if r.attendance_status == Status.LEAVE),
+        (ONE - r.payable_fraction for r in records
+         if r.attendance_status == Status.LEAVE or getattr(r, "leave_day", None) is not None),
         Decimal("0"),
     )
     unpaid_off = Decimal(sum(
@@ -158,7 +164,9 @@ def _monthly_deductions(rules, per_day, records):
         for record in records:
             if record.attendance_status not in (Status.PRESENT, Status.HALF_DAY):
                 continue
-            expected = expected_minutes(record)
+            leave_day = getattr(record, "leave_day", None)
+            # The half on leave is not "short": it is leave, paid or deducted above.
+            expected = max(0, expected_minutes(record) - (leave_day.leave_minutes if leave_day else 0))
             short = max(0, expected - record.worked_minutes)
             if expected and short:
                 short_minutes += short

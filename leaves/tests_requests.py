@@ -1,6 +1,7 @@
 """A8 requests: ownership, routing, atomic approval and existing salary inputs."""
 
 import datetime
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -86,6 +87,18 @@ class RequestTests(LiveTestCase):
         self.decide(request)
         with self.assertRaises(ValidationError):
             self.submit()
+
+    def test_half_day_request_counts_half_a_day(self):
+        request = self.submit(duration='half_day')
+        self.decide(request)
+        with use_company(self.company):
+            self.assertEqual(LeaveDay.objects.get().balance_units, Decimal('0.5'))
+        self.client.force_login(self.worker)
+        page = self.client.get(reverse('me:leave'), {'year': 2026})
+        self.assertContains(page, 'Casual (half day)')
+        with self.assertRaises(ValidationError):
+            self.submit(duration='half_day', start_date=DAY + datetime.timedelta(days=1),
+                        end_date=DAY + datetime.timedelta(days=2))
 
     def test_employee_withdraws_only_their_own_pending_request(self):
         request = self.submit()

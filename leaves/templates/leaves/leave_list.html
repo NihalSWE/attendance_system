@@ -156,7 +156,7 @@
                                         {{ leave.employee.full_name }}
                                     </td>
                                     <td>
-                                        {% for part in leave.segments.all %}{{ part.leave_type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                        {% for part in leave.segments.all %}{{ part.leave_type.name }}{% if part.duration_type == 'half_day' %} (half day){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
                                     </td>
                                     <td class="numeric">
                                         {{ leave.first_day|date:"d M Y" }}

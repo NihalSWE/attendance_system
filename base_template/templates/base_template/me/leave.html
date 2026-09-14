@@ -135,7 +135,7 @@
                                     {{ row.first|date:"d M Y" }}{% if row.last != row.first %} – {{ row.last|date:"d M Y" }}{% endif %}
                                 </td>
                                 <td>
-                                    {% for segment in row.segments %}{{ segment.leave_type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {% for segment in row.segments %}{{ segment.leave_type.name }}{% if segment.duration_type == 'half_day' %} (half day){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
                                 </td>
                                 <td class="numeric">
                                     {{ row.days }}

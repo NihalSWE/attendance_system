@@ -14,7 +14,7 @@ from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
-from leaves.services import plan_leave_days, write_approved_days, _writable
+from leaves.services import is_half_day, plan_leave_days, write_approved_days, _writable
 from organization.services import require_company_membership, STRUCTURE_ROLES
 
 
@@ -87,7 +87,8 @@ def submit_request(*, actor, company_id, values):
     member = require_company_membership(actor, company_id)
     if actor.is_superuser:
         raise PermissionDenied('Use your employee login to request leave.')
-    values = _writable(values, ('leave_type', 'start_date', 'end_date', 'pay_type', 'reason'))
+    values = _writable(values, ('leave_type', 'start_date', 'end_date', 'duration', 'pay_type', 'reason'))
+    half = is_half_day(values)
     with use_company(company_id):
         employee = Employee.objects.select_for_update().filter(user=actor).first()
         if employee is None or employee.employment_status not in ('active', 'probation'):
@@ -109,8 +110,12 @@ def submit_request(*, actor, company_id, values):
         create_validated(
             LeaveRequestSegment, company=member.company, leave_request=request,
             leave_type=leave_type, start_date=values['start_date'], end_date=values['end_date'],
-            timezone=member.company.timezone or 'UTC', requested_units=Decimal(len(days)),
-            requested_minutes=sum(shift.scheduled_minutes for *_, shift in days),
+            duration_type=(LeaveRequestSegment.DurationType.HALF_DAY if half
+                           else LeaveRequestSegment.DurationType.FULL_DAY),
+            timezone=member.company.timezone or 'UTC',
+            requested_units=Decimal('0.5') if half else Decimal(len(days)),
+            requested_minutes=(days[0][4].scheduled_minutes // 2 if half
+                               else sum(shift.scheduled_minutes for *_, shift in days)),
             requested_pay_type=values['pay_type'],
             requested_pay_percentage=100 if values['pay_type'] == 'paid' else 0,
         )

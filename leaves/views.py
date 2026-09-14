@@ -145,7 +145,7 @@ def leave_record(request):
                 ]
             ).annotate(table_code=Subquery(current_code)).order_by("first_name", "last_name"),
             leave_types=LeaveType.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
-            initial={"pay_type": "paid"},
+            initial={"pay_type": "paid", "duration": "full_day"},
         )
         return _form_page(
             request,

@@ -54,6 +54,11 @@ class RecordLeaveForm(StyledFormMixin, forms.Form):
     end_date = forms.DateField(
         label="To", widget=_range_input("leave", "Select leave dates")
     )
+    duration = forms.ChoiceField(
+        choices=(("full_day", "Full day"), ("half_day", "Half day")),
+        label="Length", required=False, initial="full_day",
+        help_text="A half day is for one date and counts as half a day.",
+    )
     pay_type = forms.ChoiceField(
         choices=PayType.choices,
         label="Pay",

@@ -188,6 +188,18 @@ class RecordLeaveTests(LeaveBase):
         with self.assertRaises(PermissionDenied):
             services.add_default_leave_types(actor=self.hr, company_id=self.company.pk)
 
+    def test_half_day_leave_is_one_date_and_half_a_day(self):
+        leave = self._record(start=THU, end=THU, pay="paid", duration="half_day")
+        [day] = self._days(leave)
+        self.assertEqual((day.balance_units, day.leave_minutes),
+                         (Decimal("0.5"), day.scheduled_minutes_snapshot // 2))
+        with use_company(self.company):
+            self.assertEqual(leave.segments.get().requested_units, Decimal("0.5"))
+        with self.assertRaises(ValidationError):
+            self._record(start=SAT, end=datetime.date(2026, 9, 20), duration="half_day")
+        with self.assertRaises(ValidationError):
+            self._record(start=SAT, end=SAT, duration="hourly")
+
     def test_inactive_leave_type_is_refused(self):
         services.set_leave_type_status(
             actor=self.admin, company_id=self.company.pk,

@@ -31,7 +31,7 @@ def request_leave(request):
     with use_company(request.company_id):
         form = RequestLeaveForm(request.POST or None,
                                 leave_types=LeaveType.objects.filter(status='active'),
-                                initial={'pay_type': 'paid'})
+                                initial={'pay_type': 'paid', 'duration': 'full_day'})
         if request.method == 'POST' and form.is_valid():
             try:
                 workflow.submit_request(actor=request.user, company_id=request.company_id, values=form.cleaned_data)
