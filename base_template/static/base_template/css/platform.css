@@ -97,9 +97,6 @@
     justify-content:space-between;
     gap:var(--s3);
 }
-.mobile-menu {
-    display:none;
-}
 .platform-label {
     font-weight:600;
     font-size:13px;
@@ -124,22 +121,6 @@
     }
     .facts--wide dd {
         margin-bottom:var(--s2);
-    }
-    .mobile-menu {
-        display:inline-flex;
-    }
-    .sidebar.is-open {
-        display:flex;
-        position:fixed;
-        z-index:60;
-        width:232px;
-        box-shadow:var(--shadow-lg);
-    }
-    .sidebar.is-open .sidebar__brand span,.sidebar.is-open .sidebar__label,.sidebar.is-open .sidebar__link span {
-        display:block;
-    }
-    .sidebar.is-open .sidebar__link {
-        justify-content:flex-start;
     }
     .topbar__user {
         margin-left:auto;

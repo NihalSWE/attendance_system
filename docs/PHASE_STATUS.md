@@ -559,7 +559,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A11 | **Salary completeness** | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
 | A12 | **Access** | Department heads, permissions, HR and payroll-manager pages | — | Department heads, permissions; salary and attendance pages for HR |
 | A13 | **Later** | Payments, advances, loans (P5) | — | Payments (P5) |
-| A14 | **Sidebar menus with submenus** (Ajay, 2026-09-14) | Every important page reachable from the sidebar: a menu per area with its pages as submenus, e.g. Employees (All employees, Create employee); Attendance (Daily list, Calendar); Leave (Leave list, Record leave, Leave types); Salary (Salary by month, Salary settings, Penalty rules); Shifts (Overview, Shifts, Department shifts, Weekly offs, Holidays, Holiday calendar, Attendance settings); Organisation (Branches, Departments); Devices (Devices, Enrollments, Punches, Messages, Unresolved). Ajay: pages he could not find were only reachable through buttons inside other pages. Every later step adds its pages to these menus | — | (new) |
+| A14 | **Sidebar menus with submenus — done 2026-09-15**, branch `feature/a14-sidebar-menus` | Every important page reachable from the sidebar: a menu per area with its pages as submenus, e.g. Employees (All employees, Create employee); Attendance (Daily list, Calendar); Leave (Leave list, Record leave, Leave types); Salary (Salary by month, Salary settings, Penalty rules); Shifts (Overview, Shifts, Department shifts, Weekly offs, Holidays, Holiday calendar, Attendance settings); Organisation (Branches, Departments); Devices (Devices, Enrollments, Punches, Messages, Unresolved). Ajay: pages he could not find were only reachable through buttons inside other pages. Every later step adds its pages to these menus | — | (new) |
 | A6b | **First salary for an employee without one** (bug, Ajay 2026-09-14) — ✅ done 2026-09-14, branch `feature/a6b-first-salary` | Employees created from a device's users (`devices/services/user_sync.py`) get a placement but no salary row, and Edit employee → Salary refuses: "This employee has no current salary to change" — so they can never be given one. Fix: when there is no salary, the Salary card **sets the first one** (button "Set salary", from the placement's start date by default) instead of refusing; the salary page keeps listing such people under "Skipped, no salary set" until then | — | (bug) |
 | A15 | **Real data tables everywhere** (Ajay, 2026-09-14: "there is no server side pagination in many of the pages. we already discussed this before the start of the project"; then "data tables later" — after A8) | The agreed rule (DEVICE_INTEGRATION_HANDOFF.md, UI conventions): real DataTables with **server-side** paging, search and sorting, a real result count and a page-length select — today only the platform company list does it; the others have hand-built pagination or none. A shared helper in `base_template` (view side: filter/search/order/page a queryset and answer DataTables' JSON; page side: one init) so every list is one small view. Ajay's lists: Salary month, **Overtime (+ Employee and Branch filters)**, Leave, Leave types, Holidays, Penalty rules, Employees, Branches, Departments, My leave, My payslips. Every list gets filters for what people look things up by — employee, branch, status, month. Nihal's lists: N9 | — | (new) |
 | A5c | **Calendar and salary-settings fixes** — done 2026-09-14, branch `feature/a5c-calendar-fixes` | Weekly-off conflicts compare date ranges, including stopped history. **Change start date** on Shifts → Weekly off days corrects an active or stopped rule and rebuilds changed attendance dates while preserving finalised months. Paid holiday / weekly-off fields are removed; writes force True and the calendar treats legacy flags as paid. Daily/hourly pay remains on Salary settings. The day-value label explains absence deductions and the overtime hourly-rate base. See progress below. | — | (new) |
@@ -995,7 +995,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14, home):** Home setup, A5c, September salary simulation and the paid-break correction are complete (see progress below). Nihal is paused; generate his prompt only when Ajay explicitly asks. Continue with **A14 sidebar menus**, then A8; do not repeat A5c. [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md) remains the office context; A16 (the SenseFace 3A, Push protocol 3.x experiment) is tested in the office with the device. The salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-15, home):** Home setup, A5c, September salary simulation, the paid-break correction and A14 sidebar menus are complete (see progress below). Nihal is paused; generate his prompt only when Ajay explicitly asks. Continue with **A8 leave requests and branch-manager approval**, then A15; do not repeat A5c or A14. [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md) remains the office context; A16 (the SenseFace 3A, Push protocol 3.x experiment) is tested in the office with the device. The salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A6b (first salary for employees made from device users), A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A16 test the SenseFace 3A on the real device (its catalogue row is on main), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5, N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2071,7 +2071,7 @@ reset or assistant-run development migration.
   PASS**, `manage.py test --parallel 4 --keepdb --noinput`, 276.656 seconds.
   After the summary-label follow-up, all 26 salary-settings tests also pass.
 
-Next at home: **A14**, then **A8**, then A15. Office A16 still needs the physical
+Next at home (updated 2026-09-15): **A8**, then A15; A14 is complete. Office A16 still needs the physical
 SenseFace 3A. Nihal's planned work is N5, N6, N8; N9 waits for A15. Keep his attendance
 recalculation API, overtime hook and finalised-month guard when merging N5.
 
@@ -2117,5 +2117,57 @@ or handle the database password.
 
 **Coordination override:** Nihal is not making changes now. Generate his prompt
 only when Ajay explicitly asks. His remaining plan is N5, N6, N8, then N9 after
-A15; these are not active assignments. Ajay's next build remains **A14 → A8 →
-A15 → A10 → A11 → A12 → A13**. A16 awaits the physical SenseFace 3A in the office.
+A15; these are not active assignments. Ajay's next build (updated 2026-09-15) is **A8 → A15 → A10 → A11 → A12 → A13**; A14 is complete. A16 awaits the physical SenseFace 3A in the office.
+
+
+## 2026-09-15 — A14: sidebar menus and submenus (Ajay's session)
+
+Built on `feature/a14-sidebar-menus`. Important pages and settings are now
+reachable directly from seven expandable company menus, with 28 submenu links
+for an unrestricted company administrator:
+
+| Menu | Submenus |
+|---|---|
+| Employees | All employees; Create employee |
+| Attendance | Daily list; Calendar |
+| Leave | Leave list; Record leave; Leave types |
+| Salary | Salary by month; Salary settings; Penalty rules; Overtime; Overtime settings |
+| Shifts | Overview; Shifts; Department shifts; Weekly off days; Holidays; Holiday calendar; Attendance settings |
+| Organisation | Branches; Departments |
+| Devices | All devices; Register device; Enrollments; Punches; Messages; Unresolved; Which devices count |
+
+- **Existing links and buttons on individual pages remain.** Penalty rules and
+  Overtime settings link to their existing Salary settings sections. Shifts,
+  Department shifts and Weekly off days link to anchored cards on the overview.
+  Device users still requires choosing a device; its existing device-page link
+  is preserved. No replacement settings screens, new lists or duplicated forms.
+- `base_template/navigation.py` owns the company menu destinations and their
+  edit/detail aliases. Namespaced routes prevent cross-app highlighting clashes.
+  The current menu opens on page load; the selected page has the solid ink
+  state and `aria-current`. Fragment navigation updates the selected submenu.
+- Create/settings links follow structure-manager access. Device navigation and
+  the broad employee list/dashboard follow unrestricted administrator access.
+  Root and employee/branch-manager sidebars remain separate. Existing endpoint
+  and service permissions are unchanged; the sidebar grants no access.
+- Shared `navigation.js` handles tablet/phone navigation for all three surfaces.
+  The drawer has Close, Escape and backdrop dismissal, focus wrapping/return,
+  background page inertness and its own scroll. Native details allow keyboard
+  expansion and a usable navigation fallback without JavaScript.
+- Browser checks at **1440, 768 and 375 px** found no page horizontal overflow.
+  Verified Salary settings, Penalty rules, Overtime settings and Weekly off
+  days navigation; keyboard expansion, Tab/Shift+Tab wrapping and Escape;
+  phone employee/platform menus retain their own destinations. Previews used
+  synthetic test fixtures in a rolled-back transaction, not the local payroll.
+- Eight new tests cover every destination and fragment, record-page selection,
+  retained page actions, HR/scoped administrator restrictions, company switching,
+  employee/manager separation and the platform sidebar.
+- Validation: **916 tests pass** in the full suite, run once with
+  `manage.py test --parallel 4 --keepdb --noinput`. `git diff --check` passes.
+- **No migration; `.env.example` unchanged; no new environment variables.**
+  Normal reload picks up the versioned CSS/JS. No local salary or configuration
+  changes in this step. QA logs/previews live in ignored `.qa/`.
+
+**Next:** A8 leave requests and branch-manager approval, then A15 shared
+server-side tables, A10 full leave, A11 salary completeness, A12 access, A13
+payments. A16 still needs the physical SenseFace 3A in the office. Nihal remains
+paused; N5/N6/N8/N9 are planned only. Generate his prompt only when Ajay asks.

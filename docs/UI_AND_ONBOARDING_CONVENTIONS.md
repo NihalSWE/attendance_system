@@ -160,3 +160,19 @@ uses `overflow: hidden` for its rounded corners, so a panel positioned inside a
 card gets cut off. Placement prefers below the trigger, flips above only when
 below will not fit, clamps to the viewport edges, and re-anchors on scroll and
 resize.
+
+
+## Sidebar navigation (A14, 2026-09-15)
+
+- Important pages and settings belong in the sidebar under their area. Maintain
+  company destinations in `base_template/navigation.py`, including edit/detail
+  aliases and appropriate access visibility. Keep existing page-level links and
+  buttons; sidebar links are additional navigation, not replacements.
+- Link to an existing section with a stable fragment when settings share a page.
+  Do not duplicate a form just to give it a sidebar destination. Context-specific
+  actions (such as a particular device's users) remain on that record's page.
+- The current menu opens on navigation. Selected links use solid ink and
+  `aria-current`; disclosure headings use native `details`/`summary` controls.
+- At 1024 px and below, the shared Menu button opens a labelled, scrollable
+  drawer. Keep Close, Escape, focus wrapping/return and backdrop dismissal.
+  Root, company and self-service menus retain separate destinations.

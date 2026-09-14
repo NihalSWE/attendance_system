@@ -1,27 +1,5 @@
 /* Real DataTables over the server-rendered, paginated fallback. */
 document.addEventListener("DOMContentLoaded", function () {
-    const toggle = document.querySelector(".mobile-menu");
-    const side = document.getElementById("platform-sidebar");
-    if (toggle && side) {
-        const close = function () {
-            side.classList.remove("is-open");
-            toggle.setAttribute("aria-expanded", "false");
-        };
-        toggle.addEventListener("click", function () {
-            const open = side.classList.toggle("is-open");
-            toggle.setAttribute("aria-expanded", String(open));
-        });
-        document.addEventListener("keydown", function (event) {
-            if (event.key === "Escape") {
-                close();
-                toggle.focus();
-            }
-        });
-        document.addEventListener("click", function (event) {
-            if (!side.contains(event.target) && !toggle.contains(event.target)) close();
-        });
-    }
-
     /* Server-rendered platform tables that only want client-side sorting and
        filtering over the current page. Same `data-enhance` contract the device
        screens use, so there is one convention rather than two. The server's own
