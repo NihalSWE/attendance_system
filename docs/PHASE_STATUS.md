@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A10a):** A10 is split into A10a–A10e (see "A10a" at the end). A10a is done; next is **A10b half-day, hourly and partial-pay leave**. N9 (main attendance list and device lists) stays with Nihal — Ajay confirmed Ajay's session does not build Nihal's steps. Ajay's in-browser acceptance of A15 and A10a is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A10b half-day leave):** Leave is kept **simple** (Ajay). A10a and A10b are done; next is **A10c yearly allowance per leave type**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2293,10 +2293,14 @@ Ajay disputed the A15 completion above. Claude reviewed it read-only, then finis
 | Step | Scope | Needs migration |
 |---|---|---|
 | **A10a — done** | HR records/cancels leave; default leave types; employee code in the Record leave picker; employee withdraws a pending request | No |
-| A10b | Half-day and hourly leave; partial pay percentage (fields already exist on segments and leave days); attendance and salary read the leave minutes/percentage | Probably not; attendance reads LeaveDay (Nihal's app) — coordinate before changing its reading |
-| A10c | Leave policies and versions, entitlements, balance ledger (reserve on request, debit on approval, release on reject/withdraw/cancel), balances on My leave and the Record leave form | Yes |
-| A10d | Attachments on requests and recorded leave, private storage | Yes |
-| A10e | Amend a pending request; employee asks to cancel approved leave (approver decides); partial cancellation | Maybe |
+| **A10b — done** | Half-day leave: Full day / Half day on Record leave and Request leave; paid or unpaid | No |
+| A10c | Optional **Days per year** on each leave type; used/remaining shown on My leave, Record leave and approval; over-allowance refused. No accrual, carry-forward or ledger | Yes (one field) |
+| — | Cancel approved leave: HR/admin use the existing Cancel. Nothing to build | — |
+
+**Simplified 2026-09-15 (Ajay: "keep leave simple").** Dropped: partly paid
+leave (the database allows paid = 100% or unpaid = 0% only, and the attempt was
+discarded unpushed), hourly leave, morning/afternoon choice, attachments, leave
+policies/versions, accrual/carry-forward ledger, amendment, partial cancellation.
 
 ## A10a done — 2026-09-15 (Claude, Ajay's session)
 
@@ -2323,3 +2327,31 @@ Ajay disputed the A15 completion above. Claude reviewed it read-only, then finis
   Not browser-verified by Claude (the local app needs Ajay's sign-in).
 - Loose end noticed, not changed: Record/Cancel leave do not recalculate
   attendance immediately (approval does); days update when attendance refreshes.
+
+## A10b done — half-day leave — 2026-09-15 (Claude, Ajay's session)
+
+Ajay allowed attendance changes where a leave step needs them, and asked for
+leave to stay simple.
+
+- **Leave:** Leave → Record leave and My leave → Request leave have **Length:
+  Full day / Half day**. A half day is one date, 0.5 day, half the shift's
+  minutes, paid or unpaid as today. No morning/afternoon choice. Two dates with
+  Half day are refused. Leave list and My leave show "Casual (half day)"; My
+  leave counts 0.5.
+- **Attendance (`attendance/services.py`, Nihal's app, changed with Ajay's
+  permission):** half-day leave and the employee scanned in → Present, no late or
+  early-out minutes, paid day (paid leave) or half paid (unpaid leave); still
+  in progress until the day closes, like any day. No scans → Leave, half paid
+  (paid) or unpaid. Full-day leave is unchanged. `live_status.py`: the Now badge
+  says On leave only for full-day leave.
+- **Salary:** monthly deducts the unpaid half on a worked day too; the
+  "minutes short" method does not count the leave half as short; hourly pays a
+  paid half's minutes on a worked day. Daily pay already followed the day's
+  payable fraction.
+- **Nihal, when he resumes:** pull main before touching attendance; keep the
+  half-day branch in `_write_day` and the `balance_units__gte=1` badge filter.
+- Tests: **full suite 941 tests OK**. New `leaves/tests_half_day.py` runs real
+  scans through attendance and salary (paid/unpaid half day, came in / did not);
+  leave tests cover one-date rule, 0.5 units, request/approval and My leave text.
+  Not browser-verified by Claude (the local app needs Ajay's sign-in).
+- No migrations, dependencies or `.env.example` changes.

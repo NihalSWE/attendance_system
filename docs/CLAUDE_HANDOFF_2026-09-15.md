@@ -14,13 +14,21 @@
 >
 > **Ajay's rule (2026-09-15):** Ajay's session does not build Nihal's steps
 > (attendance and device lists, N5/N6/N8/N9), even when a gap is pointed out on
-> one of those pages. `/attendance/` stays for N9.
+> one of those pages. `/attendance/` stays for N9. **Amended by Ajay the same
+> day:** attendance code may be changed when a leave or salary step needs it.
+> **Keep leave simple** (Ajay): no partly paid, hourly, attachments, policy
+> versions or ledgers.
 >
 > **A10a done (2026-09-15):** HR records/cancels leave (never their own, never in
 > a finalised month); default leave types for new companies plus "Add default
 > leave types" on Leave types; employee code in the Record leave picker;
-> employees withdraw pending requests from My leave. Next: A10b half-day, hourly
-> and partial-pay leave. Plan table: `PHASE_STATUS.md` → "A10 split into sub-steps".
+> employees withdraw pending requests from My leave. Plan table: `PHASE_STATUS.md`
+> → "A10 split into sub-steps".
+>
+> **A10b done (2026-09-15):** half-day leave (one date, 0.5 day). Came in → full
+> day, no late mark, unpaid half deducted; no scans → only the leave half.
+> Attendance and the Now badge were changed for this. Next: A10c yearly allowance
+> per leave type, then A11.
 
 ## 0. First instruction: review and report, do not implement
 

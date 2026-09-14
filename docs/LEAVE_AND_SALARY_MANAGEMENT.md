@@ -395,9 +395,14 @@ hourly leave, balances, attachments and withdrawal/amendment remain A10.
 
 A10a (2026-09-15): HR records and cancels leave (not their own, not in a
 finalised month); default Casual/Sick/Earned/Maternity leave types; employee
-code in the Record leave picker; employees withdraw pending requests. Still
-A10b–A10e: half-day/hourly/partial pay, policies and balances, attachments,
-amendment and cancellation of approved leave.
+code in the Record leave picker; employees withdraw pending requests.
+
+A10b (2026-09-15): half-day leave — one date, 0.5 day, paid or unpaid. Came in
+→ full day with no late mark (unpaid half deducted); no scans → only the leave
+half counts. **Leave is kept simple (Ajay):** next only A10c, an optional yearly
+allowance per leave type. Partly paid and hourly leave, attachments, policies,
+accrual ledgers and amendments are not planned for now; the larger design above
+remains reference only.
 
 
 ## A15 list navigation — 2026-09-15
