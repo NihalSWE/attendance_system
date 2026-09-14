@@ -385,15 +385,19 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
             punches = sorted(punches_by_employee[employee_id])
 
             # One employee's windows: the shift can differ per day because it
-            # follows the placement's department.
-            def shift_on(on, _assignments=assignments):
+            # follows the placement's department — unless this employee has a
+            # shift of their own, which wins. Without employee_id that
+            # override is silently ignored.
+            def shift_on(on, _assignments=assignments, _employee_id=employee_id):
                 probe = datetime.datetime.combine(
                     on, datetime.time(12), tzinfo=company_tz
                 )
                 placement = _assignment_on(_assignments, probe)
                 if placement is None:
                     return None
-                return calendar.shift_for(placement.department_id, on)
+                return calendar.shift_for(
+                    placement.department_id, on, employee_id=_employee_id
+                )
 
             windows = day_window.build_windows(
                 days=span_days, shift_for=shift_on, tz=company_tz,
@@ -555,6 +559,8 @@ def _pair(day_punches, window, settings, is_closed):
         scheduled_start=window.scheduled_start,
         scheduled_end=window.scheduled_end,
         grace_in_minutes=getattr(shift, "grace_in_minutes", 0),
+        grace_out_minutes=getattr(shift, "grace_out_minutes", 0),
+        overtime_after_minutes=getattr(shift, "overtime_after_minutes", 0),
         is_closed=is_closed,
     )
 

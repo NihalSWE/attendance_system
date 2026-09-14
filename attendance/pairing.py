@@ -168,6 +168,8 @@ def build_day(
     scheduled_start=None,
     scheduled_end=None,
     grace_in_minutes=0,
+    grace_out_minutes=0,
+    overtime_after_minutes=0,
     is_closed=True,
 ):
     """Pair one employee-day. ``moments`` is datetimes or (datetime, punch id).
@@ -256,13 +258,29 @@ def build_day(
         break_minutes=break_minutes,
         break_is_paid=break_is_paid,
         grace_in_minutes=grace_in_minutes,
+        grace_out_minutes=grace_out_minutes,
+        overtime_after_minutes=overtime_after_minutes,
     )
     return day
 
 
 def _account(day, *, scheduled_start, scheduled_end, break_minutes,
-             break_is_paid, grace_in_minutes):
-    """Split in-office time into regular and overtime against the shift."""
+             break_is_paid, grace_in_minutes, grace_out_minutes=0,
+             overtime_after_minutes=0):
+    """Split in-office time into regular and overtime against the shift.
+
+    ``overtime_after_minutes`` delays when overtime starts counting, as the
+    shift form puts it: "Minutes after the shift's end before overtime counts
+    — 0 = straight away." So with 30, the first half hour past the end counts
+    as neither regular time nor overtime, the same way arriving early counts
+    as neither, and overtime is measured from the shift's end plus 30.
+    """
+    overtime_from = scheduled_end
+    if scheduled_end is not None and overtime_after_minutes:
+        overtime_from = scheduled_end + datetime.timedelta(
+            minutes=int(overtime_after_minutes)
+        )
+
     regular = overtime = 0
     for session in day.sessions:
         if session.ended_at is None:
@@ -270,9 +288,11 @@ def _account(day, *, scheduled_start, scheduled_end, break_minutes,
         session.regular_minutes = _overlap(
             session.started_at, session.ended_at, scheduled_start, scheduled_end
         )
-        session.overtime_minutes = _overlap(
-            session.started_at, session.ended_at, scheduled_end, None
-        ) if scheduled_end else 0
+        session.overtime_minutes = (
+            _overlap(session.started_at, session.ended_at, overtime_from, None)
+            if overtime_from
+            else 0
+        )
         if session.needs_review:
             # An unapproved, unclosed overtime claim counts nothing.
             session.regular_minutes = session.overtime_minutes = 0
@@ -297,4 +317,8 @@ def _account(day, *, scheduled_start, scheduled_end, break_minutes,
         and day.last_out_at is not None
         and not day.check_out_by_rule
     ):
-        day.early_out_minutes = _minutes(day.last_out_at, scheduled_end)
+        # Leaving inside the shift's out-grace is not leaving early.
+        early = _minutes(day.last_out_at, scheduled_end)
+        day.early_out_minutes = (
+            early if early > int(grace_out_minutes or 0) else 0
+        )

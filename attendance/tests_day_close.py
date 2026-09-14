@@ -23,6 +23,7 @@ def shift(start=9, end=18, spans=False, grace=0, break_minutes=0, paid=False):
     return SimpleNamespace(
         start_time=datetime.time(start), end_time=datetime.time(end),
         spans_next_day=spans, grace_in_minutes=grace,
+        grace_out_minutes=0, overtime_after_minutes=0,
         default_break_minutes=break_minutes, break_is_paid=paid,
     )
 
@@ -170,6 +171,53 @@ class OvertimeTests(TestCase):
         self.assertIsNone(evening.ended_at)
         self.assertEqual(evening.minutes, 0)
         self.assertTrue(evening.needs_review)
+
+
+class ShiftThresholdTests(TestCase):
+    """The two shift settings A5 put on the form."""
+
+    def test_overtime_does_not_start_until_the_shift_says_so(self):
+        """"Minutes after the shift's end before overtime counts."""
+        day = pairing.build_day(
+            [at(9), at(18, 20)], is_closed=True,
+            scheduled_start=at(9), scheduled_end=at(18),
+            overtime_after_minutes=30,
+        )
+        self.assertEqual(day.overtime_minutes, 0)
+        self.assertEqual(day.worked_minutes, 540)
+
+    def test_overtime_is_measured_from_the_end_plus_the_delay(self):
+        """Staying to 19:00 on a 30-minute delay is 30 minutes, not 60."""
+        day = pairing.build_day(
+            [at(9), at(19)], is_closed=True,
+            scheduled_start=at(9), scheduled_end=at(18),
+            overtime_after_minutes=30,
+        )
+        self.assertEqual(day.overtime_minutes, 30)
+
+    def test_a_zero_delay_counts_overtime_straight_away(self):
+        day = pairing.build_day(
+            [at(9), at(19)], is_closed=True,
+            scheduled_start=at(9), scheduled_end=at(18),
+            overtime_after_minutes=0,
+        )
+        self.assertEqual(day.overtime_minutes, 60)
+
+    def test_leaving_inside_the_out_grace_is_not_early(self):
+        day = pairing.build_day(
+            [at(9), at(17, 50)], is_closed=True,
+            scheduled_start=at(9), scheduled_end=at(18),
+            grace_out_minutes=15,
+        )
+        self.assertEqual(day.early_out_minutes, 0)
+
+    def test_leaving_beyond_the_out_grace_is_early(self):
+        day = pairing.build_day(
+            [at(9), at(17, 30)], is_closed=True,
+            scheduled_start=at(9), scheduled_end=at(18),
+            grace_out_minutes=15,
+        )
+        self.assertEqual(day.early_out_minutes, 30)
 
 
 class PaidBreakTests(TestCase):

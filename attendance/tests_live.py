@@ -266,6 +266,82 @@ class RefreshOnReadTests(LiveTestCase):
         self.assertNotContains(response, "Calculate ")
 
 
+class EmployeeShiftTests(LiveTestCase):
+    """An employee's own shift wins, and attendance has to ask for it.
+
+    ``shift_for`` ignores an override unless the employee is named, so an
+    attendance run that forgot to pass ``employee_id`` would quietly measure
+    everyone against the company shift. This is the test that says it does.
+    """
+
+    def _own_shift(self, start, end, from_day):
+        evening = schedule.create_shift(
+            actor=self.admin, company_id=self.company.pk, values={
+                "code": "EVE", "name": "Evening",
+                "start_time": datetime.time(start), "end_time": datetime.time(end),
+                "spans_next_day": False, "grace_in_minutes": 10,
+                "minimum_full_day_minutes": 300, "minimum_half_day_minutes": 120,
+            },
+        )
+        schedule.set_employee_shift(
+            actor=self.admin, company_id=self.company.pk, values={
+                "employee": self.employee, "shift": evening, "first_day": from_day,
+            },
+        )
+        return evening
+
+    def test_the_employees_own_shift_decides_their_day(self):
+        day = datetime.date(2026, 8, 10)
+        self._own_shift(14, 22, datetime.date(2026, 8, 1))
+        # Worked the evening shift, not the company 09–18 one.
+        self.punch(day, 14)
+        self.punch(day, 22)
+        recalculate(
+            self.company.pk, start=day, end=day,
+            now=datetime.datetime(2026, 8, 11, 10, tzinfo=DHAKA),
+        )
+        stored = self.record(day)
+        self.assertEqual(stored.shift.code, "EVE")
+        self.assertEqual(stored.worked_minutes, 480)
+        self.assertEqual(stored.late_minutes, 0)
+        self.assertEqual(stored.calculated_overtime_minutes, 0)
+
+    def test_the_company_shift_would_have_read_that_day_wrongly(self):
+        """What the override is protecting against, stated plainly."""
+        day = datetime.date(2026, 8, 10)
+        self.punch(day, 14)
+        self.punch(day, 22)
+        recalculate(
+            self.company.pk, start=day, end=day,
+            now=datetime.datetime(2026, 8, 11, 10, tzinfo=DHAKA),
+        )
+        on_company_shift = self.record(day)
+        # 09–18 shift: only 14:00–18:00 is regular, the rest is overtime.
+        self.assertEqual(on_company_shift.worked_minutes, 240)
+        self.assertGreater(on_company_shift.calculated_overtime_minutes, 0)
+
+    def test_a_temporary_shift_ends_and_the_old_one_returns(self):
+        self._own_shift(14, 22, datetime.date(2026, 8, 1))
+        schedule.set_employee_shift(
+            actor=self.admin, company_id=self.company.pk, values={
+                "employee": self.employee, "shift": self.shift,
+                "first_day": datetime.date(2026, 8, 12),
+            },
+        )
+        for day, expected in (
+            (datetime.date(2026, 8, 10), "EVE"),
+            (datetime.date(2026, 8, 12), "DAY"),
+        ):
+            with self.subTest(day=day):
+                self.punch(day, 15)
+                self.punch(day, 16)
+                recalculate(
+                    self.company.pk, start=day, end=day,
+                    now=datetime.datetime(2026, 8, 20, 10, tzinfo=DHAKA),
+                )
+                self.assertEqual(self.record(day).shift.code, expected)
+
+
 class PayrollLockTests(LiveTestCase):
     """A day inside a posted run never moves again."""
 
