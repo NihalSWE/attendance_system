@@ -34,6 +34,7 @@ from common.tenant import use_company
 from employees.models import EmployeeCompensation
 from organization.services import require_structure_manager
 from payroll.models import (
+    PayrollAdjustment,
     PayrollLine,
     PenaltyAssessment,
     PenaltyAssessmentAttendance,
@@ -264,7 +265,7 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 
 
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
-                  penalty_rules=(), waived=frozenset(), employee_key=""):
+                  penalty_rules=(), waived=frozenset(), employee_key="", adjustments=()):
     """Lines and totals for one employee. Pure: no database writes.
 
     ``penalty_rules`` add one deduction line per penalty found; the
@@ -324,6 +325,16 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     overtime_lines, overtime = _overtime_lines(pay_basis, rate, rules, records, days_in_month)
     lines.extend(overtime_lines)
 
+    # One-time bonus and deduction lines added on the draft (A11 part 2).
+    adjustment_lines = []
+    for adjustment in adjustments:
+        kind = "earning" if adjustment.adjustment_type == "earning" else "deduction"
+        adjustment_lines.append((len(lines), adjustment.pk))
+        lines.append((
+            kind, "BONUS" if kind == "earning" else "DEDUCTION",
+            adjustment.reason, ONE, adjustment.amount, money(adjustment.amount),
+        ))
+
     gross = sum((amount for kind, *_, amount in lines if kind == "earning"), Decimal("0"))
 
     penalties = []
@@ -369,6 +380,7 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
         "rules": rules.describe(),
         "penalties": penalties,
         "overtime": overtime,
+        "adjustments": adjustment_lines,
     }
 
 
@@ -490,6 +502,11 @@ def generate_payroll(*, actor, company_id, year, month):
                 payroll_period=period, status=PenaltyAssessment.Status.WAIVED
             ).values_list("occurrence_identity", flat=True)
         )
+        adjustments_by_employee = {}
+        for adjustment in PayrollAdjustment.objects.filter(
+            target_payroll_period=period, status=PayrollAdjustment.Status.ACTIVE
+        ).order_by("pk"):
+            adjustments_by_employee.setdefault(adjustment.employee_id, []).append(adjustment)
 
         records_by_employee = {}
         for record in (
@@ -514,6 +531,7 @@ def generate_payroll(*, actor, company_id, year, month):
                 compensation.pay_basis, compensation.base_rate, records,
                 rules=rules, days_in_month=last.day,
                 penalty_rules=penalty_rules, waived=waived, employee_key=f"{employee.pk}:",
+                adjustments=adjustments_by_employee.get(employee.pk, ()),
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,
@@ -537,13 +555,19 @@ def generate_payroll(*, actor, company_id, year, month):
                 )
                 for index, occurrence in result["penalties"]
             }
+            adjusted = dict(result["adjustments"])
             PayrollLine.objects.bulk_create([
                 PayrollLine(
                     company=membership.company, payroll_record=payroll_record,
                     line_type=kind, code=code, description=label,
                     quantity=money(quantity), rate=rate, amount=amount, sequence=index,
                     penalty_assessment=assessments.get(index),
-                    source_type="penalty" if index in assessments else "",
+                    payroll_adjustment_id=adjusted.get(index),
+                    is_manual=index in adjusted,
+                    source_type=(
+                        "penalty" if index in assessments
+                        else "adjustment" if index in adjusted else ""
+                    ),
                 )
                 for index, (kind, code, label, quantity, rate, amount) in enumerate(result["lines"])
             ])
@@ -650,3 +674,83 @@ def reopen_payroll(*, actor, company_id, year, month, reason):
             after={"status": PayrollRun.Status.DRAFT, "reason": reason},
         )
     return run
+
+
+def _regenerated_record(actor, company_id, period, employee_id):
+    run = generate_payroll(
+        actor=actor, company_id=company_id,
+        year=period.start_date.year, month=period.start_date.month,
+    )
+    with use_company(company_id):
+        return run.records.filter(employee_id=employee_id).first()
+
+
+@transaction.atomic
+def add_adjustment(*, actor, company_id, record_id, adjustment_type, amount, reason):
+    """Add a one-time bonus or deduction to a draft payslip, then regenerate the month."""
+    membership = require_structure_manager(actor, company_id)
+    if adjustment_type not in PayrollAdjustment.AdjustmentType.values:
+        raise ValidationError({"adjustment_type": "Choose Bonus or Deduction."})
+    try:
+        amount = Decimal(str(amount))
+    except ArithmeticError:
+        amount = Decimal("0")
+    if not amount > 0:
+        raise ValidationError({"amount": "Enter an amount above zero."})
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError({"reason": "Give a reason; it is shown on the payslip."})
+    with use_company(company_id):
+        record = PayrollRecord.objects.select_related("payroll_run__payroll_period").filter(
+            pk=record_id
+        ).first()
+        if record is None:
+            raise PermissionDenied("Payslip not found in this company.")
+        if record.payroll_run.status != PayrollRun.Status.DRAFT:
+            raise ValidationError(
+                "Bonus and deduction lines can only change while the salary is a draft."
+            )
+        period = record.payroll_run.payroll_period
+        adjustment = PayrollAdjustment(
+            company=membership.company, employee_id=record.employee_id,
+            target_payroll_period=period, adjustment_type=adjustment_type,
+            amount=amount, reason=reason, created_by=actor, updated_by=actor,
+        )
+        adjustment.full_clean()
+        adjustment.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.adjustment_added", obj=adjustment,
+            after={"employee_id": record.employee_id, "type": adjustment_type,
+                   "amount": str(amount), "reason": reason},
+        )
+        employee_id = record.employee_id
+    return _regenerated_record(actor, company_id, period, employee_id)
+
+
+@transaction.atomic
+def remove_adjustment(*, actor, company_id, adjustment_id):
+    """Remove a bonus or deduction from a draft month (kept as removed), then regenerate."""
+    membership = require_structure_manager(actor, company_id)
+    with use_company(company_id):
+        adjustment = PayrollAdjustment.objects.select_for_update(of=("self",)).select_related(
+            "target_payroll_period"
+        ).filter(pk=adjustment_id, status=PayrollAdjustment.Status.ACTIVE).first()
+        if adjustment is None:
+            raise PermissionDenied("Line not found in this company.")
+        period = adjustment.target_payroll_period
+        if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.POSTED).exists():
+            raise ValidationError(
+                "Bonus and deduction lines can only change while the salary is a draft."
+            )
+        adjustment.status = PayrollAdjustment.Status.CANCELLED
+        adjustment.updated_by = actor
+        adjustment.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.adjustment_removed", obj=adjustment,
+            before={"status": "active"},
+            after={"status": "cancelled", "amount": str(adjustment.amount), "reason": adjustment.reason},
+        )
+        employee_id = adjustment.employee_id
+    return _regenerated_record(actor, company_id, period, employee_id)

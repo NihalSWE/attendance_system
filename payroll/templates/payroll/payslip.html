@@ -284,6 +284,58 @@
         </div>
     </div>
 
+    {% if not for_employee %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Bonus and deductions
+                </h2>
+            </div>
+            <div class="card__body stack">
+                {% if adjustments %}
+                    {% for adjustment in adjustments %}
+                        <div class="row">
+                            <span>
+                                {{ adjustment.get_adjustment_type_display }} · {{ adjustment.amount|money }} · {{ adjustment.reason }}
+                            </span>
+                            {% if can_adjust %}
+                                <form method="post" action="{% url 'payroll:payslip_adjustment_remove' adjustment.pk %}">
+                                    {% csrf_token %}
+                                    <button class="btn btn--quiet btn--sm" type="submit">
+                                        Remove
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="field__help">
+                        No bonus or deduction added for this month.
+                    </p>
+                {% endif %}
+                {% if can_adjust %}
+                    <form method="post" action="{% url 'payroll:payslip_adjustment_add' record.pk %}" class="stack" novalidate>
+                        {% csrf_token %}
+                        <div class="grid grid--2">
+                            {% include "leaves/includes/field.html" with field=adjustment_form.adjustment_type %}
+                            {% include "leaves/includes/field.html" with field=adjustment_form.amount %}
+                        </div>
+                        {% include "leaves/includes/field.html" with field=adjustment_form.reason %}
+                        <div class="row">
+                            <button class="btn btn--primary" type="submit">
+                                Add line
+                            </button>
+                        </div>
+                    </form>
+                {% else %}
+                    <p class="field__help">
+                        This salary is finalised. Undo finalise on Salary by month to change these lines.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+
     <div class="card">
         <div class="card__head">
             <h2>

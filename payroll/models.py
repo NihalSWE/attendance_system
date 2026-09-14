@@ -686,6 +686,46 @@ class PayrollRecord(TenantOwned):
         return f"{self.employee_id} {self.net_pay}"
 
 
+class PayrollAdjustment(TenantOwned, ActorTracked):
+    """A one-time bonus or deduction on one employee's month (A11 part 2, dictionary §77).
+
+    Kept simple: amount and reason, added on a draft salary. Generation turns
+    each active one into a manual payslip line, so it survives regenerating.
+    Removing it marks it removed; nothing is deleted.
+    """
+
+    class AdjustmentType(models.TextChoices):
+        EARNING = "earning", "Bonus"
+        DEDUCTION = "deduction", "Deduction"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CANCELLED = "cancelled", "Removed"
+
+    employee = models.ForeignKey(
+        "employees.Employee", on_delete=models.PROTECT, related_name="payroll_adjustments"
+    )
+    target_payroll_period = models.ForeignKey(
+        PayrollPeriod, on_delete=models.PROTECT, related_name="adjustments"
+    )
+    adjustment_type = models.CharField(max_length=16, choices=AdjustmentType.choices)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    reason = models.CharField(max_length=255)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+
+    class Meta:
+        db_table = "payroll_adjustment"
+        ordering = ("pk",)
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0), name="payroll_adjustment_amount_positive"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_adjustment_type_display()} {self.amount}"
+
+
 class PayrollLine(TenantOwned):
     class LineType(models.TextChoices):
         EARNING = "earning", "Earning"
@@ -700,6 +740,10 @@ class PayrollLine(TenantOwned):
     source_type = models.CharField(max_length=24, blank=True, default="")
     penalty_assessment = models.ForeignKey(
         PenaltyAssessment, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="payroll_lines",
+    )
+    payroll_adjustment = models.ForeignKey(
+        PayrollAdjustment, null=True, blank=True, on_delete=models.PROTECT,
         related_name="payroll_lines",
     )
     code = models.CharField(max_length=32)

@@ -39,6 +39,7 @@ from payroll.forms import (
 from payroll.models import (
     AttendancePenaltyRule,
     OvertimeDecision,
+    PayrollAdjustment,
     PayrollPeriod,
     PayrollPolicyVersion,
     PayrollRecord,
@@ -46,7 +47,9 @@ from payroll.models import (
     PenaltyAssessment,
 )
 from payroll.services import (
+    add_adjustment,
     finalise_payroll,
+    remove_adjustment,
     generate_payroll,
     reopen_payroll,
     summarise,
@@ -128,6 +131,19 @@ class ReopenForm(StyledFormMixin, forms.Form):
     reason = forms.CharField(
         label="Why is it being undone?", widget=forms.Textarea,
         help_text="Recorded in the audit trail. Employees stop seeing these payslips until it is finalised again.",
+    )
+
+
+class AdjustmentForm(StyledFormMixin, forms.Form):
+    adjustment_type = forms.ChoiceField(
+        label="Type", choices=PayrollAdjustment.AdjustmentType.choices
+    )
+    amount = forms.DecimalField(
+        label="Amount", min_value=Decimal("0.01"), max_digits=14, decimal_places=2
+    )
+    reason = forms.CharField(
+        label="Reason", max_length=255,
+        help_text="Shown on the payslip, for example Eid bonus or Advance recovery.",
     )
 
 
@@ -398,6 +414,41 @@ def penalty_waive(request, pk):
     return redirect("payroll:payslip", record.pk)
 
 
+@login_required
+@require_http_methods(["POST"])
+def payslip_adjustment_add(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    form = AdjustmentForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Choose Bonus or Deduction, and enter an amount above zero and a reason.")
+        return redirect("payroll:payslip", pk)
+    try:
+        record = add_adjustment(actor=request.user, company_id=company_id, record_id=pk,
+                                **form.cleaned_data)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return redirect("payroll:payslip", pk)
+    messages.success(request, "Line added. The month's salary was regenerated with it.")
+    return redirect("payroll:payslip", record.pk) if record else redirect("payroll:payroll_home")
+
+
+@login_required
+@require_http_methods(["POST"])
+def payslip_adjustment_remove(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    try:
+        record = remove_adjustment(actor=request.user, company_id=company_id, adjustment_id=pk)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return redirect("payroll:payroll_home")
+    messages.success(request, "Line removed. The month's salary was regenerated without it.")
+    return redirect("payroll:payslip", record.pk) if record else redirect("payroll:payroll_home")
+
+
 def rules_summary(rules):
     """The rules in force, as plain sentences for the settings page."""
     Version = PayrollPolicyVersion
@@ -604,6 +655,12 @@ def payslip(request, pk):
         if record is None:
             raise PermissionDenied("Payslip not found in this company.")
         context = payslip_context(record)
+        context["adjustments"] = list(PayrollAdjustment.objects.filter(
+            employee=record.employee, target_payroll_period=context["period"],
+            status=PayrollAdjustment.Status.ACTIVE,
+        ))
+        context["can_adjust"] = record.payroll_run.status == PayrollRun.Status.DRAFT
+        context["adjustment_form"] = AdjustmentForm()
     return render(request, "payroll/payslip.html", context)
 
 
