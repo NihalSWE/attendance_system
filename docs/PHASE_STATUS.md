@@ -704,6 +704,39 @@ Ajay's running server was not touched while he checked A3).**
   a payslip generated from a demo month. **No new .env variables.** After
   pulling: `python manage.py migrate`.
 
+**A5 — shifts, part one (2026-09-14, branch `feature/a5-shifts`, built in the
+worktree `D:\\attendance_device_a5`).** No migration: every field already
+existed.
+
+- **Shift form:** break minutes, paid break, leaving-early grace
+  (`grace_out_minutes`), "overtime starts after" (`overtime_after_minutes`).
+  Blank = 0. Grace in/out must be shorter than the shift.
+- **An employee's own shift** (`EmployeeShiftAssignment`, dictionary §17), on
+  the Edit employee page (Shift card): shows what the employee works today and
+  where it comes from; gives them their own shift from a day and optionally
+  until a day; lists their own shifts; ends the current one. No last day =
+  `employee_override`; with one = `temporary`, and afterwards they are back on
+  what they had (a temporary shift inside an override hands back to it). One
+  at a time, like department shifts: a new one closes the one in force, one
+  starting the same day replaces it (`cancelled`), a later saved change
+  refuses an earlier one. Starts/ends at the company's midnight. Audit:
+  `employee_shift.set`, `employee_shift.ended`.
+- **`WorkCalendar.shift_for(department_id, on, employee_id=None)`**: the
+  employee's own shift wins. Optional so existing callers keep working;
+  leave passes it. **Nihal's attendance calculation and demo seeder must pass
+  `employee_id`** (in his N1b), or an override is ignored there.
+- **Time picker** for every `HH:MM` box (see UI_AND_ONBOARDING_CONVENTIONS.md).
+- Penalties: "leaving early" subtracts the shift's grace-out.
+- Shift `effective_from/to` stay off the form: a shift is retired with its
+  status, and dated assignment lives on department and employee shifts.
+- **Not in part one — rotating shifts and two shifts in one day.** The
+  roadmap lists "rotating rosters, arbitrary split shifts" as later and the
+  schema has no table for a repeating pattern. A rotation can be entered
+  today as a series of temporary shifts. A repeating pattern (e.g. week A
+  day, week B night) needs a new model; proposed to Ajay before adding it.
+- 19 new tests (`scheduling/tests_employee_shifts.py`). Browser-checked at
+  1440, 768 and 375 px.
+
 #### Keeping the two sides apart
 
 - **The contract is `AttendanceRecord`.** Payroll reads `attendance_status`,
