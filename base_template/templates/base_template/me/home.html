@@ -28,6 +28,49 @@
             <div class="card">
                 <div class="card__head">
                     <h2>
+                        Today
+                    </h2>
+                    {% if now_status %}
+                        <span class="badge badge--{{ now_status.tone }}">
+                            {{ now_status.label }}
+                        </span>
+                    {% endif %}
+                </div>
+                <div class="card__body stack">
+                    {% if now_status.since_text %}
+                        <p>
+                            {{ now_status.label }} since {{ now_status.since_text }}{% if now_status.detail %} · {{ now_status.detail }}{% endif %}
+                        </p>
+                    {% endif %}
+                    {% if month_summary %}
+                        <dl class="facts facts--wide">
+                            <dt>
+                                {{ month_name }} so far
+                            </dt>
+                            <dd>
+                                {{ month_summary.present }} present · {{ month_summary.late }} late ·
+                                {{ month_summary.absent }} absent · {{ month_summary.leave }} on leave ·
+                                {{ month_summary.in_office }} in the office
+                            </dd>
+                        </dl>
+                    {% endif %}
+                    <div class="row">
+                        <a class="btn btn--primary" href="{% url 'me:attendance' %}">
+                            My attendance
+                        </a>
+                        <a class="btn btn--ghost" href="{% url 'me:leave' %}">
+                            My leave
+                        </a>
+                        <a class="btn btn--ghost" href="{% url 'me:payslips' %}">
+                            My payslips
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card__head">
+                    <h2>
                         Work
                     </h2>
                 </div>
@@ -101,9 +144,6 @@
                         {{ role_label|default:"—" }}{% if managed_branches %} of {% for branch in managed_branches %}{{ branch.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
                     </dd>
                 </dl>
-                <p class="field__help">
-                    Your attendance, leave and payslips will appear here as they are added.
-                </p>
             </div>
         </div>
     </div>

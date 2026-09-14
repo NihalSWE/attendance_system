@@ -551,7 +551,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A9 | **Overtime** — ✅ done 2026-09-14 (moved up: right after Nihal's N1b) | Review and approval, including an open overtime session with a blank check-out (the approver sets the time); overtime paid at × the hourly rate on the salary settings page (default 2×), a separate multiplier for holiday / weekly-off work, minimum overtime minutes and rounding; monthly staff's hourly rate = monthly ÷ days ÷ shift hours | — | Overtime review, approval and pay; `HolidayWorkAssignment`; attendance settings overtime approval |
 | A5 | **Shifts** — ✅ done 2026-09-14 (rotating shifts deferred by Ajay: "initially I want to keep it simple") | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
 | A6 | **Logins** — ✅ done 2026-09-14 | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
-| A7 | **Employee panel** | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
+| A7 | **Employee panel** — ✅ done 2026-09-14 | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
 | A8 | **Leave requests, branch-manager approval** | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 1 | Full leave: employee requests, approval step; salary and attendance pages for managers (branch manager part) |
 | A10 | **Full leave** | Half-day and hourly leave, partial pay, policies and versions, balances / entitlements / ledger, attachments, withdraw, amend; default leave types at onboarding; HR records leave; employee code in the picker | — | Full leave (rest); leave fields not built; HR role recording leave; default leave types; employee code in picker |
 | A11 | **Salary completeness** | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
@@ -877,6 +877,41 @@ merge).**
   new fields; two end-to-end salary tests now include the demo month's
   automatic overtime. **No new .env variables.**
 
+**A7 — employee panel (done 2026-09-14, branch `feature/a7-employee-panel`,
+worktree `D:\\attendance_device_a5`). No migration.**
+
+- **Where:** sign in with an employee's login (Employees → Edit → Login card
+  gives one). The sidebar is the employee's own: **My account**, **My
+  attendance**, **My leave**, **My payslips**, **Change password**, Sign out.
+  The top bar says "My panel" instead of the company-wide employee search.
+- **My account** (`/me/`): a **Today** card — the same status as the
+  Employees page's "Now" badge (N3: In office / On break / Left / Not in yet
+  / Absent / On leave / Off today, with the time) — this month so far
+  (present, late, absent, on leave, time in the office) and buttons to the
+  other pages; then Work and Login as before.
+- **My attendance** (`/me/attendance/`): Nihal's planner calendar (N2),
+  unchanged, for the signed-in employee only; month/year, Prev/Next; clicking
+  a day opens the same side panel with every scan, from `me:attendance_day`.
+  The calendar include takes an optional `day_url_template` for this — its
+  one change.
+- **My leave** (`/me/leave/`): days taken in the year by leave type and pay,
+  and every application (dates, type, days, pay, status, reason) with a year
+  filter. Asking for leave from here is A8.
+- **My payslips** (`/me/payslips/`): **finalised months only** — a draft can
+  still change, so the company checks it before anyone reads it as their
+  salary. Finalising a month is not built yet (A11), so the list says "No
+  payslips yet" until then. Opening one shows the same payslip page as the
+  company's (`payroll.views.payslip_context(record, for_employee=True)`: no
+  Waive). N7 is asked to make the payslip's breadcrumbs and "Draft" label
+  follow `for_employee` and the run's status.
+- **Safety:** every page reads the employee linked to the login — never an
+  id from the URL — so nobody can open another person's day, leave or
+  payslip; another person's payslip or a draft is a 404. A login without an
+  employee record (a company administrator) is told these pages are an
+  employee's own. The gate (A6) still keeps these logins off company pages.
+- 8 tests (`base_template/tests_employee_panel.py`). **No new .env
+  variables.**
+
 #### Keeping the two sides apart
 
 - **The contract is `AttendanceRecord`.** Payroll reads `attendance_status`,
@@ -937,7 +972,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A6, A9 (overtime approval and pay) and N0–N3 (N1b day close / live attendance and N3 in-office badge merged 2026-09-14). Ajay's session: A7 (employee panel), then A14 (sidebar menus), A8. Nihal: N7 (payslip redesign), then N4 (device attendance scope + Re-check punches), N5, N6. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A9 (overtime, approved automatically when scanned out) and N0–N3 (N1b day close / live attendance and N3 in-office badge merged 2026-09-14). Ajay's session: A14 (sidebar menus), then A8 (leave requests, branch-manager approval). Nihal: N7 (payslip redesign), then N4 (device attendance scope + Re-check punches), N5, N6. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 

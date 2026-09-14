@@ -1,0 +1,79 @@
+{% extends "base_template/base.html" %}
+{% load money %}
+{% block title %}
+    My payslips · Attendance
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                My payslips
+            </h1>
+            <p class="page__sub">
+                {{ employee.full_name }}
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        {% if payslips %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Month
+                            </th>
+                            <th class="numeric">
+                                Gross
+                            </th>
+                            <th class="numeric">
+                                Deductions
+                            </th>
+                            <th class="numeric">
+                                Net pay
+                            </th>
+                            <th class="no-sort">
+                                Payslip
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payslip in payslips %}
+                            <tr>
+                                <td>
+                                    {{ payslip.payroll_run.payroll_period.start_date|date:"F Y" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ payslip.gross_earnings|money }}
+                                </td>
+                                <td class="numeric">
+                                    {{ payslip.total_deductions|money }}
+                                </td>
+                                <td class="numeric">
+                                    <strong>
+                                        {{ payslip.currency }} {{ payslip.net_pay|money }}
+                                    </strong>
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'me:payslip' payslip.pk %}">
+                                        Open
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No payslips yet
+                </div>
+                <div class="empty__text">
+                    A month's payslip appears here once the company has finalised that month's salary.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

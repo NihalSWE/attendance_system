@@ -1,6 +1,5 @@
 {% load nav %}
-{# The sidebar for an Employee or Branch manager login. My attendance, leave and #}
-{# payslips join it with the employee panel (plan step A7). #}
+{# The sidebar for an Employee or Branch manager login: the employee panel (A6, A7). #}
 <aside class="sidebar" id="self-service-sidebar" aria-label="My navigation">
     <div class="sidebar__brand">
         <span class="sidebar__mark">
@@ -20,6 +19,34 @@
         </svg>
         <span>
             My account
+        </span>
+    </a>
+    <a class="sidebar__link {% active request 'attendance' 'attendance_day' %}" href="{% url 'me:attendance' %}" aria-label="My attendance">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4.5" width="18" height="16" rx="2"/>
+            <path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>
+        </svg>
+        <span>
+            My attendance
+        </span>
+    </a>
+    <a class="sidebar__link {% active request 'leave' %}" href="{% url 'me:leave' %}" aria-label="My leave">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 3.5h14v17l-3.5-2.2L12 20.5l-3.5-2.2L5 20.5z"/>
+            <path d="M9 9h6M9 13h4"/>
+        </svg>
+        <span>
+            My leave
+        </span>
+    </a>
+    <a class="sidebar__link {% active request 'payslips' 'payslip' %}" href="{% url 'me:payslips' %}" aria-label="My payslips">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2.5" y="5.5" width="19" height="13" rx="2"/>
+            <circle cx="12" cy="12" r="2.6"/>
+            <path d="M6 12h.01M18 12h.01"/>
+        </svg>
+        <span>
+            My payslips
         </span>
     </a>
     <a class="sidebar__link {% active request 'password' %}" href="{% url 'me:password' %}" aria-label="Change password">

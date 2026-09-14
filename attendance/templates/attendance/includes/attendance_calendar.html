@@ -9,10 +9,12 @@
     that scrolls sideways is worse than a list.
 
     Every day is a <button>, so the keyboard reaches it and Enter opens the
-    history. The panel it opens is fetched from attendance:attendance_day.
+    history. The panel it opens is fetched from attendance:attendance_day, or
+    from `day_url_template` when the page passes one (the employee panel's own
+    me:attendance_day, A7).
 {% endcomment %}
 <div class="cal" data-attendance-calendar
-     data-day-url-template="{% url 'attendance:attendance_day' employee.pk '0000-00-00' %}">
+     data-day-url-template="{% if day_url_template %}{{ day_url_template }}{% else %}{% url 'attendance:attendance_day' employee.pk '0000-00-00' %}{% endif %}">
 
     <div class="cal__summary">
         <div class="cal__stat">

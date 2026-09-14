@@ -529,33 +529,46 @@ def payslip(request, pk):
         return bail
     require_structure_manager(request.user, company_id)
     with use_company(company_id):
-        record = (
-            PayrollRecord.objects.select_related(
-                "employee", "payroll_run__payroll_period",
-                "employee_assignment_at_period_end__department__department",
-                "employee_assignment_at_period_end__designation__designation",
-                "employee_assignment_at_period_end__branch",
-            )
-            .filter(pk=pk).first()
-        )
+        record = payslip_records().filter(pk=pk).first()
         if record is None:
             raise PermissionDenied("Payslip not found in this company.")
-        period = record.payroll_run.payroll_period
-        days = list(
-            AttendanceRecord.objects.select_related("leave_day").filter(
-                employee=record.employee,
-                work_date__gte=period.start_date, work_date__lte=period.end_date,
-            ).order_by("work_date")
-        )
-        lines = list(record.lines.all())
-        penalty_list = list(
-            PenaltyAssessment.objects.select_related("penalty_rule", "approved_by")
-            .prefetch_related("days__attendance_record")
-            .filter(employee=record.employee, payroll_period=period)
-            .exclude(status=PenaltyAssessment.Status.REVERSED)
-            .order_by("period_start", "pk")
-        )
-    return render(request, "payroll/payslip.html", {
+        context = payslip_context(record)
+    return render(request, "payroll/payslip.html", context)
+
+
+def payslip_records():
+    """Payslips with everything the page reads. Call inside the company's context."""
+    return PayrollRecord.objects.select_related(
+        "employee", "payroll_run__payroll_period",
+        "employee_assignment_at_period_end__department__department",
+        "employee_assignment_at_period_end__designation__designation",
+        "employee_assignment_at_period_end__branch",
+    )
+
+
+def payslip_context(record, *, for_employee=False):
+    """What payroll/payslip.html shows. Call inside the company's context.
+
+    Shared by the company's payslip page and the employee's own (A7);
+    ``for_employee`` hides what is the company's to act on (Waive) and tells
+    the template it is the employee's page.
+    """
+    period = record.payroll_run.payroll_period
+    days = list(
+        AttendanceRecord.objects.select_related("leave_day").filter(
+            employee=record.employee,
+            work_date__gte=period.start_date, work_date__lte=period.end_date,
+        ).order_by("work_date")
+    )
+    lines = list(record.lines.all())
+    penalty_list = list(
+        PenaltyAssessment.objects.select_related("penalty_rule", "approved_by")
+        .prefetch_related("days__attendance_record")
+        .filter(employee=record.employee, payroll_period=period)
+        .exclude(status=PenaltyAssessment.Status.REVERSED)
+        .order_by("period_start", "pk")
+    )
+    return {
         "record": record,
         "period": period,
         "assignment": record.employee_assignment_at_period_end,
@@ -564,5 +577,8 @@ def payslip(request, pk):
         "counts": summarise(days),
         "days": days,
         "penalties": penalty_list,
-        "can_waive": record.payroll_run.status == PayrollRun.Status.DRAFT,
-    })
+        "can_waive": (
+            not for_employee and record.payroll_run.status == PayrollRun.Status.DRAFT
+        ),
+        "for_employee": for_employee,
+    }

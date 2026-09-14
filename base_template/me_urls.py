@@ -9,5 +9,10 @@ app_name = "me"
 # (common.middleware.SelfServiceGate lets this namespace through).
 urlpatterns = [
     path("", me_views.my_account, name="home"),
+    path("attendance/", me_views.my_attendance, name="attendance"),
+    path("attendance/<slug:on>/", me_views.my_attendance_day, name="attendance_day"),
+    path("leave/", me_views.my_leave, name="leave"),
+    path("payslips/", me_views.my_payslips, name="payslips"),
+    path("payslips/<int:pk>/", me_views.my_payslip, name="payslip"),
     path("password/", login_required(me_views.MyPasswordView.as_view()), name="password"),
 ]

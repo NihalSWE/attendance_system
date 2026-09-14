@@ -1,0 +1,22 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+        </div>
+    </div>
+    <div class="empty">
+        <div class="empty__title">
+            This login is not linked to an employee
+        </div>
+        <div class="empty__text">
+            These pages show an employee's own attendance, leave and payslips. Your login
+            is not an employee's, so there is nothing to show here.
+        </div>
+    </div>
+{% endblock %}

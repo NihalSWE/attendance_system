@@ -6,6 +6,11 @@
         <span class="platform-label">
             Platform owner
         </span>
+    {% elif self_service %}
+        {# An employee's own panel: no company-wide employee search. #}
+        <span class="platform-label">
+            My panel
+        </span>
     {% else %}
         <form class="topbar__search" action="{% url 'employee_list' %}" method="get">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">

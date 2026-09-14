@@ -1,0 +1,72 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    My attendance · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/attendance-calendar.css' %}">
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'attendance/js/calendar.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                My attendance
+            </h1>
+            <p class="page__sub">
+                {{ month_name }} {{ year }} · {{ employee.full_name }}. Click a day to see every scan.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__body">
+            <form class="cal__toolbar" method="get">
+                <div class="field">
+                    <label class="field__label" for="month">
+                        Month
+                    </label>
+                    <select class="input select js-select" id="month" name="month">
+                        {% for value, name in months %}
+                            <option value="{{ value }}" {% if value == month %}selected{% endif %}>
+                                {{ name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label class="field__label" for="year">
+                        Year
+                    </label>
+                    <select class="input select js-select" id="year" name="year">
+                        {% for value in years %}
+                            <option value="{{ value }}" {% if value == year %}selected{% endif %}>
+                                {{ value }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="cal__toolbar-actions">
+                    <button class="btn btn--primary" type="submit">
+                        Show
+                    </button>
+                    <a class="btn btn--ghost btn--sm" href="?month={{ previous_month }}&year={{ previous_year }}" aria-label="Previous month">
+                        ‹ Prev
+                    </a>
+                    <a class="btn btn--ghost btn--sm" href="?month={{ next_month }}&year={{ next_year }}" aria-label="Next month">
+                        Next ›
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__body">
+            {% include "attendance/includes/attendance_calendar.html" %}
+        </div>
+    </div>
+{% endblock %}
