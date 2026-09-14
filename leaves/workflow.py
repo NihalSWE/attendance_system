@@ -121,6 +121,29 @@ def submit_request(*, actor, company_id, values):
 
 
 @transaction.atomic
+def withdraw_request(*, actor, company_id, request_id):
+    """The employee takes back their own pending request. Nothing had counted yet."""
+    member = require_company_membership(actor, company_id)
+    with use_company(company_id):
+        request = LeaveRequest.objects.select_for_update(of=('self',)).filter(
+            pk=request_id, employee__user=actor).first()
+        if request is None:
+            raise PermissionDenied('Leave request not found.')
+        if request.status != 'pending':
+            raise ValidationError('Only a pending request can be withdrawn.')
+        request.segments.update(status=LeaveRequestSegment.Status.CANCELLED)
+        request.status = LeaveRequest.Status.WITHDRAWN
+        request.decision_snapshot = {**request.decision_snapshot, 'withdrawn_by': actor.pk}
+        request.updated_by = actor
+        request.full_clean()
+        request.save()
+        record_company_event(actor=actor, membership=member, company=member.company,
+                             action='leave.withdrawn', obj=request,
+                             before={'status': 'pending'}, after={'status': request.status})
+        return request
+
+
+@transaction.atomic
 def decide_request(*, actor, company_id, request_id, approve, pay_type='paid', reason=''):
     member = reviewer(actor, company_id)
     with use_company(company_id):

@@ -79,7 +79,7 @@ def create_platform_company(*, actor, values):
     values = {field: getattr(candidate, field) for field in COMPANY_FIELDS}
     company = onboard_company(
         **{k: values[k] for k in ("code", "slug", "name", "timezone", "currency", "country_code")},
-        created_by=actor, require_new=True,
+        created_by=actor, require_new=True, default_leave_types=True,
     )
     for field, value in values.items():
         setattr(company, field, value)

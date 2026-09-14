@@ -82,7 +82,10 @@ class RecordLeaveForm(StyledFormMixin, forms.Form):
 
 
 def _employee_label(employee):
-    return employee.full_name
+    # The view annotates the current employee code, so the picker can find
+    # people by code as well as by name.
+    code = getattr(employee, "table_code", "")
+    return f"{code} · {employee.full_name}" if code else employee.full_name
 
 
 class CancelLeaveForm(StyledFormMixin, forms.Form):

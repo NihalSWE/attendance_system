@@ -7,9 +7,10 @@ Aliases keep an area's item selected while editing one of its records.
 from django.urls import reverse
 
 
-def item(label, view, *aliases, fragment="", manage=False, unrestricted=False):
-    return {"label": label, "view": view, "aliases": aliases,
-            "fragment": fragment, "manage": manage, "unrestricted": unrestricted}
+def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False):
+    # record: shown to people who may record leave (HR as well as administrators).
+    return {"label": label, "view": view, "aliases": aliases, "fragment": fragment,
+            "manage": manage, "unrestricted": unrestricted, "record": record}
 
 
 COMPANY_MENUS = (
@@ -23,7 +24,7 @@ COMPANY_MENUS = (
     )),
     ("leave", "Leave", (
         item("Leave list", "leaves:leave_list", "leaves:leave_cancel"),
-        item("Record leave", "leaves:leave_record", manage=True),
+        item("Record leave", "leaves:leave_record", record=True),
         item("Approval inbox", "me:leave_inbox", "me:leave_decide", manage=True),
         item("Leave types", "leaves:leave_type_list", "leaves:leave_type_create",
              "leaves:leave_type_edit", "leaves:leave_type_status"),
@@ -70,8 +71,9 @@ COMPANY_MENUS = (
 )
 
 
-def company_menus(request, *, can_manage, can_manage_devices):
+def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=None):
     current = getattr(getattr(request, "resolver_match", None), "view_name", "")
+    can_record_leave = can_manage if can_record_leave is None else can_record_leave
     menus = []
     for key, label, entries in COMPANY_MENUS:
         if key == "devices" and not can_manage_devices:
@@ -79,6 +81,8 @@ def company_menus(request, *, can_manage, can_manage_devices):
         links = []
         for entry in entries:
             if entry["manage"] and not can_manage:
+                continue
+            if entry["record"] and not can_record_leave:
                 continue
             if entry["unrestricted"] and not can_manage_devices:
                 continue

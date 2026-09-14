@@ -16,7 +16,7 @@ from accounts.models import CompanyMembership, User
 from common.tenant import use_company
 from employees.services import create_employee
 from leaves import services
-from leaves.models import LeaveDay, LeaveRequest
+from leaves.models import LeaveDay, LeaveRequest, LeaveType
 from organization.catalogue import adopt_department, adopt_designation
 from organization.models import Branch
 from scheduling import services as schedule
@@ -158,14 +158,35 @@ class RecordLeaveTests(LeaveBase):
                 start_date=THU, end_date=THU,
             )
 
-    def test_hr_cannot_record_leave_yet(self):
+    def test_hr_records_and_cancels_leave_but_never_their_own(self):
+        values = {"employee": self.employee, "leave_type": self.casual,
+                  "start_date": THU, "end_date": THU, "pay_type": "paid", "reason": ""}
+        leave = services.record_leave(actor=self.hr, company_id=self.company.pk, values=values)
+        self.assertEqual(leave.status, LeaveRequest.Status.APPROVED)
+        services.cancel_leave(actor=self.hr, company_id=self.company.pk, request_id=leave.pk)
+        with use_company(self.company):
+            self.employee.user = self.hr
+            self.employee.save(update_fields=["user"])
         with self.assertRaises(PermissionDenied):
-            services.record_leave(
-                actor=self.hr, company_id=self.company.pk,
-                values={"employee": self.employee, "leave_type": self.casual,
-                        "start_date": THU, "end_date": THU, "pay_type": "paid",
-                        "reason": ""},
-            )
+            services.record_leave(actor=self.hr, company_id=self.company.pk, values=values)
+        # An administrator's record of it cannot be cancelled by HR either.
+        leave = self._record(start=THU, end=THU)
+        with self.assertRaises(PermissionDenied):
+            services.cancel_leave(actor=self.hr, company_id=self.company.pk, request_id=leave.pk)
+
+    def test_default_leave_types_for_new_and_existing_companies(self):
+        fresh = onboard_company(code="NEW", slug="new", name="New Ltd", default_leave_types=True)
+        with use_company(fresh):
+            self.assertEqual(sorted(LeaveType.objects.values_list("code", flat=True)),
+                             ["CL", "EL", "ML", "SL"])
+        # Acme already has its own CL, which is kept.
+        added = services.add_default_leave_types(actor=self.admin, company_id=self.company.pk)
+        self.assertEqual(sorted(t.code for t in added), ["EL", "ML", "SL"])
+        self.assertEqual(services.add_default_leave_types(actor=self.admin, company_id=self.company.pk), [])
+        with use_company(self.company):
+            self.assertEqual(LeaveType.objects.get(code="CL").name, "Casual leave")
+        with self.assertRaises(PermissionDenied):
+            services.add_default_leave_types(actor=self.hr, company_id=self.company.pk)
 
     def test_inactive_leave_type_is_refused(self):
         services.set_leave_type_status(
@@ -241,7 +262,13 @@ class LeaveScreenTests(LeaveBase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "already on leave")
 
-    def test_hr_can_view_but_not_record(self):
+    def test_hr_records_leave_and_the_picker_shows_employee_codes(self):
         self.client.force_login(self.hr)
-        self.assertEqual(self.client.get(reverse("leaves:leave_list")).status_code, 200)
-        self.assertEqual(self.client.get(reverse("leaves:leave_record")).status_code, 403)
+        self.assertContains(self.client.get(reverse("leaves:leave_list")), reverse("leaves:leave_record"))
+        self.assertContains(self.client.get(reverse("leaves:leave_record")), "E1 · Rahim")
+        self.assertEqual(self.client.post(reverse("leaves:leave_type_defaults")).status_code, 403)
+        self.client.force_login(self.admin)
+        self.assertContains(self.client.get(reverse("leaves:leave_type_list")), "Add default leave types")
+        response = self.client.post(reverse("leaves:leave_type_defaults"))
+        self.assertRedirects(response, reverse("leaves:leave_type_list"))
+        self.assertNotContains(self.client.get(reverse("leaves:leave_type_list")), "Add default leave types")

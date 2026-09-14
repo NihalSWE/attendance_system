@@ -14,6 +14,7 @@ urlpatterns = [
     path("attendance/<slug:on>/", me_views.my_attendance_day, name="attendance_day"),
     path("leave/", me_views.my_leave, name="leave"),
     path("leave/request/", request_views.request_leave, name="leave_request"),
+    path("leave/<int:pk>/withdraw/", request_views.withdraw_leave, name="leave_withdraw"),
     path("leave-inbox/", request_views.leave_inbox, name="leave_inbox"),
     path("leave-inbox/<int:pk>/", request_views.leave_decide, name="leave_decide"),
     path("branch-attendance/", request_views.branch_attendance, name="branch_attendance"),

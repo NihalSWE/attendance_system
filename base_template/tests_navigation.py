@@ -72,9 +72,11 @@ class CompanyNavigationTests(CalendarBase):
         sidebar = page.content.decode().split('</aside>', 1)[0]
         self.assertNotIn('data-menu="devices"', sidebar)
         for view in ("payroll:salary_settings", "organization:employee_create",
-                     "leaves:leave_record", "scheduling:attendance_settings_edit"):
+                     "scheduling:attendance_settings_edit"):
             self.assertNotIn(f'href="{reverse(view)}', sidebar)
             self.assertEqual(self.client.get(reverse(view)).status_code, 403)
+        # HR records leave (A10a), so that link stays in HR's menu.
+        self.assertIn(f'href="{reverse("leaves:leave_record")}"', sidebar)
         self.assertIn('data-menu="attendance"', sidebar)
 
     def test_branch_scoped_admin_has_no_device_menu(self):

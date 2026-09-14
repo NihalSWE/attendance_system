@@ -21,13 +21,18 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from accounts.models import CompanyMembership
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
 from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
-from organization.services import require_structure_manager
+from organization.services import (
+    STRUCTURE_ROLES,
+    require_company_membership,
+    require_structure_manager,
+)
 from scheduling.calendar import WORKING, WorkCalendar
 
 LEAVE_TYPE_FIELDS = ("code", "name", "description")
@@ -35,6 +40,42 @@ RECORD_FIELDS = ("employee", "leave_type", "start_date", "end_date", "pay_type",
 
 # A leave longer than this is almost certainly a typo in the year.
 MAX_LEAVE_DAYS = 366
+
+# HR records and cancels leave; leave types stay with owners and administrators.
+LEAVE_RECORDER_ROLES = (*STRUCTURE_ROLES, CompanyMembership.Role.HR)
+
+# Offered to every new company and addable later from Leave types. Whether a
+# given leave is paid is still decided when it is recorded or approved.
+DEFAULT_LEAVE_TYPES = (
+    ("CL", "Casual leave", "Short personal leave, for example a family matter."),
+    ("SL", "Sick leave", "Illness or medical treatment."),
+    ("EL", "Earned leave", "Annual leave earned through service."),
+    ("ML", "Maternity leave", "Leave before and after childbirth."),
+)
+
+
+def require_leave_recorder(actor, company_id):
+    membership = require_company_membership(actor, company_id)
+    if membership.role not in LEAVE_RECORDER_ROLES:
+        raise PermissionDenied(
+            "Recording leave requires HR, owner or company administrator access."
+        )
+    return membership
+
+
+def _refuse_own_leave(actor, employee):
+    if employee.user_id and employee.user_id == actor.pk:
+        raise PermissionDenied(
+            "You cannot record or cancel your own leave. Ask another administrator or HR."
+        )
+
+
+def _refuse_finalised_month(company_id, start, end):
+    # Imported here: attendance.services reads leave days.
+    from attendance.services import locked_ranges
+
+    if any(start <= last and end >= first for first, last in locked_ranges(company_id)):
+        raise ValidationError({"start_date": "These dates include a finalised salary month."})
 
 
 def _writable(values, allowed):
@@ -114,6 +155,34 @@ def set_leave_type_status(*, actor, company_id, leave_type_id, status):
             before=before, after={"status": status},
         )
     return leave_type
+
+
+def create_default_leave_types(company, *, actor=None):
+    """Add the standard leave types a company lacks. Existing codes are kept as they are."""
+    with use_company(company.pk):
+        existing = set(LeaveType.objects.values_list("code", flat=True))
+        return [
+            create_validated(
+                LeaveType, company=company, code=code, name=name, description=description,
+                created_by=actor, updated_by=actor,
+            )
+            for code, name, description in DEFAULT_LEAVE_TYPES
+            if code not in existing
+        ]
+
+
+@transaction.atomic
+def add_default_leave_types(*, actor, company_id):
+    membership = require_structure_manager(actor, company_id)
+    created = create_default_leave_types(membership.company, actor=actor)
+    with use_company(company_id):
+        for leave_type in created:
+            record_company_event(
+                actor=actor, membership=membership, company=membership.company,
+                action="leave_type.created", obj=leave_type,
+                after={field: getattr(leave_type, field) for field in LEAVE_TYPE_FIELDS},
+            )
+    return created
 
 
 # --------------------------------------------------------------------------
@@ -223,7 +292,7 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
 @transaction.atomic
 def record_leave(*, actor, company_id, values):
     """Record approved, full-day leave for one employee."""
-    membership = require_structure_manager(actor, company_id)
+    membership = require_leave_recorder(actor, company_id)
     values = _writable(values, RECORD_FIELDS)
     employee = values["employee"]
     leave_type = values["leave_type"]
@@ -234,8 +303,10 @@ def record_leave(*, actor, company_id, values):
     with use_company(company_id):
         if employee.company_id != membership.company.pk:
             raise PermissionDenied("That employee is not in this company.")
+        _refuse_own_leave(actor, employee)
         if leave_type.company_id != membership.company.pk or leave_type.status != ActiveStatus.ACTIVE:
             raise ValidationError({"leave_type": "Choose an active leave type."})
+        _refuse_finalised_month(company_id, values["start_date"], values["end_date"])
 
         days, skipped = plan_leave_days(
             company_id=company_id, employee=employee,
@@ -318,7 +389,7 @@ def record_leave(*, actor, company_id, values):
 
 
 def get_leave_for_edit(*, actor, company_id, request_id):
-    membership = require_structure_manager(actor, company_id)
+    membership = require_leave_recorder(actor, company_id)
     with use_company(company_id):
         request = (
             LeaveRequest.objects.select_related("employee")
@@ -337,7 +408,10 @@ def cancel_leave(*, actor, company_id, request_id, reason=""):
     )
     if request.status == LeaveRequest.Status.CANCELLED:
         raise ValidationError("This leave is already cancelled.")
+    _refuse_own_leave(actor, request.employee)
     with use_company(company_id):
+        for start, end in request.segments.values_list("start_date", "end_date"):
+            _refuse_finalised_month(company_id, start, end)
         LeaveDay.objects.filter(request_segment__leave_request=request).update(
             status=LeaveDay.Status.CANCELLED
         )

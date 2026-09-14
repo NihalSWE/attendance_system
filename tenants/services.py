@@ -24,8 +24,13 @@ def onboard_company(
     effective_from=None,
     created_by=None,
     require_new=False,
+    default_leave_types=False,
 ):
     """Create a company with its default branch and attendance settings.
+
+    ``default_leave_types`` also adds the standard leave types (Casual, Sick,
+    Earned, Maternity). The platform's Create company screen turns it on; seeds
+    and tests create their own leave types.
 
     Atomic: the whole block is one transaction, so a failure part-way through
     leaves no half-built company (no company without a branch, no branch without
@@ -75,5 +80,10 @@ def onboard_company(
             effective_from=effective_from,
             created_by=created_by,
         )
+    if default_leave_types:
+        # Imported here: the leaves app depends on tenants, not the reverse.
+        from leaves.services import create_default_leave_types
+
+        create_default_leave_types(company, actor=created_by)
 
     return company

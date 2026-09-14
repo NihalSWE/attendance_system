@@ -123,6 +123,9 @@
                             <th>
                                 Reason
                             </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -155,6 +158,17 @@
                                     {{ row.request.reason|default:"—"|truncatechars:60 }}
                                     {% if row.request.decision_snapshot.reason %}
                                         <p class="field__help">Decision: {{ row.request.decision_snapshot.reason }}</p>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.request.status == 'pending' %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'me:leave_withdraw' row.request.pk %}">
+                                            Withdraw
+                                        </a>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
                                     {% endif %}
                                 </td>
                             </tr>

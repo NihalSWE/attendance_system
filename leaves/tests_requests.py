@@ -87,6 +87,26 @@ class RequestTests(LiveTestCase):
         with self.assertRaises(ValidationError):
             self.submit()
 
+    def test_employee_withdraws_only_their_own_pending_request(self):
+        request = self.submit()
+        with self.assertRaises(PermissionDenied):
+            workflow.withdraw_request(actor=self.manager, company_id=self.company.pk, request_id=request.pk)
+        self.client.force_login(self.worker)
+        url = reverse('me:leave_withdraw', args=[request.pk])
+        self.assertContains(self.client.get(reverse('me:leave'), {'year': 2026}), url)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertRedirects(self.client.post(url), reverse('me:leave'))
+        request.refresh_from_db()
+        self.assertEqual(request.status, 'withdrawn')
+        with self.assertRaises(ValidationError):
+            self.decide(request)
+        # The dates are free again; an approved request cannot be withdrawn.
+        again = self.submit()
+        self.decide(again)
+        with self.assertRaises(ValidationError):
+            workflow.withdraw_request(actor=self.worker, company_id=self.company.pk, request_id=again.pk)
+        self.assertEqual(self.client.get(reverse('me:leave_withdraw', args=[again.pk])).status_code, 404)
+
     def test_manager_scope_and_admin_fallback(self):
         request = self.submit()
         with self.assertRaises(PermissionDenied):

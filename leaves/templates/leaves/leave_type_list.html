@@ -34,6 +34,14 @@
                 <a class="btn btn--primary" href="{% url 'leaves:leave_type_create' %}">
                     Add leave type
                 </a>
+                {% if missing_defaults %}
+                    <form method="post" action="{% url 'leaves:leave_type_defaults' %}">
+                        {% csrf_token %}
+                        <button class="btn btn--ghost" type="submit" title="Casual, Sick, Earned and Maternity leave. Types you already have are kept.">
+                            Add default leave types
+                        </button>
+                    </form>
+                {% endif %}
             {% endif %}
         </div>
     </div>

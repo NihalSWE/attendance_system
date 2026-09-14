@@ -190,7 +190,7 @@ def my_leave(request):
             .annotate(table_date=Min("segments__start_date"), table_type=Min("segments__leave_type__name"))
             .distinct().order_by("-pk"),
             search=("table_type", "status", "reason"),
-            order=("table_date", "table_type", None, None, "status", "reason"))
+            order=("table_date", "table_type", None, None, "status", "reason", None))
         taken = Counter()
         for name, pay_type, units in LeaveDay.objects.filter(
             employee=employee, status__in=LEAVE_TAKEN,

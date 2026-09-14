@@ -20,7 +20,7 @@ from common.forms import StyledFormMixin, apply_service_errors
 from common.tenant import use_company
 from employees.models import EmployeeAssignment
 from leaves.forms import RequestLeaveForm, DecideLeaveForm
-from leaves.models import LeaveType
+from leaves.models import LeaveRequest, LeaveType
 from leaves import workflow
 
 
@@ -42,6 +42,25 @@ def request_leave(request):
                 return redirect('me:leave')
         return render(request, 'leaves/request_form.html', {'form': form, 'title': 'Request leave',
                        'submit_label': 'Submit request', 'back_url': 'me:leave'})
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def withdraw_leave(request, pk):
+    workflow.require_company_membership(request.user, request.company_id)
+    with use_company(request.company_id):
+        leave = get_object_or_404(LeaveRequest.objects.select_related('employee'),
+                                  pk=pk, employee__user=request.user, status='pending')
+        segment = leave.segments.select_related('leave_type').get(status='active')
+    if request.method == 'POST':
+        try:
+            workflow.withdraw_request(actor=request.user, company_id=request.company_id, request_id=pk)
+        except ValidationError as exc:
+            messages.error(request, ' '.join(exc.messages))
+        else:
+            messages.success(request, 'Leave request withdrawn.')
+        return redirect('me:leave')
+    return render(request, 'leaves/withdraw_form.html', {'leave': leave, 'segment': segment})
 
 
 @login_required

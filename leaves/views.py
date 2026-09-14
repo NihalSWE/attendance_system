@@ -5,7 +5,7 @@ import datetime
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db.models import Max, Sum, Exists, Min, OuterRef, Q
+from django.db.models import Max, Sum, Exists, Min, OuterRef, Q, Subquery
 from django.shortcuts import redirect
 from base_template.tables import paginate, render
 from django.utils import timezone
@@ -14,7 +14,7 @@ from django.views.decorators.http import require_http_methods
 from common.choices import ActiveStatus
 from common.forms import apply_service_errors
 from common.tenant import use_company
-from employees.models import Employee
+from employees.models import Employee, EmployeeAssignment
 from leaves import services
 from leaves.forms import CancelLeaveForm, LeaveTypeForm, LeaveTypeStatusForm, RecordLeaveForm
 from leaves.models import LeaveRequest, LeaveRequestSegment, LeaveType
@@ -121,7 +121,7 @@ def leave_list(request):
         ],
         "query": query,
         "has_types": has_types,
-        "can_manage": membership.role in STRUCTURE_ROLES,
+        "can_record": membership.role in services.LEAVE_RECORDER_ROLES,
     })
 
 
@@ -131,8 +131,10 @@ def leave_record(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    require_structure_manager(request.user, company_id)
+    services.require_leave_recorder(request.user, company_id)
     with use_company(company_id):
+        current_code = EmployeeAssignment.objects.filter(employee=OuterRef("pk")).exclude(
+            status="cancelled").order_by("-effective_from", "-pk").values("employee_code")[:1]
         form = RecordLeaveForm(
             request.POST or None,
             employees=Employee.objects.exclude(
@@ -141,7 +143,7 @@ def leave_record(request):
                     Employee.EmploymentStatus.TERMINATED,
                     Employee.EmploymentStatus.RETIRED,
                 ]
-            ).order_by("first_name", "last_name"),
+            ).annotate(table_code=Subquery(current_code)).order_by("first_name", "last_name"),
             leave_types=LeaveType.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
             initial={"pay_type": "paid"},
         )
@@ -212,10 +214,27 @@ def leave_type_list(request):
         leave_types = paginate(request, LeaveType.objects.order_by("status", "name"),
             search=("code", "name", "description", "status"),
             order=("code", "name", "description", "status", None))
+        default_codes = [code for code, *_ in services.DEFAULT_LEAVE_TYPES]
+        missing_defaults = LeaveType.objects.filter(code__in=default_codes).count() < len(default_codes)
     return render(request, "leaves/leave_type_list.html", {
         "leave_types": leave_types,
         "can_manage": membership.role in STRUCTURE_ROLES,
+        "missing_defaults": missing_defaults,
     })
+
+
+@login_required
+@require_http_methods(["POST"])
+def leave_type_defaults(request):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    created = services.add_default_leave_types(actor=request.user, company_id=company_id)
+    if created:
+        messages.success(request, "Added " + ", ".join(t.name for t in created) + ".")
+    else:
+        messages.info(request, "This company already has every default leave type.")
+    return redirect("leaves:leave_type_list")
 
 
 @login_required

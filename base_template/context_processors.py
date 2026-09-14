@@ -8,6 +8,7 @@ from accounts.services import get_active_memberships
 from tenants.models import Company
 from base_template.navigation import company_menus
 from devices.services.panel_access import may_manage_devices
+from leaves.services import LEAVE_RECORDER_ROLES
 from organization.services import STRUCTURE_ROLES
 
 
@@ -37,6 +38,7 @@ def shell(request):
         menus = company_menus(
             request, can_manage=membership.role in STRUCTURE_ROLES,
             can_manage_devices=unrestricted_admin,
+            can_record_leave=membership.role in LEAVE_RECORDER_ROLES,
         )
 
     return {
