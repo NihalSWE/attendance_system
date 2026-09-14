@@ -548,7 +548,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A3 | **Company salary settings** — ✅ done 2026-09-13 | Salary settings page with dated versions (`PayrollSettings`, `PayrollPolicyVersion`): monthly divisor (30 / days in month / working days), daily and hourly rate method, weekly off / holiday pay by pay type, half-day and Incomplete treatment, currency. Payroll reads them instead of constants; each run records the version used; every company starts on today's rules | 2 | Company salary settings |
 | A4 | **Penalty rules** (on the salary settings page) — ✅ done 2026-09-13 | `AttendancePenaltyRule`: late (per minute, or N late days = one day's pay), absence, repeated lateness; deduction lines on the payslip | 2 | Penalty rules |
 | A9 | **Overtime** — moved up 2026-09-14: right after Nihal's N1b | Review and approval, including an open overtime session with a blank check-out (the approver sets the time); overtime paid at × the hourly rate on the salary settings page (default 2×), a separate multiplier for holiday / weekly-off work, minimum overtime minutes and rounding; monthly staff's hourly rate = monthly ÷ days ÷ shift hours | — | Overtime review, approval and pay; `HolidayWorkAssignment`; attendance settings overtime approval |
-| A5 | **Shifts** — in progress 2026-09-14 | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
+| A5 | **Shifts** — ✅ done 2026-09-14 (rotating shifts deferred by Ajay: "initially I want to keep it simple") | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
 | A6 | **Logins** | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
 | A7 | **Employee panel** | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
 | A8 | **Leave requests, branch-manager approval** | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 1 | Full leave: employee requests, approval step; salary and attendance pages for managers (branch manager part) |
@@ -704,7 +704,7 @@ Ajay's running server was not touched while he checked A3).**
   a payslip generated from a demo month. **No new .env variables.** After
   pulling: `python manage.py migrate`.
 
-**A5 — shifts, part one (2026-09-14, branch `feature/a5-shifts`, built in the
+**A5 — shifts (done 2026-09-14, branch `feature/a5-shifts`, built in the
 worktree `D:\\attendance_device_a5`).** No migration: every field already
 existed.
 
@@ -729,11 +729,12 @@ existed.
 - Penalties: "leaving early" subtracts the shift's grace-out.
 - Shift `effective_from/to` stay off the form: a shift is retired with its
   status, and dated assignment lives on department and employee shifts.
-- **Not in part one — rotating shifts and two shifts in one day.** The
+- **Rotating shifts: deferred (Ajay, 2026-09-14: "initially I want to keep it simple").** The
   roadmap lists "rotating rosters, arbitrary split shifts" as later and the
   schema has no table for a repeating pattern. A rotation can be entered
   today as a series of temporary shifts. A repeating pattern (e.g. week A
-  day, week B night) needs a new model; proposed to Ajay before adding it.
+  day, week B night) needs one new table and one step in the shift lookup
+  (own shift → rotation → department → company); nothing built now changes.
 - 19 new tests (`scheduling/tests_employee_shifts.py`). Browser-checked at
   1440, 768 and 375 px.
 
@@ -797,7 +798,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1–A4 and N0–N2 are on main (2026-09-14). Ajay's session: A5 (shifts) now; A9 (overtime) as soon as Nihal's N1b lands. Nihal: N1b (day close, check-out rule, live attendance), then N3. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1–A5 and N0–N2 are on main (2026-09-14). Ajay's session: A6 (logins) while waiting; A9 (overtime) as soon as Nihal's N1b lands. Nihal: N1b (day close, check-out rule, live attendance), then N3. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
