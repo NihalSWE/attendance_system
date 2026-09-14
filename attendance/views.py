@@ -1,4 +1,10 @@
-"""Company attendance page: calculate a month and review it (read-only)."""
+"""Company attendance pages, read-only and live.
+
+There is no Calculate button. ``attendance.services.refresh`` brings the days
+being read up to date first — a day whose close has passed, or one never
+written because its shift had not finished — so the page shows the finished
+answer rather than whatever was stored last time somebody looked.
+"""
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -11,7 +17,7 @@ from django.views.decorators.http import require_http_methods
 
 from attendance import month_view
 from attendance.models import AttendanceRecord
-from attendance.services import calculate_attendance, month_bounds
+from attendance.services import month_bounds, refresh
 from common.tenant import use_company
 from employees.models import Employee
 from organization.services import STRUCTURE_ROLES, require_company_membership
@@ -55,6 +61,8 @@ def attendance_list(request):
     first, last = month_bounds(year, month)
     employee_id = request.GET.get("employee", "").strip()
     status = request.GET.get("status", "").strip()
+
+    refresh(company_id, start=first, end=last)
 
     with use_company(company_id):
         queryset = AttendanceRecord.objects.select_related("employee", "branch").filter(
@@ -121,6 +129,12 @@ def attendance_calendar(request):
         if employee is None and employees:
             employee = employees[0]
 
+    first, last = month_bounds(year, month)
+    if employee is not None:
+        # Live: bring this person's month up to date before drawing it.
+        refresh(company_id, employee_ids=[employee.pk], start=first, end=last)
+
+    with use_company(company_id):
         calendar = (
             month_view.build_month(
                 employee=employee, year=year, month=month,
@@ -162,6 +176,15 @@ def attendance_day(request, employee_id, on):
     membership = require_company_membership(request.user, company_id)
     company_tz = membership.company.timezone or "UTC"
 
+    import datetime as _dt
+
+    try:
+        day = _dt.date.fromisoformat(str(on))
+    except ValueError:
+        day = None
+    if day is not None:
+        refresh(company_id, employee_ids=[employee_id], start=day, end=day)
+
     with use_company(company_id):
         record = (
             AttendanceRecord.objects.select_related("shift", "employee")
@@ -181,23 +204,3 @@ def attendance_day(request, employee_id, on):
     })
 
 
-@login_required
-@require_http_methods(["POST"])
-def attendance_calculate(request):
-    company_id, bail = _company_or_redirect(request)
-    if bail:
-        return bail
-    year, month = read_month(request.POST)
-    try:
-        summary = calculate_attendance(
-            actor=request.user, company_id=company_id, year=year, month=month
-        )
-    except ValidationError as exc:
-        messages.error(request, " ".join(exc.messages))
-    else:
-        messages.success(
-            request,
-            f"Attendance calculated for {dict(MONTHS)[month]} {year}: "
-            f"{summary['employees']} employee(s).",
-        )
-    return redirect(f"{reverse('attendance:attendance_list')}?month={month}&year={year}")

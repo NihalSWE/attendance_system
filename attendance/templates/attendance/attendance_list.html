@@ -27,16 +27,6 @@
             <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}?month={{ month }}&year={{ year }}">
                 Calendar view
             </a>
-            {% if can_manage %}
-                <form method="post" action="{% url 'attendance:attendance_calculate' %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="month" value="{{ month }}">
-                    <input type="hidden" name="year" value="{{ year }}">
-                    <button class="btn btn--primary" type="submit">
-                        Calculate {{ month_name }} {{ year }}
-                    </button>
-                </form>
-            {% endif %}
         </div>
     </div>
 
@@ -223,7 +213,10 @@
                     No attendance for {{ month_name }} {{ year }}
                 </div>
                 <div class="empty__text">
-                    Press Calculate to build it from the month's punches, leave and calendar.
+                    Attendance is built from the month's scans, leave and working
+                    calendar as they arrive — there is nothing to press. Nothing here
+                    means no scans and no working days yet, or no shift set up under
+                    Shifts.
                 </div>
             </div>
         {% endif %}

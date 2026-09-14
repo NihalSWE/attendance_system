@@ -248,19 +248,21 @@ class PairedCalculationTests(TestCase):
             )
         self.assertEqual(record.worked_minutes, 540)
 
-    def test_a_day_with_no_check_out_is_incomplete_and_pays_nothing_extra(self):
+    def test_a_day_that_closes_on_an_in_is_closed_at_the_shift_end(self):
+        """The 2026-09-14 rule, replacing "no check-out, stays incomplete"."""
         self.punch(9)
         self.punch(13)
         self.punch(14)
         record = self.run_month()
 
-        self.assertEqual(record.attendance_status, "incomplete")
+        self.assertTrue(record.check_out_by_rule)
+        self.assertEqual(record.review_status, "needs_review")
+        self.assertEqual(record.review_reason, "check-out by rule, no scan")
         self.assertEqual(record.punch_status, "missing_out")
-        self.assertIsNone(record.last_out_at)
-        self.assertEqual(record.total_minutes, 0)
-        # Measured so far, kept as evidence.
-        self.assertEqual(record.worked_minutes, 240)
+        # Closed at 18:00 local, so the second session ran 14:00 -> 18:00.
+        self.assertEqual(record.worked_minutes, 480)
         self.assertEqual(record.break_count, 1)
+        self.assertIsNotNone(record.last_out_at)
 
     def test_recalculating_leaves_exactly_one_set_of_rows(self):
         for hour in (9, 13, 14, 18):

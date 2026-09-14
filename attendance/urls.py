@@ -12,5 +12,4 @@ urlpatterns = [
         views.attendance_day,
         name="attendance_day",
     ),
-    path("calculate/", views.attendance_calculate, name="attendance_calculate"),
 ]
