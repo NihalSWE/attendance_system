@@ -56,14 +56,16 @@ uses; if there is none, record it in `PHASE_STATUS.md` for confirmation.
   `common.forms.time_widget()` and the shift form set it, and a test fails if
   an `HH:MM` box anywhere lacks it.
 - **Derived values are never typed.** A shift's length comes from its start
-  and end times.
+  and end times, and so does "ends the next day" (end earlier than start) —
+  no checkbox asks for it.
 - **Amounts on screen have thousands separators (Ajay, 2026-09-14).** Every
   amount shown uses `{% load money %}{{ value|money }}` → `30,000.00`.
   Display only; stored values and calculations are untouched. Text built in
   Python formats with `f"{amount:,.2f}"`.
 - **A field that only applies to some choices of another field is hidden
   until it applies (Ajay, 2026-09-14).** Put the rule on the widget:
-  `data-show-when="other_field:value1,value2"`, and
+  `data-show-when="other_field:value1,value2"` (or `other_field:>0` for a
+  number, e.g. "The break is paid" only with a break), and
   `data-label-when="other_field:value=Label|value=Label"` when its meaning
   changes (`dependent.js`, loaded on every page). The field still posts; the
   service ignores a value that does not apply. `[hidden]` always hides

@@ -6,6 +6,9 @@
          Show this field's .field block only while the form's
          occurrence_mode is one of those values.
 
+     data-show-when="default_break_minutes:>0"
+         Show it only while that number is above 0 (updates as you type).
+
      data-label-when="deduction_method:fixed_minutes=Minutes to deduct|day_fraction=Days of pay"
          Change the field's label to match the chosen value.
 
@@ -49,8 +52,15 @@
         var update = function () {
             if (el.dataset.showWhen) {
                 var show = parse(el.dataset.showWhen);
-                var allowed = show.rest.split(",").map(function (v) { return v.trim(); });
-                field.hidden = allowed.indexOf(valueOf(form, show.name)) === -1;
+                var value = valueOf(form, show.name);
+                var rest = show.rest.trim();
+                if (rest.charAt(0) === ">") {
+                    var number = parseFloat(value);
+                    field.hidden = !(number > parseFloat(rest.slice(1)));
+                } else {
+                    var allowed = rest.split(",").map(function (v) { return v.trim(); });
+                    field.hidden = allowed.indexOf(value) === -1;
+                }
             }
             if (el.dataset.labelWhen) {
                 var labels = parse(el.dataset.labelWhen);
@@ -67,6 +77,7 @@
         names.forEach(function (name) {
             form.querySelectorAll('[name="' + name + '"]').forEach(function (control) {
                 control.addEventListener("change", update);
+                control.addEventListener("input", update);
             });
         });
         update();

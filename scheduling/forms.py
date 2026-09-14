@@ -9,7 +9,7 @@ from common.choices import ActiveStatus
 from common.forms import StyledFormMixin
 from organization.models import Branch, CompanyDepartment
 from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
-from scheduling.services import scheduled_minutes_between
+from scheduling.services import scheduled_minutes_between, spans_next_day
 
 
 def _date_widget(placeholder):
@@ -40,16 +40,21 @@ def _time_field(label, help_text):
 
 class ShiftForm(StyledFormMixin, forms.ModelForm):
     start_time = _time_field("Starts at", "24-hour time, e.g. 09:00.")
-    end_time = _time_field("Ends at", "24-hour time, e.g. 18:00.")
+    end_time = _time_field(
+        "Ends at",
+        "24-hour time, e.g. 18:00. An end earlier than the start (22:00 → 06:00) "
+        "is a night shift that ends the next day.",
+    )
 
     class Meta:
         model = Shift
+        # No "ends on the next day" box: the times already say it (Ajay,
+        # 2026-09-14). The service derives spans_next_day from them.
         fields = (
             "code",
             "name",
             "start_time",
             "end_time",
-            "spans_next_day",
             "grace_in_minutes",
             "grace_out_minutes",
             "minimum_full_day_minutes",
@@ -61,7 +66,6 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
         labels = {
             "code": "Shift code",
             "name": "Shift name",
-            "spans_next_day": "Ends on the next day (night shift)",
             "grace_in_minutes": "Late after (minutes)",
             "grace_out_minutes": "Leaving early after (minutes)",
             "minimum_full_day_minutes": "Full day needs (minutes)",
@@ -102,6 +106,8 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
         self.fields["end_time"].widget.format = "%H:%M"
         for name in self.OPTIONAL_MINUTES:
             self.fields[name].required = False
+        # "The break is paid" only means something once there is a break.
+        self.fields["break_is_paid"].widget.attrs["data-show-when"] = "default_break_minutes:>0"
 
     def _minutes_or_zero(self, name):
         value = self.cleaned_data.get(name)
@@ -123,17 +129,16 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
         cleaned = super().clean()
         start, end = cleaned.get("start_time"), cleaned.get("end_time")
         if start and end:
-            # The length is derived, not typed. Set it before model validation
-            # runs, because Shift.clean() checks the break against it.
+            if start == end:
+                self.add_error("end_time", "The shift cannot start and end at the same time.")
+                return cleaned
+            # Derived, not typed: an end before the start ends the next day, and
+            # the length follows. Set both before model validation runs, because
+            # Shift.clean() checks the break against the length.
+            self.instance.spans_next_day = spans_next_day(start, end)
             self.instance.scheduled_minutes = scheduled_minutes_between(
-                start, end, cleaned.get("spans_next_day", False)
+                start, end, self.instance.spans_next_day
             )
-            if self.instance.scheduled_minutes <= 0:
-                self.add_error(
-                    "end_time",
-                    "End must be after start. Tick 'Ends on the next day' for a "
-                    "night shift.",
-                )
         return cleaned
 
 

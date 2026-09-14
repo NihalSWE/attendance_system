@@ -799,6 +799,20 @@ worktree `D:\\attendance_device_a5`).** No migration: `User`,
   descriptions. The payslip gets it in Nihal's N7 redesign.
 - 6 tests (`base_template/tests_display.py`).
 
+**Shift form fixes from Ajay's review (2026-09-14, on main after the N1b/N3
+merge).**
+
+- **No "Ends on the next day (night shift)" box.** The times already say it:
+  an end earlier than the start (22:00 → 06:00) ends the next day. The form and
+  `_apply_shift_values` derive `spans_next_day` from the times (a value passed
+  in is ignored), so editing a night shift into a day shift clears it. Same
+  start and end is refused. The column stays; N1b's day window reads it.
+- **"The break is paid" shows only when Break (minutes) is above 0**
+  (`data-show-when="default_break_minutes:>0"`; `dependent.js` now takes a
+  `>N` number rule and reacts while typing). A tick left behind with no break
+  is saved as unpaid.
+- 5 tests in `scheduling/tests_screens.py` (one old test replaced).
+
 #### Keeping the two sides apart
 
 - **The contract is `AttendanceRecord`.** Payroll reads `attendance_status`,

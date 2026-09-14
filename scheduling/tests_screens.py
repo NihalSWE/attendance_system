@@ -333,15 +333,55 @@ class CalendarScreenTests(CalendarBase):
         self.assertEqual(shift.code, "DAY")
         self.assertEqual(shift.scheduled_minutes, 540)
 
-    def test_end_before_start_without_night_tick_is_a_field_error(self):
+    def test_an_end_before_the_start_is_a_night_shift(self):
+        # No "ends on the next day" box: the times say it.
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("scheduling:shift_create"))
+        self.assertNotContains(page, "spans_next_day")
+        response = self.client.post(reverse("scheduling:shift_create"), {
+            "code": "ngt", "name": "Night", "start_time": "22:00", "end_time": "06:00",
+            "grace_in_minutes": "0", "minimum_full_day_minutes": "420",
+            "minimum_half_day_minutes": "210",
+        })
+        self.assertRedirects(response, reverse("scheduling:schedule_overview"))
+        with use_company(self.company):
+            shift = Shift.objects.get()
+        self.assertTrue(shift.spans_next_day)
+        self.assertEqual(shift.scheduled_minutes, 480)
+
+    def test_editing_a_night_shift_into_a_day_shift_clears_next_day(self):
+        shift = self._shift(
+            code="NGT", name="Night", start_time=time(22, 0), end_time=time(6, 0),
+            minimum_full_day_minutes=420, minimum_half_day_minutes=210,
+        )
+        self.assertTrue(shift.spans_next_day)
+        shift = services.update_shift(
+            actor=self.admin, company_id=self.company.pk, shift_id=shift.pk,
+            values={"start_time": time(9, 0), "end_time": time(17, 0)},
+        )
+        self.assertFalse(shift.spans_next_day)
+        self.assertEqual(shift.scheduled_minutes, 480)
+
+    def test_same_start_and_end_is_a_field_error(self):
         self.client.force_login(self.admin)
         response = self.client.post(reverse("scheduling:shift_create"), {
-            "code": "X", "name": "X", "start_time": "22:00", "end_time": "06:00",
+            "code": "X", "name": "X", "start_time": "09:00", "end_time": "09:00",
             "grace_in_minutes": "0", "minimum_full_day_minutes": "0",
             "minimum_half_day_minutes": "0",
         })
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Ends on the next day")
+        self.assertContains(response, "cannot start and end at the same time")
+
+    def test_paid_break_shows_only_with_a_break(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("scheduling:shift_create")).content.decode()
+        self.assertIn('data-show-when="default_break_minutes:&gt;0"', page)
+
+    def test_paid_tick_without_a_break_is_dropped(self):
+        shift = self._shift(default_break_minutes=0, break_is_paid=True)
+        self.assertFalse(shift.break_is_paid)
+        shift = self._shift(code="LUNCH", default_break_minutes=60, break_is_paid=True)
+        self.assertTrue(shift.break_is_paid)
 
     def test_weekly_off_page_shows_seven_day_buttons_saturday_first(self):
         self.client.force_login(self.admin)

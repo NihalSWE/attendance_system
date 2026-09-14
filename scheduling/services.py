@@ -109,18 +109,31 @@ def scheduled_minutes_between(start_time, end_time, spans_next_day):
     return end - start
 
 
-def _apply_shift_values(shift, values):
-    """Set shift fields and derive the scheduled length from start and end.
+def spans_next_day(start_time, end_time):
+    """A shift whose end is earlier than its start ends the next day (22:00 → 06:00)."""
+    return end_time < start_time
 
-    Scheduled minutes are computed rather than typed: asking for a number that
-    start and end already determine is an invitation to get it wrong.
+
+def _apply_shift_values(shift, values):
+    """Set shift fields and derive "ends the next day" and the length from the times.
+
+    Both are computed rather than typed: asking for what start and end already
+    determine is an invitation to get it wrong. A value passed for
+    ``spans_next_day`` is ignored in favour of the times.
     """
     for field, value in values.items():
         setattr(shift, field, value)
     if shift.start_time and shift.end_time:
+        if shift.start_time == shift.end_time:
+            raise ValidationError({"end_time": "The shift cannot start and end at the same time."})
+        shift.spans_next_day = spans_next_day(shift.start_time, shift.end_time)
         shift.scheduled_minutes = scheduled_minutes_between(
             shift.start_time, shift.end_time, shift.spans_next_day
         )
+    # "The break is paid" is hidden while there is no break; a box left ticked
+    # before the break was cleared must not survive as a stray setting.
+    if not shift.default_break_minutes:
+        shift.break_is_paid = False
     errors = {}
     if shift.scheduled_minutes and shift.minimum_full_day_minutes > shift.scheduled_minutes:
         errors["minimum_full_day_minutes"] = (
