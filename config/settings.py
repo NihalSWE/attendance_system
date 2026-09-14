@@ -94,6 +94,8 @@ MIDDLEWARE = [
     # Must follow AuthenticationMiddleware: it needs request.user to resolve the
     # active company, and it sets/clears the tenant context for the request.
     'common.middleware.TenantMiddleware',
+    # Employees and branch managers stay on their own pages (common/middleware.py).
+    'common.middleware.SelfServiceGate',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

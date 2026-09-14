@@ -25,4 +25,10 @@ def shell(request):
             (m.company for m in memberships if m.company_id == company_id), None
         ) or Company.objects.filter(pk=company_id).first()
 
-    return {"memberships": memberships, "active_company": active_company}
+    return {
+        "memberships": memberships,
+        "active_company": active_company,
+        # Set by common.middleware.SelfServiceGate: an Employee or Branch
+        # manager login, who gets the small "my" sidebar.
+        "self_service": getattr(request, "self_service", False),
+    }

@@ -1,0 +1,110 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    My account · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {% if employee %}{{ employee.full_name }}{% else %}My account{% endif %}
+            </h1>
+            <p class="page__sub">
+                {{ membership.company.name }}{% if role_label %} · {{ role_label }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'me:password' %}">
+                Change password
+            </a>
+        </div>
+    </div>
+
+    <div class="form-page stack">
+        {% if employee %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        Work
+                    </h2>
+                </div>
+                <div class="card__body">
+                    <dl class="facts facts--wide">
+                        <dt>
+                            Employee code
+                        </dt>
+                        <dd>
+                            {{ placement.employee_code|default:"—" }}
+                        </dd>
+                        <dt>
+                            Designation
+                        </dt>
+                        <dd>
+                            {{ placement.designation.name|default:"—" }}
+                        </dd>
+                        <dt>
+                            Department
+                        </dt>
+                        <dd>
+                            {{ placement.department.name|default:"—" }}
+                        </dd>
+                        <dt>
+                            Branch
+                        </dt>
+                        <dd>
+                            {{ placement.branch.name|default:"—" }}
+                        </dd>
+                        <dt>
+                            Shift today
+                        </dt>
+                        <dd>
+                            {% if shift %}
+                                {{ shift.name }}, {{ shift.start_time|time:"H:i" }}–{{ shift.end_time|time:"H:i" }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </dd>
+                        {% if employee.joining_date %}
+                            <dt>
+                                Joined
+                            </dt>
+                            <dd>
+                                {{ employee.joining_date|date:"d M Y" }}
+                            </dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Login
+                </h2>
+            </div>
+            <div class="card__body stack">
+                <dl class="facts facts--wide">
+                    <dt>
+                        Signs in with
+                    </dt>
+                    <dd>
+                        {{ request.user.email }}
+                    </dd>
+                    <dt>
+                        Access
+                    </dt>
+                    <dd>
+                        {{ role_label|default:"—" }}{% if managed_branches %} of {% for branch in managed_branches %}{{ branch.name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}
+                    </dd>
+                </dl>
+                <p class="field__help">
+                    Your attendance, leave and payslips will appear here as they are added.
+                </p>
+            </div>
+        </div>
+    </div>
+{% endblock %}

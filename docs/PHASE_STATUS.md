@@ -549,7 +549,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A4 | **Penalty rules** (on the salary settings page) — ✅ done 2026-09-13 | `AttendancePenaltyRule`: late (per minute, or N late days = one day's pay), absence, repeated lateness; deduction lines on the payslip | 2 | Penalty rules |
 | A9 | **Overtime** — moved up 2026-09-14: right after Nihal's N1b | Review and approval, including an open overtime session with a blank check-out (the approver sets the time); overtime paid at × the hourly rate on the salary settings page (default 2×), a separate multiplier for holiday / weekly-off work, minimum overtime minutes and rounding; monthly staff's hourly rate = monthly ÷ days ÷ shift hours | — | Overtime review, approval and pay; `HolidayWorkAssignment`; attendance settings overtime approval |
 | A5 | **Shifts** — ✅ done 2026-09-14 (rotating shifts deferred by Ajay: "initially I want to keep it simple") | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
-| A6 | **Logins** | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
+| A6 | **Logins** — ✅ done 2026-09-14 | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
 | A7 | **Employee panel** | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
 | A8 | **Leave requests, branch-manager approval** | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 1 | Full leave: employee requests, approval step; salary and attendance pages for managers (branch manager part) |
 | A10 | **Full leave** | Half-day and hourly leave, partial pay, policies and versions, balances / entitlements / ledger, attachments, withdraw, amend; default leave types at onboarding; HR records leave; employee code in the picker | — | Full leave (rest); leave fields not built; HR role recording leave; default leave types; employee code in picker |
@@ -739,6 +739,47 @@ existed.
 - 19 new tests (`scheduling/tests_employee_shifts.py`). Browser-checked at
   1440, 768 and 375 px.
 
+**A6 — logins (done 2026-09-14, branch `feature/a6-logins`, built in the
+worktree `D:\\attendance_device_a5`).** No migration: `User`,
+`CompanyMembership` (roles `employee`, `manager`, `allowed_branches`) and
+`Employee.user` already existed.
+
+- **Where:** Employees → **Edit** on a row → **Login** card (second card).
+  No login: email, password (twice), Access (Employee / Branch manager) and,
+  for a branch manager, the branches they manage → **Create login**. With a
+  login: who signs in and their access; **Save access** (change the role or
+  branches); **Set new password**; **Disable login** / **Enable login**.
+- **Services** (`organization/employee_login.py`): `give_login`,
+  `change_login_role`, `reset_login_password`, `set_login_active`. Owner /
+  company admin only; audited (`employee.login_created`, `…_role_changed`,
+  `…_password_reset`, `…_disabled/enabled`), never with the password.
+- **Safety:** a login is always a new account — an email that already has a
+  login is refused, so nobody can attach someone else's account; a password is
+  only reset for an account that belongs to this company alone (never a
+  person who is also a member elsewhere, never a superuser or staff);
+  disabling suspends the membership in this company, not the account; the
+  company administrator's own login is not changed from an employee record.
+  Passwords go through Django's password validators.
+- **The gate** (`common.middleware.SelfServiceGate`, after TenantMiddleware):
+  an Employee or Branch manager login may only open the `me` pages and sign
+  in/out. Any other page redirects to My account (GET) or is refused (form
+  post). Needed because Salary, Attendance, Leave, Shifts, the holiday list,
+  Branches and Departments only checked "is a member" — fine while only
+  administrators could sign in, a salary leak once employees can. One gate
+  closes every current and future company page to them by default; A7/A8 open
+  their own pages by adding them to the `me` (or a branch-manager) namespace.
+- **Their pages** (`base_template/me_views.py`, `/me/`): **My account**
+  (name, company, employee code, designation, department, branch, shift
+  today, how they sign in and their access) and **Change password** (Django's
+  own form, they stay signed in). A small sidebar: My account, Change
+  password, Sign out. My attendance / leave / payslips come with A7.
+- A **branch manager** is kept on the same pages until A8 gives them the
+  leave inbox and branch views.
+- 21 new tests (`organization/tests_logins.py`): the services, the safety
+  rules, the gate on seven company pages and a form post, a real sign-in,
+  changing their own password, a disabled login, and the Login card.
+  **No new .env variables.**
+
 #### Keeping the two sides apart
 
 - **The contract is `AttendanceRecord`.** Payroll reads `attendance_status`,
@@ -799,7 +840,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1–A5 and N0–N2 are on main (2026-09-14). Ajay's session: A6 (logins) while waiting; A9 (overtime) as soon as Nihal's N1b lands. Nihal: N1b (day close, check-out rule, live attendance), then N3. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-13):** the salary fast-track is done (shifts, thin leave, attendance, basic salary). From 2026-09-14 build the "Plan after the fast-track — 2026-09-13" above: Nihal N0–N6, Ajay's session A1–A13; it contains Ajay's five new points and every "Skipped today" row. A1–A6 and N0–N2 done (2026-09-14). Ajay's session: A7 (employee panel) next; A9 (overtime) as soon as Nihal's N1b lands; A14 (sidebar menus) is on the plan. Nihal: N1b (day close, check-out rule, live attendance), then N3. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 

@@ -63,6 +63,135 @@
             </div>
         </div>
 
+        <div class="card" id="login">
+            <div class="card__head">
+                <h2>
+                    Login
+                </h2>
+                {% if not login %}
+                    <span class="badge badge--neutral">
+                        No login
+                    </span>
+                {% elif login.status == "active" %}
+                    <span class="badge badge--success">
+                        Can sign in
+                    </span>
+                {% else %}
+                    <span class="badge badge--warning">
+                        Disabled
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                {% if not login %}
+                    <p class="field__help">
+                        Give this employee a login to the software. They sign in with this email and
+                        password, see only their own pages, and can change the password themselves.
+                    </p>
+                    {% if give_login.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {{ give_login.non_field_errors }}
+                        </div>
+                    {% endif %}
+                    <form method="post" class="stack" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="section" value="login_give">
+                        <div class="grid grid--2">
+                            {% for field in give_login %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--primary" type="submit">
+                                Create login
+                            </button>
+                        </div>
+                    </form>
+                {% elif not login_role_label %}
+                    <p class="field__help">
+                        {{ login.user.email }} is the company administrator's login. It is managed on the
+                        company page, not here.
+                    </p>
+                {% else %}
+                    <dl class="facts">
+                        <dt>
+                            Signs in with
+                        </dt>
+                        <dd>
+                            {{ login.user.email }}
+                        </dd>
+                        <dt>
+                            Access
+                        </dt>
+                        <dd>
+                            {{ login_role_label }}{% for branch in login.allowed_branches.all %}{% if forloop.first %} of {% endif %}{{ branch.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </dd>
+                    </dl>
+
+                    {% if login_role.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {{ login_role.non_field_errors }}
+                        </div>
+                    {% endif %}
+                    <form method="post" class="stack" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="section" value="login_role">
+                        <div class="grid grid--2">
+                            {% for field in login_role %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--primary" type="submit">
+                                Save access
+                            </button>
+                        </div>
+                    </form>
+
+                    <h3 class="t-card-head">
+                        Set a new password
+                    </h3>
+                    {% if login_password.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {{ login_password.non_field_errors }}
+                        </div>
+                    {% endif %}
+                    <form method="post" class="stack" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="section" value="login_password">
+                        <div class="grid grid--2">
+                            {% for field in login_password %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--ghost" type="submit">
+                                Set new password
+                            </button>
+                        </div>
+                    </form>
+
+                    <form method="post" class="row">
+                        {% csrf_token %}
+                        {% if login.status == "active" %}
+                            <input type="hidden" name="section" value="login_disable">
+                            <button class="btn btn--danger" type="submit">
+                                Disable login
+                            </button>
+                            <span class="field__help">
+                                They can no longer sign in to this company. Their records stay.
+                            </span>
+                        {% else %}
+                            <input type="hidden" name="section" value="login_enable">
+                            <button class="btn btn--primary" type="submit">
+                                Enable login
+                            </button>
+                        {% endif %}
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="card">
             <div class="card__head">
                 <h2>

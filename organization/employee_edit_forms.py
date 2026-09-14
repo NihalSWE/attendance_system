@@ -136,3 +136,73 @@ class SalaryForm(StyledFormMixin, forms.Form):
             "pay_basis": data["pay_basis"], "base_rate": data["base_rate"],
             "effective_at": data["effective_at"], "reason": data.get("salary_reason", ""),
         }
+
+
+# --------------------------------------------------------------------------
+# Login (A6). Field names carry a login_ prefix so they do not clash with the
+# placement form's branch field on the same page.
+# --------------------------------------------------------------------------
+
+LOGIN_ROLE_CHOICES = (("employee", "Employee"), ("manager", "Branch manager"))
+
+
+class _LoginRoleFields(forms.Form):
+    login_role = forms.ChoiceField(
+        label="Access", choices=LOGIN_ROLE_CHOICES,
+        help_text="Employee: their own pages. Branch manager: also their branch's people (coming with leave approval).",
+    )
+    login_branches = forms.ModelMultipleChoiceField(
+        queryset=Branch.all_objects.none(), required=False, label="Branches they manage",
+        help_text="Only for a branch manager.",
+    )
+
+    def __init__(self, *args, branches=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if branches is not None:
+            self.fields["login_branches"].queryset = branches
+
+    def role_values(self):
+        return {
+            "role": self.cleaned_data["login_role"],
+            "branches": list(self.cleaned_data.get("login_branches") or []),
+        }
+
+
+class GiveLoginForm(StyledFormMixin, _LoginRoleFields):
+    login_email = forms.EmailField(label="Email they sign in with")
+    login_password = forms.CharField(
+        label="Password", strip=False, widget=forms.PasswordInput(render_value=False),
+        help_text="Give it to them; they can change it after signing in.",
+    )
+    login_password_confirm = forms.CharField(
+        label="Password again", strip=False, widget=forms.PasswordInput(render_value=False),
+    )
+
+    field_order = ("login_email", "login_password", "login_password_confirm", "login_role", "login_branches")
+
+    def service_values(self):
+        return {
+            "email": self.cleaned_data["login_email"],
+            "password": self.cleaned_data["login_password"],
+            "password_confirm": self.cleaned_data["login_password_confirm"],
+            **self.role_values(),
+        }
+
+
+class LoginRoleForm(StyledFormMixin, _LoginRoleFields):
+    pass
+
+
+class LoginPasswordForm(StyledFormMixin, forms.Form):
+    login_new_password = forms.CharField(
+        label="New password", strip=False, widget=forms.PasswordInput(render_value=False),
+    )
+    login_new_password_confirm = forms.CharField(
+        label="New password again", strip=False, widget=forms.PasswordInput(render_value=False),
+    )
+
+    def service_values(self):
+        return {
+            "password": self.cleaned_data["login_new_password"],
+            "password_confirm": self.cleaned_data["login_new_password_confirm"],
+        }

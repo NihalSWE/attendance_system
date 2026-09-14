@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -15,13 +15,44 @@ from common.choices import ActiveStatus
 from common.forms import apply_service_errors
 from common.tenant import use_company
 from organization import employee_edit_services as services
-from organization.employee_edit_forms import EmployeeDetailsForm, PlacementForm, SalaryForm
+from organization import employee_login
+from organization.employee_edit_forms import (
+    EmployeeDetailsForm,
+    GiveLoginForm,
+    LoginPasswordForm,
+    LoginRoleForm,
+    PlacementForm,
+    SalaryForm,
+)
 from organization.services import visible_branches
 from organization.views import _company_or_redirect
 from scheduling import services as schedule
 from scheduling.calendar import WorkCalendar
 from scheduling.forms import EmployeeShiftForm, EndEmployeeShiftForm
 from scheduling.models import Shift
+
+
+# The login service names fields as it stores them; the page's forms prefix them.
+_LOGIN_FIELDS = {
+    "email": "login_email", "password": "login_password",
+    "password_confirm": "login_password_confirm", "role": "login_role",
+    "branches": "login_branches",
+}
+
+
+def _login_errors(form, exc):
+    if not hasattr(exc, "error_dict"):
+        for message in exc.messages:
+            form.add_error(None, message)
+        return
+    for field, errors in exc.error_dict.items():
+        target = _LOGIN_FIELDS.get(field, field)
+        if target == "login_password" and "login_new_password" in form.fields:
+            target = "login_new_password"
+        if target == "login_password_confirm" and "login_new_password_confirm" in form.fields:
+            target = "login_new_password_confirm"
+        for error in errors:
+            form.add_error(target if target in form.fields else None, error)
 
 
 def _local_date(instant, company):
@@ -102,6 +133,62 @@ def employee_edit(request, pk):
                     messages.success(request, message)
                     return redirect(f"{reverse('organization:employee_edit', args=[employee.pk])}#shift")
 
+        # Login (A6).
+        login = employee_login.login_for(company_id, employee)
+        manager_branches = visible_branches(membership).filter(status=ActiveStatus.ACTIVE).order_by("name")
+        give_login = GiveLoginForm(
+            request.POST if section == "login_give" else None, branches=manager_branches,
+            initial={"login_email": employee.work_email, "login_role": "employee"},
+        )
+        login_role = LoginRoleForm(
+            request.POST if section == "login_role" else None, branches=manager_branches,
+            initial={
+                "login_role": login.role if login else "employee",
+                "login_branches": [b.pk for b in login.allowed_branches.all()] if login else [],
+            },
+        )
+        login_password = LoginPasswordForm(request.POST if section == "login_password" else None)
+
+        if section in ("login_give", "login_role", "login_password", "login_disable", "login_enable"):
+            chosen = {"login_give": give_login, "login_role": login_role,
+                      "login_password": login_password}.get(section)
+            if chosen is None or chosen.is_valid():
+                try:
+                    if section == "login_give":
+                        employee_login.give_login(
+                            actor=request.user, company_id=company_id,
+                            employee_id=employee.pk, values=chosen.service_values(),
+                        )
+                        message = "Login created. Give them the email and password to sign in."
+                    elif section == "login_role":
+                        employee_login.change_login_role(
+                            actor=request.user, company_id=company_id,
+                            employee_id=employee.pk, values=chosen.role_values(),
+                        )
+                        message = "Access saved."
+                    elif section == "login_password":
+                        employee_login.reset_login_password(
+                            actor=request.user, company_id=company_id,
+                            employee_id=employee.pk, values=chosen.service_values(),
+                        )
+                        message = "New password set. Give it to them."
+                    else:
+                        employee_login.set_login_active(
+                            actor=request.user, company_id=company_id,
+                            employee_id=employee.pk, active=section == "login_enable",
+                        )
+                        message = ("Login enabled." if section == "login_enable"
+                                   else "Login disabled. They can no longer sign in to this company.")
+                except (ValidationError, PermissionDenied) as exc:
+                    if chosen is None or isinstance(exc, PermissionDenied):
+                        # No form to show it on: say it at the top of the page.
+                        messages.error(request, " ".join(getattr(exc, "messages", [str(exc)])))
+                        return redirect(f"{reverse('organization:employee_edit', args=[employee.pk])}#login")
+                    _login_errors(chosen, exc)
+                else:
+                    messages.success(request, message)
+                    return redirect(f"{reverse('organization:employee_edit', args=[employee.pk])}#login")
+
         form = {"details": details, "placement": placement, "salary": salary}.get(section)
         if form is not None and form.is_valid():
             try:
@@ -166,4 +253,9 @@ def employee_edit(request, pk):
                 None,
             ),
             "today": today,
+            "login": login,
+            "login_role_label": employee_login.ROLE_LABELS.get(login.role, "") if login else "",
+            "give_login": give_login,
+            "login_role": login_role,
+            "login_password": login_password,
         })

@@ -1,0 +1,47 @@
+{% load nav %}
+{# The sidebar for an Employee or Branch manager login. My attendance, leave and #}
+{# payslips join it with the employee panel (plan step A7). #}
+<aside class="sidebar" id="self-service-sidebar" aria-label="My navigation">
+    <div class="sidebar__brand">
+        <span class="sidebar__mark">
+            A
+        </span>
+        <span>
+            Attendance
+        </span>
+    </div>
+    <div class="sidebar__label">
+        Me
+    </div>
+    <a class="sidebar__link {% active request 'home' %}" href="{% url 'me:home' %}" aria-label="My account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="8" r="4"/>
+            <path d="M4 21a8 8 0 0 1 16 0"/>
+        </svg>
+        <span>
+            My account
+        </span>
+    </a>
+    <a class="sidebar__link {% active request 'password' %}" href="{% url 'me:password' %}" aria-label="Change password">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="4" y="11" width="16" height="10" rx="2"/>
+            <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+        </svg>
+        <span>
+            Change password
+        </span>
+    </a>
+    <div class="sidebar__foot">
+        <form method="post" action="{% url 'logout' %}">
+            {% csrf_token %}
+            <button class="sidebar__link nav-button" type="submit" aria-label="Sign out">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M15 17l5-5-5-5M20 12H9M12 20H6V4h6"/>
+                </svg>
+                <span>
+                    Sign out
+                </span>
+            </button>
+        </form>
+    </div>
+</aside>

@@ -203,7 +203,9 @@ class PlatformTests(TestCase):
         with use_company(company):
             member.allowed_branches.clear()
         services.update_company_membership(actor=self.root, company_id=company.pk, membership_id=member.pk, role="employee", status="active")
-        self.assertEqual(self.client.get("/employees/").status_code, 403)
+        # An Employee login is kept on its own pages by SelfServiceGate (A6):
+        # a company page sends it to My account rather than a bare 403.
+        self.assertRedirects(self.client.get("/employees/"), reverse("me:home"))
 
     def test_datatable_search_pagination_and_bounds(self):
         Company.objects.bulk_create([Company(code=f"C{i:02d}", slug=f"c{i:02d}", name=f"Company {i:02d}") for i in range(35)])

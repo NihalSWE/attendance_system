@@ -41,3 +41,59 @@ class TenantMiddleware:
             return self.get_response(request)
         finally:
             clear_current_company_id(token)
+
+
+# Roles whose people use their own pages, not the company's.
+SELF_SERVICE_ROLES = ("employee", "manager")
+# Their pages, plus signing in and out.
+SELF_SERVICE_NAMESPACES = ("me",)
+ALWAYS_OPEN_URL_NAMES = ("login", "logout", "switch_company")
+
+
+class SelfServiceGate:
+    """Keep employees and branch managers on their own pages.
+
+    Company pages were built for the owner and company administrator; several
+    only check that the person is a member of the company, which was enough
+    while nobody else could sign in. An Employee or Branch manager login may
+    only reach the ``me`` pages (and sign in/out); anything else sends them to
+    My account, or is refused for a form post. One gate instead of a check in
+    every view, so a company page added later is closed to them by default.
+
+    Also sets ``request.self_service`` for the sidebar. Must follow
+    TenantMiddleware (it needs ``request.company_id``).
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        return self.get_response(request)
+
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        from django.core.exceptions import PermissionDenied
+        from django.shortcuts import redirect
+
+        from accounts.models import CompanyMembership
+
+        request.self_service = False
+        user = getattr(request, "user", None)
+        company_id = getattr(request, "company_id", None)
+        if user is None or not user.is_authenticated or user.is_superuser or not company_id:
+            return None
+        role = (
+            CompanyMembership.all_objects.filter(
+                company_id=company_id, user=user, status=CompanyMembership.Status.ACTIVE
+            ).values_list("role", flat=True).first()
+        )
+        if role not in SELF_SERVICE_ROLES:
+            return None
+        request.self_service = True
+        match = request.resolver_match
+        if match is None:
+            return None
+        if match.namespace in SELF_SERVICE_NAMESPACES or match.url_name in ALWAYS_OPEN_URL_NAMES:
+            return None
+        if request.method in ("GET", "HEAD"):
+            return redirect("me:home")
+        raise PermissionDenied("This page is for the company's administrators.")

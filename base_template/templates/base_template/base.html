@@ -27,6 +27,8 @@
         <div class="shell">
             {% if platform_surface %}
                 {% include "base_template/includes/sidebars/platform.html" %}
+            {% elif self_service %}
+                {% include "base_template/includes/sidebars/self_service.html" %}
             {% else %}
                 {% include "base_template/includes/sidebar.html" %}
             {% endif %}
