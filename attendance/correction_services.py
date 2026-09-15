@@ -206,6 +206,15 @@ def change_status(*, actor, company_id, employee_id, work_date, status, reason):
             raise ValidationError(
                 "This day has not finished yet, so there is no status to change."
             )
+        if record.leave_day_id:
+            # Leave decides these days, including a half-day leave somebody
+            # came in on (which reads "present"). _write_day applies a status
+            # correction only to an ordinary working day, so accepting one
+            # here would store a fix that silently does nothing.
+            raise ValidationError(
+                "This day has leave recorded. Change or cancel the leave on the "
+                "Leave page."
+            )
         if record.attendance_status not in CORRECTABLE_DAY_STATUSES:
             raise ValidationError(
                 f"This day is {record.get_attendance_status_display().lower()}. "

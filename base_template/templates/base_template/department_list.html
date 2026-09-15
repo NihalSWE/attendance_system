@@ -35,12 +35,12 @@
                 All departments
             </h2>
             <span class="badge badge--neutral">
-                {{ departments|length }}
+                {{ server_table.total }}
             </span>
         </div>
-        {% if departments %}
+        {% if server_table.total %}
             <div class="table-wrap">
-                <table class="table">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th>
@@ -84,18 +84,14 @@
                                     {% endif %}
                                 </td>
                                 <td class="numeric">
-                                    {{ d.designations.count }}
+                                    {{ d.table_designations }}
                                 </td>
                             </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-            <div class="pagination">
-                <span class="pagination__info">
-                    Showing 1–{{ departments|length }} of {{ departments|length }}
-                </span>
-            </div>
+            {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">

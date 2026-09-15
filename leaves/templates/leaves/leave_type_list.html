@@ -34,6 +34,14 @@
                 <a class="btn btn--primary" href="{% url 'leaves:leave_type_create' %}">
                     Add leave type
                 </a>
+                {% if missing_defaults %}
+                    <form method="post" action="{% url 'leaves:leave_type_defaults' %}">
+                        {% csrf_token %}
+                        <button class="btn btn--ghost" type="submit" title="Casual, Sick, Earned and Maternity leave. Types you already have are kept.">
+                            Add default leave types
+                        </button>
+                    </form>
+                {% endif %}
             {% endif %}
         </div>
     </div>
@@ -43,12 +51,23 @@
                 Leave types
             </h2>
             <span class="badge badge--neutral">
-                {{ leave_types|length }}
+                {{ server_table.page.paginator.count }}
             </span>
         </div>
-        {% if leave_types %}
+        {% if not leave_types %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    No leave types yet
+                </div>
+                <div class="empty__text">
+                    Add the kinds of leave employees take, for example Casual,
+                    Sick and Annual leave.
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or leave_types %}
             <div class="table-wrap">
-                <table class="table" data-enhance>
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th>
@@ -56,6 +75,9 @@
                             </th>
                             <th>
                                 Leave type
+                            </th>
+                            <th class="numeric">
+                                Days per year
                             </th>
                             <th>
                                 Description
@@ -76,6 +98,9 @@
                                 </td>
                                 <td>
                                     {{ leave_type.name }}
+                                </td>
+                                <td class="numeric">
+                                    {{ leave_type.days_per_year|floatformat:"-1"|default:"No limit" }}
                                 </td>
                                 <td>
                                     {{ leave_type.description|default:"—" }}
@@ -110,6 +135,7 @@
                     </tbody>
                 </table>
             </div>
+        {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">
@@ -124,8 +150,6 @@
     </div>
 {% endblock %}
 {% block extra_js %}
-    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
-    </script>
     <script defer src="{% static 'base_template/js/platform.js' %}">
     </script>
 {% endblock %}

@@ -193,6 +193,8 @@
                                 There is no finished day to change yet.
                             {% elif record.is_open %}
                                 This day has not finished yet.
+                            {% elif record.leave_day_id %}
+                                This day has leave recorded. Change or cancel the leave on the Leave page.
                             {% else %}
                                 This day is {{ record.get_attendance_status_display|lower }}. Leave, holidays and weekly offs are changed on their own pages.
                             {% endif %}

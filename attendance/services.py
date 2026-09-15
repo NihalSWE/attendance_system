@@ -536,7 +536,38 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         "calculated_at": now,
     }
 
-    if leave is not None:
+    if leave is not None and leave.balance_units < ONE:
+        # Half-day leave (Ajay's session, A10 — kept simple): if the employee
+        # came in, the day counts in full with no late or early-out mark; an
+        # unpaid half is still deducted. No scans: only the leave half counts.
+        paid = leave.approved_pay_type == "paid"
+        note = f"Half-day leave ({leave.approved_pay_type})"
+        if day_punches:
+            paired = _pair(day_punches, window, settings, is_closed)
+            status, punch_status, _, minutes = _classify_working_day(
+                window.shift, settings, paired
+            )
+            values.update(punch_status=punch_status, **minutes)
+            values.update(
+                attendance_status=(
+                    AttendanceRecord.AttendanceStatus.PRESENT if is_closed else status
+                ),
+                payable_fraction=(ONE if paid else HALF) if is_closed else NONE,
+                late_minutes=0, early_out_minutes=0,
+                leave_day=leave, note=note, is_open=not is_closed,
+            )
+        elif not is_closed:
+            return None
+        else:
+            values.update(
+                attendance_status=AttendanceRecord.AttendanceStatus.LEAVE,
+                punch_status=AttendanceRecord.PunchStatus.NO_PUNCH,
+                payable_fraction=HALF if paid else NONE,
+                leave_day=leave, is_open=False,
+                note=f"{note}; did not come in for the other half",
+            )
+            paired = None
+    elif leave is not None:
         values.update(
             attendance_status=AttendanceRecord.AttendanceStatus.LEAVE,
             punch_status=AttendanceRecord.PunchStatus.NO_PUNCH,

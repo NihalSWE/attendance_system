@@ -91,15 +91,24 @@ def employee_edit(request, pk):
                 "placement_from": today,
             },
         )
+        # No salary yet (e.g. created from a device's users): the first one
+        # starts, by default, when they were placed, so no worked day is missed.
+        placed = None if compensation else services.first_placement(employee)
         salary = SalaryForm(
             request.POST if section == "salary" else None,
             company=company,
             initial={
                 "pay_basis": compensation.pay_basis if compensation else "monthly",
                 "base_rate": compensation.base_rate if compensation else None,
-                "salary_from": today,
+                "salary_from": (
+                    _local_date(placed.effective_from, company) if placed else today
+                ),
             },
         )
+        if compensation is None:
+            salary.fields["salary_from"].help_text = (
+                "The salary counts from this date. It starts, by default, when they were placed."
+            )
 
         shifts = Shift.objects.filter(status=ActiveStatus.ACTIVE).order_by("name")
         shift_form = EmployeeShiftForm(
@@ -209,7 +218,11 @@ def employee_edit(request, pk):
                         actor=request.user, company_id=company_id,
                         employee_id=employee.pk, values=form.service_values(),
                     )
-                    message = "Salary saved. Regenerate the month's salary to apply it."
+                    message = (
+                        "Salary saved. Regenerate the month's salary to apply it."
+                        if compensation else
+                        "Salary set. Regenerate the month's salary to include them."
+                    )
             except (ValidationError, IntegrityError) as exc:
                 if isinstance(exc, IntegrityError):
                     form.add_error(None, "That employee code is already in use for those dates.")

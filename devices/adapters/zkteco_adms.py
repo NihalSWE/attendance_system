@@ -391,7 +391,12 @@ class ZKTecoAdmsAdapter(DeviceAdapter):
         pointers for attendance and operation logs.
         """
         settings = device.settings or {}
-        push3 = uses_push3(pushver)
+        # A device can announce 2.x and still run PushSDK 3.x: the SenseFace
+        # 3A (system 3.2.1.2.1, Push 3.1.2 in its menu) sends pushver=2.4.1 and
+        # stays in 2.x for as long as the server answers as a 2.x server. The
+        # administrator can tell us to answer it as a 3.x server instead
+        # (Edit device → Push protocol). "auto" keeps what the device says.
+        push3 = uses_push3(pushver) or settings.get("push_protocol") == "3"
         lines = [
             f"GET OPTION FROM: {device.serial_number}",
             f"Stamp={stamp}",

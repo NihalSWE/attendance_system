@@ -6,6 +6,10 @@ permissions itself — a name in this dropdown is not authorisation.
 
 from accounts.services import get_active_memberships
 from tenants.models import Company
+from base_template.navigation import company_menus
+from devices.services.panel_access import may_manage_devices
+from leaves.services import LEAVE_RECORDER_ROLES
+from organization.services import STRUCTURE_ROLES
 
 
 def shell(request):
@@ -25,10 +29,25 @@ def shell(request):
             (m.company for m in memberships if m.company_id == company_id), None
         ) or Company.objects.filter(pk=company_id).first()
 
+    self_service = getattr(request, "self_service", False)
+    membership = next((m for m in memberships if m.company_id == company_id), None)
+    menus = []
+    unrestricted_admin = False
+    if membership and not self_service:
+        unrestricted_admin = may_manage_devices(user, company_id)
+        menus = company_menus(
+            request, can_manage=membership.role in STRUCTURE_ROLES,
+            can_manage_devices=unrestricted_admin,
+            can_record_leave=membership.role in LEAVE_RECORDER_ROLES,
+        )
+
     return {
         "memberships": memberships,
         "active_company": active_company,
         # Set by common.middleware.SelfServiceGate: an Employee or Branch
         # manager login, who gets the small "my" sidebar.
-        "self_service": getattr(request, "self_service", False),
+        "self_service": self_service,
+        "company_menus": menus,
+        "sidebar_unrestricted_admin": unrestricted_admin,
+        "sidebar_branch_manager": bool(membership and membership.role == 'manager'),
     }

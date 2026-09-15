@@ -21,11 +21,12 @@ def _range_input(key, placeholder, presets=True):
 class LeaveTypeForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = LeaveType
-        fields = ("code", "name", "description")
-        labels = {"code": "Code", "name": "Leave type"}
+        fields = ("code", "name", "days_per_year", "description")
+        labels = {"code": "Code", "name": "Leave type", "days_per_year": "Days per year"}
         help_texts = {
             "code": "Short identifier, unique in this company, e.g. CL.",
             "name": "As employees know it, e.g. Casual leave.",
+            "days_per_year": "Leave blank for no limit. Approved leave in a calendar year counts; a half day is 0.5.",
         }
         widgets = {"description": forms.TextInput()}
 
@@ -53,6 +54,11 @@ class RecordLeaveForm(StyledFormMixin, forms.Form):
     )
     end_date = forms.DateField(
         label="To", widget=_range_input("leave", "Select leave dates")
+    )
+    duration = forms.ChoiceField(
+        choices=(("full_day", "Full day"), ("half_day", "Half day")),
+        label="Length", required=False, initial="full_day",
+        help_text="A half day is for one date and counts as half a day.",
     )
     pay_type = forms.ChoiceField(
         choices=PayType.choices,
@@ -82,7 +88,10 @@ class RecordLeaveForm(StyledFormMixin, forms.Form):
 
 
 def _employee_label(employee):
-    return employee.full_name
+    # The view annotates the current employee code, so the picker can find
+    # people by code as well as by name.
+    code = getattr(employee, "table_code", "")
+    return f"{code} · {employee.full_name}" if code else employee.full_name
 
 
 class CancelLeaveForm(StyledFormMixin, forms.Form):
@@ -90,3 +99,32 @@ class CancelLeaveForm(StyledFormMixin, forms.Form):
         label="Why is it being cancelled?", required=False, widget=forms.Textarea,
         help_text="Recorded in the audit trail.",
     )
+
+
+class RequestLeaveForm(RecordLeaveForm):
+    """The service determines the employee from the signed-in account."""
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        del self.fields['employee']
+        self.fields['reason'].required = True
+        self.fields['pay_type'].label = 'Requested pay'
+        self.fields['pay_type'].help_text = 'Your approver decides whether the leave is paid or unpaid.'
+
+
+class DecideLeaveForm(StyledFormMixin, forms.Form):
+    decision = forms.ChoiceField(choices=(('approve', 'Approve'), ('reject', 'Reject')))
+    pay_type = forms.ChoiceField(choices=PayType.choices, label='Approved pay', required=False)
+    reason = forms.CharField(label='Decision note', required=False, widget=forms.Textarea,
+                             help_text='Required when rejecting. The employee can read this note.')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['pay_type'].widget.attrs['data-show-when'] = 'decision:approve'
+
+    def clean(self):
+        values = super().clean()
+        if values.get('decision') == 'reject' and not values.get('reason'):
+            self.add_error('reason', 'Give a reason for rejecting the request.')
+        if values.get('decision') == 'approve' and not values.get('pay_type'):
+            self.add_error('pay_type', 'Choose paid or unpaid.')
+        return values

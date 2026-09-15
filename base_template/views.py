@@ -11,14 +11,14 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LogoutView
-from django.core.paginator import Paginator
-from django.db.models import Q
-from django.shortcuts import redirect, render
+from django.db.models import Count, OuterRef, Q, Subquery
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.views.decorators.http import require_POST
 
 from accounts.services import ACTIVE_COMPANY_SESSION_KEY, get_active_memberships
 from attendance import live_status
-from employees.models import Employee
+from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from organization.models import Branch, CompanyDepartment
 
 
@@ -73,7 +73,17 @@ def employee_list(request):
     if not request.company_id:
         return _no_company(request)
 
-    qs = Employee.objects.select_related("user").order_by("first_name", "last_name")
+    assignment = EmployeeAssignment.objects.filter(employee=OuterRef("pk")).exclude(
+        status="cancelled").order_by("-effective_from", "-pk")
+    compensation = EmployeeCompensation.objects.filter(employee=OuterRef("pk")).exclude(
+        status="cancelled").order_by("-effective_from", "-pk")
+    qs = Employee.objects.select_related("user").annotate(
+        table_code=Subquery(assignment.values("employee_code")[:1]),
+        table_branch=Subquery(assignment.values("branch__name")[:1]),
+        table_department=Subquery(assignment.values("department__department__name")[:1]),
+        table_designation=Subquery(assignment.values("designation__designation__name")[:1]),
+        table_rate=Subquery(compensation.values("base_rate")[:1]),
+    ).order_by("first_name", "last_name")
 
     search = request.GET.get("q", "").strip()
     if search:
@@ -88,13 +98,10 @@ def employee_list(request):
     if status:
         qs = qs.filter(employment_status=status)
 
-    try:
-        per_page = min(int(request.GET.get("per_page", 25)), 100)
-    except ValueError:
-        per_page = 25
-
-    paginator = Paginator(qs, per_page)
-    page = paginator.get_page(request.GET.get("page"))
+    page = paginate(request, qs,
+        search=("first_name", "last_name", "work_email", "table_code", "table_branch", "table_department", "table_designation", "employment_status"),
+        order=("table_code", ("first_name", "last_name"), "table_branch", "table_department", "table_designation", None, "employment_status", "table_rate", None))
+    paginator, per_page = page.paginator, page.paginator.per_page
 
     # Current assignment per employee, for code/branch/department columns.
     rows = []
@@ -139,9 +146,13 @@ def employee_list(request):
 def department_list(request):
     if not request.company_id:
         return _no_company(request)
-    departments = (
+    departments = paginate(
+        request,
         CompanyDepartment.objects.select_related("branch", "department", "head")
-        .order_by("branch__name", "department__name")
+        .annotate(table_designations=Count("designations", distinct=True))
+        .order_by("branch__name", "department__name"),
+        search=("department__code", "department__name", "branch__name", "status"),
+        order=("department__code", "department__name", "branch__name", "status", "table_designations"),
     )
     return render(request, "base_template/department_list.html",
                   {"departments": departments})

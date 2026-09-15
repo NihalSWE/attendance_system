@@ -4,8 +4,10 @@
     <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
 {% endblock %}
 {% block extra_js %}
-    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
-    </script>
+    {% if not server_tables %}
+        <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
+        </script>
+    {% endif %}
     <script defer src="{% static 'base_template/js/platform.js' %}">
     </script>
 {% endblock %}

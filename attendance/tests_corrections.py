@@ -219,6 +219,27 @@ class ChangeStatusTests(CorrectionTestCase):
         with self.assertRaises(ValidationError):
             self.change_status(AUG_12, "present")
 
+    def test_a_half_day_leave_day_is_changed_on_the_leave_page(self):
+        """Came in on a half-day leave reads "present", but leave decides it."""
+        from leaves import services as leave_services
+
+        casual = leave_services.create_leave_type(
+            actor=self.admin, company_id=self.company.pk,
+            values={"code": "CAS", "name": "Casual"},
+        )
+        leave_services.record_leave(actor=self.admin, company_id=self.company.pk, values={
+            "employee": self.employee, "leave_type": casual, "start_date": AUG_12,
+            "end_date": AUG_12, "duration": "half_day", "pay_type": "paid", "reason": "",
+        })
+        self.punch(AUG_12, 13, 30)
+        self.punch(AUG_12, 18)
+        self.assertEqual(self.day(AUG_12).attendance_status, S.PRESENT)
+        with self.assertRaises(ValidationError) as caught:
+            self.change_status(AUG_12, "absent")
+        self.assertIn("Leave page", str(caught.exception))
+        with use_company(self.company):
+            self.assertFalse(AttendanceCorrection.objects.exists())
+
     def test_only_present_half_day_or_absent(self):
         with self.assertRaises(ValidationError):
             self.change_status(AUG_12, "leave")

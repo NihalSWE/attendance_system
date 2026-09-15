@@ -827,6 +827,9 @@ Common fields: TenantOwned plus actor tracking.
 
 - `code`, `name` — CharField.
 - `description` — TextField.
+- `days_per_year` — optional DecimalField(5,1), minimum 0.5; blank = no limit.
+  Built 2026-09-15 (A10c, simple): approved leave days of the type in a calendar
+  year count against it; no accrual or carry-forward.
 - `default_balance_unit` — days or minutes.
 - `requires_attachment_by_default` — BooleanField.
 - `color` — optional CharField for calendar display.
@@ -1609,6 +1612,14 @@ Constraints: repayment and installment belong to the same loan/company/currency;
 ### 77. PayrollAdjustment
 
 An approved one-time earning, deduction, balance correction, waiver, or carry-forward instruction. It becomes financial only when a PayrollLine posts it or when its explicitly selected non-payroll balance action is applied.
+
+**Built 2026-09-15 (A11 part 2, simple subset), table `payroll_adjustment`:**
+`employee` (FK PROTECT), `target_payroll_period` (FK PROTECT, required),
+`adjustment_type` (earning shown as Bonus / deduction), `amount` (> 0, check
+constraint), `reason` (CharField 255), `status` (active / cancelled shown as
+Removed), plus actor tracking. `PayrollLine.payroll_adjustment` (nullable FK
+PROTECT) links the manual line (`source_type="adjustment"`, `is_manual=True`).
+The remaining fields below are not built.
 
 Common fields: TenantOwned plus actor tracking.
 

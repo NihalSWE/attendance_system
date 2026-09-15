@@ -77,9 +77,29 @@
                 </a>
             {% endif %}
         </form>
-        {% if rows %}
+        {% if not rows %}
+            <div class="empty server-table-empty">
+                <div class="empty__icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="11" cy="11" r="7"/>
+                        <path d="m20 20-3.5-3.5"/>
+                    </svg>
+                </div>
+                <div class="empty__title">
+                    No employees match
+                </div>
+                <div class="empty__text">
+                    {% if search or status %}
+                        Try clearing the filters.
+                    {% else %}
+                        Add your first employee to get started.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or rows %}
             <div class="table-wrap">
-                <table class="table">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th>
@@ -184,67 +204,9 @@
                     </tbody>
                 </table>
             </div>
+        {% include "base_template/includes/table_pagination.html" %}
             {# Pagination is required on every table, with a real count — spec §4. #}
-            <div class="pagination">
-                <span class="pagination__info">
-                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ paginator.count }}
-                </span>
-                <span class="pagination__size">
-                    <label class="sr-only" for="per_page">
-                        Rows per page
-                    </label>
-                    <select id="per_page"
-                    onchange="location.search='?per_page='+this.value+'&q={{ search|urlencode }}&status={{ status|urlencode }}'">
-                        <option value="25" {% if per_page == 25 %}selected{% endif %}>
-                            25
-                        </option>
-                        <option value="50" {% if per_page == 50 %}selected{% endif %}>
-                            50
-                        </option>
-                        <option value="100" {% if per_page == 100 %}selected{% endif %}>
-                            100
-                        </option>
-                    </select>
-                    <span>
-                        per page
-                    </span>
-                </span>
-                <span class="pagination__pages">
-                    {% if page.has_previous %}
-                        <a class="pagination__page" href="?page={{ page.previous_page_number }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
-                            Prev
-                        </a>
-                    {% else %}
-                        <button class="pagination__page" disabled>
-                            Prev
-                        </button>
-                    {% endif %}
-                    {% for n in page.adjusted_elided_pages %}
-                        {% if n == page.number %}
-                            <button class="pagination__page is-on">
-                                {{ n }}
-                            </button>
-                        {% elif n == "…" %}
-                            <span class="pagination__dots">
-                                …
-                            </span>
-                        {% else %}
-                            <a class="pagination__page" href="?page={{ n }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
-                                {{ n }}
-                            </a>
-                        {% endif %}
-                    {% endfor %}
-                    {% if page.has_next %}
-                        <a class="pagination__page" href="?page={{ page.next_page_number }}&q={{ search|urlencode }}&status={{ status|urlencode }}&per_page={{ per_page }}">
-                            Next
-                        </a>
-                    {% else %}
-                        <button class="pagination__page" disabled>
-                            Next
-                        </button>
-                    {% endif %}
-                </span>
-            </div>
+
         {% else %}
             <div class="empty">
                 <div class="empty__icon">

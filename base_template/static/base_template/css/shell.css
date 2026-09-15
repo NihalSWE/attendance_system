@@ -90,6 +90,51 @@ Sidebar — the active item is a solid ink block. Never soften it to a tint.
     margin-top: auto;
     padding-top: var(--s4);
 }
+.sidebar__nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s1);
+}
+.sidebar__heading {
+    cursor: pointer;
+    list-style: none;
+    font-weight: 600;
+    opacity: 1;
+}
+.sidebar__heading::-webkit-details-marker {
+    display: none;
+}
+.sidebar__link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+.sidebar__heading .sidebar__chevron {
+    width: 12px;
+    height: 12px;
+    margin-left: auto;
+}
+.sidebar__group[open] > summary .sidebar__chevron {
+    transform: rotate(90deg);
+}
+.sidebar__submenu {
+    list-style: none;
+    padding: 0 0 0 var(--s3);
+    margin: var(--s1) 0 var(--s2) var(--s4);
+    border-left: 1px solid var(--chrome-line);
+}
+.sidebar__child {
+    font-size: 12px;
+    line-height: 1.45;
+    margin-block: 2px;
+    opacity: 1;
+}
+.navigation-toggle,
+.navigation-close {
+    display: none;
+}
+.page [id] {
+    scroll-margin-top: var(--s5);
+}
 .nav-button {
     border:0;
     background:transparent;
@@ -370,31 +415,52 @@ Auth screen — a single centred card on paper.
     margin-bottom: var(--s5);
 }
 /* ---------------------------------------------------------------------------
-Responsive — the sidebar collapses to icons, then off-canvas.
+Responsive — full labelled navigation in a drawer on tablets and phones.
 ------------------------------------------------------------------------ */
 @media (max-width: 1024px) {
-    .sidebar {
-        width: 64px;
-        padding: var(--s3) var(--s2);
+    html:not(.navigation-ready) .shell {
+        flex-direction: column;
     }
-    .sidebar__brand span,
-    .sidebar__label,
-    .sidebar__link span,
-    .sidebar__count {
+    html:not(.navigation-ready) .sidebar {
+        width: 100%;
+        height: auto;
+        position: static;
+    }
+    .navigation-ready .sidebar {
         display: none;
     }
-    .sidebar__link {
-        justify-content: center;
-        padding: 10px;
+    .navigation-ready .sidebar.is-open {
+        display: flex;
+        position: fixed;
+        inset: 0 auto 0 0;
+        width: min(280px, calc(100vw - 48px));
+        height: 100dvh;
+        z-index: 101;
+        box-shadow: var(--shadow-lg);
+        overscroll-behavior: contain;
+    }
+    .navigation-ready .navigation-toggle,
+    .navigation-ready .navigation-close {
+        display: inline-flex;
+        flex: none;
+    }
+    .navigation-close {
+        margin-left: auto;
+    }
+    .navigation-backdrop {
+        position: fixed;
+        inset: 0;
+        background: var(--ring);
+        z-index: 100;
+    }
+    body.navigation-open {
+        overflow: hidden;
     }
     .topbar__search {
         width: 200px;
     }
 }
 @media (max-width: 680px) {
-    .sidebar {
-        display: none;
-    }
     .page {
         width: 100%;
         max-width: 1440px;

@@ -7,9 +7,9 @@ organization.services, so a future API or job enforces the same rules.
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.paginator import Paginator
 from django.db.models import Count, Q
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.views.decorators.http import require_POST
 
 from common.choices import ActiveStatus
@@ -66,13 +66,9 @@ def branch_list(request):
         if status in dict(ActiveStatus.choices):
             queryset = queryset.filter(status=status)
 
-        try:
-            per_page = min(max(int(request.GET.get("per_page", 25)), 5), 100)
-        except (TypeError, ValueError):
-            per_page = 25
-
-        paginator = Paginator(queryset, per_page)
-        page = paginator.get_page(request.GET.get("page"))
+        page = paginate(request, queryset, search=("code", "name", "city", "status"),
+            order=("code", "name", "city", "is_default", "status", "department_count", None))
+        paginator, per_page = page.paginator, page.paginator.per_page
         branches = list(page.object_list)
 
     can_manage = membership.role in ("owner", "company_admin")

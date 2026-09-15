@@ -16,7 +16,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import PasswordChangeForm
 from django.contrib.auth.views import PasswordChangeView
 from django.http import Http404
-from django.shortcuts import redirect, render
+from django.db.models import Min
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -30,7 +32,8 @@ from attendance.views import _month_steps, month_context, read_month
 from common.forms import StyledFormMixin
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
-from leaves.models import LeaveDay, LeaveRequest
+from leaves.models import LeaveDay, LeaveRequest, LeaveType
+from leaves.services import allowance_left
 from organization.employee_login import ROLE_LABELS
 from payroll.models import PayrollRun
 from payroll.views import payslip_context, payslip_records
@@ -181,24 +184,36 @@ def my_leave(request):
     raw_year = request.GET.get("year", "").strip()
     year = int(raw_year) if raw_year.isdigit() and 2000 <= int(raw_year) <= 2100 else today.year
     with use_company(request.company_id):
-        requests = list(
+        requests = paginate(request,
             LeaveRequest.objects.prefetch_related("segments__leave_type", "segments__days")
             .filter(employee=employee, segments__start_date__lte=datetime.date(year, 12, 31),
                     segments__end_date__gte=datetime.date(year, 1, 1))
-            .distinct().order_by("-pk")
-        )
+            .annotate(table_date=Min("segments__start_date"), table_type=Min("segments__leave_type__name"))
+            .distinct().order_by("-pk"),
+            search=("table_type", "status", "reason"),
+            order=("table_date", "table_type", None, None, "status", "reason", None))
         taken = Counter()
         for name, pay_type, units in LeaveDay.objects.filter(
             employee=employee, status__in=LEAVE_TAKEN,
             work_date__gte=datetime.date(year, 1, 1), work_date__lte=datetime.date(year, 12, 31),
         ).values_list("request_segment__leave_type__name", "approved_pay_type", "balance_units"):
             taken[(name, pay_type)] += units or Decimal("1")
+        allowances = []
+        for leave_type in LeaveType.objects.filter(
+            status="active", days_per_year__isnull=False
+        ).order_by("name"):
+            left = allowance_left(employee, leave_type, year)
+            allowances.append({"type": leave_type.name, "allowance": leave_type.days_per_year,
+                               "used": leave_type.days_per_year - left, "left": left})
     rows = []
     for leave in requests:
         segments = [s for s in leave.segments.all()]
         days = sum(
-            1 for segment in segments for day in segment.days.all() if day.status in LEAVE_TAKEN
+            day.balance_units for segment in segments for day in segment.days.all()
+            if day.status in LEAVE_TAKEN
         )
+        if leave.status in ('pending', 'rejected'):
+            days = sum(segment.requested_units for segment in segments)
         rows.append({
             "request": leave,
             "segments": segments,
@@ -209,6 +224,7 @@ def my_leave(request):
     return render(request, "base_template/me/leave.html", {
         "employee": employee,
         "rows": rows,
+        "allowances": allowances,
         "taken": [
             {"type": name, "pay_type": pay_type, "days": days}
             for (name, pay_type), days in sorted(taken.items())
@@ -233,7 +249,9 @@ def my_payslips(request):
     if employee is None:
         return _no_employee(request, "My payslips")
     with use_company(request.company_id):
-        payslips = list(_my_payslips(employee))
+        payslips = paginate(request, _my_payslips(employee),
+            search=("payroll_run__payroll_period__name",),
+            order=("payroll_run__payroll_period__start_date", "gross_earnings", "total_deductions", "net_pay", None))
     return render(request, "base_template/me/payslips.html", {
         "employee": employee, "payslips": payslips,
     })

@@ -30,7 +30,7 @@
             My attendance
         </span>
     </a>
-    <a class="sidebar__link {% active request 'leave' %}" href="{% url 'me:leave' %}" aria-label="My leave">
+    <a class="sidebar__link {% active request 'leave' 'leave_request' %}" href="{% url 'me:leave' %}" aria-label="My leave">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 3.5h14v17l-3.5-2.2L12 20.5l-3.5-2.2L5 20.5z"/>
             <path d="M9 9h6M9 13h4"/>
@@ -58,6 +58,15 @@
             Change password
         </span>
     </a>
+    {% if sidebar_branch_manager %}
+        <div class="sidebar__label">My branches</div>
+        <a class="sidebar__link {% active request 'leave_inbox' 'leave_decide' %}" href="{% url 'me:leave_inbox' %}">
+            <span>Approval inbox</span>
+        </a>
+        <a class="sidebar__link {% active request 'branch_attendance' %}" href="{% url 'me:branch_attendance' %}">
+            <span>Branch attendance</span>
+        </a>
+    {% endif %}
     <div class="sidebar__foot">
         <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}

@@ -12,11 +12,62 @@
                 {{ employee.full_name }} · {{ year }}
             </p>
         </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'me:leave_request' %}">Request leave</a>
+        </div>
     </div>
 
     <div class="alert alert--info">
-        Your leave is recorded by the company for now. Asking for leave from this page is being added next.
+        Requests wait for approval. Pending and rejected requests do not count as leave taken.
     </div>
+
+    {% if allowances %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Allowance in {{ year }}
+                </h2>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Leave type
+                            </th>
+                            <th class="numeric">
+                                Days per year
+                            </th>
+                            <th class="numeric">
+                                Used
+                            </th>
+                            <th class="numeric">
+                                Left
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in allowances %}
+                            <tr>
+                                <td>
+                                    {{ item.type }}
+                                </td>
+                                <td class="numeric">
+                                    {{ item.allowance|floatformat:"-1" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ item.used|floatformat:"-1" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ item.left|floatformat:"-1" }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
 
     <div class="card">
         <div class="card__head">
@@ -90,9 +141,16 @@
                 Show
             </button>
         </form>
-        {% if rows %}
+        {% if not rows %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    No leave in {{ year }}
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or rows %}
             <div class="table-wrap">
-                <table class="table">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th>
@@ -113,6 +171,9 @@
                             <th>
                                 Reason
                             </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
                         </tr>
                     </thead>
                     <tbody>
@@ -122,13 +183,17 @@
                                     {{ row.first|date:"d M Y" }}{% if row.last != row.first %} – {{ row.last|date:"d M Y" }}{% endif %}
                                 </td>
                                 <td>
-                                    {% for segment in row.segments %}{{ segment.leave_type.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {% for segment in row.segments %}{{ segment.leave_type.name }}{% if segment.duration_type == 'half_day' %} (half day){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
                                 </td>
                                 <td class="numeric">
                                     {{ row.days }}
                                 </td>
                                 <td>
-                                    {% for segment in row.segments %}{{ segment.get_requested_pay_type_display }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {% if row.request.status == 'approved' and row.request.decision_snapshot.pay_type %}
+                                        {{ row.request.decision_snapshot.pay_type|title }}
+                                    {% else %}
+                                        {% for segment in row.segments %}{{ segment.get_requested_pay_type_display }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% with status=row.request.status %}
@@ -139,12 +204,27 @@
                                 </td>
                                 <td>
                                     {{ row.request.reason|default:"—"|truncatechars:60 }}
+                                    {% if row.request.decision_snapshot.reason %}
+                                        <p class="field__help">Decision: {{ row.request.decision_snapshot.reason }}</p>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.request.status == 'pending' %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'me:leave_withdraw' row.request.pk %}">
+                                            Withdraw
+                                        </a>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
+        {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">

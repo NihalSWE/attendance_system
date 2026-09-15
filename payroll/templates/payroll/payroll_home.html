@@ -20,7 +20,7 @@
             </h1>
             <p class="page__sub">
                 Generating a month recalculates its attendance first. The result is a
-                draft and can be generated again at any time.
+                draft and can be generated again until you finalise it.
             </p>
         </div>
         <div class="page__actions">
@@ -33,14 +33,25 @@
                 <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}">
                     Salary settings
                 </a>
-                <form method="post" action="{% url 'payroll:payroll_generate' %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="month" value="{{ month }}">
-                    <input type="hidden" name="year" value="{{ year }}">
-                    <button class="btn btn--primary" type="submit">
-                        {% if run %}Regenerate{% else %}Generate{% endif %} {{ month_name }} {{ year }}
-                    </button>
-                </form>
+                {% if run.status == 'posted' %}
+                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_reopen' %}?month={{ month }}&year={{ year }}">
+                        Undo finalise
+                    </a>
+                {% else %}
+                    {% if run %}
+                        <a class="btn btn--ghost" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}">
+                            Finalise {{ month_name }}
+                        </a>
+                    {% endif %}
+                    <form method="post" action="{% url 'payroll:payroll_generate' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="month" value="{{ month }}">
+                        <input type="hidden" name="year" value="{{ year }}">
+                        <button class="btn btn--primary" type="submit">
+                            {% if run %}Regenerate{% else %}Generate{% endif %} {{ month_name }} {{ year }}
+                        </button>
+                    </form>
+                {% endif %}
             {% endif %}
         </div>
     </div>
@@ -64,12 +75,24 @@
             <h2>
                 {{ month_name }} {{ year }}
             </h2>
-            {% if run %}
+            {% if run.status == 'posted' %}
+                <span class="badge badge--success">
+                    Finalised {{ run.posted_at|date:"d M Y" }}
+                </span>
+            {% elif run %}
                 <span class="badge badge--warning">
                     Draft
                 </span>
             {% endif %}
         </div>
+        {% if run.status == 'posted' %}
+            <div class="card__body">
+                <p class="field__help">
+                    Employees can see these payslips. The month's attendance and overtime
+                    are locked; use Undo finalise to correct a mistake.
+                </p>
+            </div>
+        {% endif %}
         <form method="get" class="toolbar">
             <label class="sr-only" for="pay-month">
                 Month
@@ -96,9 +119,20 @@
             </button>
         </form>
 
-        {% if records %}
+        {% if not records %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    No salary generated for {{ month_name }} {{ year }}
+                </div>
+                <div class="empty__text">
+                    Press Generate. Attendance for the month is calculated first, then
+                    each employee's salary.
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or records %}
             <div class="table-wrap">
-                <table class="table">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <colgroup>
                         <col style="width: 17%">
                         <col style="width: 9%">
@@ -212,6 +246,7 @@
                     </tfoot>
                 </table>
             </div>
+        {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">

@@ -14,8 +14,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (!board) return;
 
     const url = board.dataset.nowUrl;
-    const employees = board.dataset.nowEmployees || "";
-    if (!url || !employees) return;
+    if (!url) return;
 
     const EVERY_MS = 60000;
 
@@ -37,6 +36,9 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     function poll() {
+        // A server-side draw changes the visible employees without a reload.
+        const employees = Array.from(board.querySelectorAll("[data-now-for]"), cell => cell.dataset.nowFor).join(",");
+        if (!employees) return;
         fetch(url + "?employees=" + encodeURIComponent(employees), {
             headers: {"X-Requested-With": "XMLHttpRequest"}
         })

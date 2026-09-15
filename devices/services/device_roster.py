@@ -139,6 +139,13 @@ def build_roster(device):
         row["assigned_device_authorized"] = bool(
             enrollment and enrollment.assigned_device_authorized
         )
+        # Plain values for the table's server-side search and sort (N9).
+        row["employee_name"] = enrollment.employee.full_name if enrollment else ""
+        row["counts_for_attendance"] = (
+            2 if row["attendance_enabled"] and row["assigned_device_authorized"]
+            else 1 if row["attendance_enabled"]
+            else 0
+        )
         roster.append(row)
 
     roster.sort(key=lambda r: (not r["is_mapped"], r["name"].lower(), r["pin"]))

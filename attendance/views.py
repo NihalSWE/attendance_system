@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.http import JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
@@ -27,9 +27,11 @@ from attendance.forms import (
 )
 from attendance.models import AttendanceCorrection, AttendanceRecord
 from attendance.services import _is_locked, locked_ranges, month_bounds, refresh
+from base_template.tables import paginate, render
 from common.forms import apply_service_errors
 from common.tenant import use_company
 from employees.models import Employee
+from organization.models import Branch
 from organization.services import STRUCTURE_ROLES, require_company_membership
 from organization.views import _company_or_redirect
 
@@ -63,42 +65,76 @@ def month_context(year, month):
 @login_required
 @require_http_methods(["GET"])
 def attendance_list(request):
+    """Attendance → Daily list: one row per employee-day, paged in the database.
+
+    Month, branch, employee and status are the page's own filters and narrow
+    the set before the table sees it; the table's search, order and page are
+    then applied to that set in SQL (base_template/tables.py), so its counts
+    are the real counts, not what happens to be on screen.
+
+    Branch-aware on purpose: every row carries ``branch``, which is the field
+    ``access_control.branch_access.scope_queryset`` will narrow on once that
+    step is wired in (A12).
+    """
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
     membership = require_company_membership(request.user, company_id)
     year, month = read_month(request.GET)
     first, last = month_bounds(year, month)
+    branch_id = request.GET.get("branch", "").strip()
     employee_id = request.GET.get("employee", "").strip()
     status = request.GET.get("status", "").strip()
 
     refresh(company_id, start=first, end=last)
 
     with use_company(company_id):
-        queryset = AttendanceRecord.objects.select_related("employee", "branch").filter(
-            work_date__gte=first, work_date__lte=last
-        )
-        total = queryset.count()
+        queryset = AttendanceRecord.objects.select_related(
+            "employee", "branch", "employee_assignment",
+        ).filter(work_date__gte=first, work_date__lte=last)
+        month_total = queryset.count()
+        if branch_id.isdigit():
+            queryset = queryset.filter(branch_id=int(branch_id))
         if employee_id.isdigit():
             queryset = queryset.filter(employee_id=int(employee_id))
         if status in dict(AttendanceRecord.AttendanceStatus.choices):
             queryset = queryset.filter(attendance_status=status)
-        filtered_total = queryset.count()
-        page = Paginator(
-            queryset.order_by("work_date", "employee__first_name"), 50
-        ).get_page(request.GET.get("page"))
+        page = paginate(
+            request,
+            queryset.order_by("work_date", "employee__first_name", "employee__last_name"),
+            search=(
+                "employee__first_name", "employee__last_name",
+                "employee_assignment__employee_code", "branch__name",
+                "attendance_status", "note",
+            ),
+            order=(
+                "work_date",
+                ("employee__first_name", "employee__last_name"),
+                "branch__name",
+                "attendance_status",
+                "first_in_at",
+                "last_out_at",
+                "worked_minutes",
+                "late_minutes",
+                "payable_fraction",
+                "note",
+            ),
+        )
         employees = Employee.objects.order_by("first_name", "last_name")
+        branches = Branch.objects.order_by("name")
 
     return render(request, "attendance/attendance_list.html", {
         **month_context(year, month),
         "page": page,
-        "total": total,
-        "filtered_total": filtered_total,
+        "month_total": month_total,
         "employees": employees,
+        "branches": branches,
+        "branch_id": branch_id,
         "employee_id": employee_id,
         "status": status,
         "statuses": AttendanceRecord.AttendanceStatus.choices,
         "can_manage": membership.role in STRUCTURE_ROLES,
+        "filtered": bool(branch_id or employee_id or status),
         # Punch times are stored in UTC; people read them in company time.
         "company_tz": membership.company.timezone or "UTC",
     })
@@ -343,7 +379,7 @@ def attendance_day_fix(request, employee_id, on):
     corrections = correction_services.corrections_for_day(company_id, employee_id, day)
     locked = _is_locked(day, locked_ranges(company_id))
     can_change_status = (
-        record is not None and not record.is_open
+        record is not None and not record.is_open and not record.leave_day_id
         and record.attendance_status in correction_services.CORRECTABLE_DAY_STATUSES
     )
     return render(request, "attendance/day_fix.html", {

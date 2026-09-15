@@ -1,5 +1,8 @@
 # Attendance implementation status
 
+> **2026-09-15 transfer update:** Read [CLAUDE_HANDOFF_2026-09-15.md](CLAUDE_HANDOFF_2026-09-15.md) first. Ajay disputes the A15 completion report; main attendance/device table conversions remain unfinished under N9. Claude must review and report done/pending/disputed work before implementing anything. Older completion and next-step claims below are historical, not acceptance.
+
+
 ## Platform corrections — 2026-09-07
 
 User feedback corrected the onboarding contract. Read [UI_AND_ONBOARDING_CONVENTIONS.md](UI_AND_ONBOARDING_CONVENTIONS.md) and [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md). Implemented one current master administrator per company with backend/database uniqueness, account editing, generated string codes/slugs, Bangladesh defaults, scoped Django admin forms, explicit `/platform/companies/`, centered responsive pages and readable four-space templates. No new environment variables. Existing data preserved; only the two shared demo memberships were ended with explicit user approval and audit entries. Full suite: 131 tests passed; the strengthened settings-admin valid-POST check also passed in the seven-test focused rerun. Browser creation/admin/feature flows and screenshots checked at 1440/768/375px. P1 remains in progress: next is company organization/scheduling writes and scoped authorization, then employee lifecycle pages. This supersedes earlier existing-account/role-picker examples.
@@ -514,7 +517,7 @@ All five fit the current design:
 - **Leave requests are approved by the branch manager.** A branch manager is a
   login with role `manager` and `allowed_branches` set to their branch(es) —
   no new table. The approver is the active manager of the employee's branch.
-  *Default (proposed by Ajay's session, change if he says):* if the branch has
+  *Confirmed by Ajay on 2026-09-15:* if the branch has
   no manager, or the person asking is that manager, the request goes to the
   company admin, so no request is stuck.
 - **"User list" in point 5 is taken to mean the Employees page.** The same
@@ -539,8 +542,8 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N5 | **Attendance corrections** - done 2026-09-14, branch `feature/n5-corrections` | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b). Approving overtime (set the end time, approved minutes) and its pay are A9's; the list links to A9's approve action (agreed 2026-09-14) | — | Attendance corrections; attendance review status and the Incomplete decision |
 | N6 | **Employee detail page + terminate screen** | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
 | N7 | **Payslip redesign** - done 2026-09-14, branch `feature/n7-payslip`, merged with the employee's view (A7) (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/. Also (A7): the employee opens the same template with `for_employee=True` — breadcrumbs then lead to My payslips, never company pages — and the "Draft" label must come from the run's status (a finalised month says Finalised) | — | (new) |
-| N8 | **Device connection check** (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. Builds on the existing server-address status panel | — | (new) |
-| N9 | **Data tables on Nihal's pages** (see A15) | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
+| N8 | **Device connection check** (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. (4) **Change server address on a device that has never checked in** is refused with what to do instead — "This device has never connected to this server. Set the server address on the terminal itself first (COMM → Cloud Server)" — rather than queuing a command nobody will collect. Ajay hit this 2026-09-14 with the new SenseFace 3A: registered, never checked in, the change sat as "in progress" and then ended as "lost" ("device not reachable at the new address"), which blamed the address when the device had simply never been connected. Builds on the existing server-address status panel | — | (new) |
+| N9 | **Data tables on Nihal's pages** (see A15) - done 2026-09-15, branch `feature/n9-server-side-tables` | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
 
 #### Ajay's session
 
@@ -554,15 +557,16 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A5 | **Shifts** — ✅ done 2026-09-14 (rotating shifts deferred by Ajay: "initially I want to keep it simple") | Employee-level shift override (wins over the department shift), rotating shifts; shift form fields break minutes, paid break, grace-out, overtime-after, effective dates; a proper time picker | — | Employee override, rotating shifts; shift fields not on the form; time picker |
 | A6 | **Logins** — ✅ done 2026-09-14 | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
 | A7 | **Employee panel** — ✅ done 2026-09-14 | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
-| A8 | **Leave requests, branch-manager approval** | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 1 | Full leave: employee requests, approval step; salary and attendance pages for managers (branch manager part) |
+| A8 | **Done 2026-09-15 — leave requests, branch-manager approval**, branch `feature/a8-leave-requests` | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 1 | Full leave: employee requests, approval step; salary and attendance pages for managers (branch manager part) |
 | A10 | **Full leave** | Half-day and hourly leave, partial pay, policies and versions, balances / entitlements / ledger, attachments, withdraw, amend; default leave types at onboarding; HR records leave; employee code in the picker | — | Full leave (rest); leave fields not built; HR role recording leave; default leave types; employee code in picker |
 | A11 | **Salary completeness** | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
 | A12 | **Access** | Department heads, permissions, HR and payroll-manager pages | — | Department heads, permissions; salary and attendance pages for HR |
 | A13 | **Later** | Payments, advances, loans (P5) | — | Payments (P5) |
-| A14 | **Sidebar menus with submenus** (Ajay, 2026-09-14) | Every important page reachable from the sidebar: a menu per area with its pages as submenus, e.g. Employees (All employees, Create employee); Attendance (Daily list, Calendar); Leave (Leave list, Record leave, Leave types); Salary (Salary by month, Salary settings, Penalty rules); Shifts (Overview, Shifts, Department shifts, Weekly offs, Holidays, Holiday calendar, Attendance settings); Organisation (Branches, Departments); Devices (Devices, Enrollments, Punches, Messages, Unresolved). Ajay: pages he could not find were only reachable through buttons inside other pages. Every later step adds its pages to these menus | — | (new) |
-| A6b | **First salary for an employee without one** (bug, Ajay 2026-09-14) | Employees created from a device's users (`devices/services/user_sync.py`) get a placement but no salary row, and Edit employee → Salary refuses: "This employee has no current salary to change" — so they can never be given one. Fix: when there is no salary, the Salary card **sets the first one** (button "Set salary", from the placement's start date by default) instead of refusing; the salary page keeps listing such people under "Skipped, no salary set" until then | — | (bug) |
-| A15 | **Real data tables everywhere** (Ajay, 2026-09-14: "there is no server side pagination in many of the pages. we already discussed this before the start of the project"; then "data tables later" — after A8) | The agreed rule (DEVICE_INTEGRATION_HANDOFF.md, UI conventions): real DataTables with **server-side** paging, search and sorting, a real result count and a page-length select — today only the platform company list does it; the others have hand-built pagination or none. A shared helper in `base_template` (view side: filter/search/order/page a queryset and answer DataTables' JSON; page side: one init) so every list is one small view. Ajay's lists: Salary month, **Overtime (+ Employee and Branch filters)**, Leave, Leave types, Holidays, Penalty rules, Employees, Branches, Departments, My leave, My payslips. Every list gets filters for what people look things up by — employee, branch, status, month. Nihal's lists: N9 | — | (new) |
-| A5c | **Calendar and salary-settings fixes** (Ajay, 2026-09-14) | **Weekly off from an earlier date:** today the clash check ignores dates — any active Friday blocks another Friday ("Already a weekly off company-wide: Friday"), even for a period that does not overlap, and a rule can only be ended, never started earlier. Make the check date-aware (refuse only overlapping periods, which the database constraint already allows), add **Change start date** to a weekly off so Friday-from-September can become Friday-from-2000, and word the refusal with the dates ("Friday is already a weekly off from 1 Sep 2026; change its start date instead"). Moving a start date back recalculates the affected days (finalised months stay locked). **"Paid day off" / "Paid holiday" boxes: removed (Ajay, 2026-09-14)** — days off are always paid; what daily and hourly staff get on them stays on Salary settings. **"One day of a monthly salary is"**: rename to say what it is — the value of one day when deducting absence (and the base of overtime's hourly rate) | — | (new) |
+| A14 | **Sidebar menus with submenus — done 2026-09-15**, branch `feature/a14-sidebar-menus` | Every important page reachable from the sidebar: a menu per area with its pages as submenus, e.g. Employees (All employees, Create employee); Attendance (Daily list, Calendar); Leave (Leave list, Record leave, Leave types); Salary (Salary by month, Salary settings, Penalty rules); Shifts (Overview, Shifts, Department shifts, Weekly offs, Holidays, Holiday calendar, Attendance settings); Organisation (Branches, Departments); Devices (Devices, Enrollments, Punches, Messages, Unresolved). Ajay: pages he could not find were only reachable through buttons inside other pages. Every later step adds its pages to these menus | — | (new) |
+| A6b | **First salary for an employee without one** (bug, Ajay 2026-09-14) — ✅ done 2026-09-14, branch `feature/a6b-first-salary` | Employees created from a device's users (`devices/services/user_sync.py`) get a placement but no salary row, and Edit employee → Salary refuses: "This employee has no current salary to change" — so they can never be given one. Fix: when there is no salary, the Salary card **sets the first one** (button "Set salary", from the placement's start date by default) instead of refusing; the salary page keeps listing such people under "Skipped, no salary set" until then | — | (bug) |
+| A15 | **Server-side tables — done 2026-09-15**, branch `feature/a15-server-side-tables` | Shared queryset/JSON helper and one initializer, retaining the current Paper/Ink table styles. Numbered pages, page-size choice, direct page jump, result counts, database search/order and an HTML fallback. Converted Salary month, Overtime (Employee + Branch filters), Leave, Leave types, Holidays, Penalty rules, Employees, Branches, Departments, My leave, My payslips, Approval inbox and Branch attendance. Nihal’s device/attendance lists remain N9. See SERVER_SIDE_TABLES.md. | — | (new) |
+| A5c | **Calendar and salary-settings fixes** — done 2026-09-14, branch `feature/a5c-calendar-fixes` | Weekly-off conflicts compare date ranges, including stopped history. **Change start date** on Shifts → Weekly off days corrects an active or stopped rule and rebuilds changed attendance dates while preserving finalised months. Paid holiday / weekly-off fields are removed; writes force True and the calendar treats legacy flags as paid. Daily/hourly pay remains on Salary settings. The day-value label explains absence deductions and the overtime hourly-rate base. See progress below. | — | (new) |
+| A16 | **SenseFace 3A** (Ajay, 2026-09-14: "add this to my task") | **Catalogue row — ✅ done 2026-09-14** (`devices/migrations/0004_seed_senseface_3a.py`, branch `feature/senseface-3a`): ZKTeco, `senseface-3a`, ADMS push, same adapter as the 2A; capabilities set conservatively (push, face) until confirmed; appears under Register device after `migrate`. **Connected 2026-09-14 19:02 (Dhaka)** in company Ajay ("Main Entrance", serial VGU6262600120), through Ajay's ngrok tunnel: set on the terminal (COMM → Cloud Server: domain only, port 443, HTTPS on) — the software's Change server address only moves a device that is already connected. It reports **pushver 2.4.1** (the 2A: 3.0.4S) and `DeviceType=att`. It was refused with 401 at first because registration had invented a communication key the device cannot send — fixed on main (5ed6d10: no key unless typed; Edit device → "Remove the communication key"). **Still to do, on the real 3A:** first contact (note its firmware version from the first contact); scans arrive as punches; Device users reads its roster; the server-address change works. Then widen the capabilities that were confirmed (card, fingerprint, commands) and write what was verified in the migration note and here, like the 2A's notes | 4 | (new) |
 
 #### Ajay's session — progress
 
@@ -882,6 +886,23 @@ merge).**
   new fields; two end-to-end salary tests now include the demo month's
   automatic overtime. **No new .env variables.**
 
+**A6b — first salary for an employee without one (done 2026-09-14, branch
+`feature/a6b-first-salary`). No migration.**
+
+- **The bug:** "Create employees from device users" (Nihal's device user
+  sync) makes an employee and a placement but no salary, and Edit employee →
+  Salary refused: "This employee has no current salary to change" — so they
+  could never be given one, and every salary run skipped them.
+- **Now:** the Salary card says **No salary yet**, explains that such an
+  employee is left out of salary, and its button is **Set salary**. The date
+  starts, by default, when they were first placed, so no worked day is
+  missed; a date before the placement is refused. Saving writes the first
+  salary row ("First salary"), audited as `employee.salary_set`. An employee
+  whose salary has *ended* (employment ended) is not restarted from here.
+- Tests: 4 in `organization/tests_employee_edit.py`. Ajay agreed this small,
+  contained change needs only the affected apps' tests (organization,
+  employees, payroll: 278 OK), not the full suite. **No new .env variables.**
+
 **A7 — employee panel (done 2026-09-14, branch `feature/a7-employee-panel`,
 worktree `D:\\attendance_device_a5`). No migration.**
 
@@ -977,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-14):** the salary fast-track is done. Build the "Plan after the fast-track — 2026-09-13" above; it contains Ajay's five new points and every "Skipped today" row. On main: A1–A7, A9 (overtime, approved automatically when scanned out), N0–N4 and N7 (payslip redesign, which the employee's My payslips also uses), and Nihal's fix `fix/attendance-no-shift-day-off` (Generate salary crashed for a company with an employee who has no shift). Ajay's session, in order (Ajay, 2026-09-14): A6b (first salary for an employee created from device users), A5c (weekly off start date, remove the paid-day-off boxes, day-value label), A14 (sidebar menus), A8 (leave requests, branch-manager approval), A15 (server-side data tables — "later"), then A10, A11 (finalising a month, which is when payslips reach employees), A12, A13. Nihal: N5 pushed (`feature/n5-corrections`, waiting to be merged); next N6, N8 (device connection check), N9 (after A15). Settled the same day: keep the Monthly pay basis; employees see finalised payslips only; overtime counts from the shift's end (shift end 18:00, check-out 19:15 → 75 min counted, 1 hour paid under Felan Tech's 60-minute blocks) with the shift's "Overtime after" left at 0. Do not restart P0, recreate apps, or assign root a membership as a shortcut.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). Next is **A12 part 2: Organisation → Access page**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2006,6 +2027,629 @@ reason so the count stays on screen).
 **No new migration, no new environment variable.**
 
 
+## 2026-09-14 — Home setup and A5c (Ajay's session)
+
+Cloned main at `a892f12` into the home project folder and created `venv` using
+Python 3.13. Installed the pinned requirements, including Django 6.1.1 and
+`tblib`. PostgreSQL 18 was already running. Copied `.env.example` to the ignored
+`.env`; Ajay owns its database values/password, development migrations and
+superuser creation. The assistant did not open `.env` or handle the database
+password. `manage.py check` and `pip check` pass; scheduling/payroll first passed
+196 tests, then 213 after the A5c regressions were added. No development database
+reset or assistant-run development migration.
+
+**A5c — branch `feature/a5c-calendar-fixes`.**
+
+- Weekly-off overlap checks use `[effective_from, effective_to)` for the same
+  company/branch and weekday, including stopped history. Adjacent periods are
+  allowed. Refusals name the weekday, scope and dates and suggest changing the
+  existing start date. Weekly-off writes serialize on the company row; the
+  existing exclusion constraint remains the final guard.
+- **Navigation: Shifts → Weekly off days → Change start date**, for active and
+  stopped rules. The project date picker is used. Permission, company and branch
+  scope are rechecked in the service. A start must precede the stop date.
+  Corrections record before/after dates in `weekly_off.start_changed`.
+- Moving either direction rebuilds the changed range with the existing
+  `attendance.services.recalculate`, in monthly batches bounded by employee
+  placement and today. Branch rules limit the employee set. The calendar write,
+  recalculation and audit share a transaction. Finalised months remain locked;
+  an unsuccessful rebuild rolls the correction back.
+- **Shifts → Add weekly off days**, **Shifts → All holidays → Add holiday/Edit**,
+  and **Shifts → Holiday calendar** no longer ask whether days off are paid.
+  The columns remain; service writes always store True, including a caller that
+  submits False. `WorkCalendar` treats legacy False flags as paid without a data
+  rewrite. Daily/hourly day-off payment still follows Salary settings.
+  Redundant Paid columns and Unpaid calendar markers are removed.
+- **Payroll → Salary settings:** the form and current-rules summary say
+  **One day's pay for absence deductions**; help explains unpaid leave and the
+  overtime hourly-rate base. No salary formula or monthly pay basis was changed.
+- 17 new regression tests cover boundaries, stopped periods, dates back to 2000,
+  tenant/branch/role refusal, form submission, audited corrections, recalculation
+  in both directions, finalised-month preservation, rollback and legacy paid flags.
+- Browser QA used synthetic rendered test fixtures (rolled back) at 1440, 768 and
+  375 px: no page horizontal overflow; the new date picker opens within the phone
+  viewport; paid fields are absent. No browser login password was entered.
+- `makemigrations --check --dry-run`: no changes. **No migration and no new
+  environment variable; `.env.example` unchanged.** Full suite: **905 tests
+  PASS**, `manage.py test --parallel 4 --keepdb --noinput`, 276.656 seconds.
+  After the summary-label follow-up, all 26 salary-settings tests also pass.
+
+Next at home (updated 2026-09-15): **A8**, then A15; A14 is complete. Office A16 still needs the physical
+SenseFace 3A. Nihal's planned work is N5, N6, N8; N9 waits for A15. Keep his attendance
+recalculation API, overtime hook and finalised-month guard when merging N5.
+
+## 2026-09-14 — Home salary simulation and paid-break correction
+
+Ajay completed local database/migration/account setup and configured his company,
+Head Office, shifts, days off, holidays, salary/attendance/overtime rules,
+departments, designations and dummy device. The assistant did not open `.env`
+or handle the database password.
+
+- Seeded September 2026 as a full-month simulation, including future dates,
+  through the real device ingestion and attendance/payroll services. Preserved
+  the four existing employees, their salaries/placements and company settings.
+  Ajay explicitly approved two extra demo employees: daily BDT 1,500 and hourly
+  BDT 200. Six device users are mapped; 397 punches include two intentional
+  duplicate scans. There are 180 attendance days, 17 approved leave days, a
+  cancelled leave example, seven overtime decisions and one waived penalty.
+- Six draft salaries match independent scan-based arithmetic and every earning
+  and deduction code. Total net is **BDT 177,047**. The daily demo's negative
+  net intentionally exercises additive penalties with no deduction cap.
+  This is synthetic data, not evidence from the physical device.
+- Fixed `attendance/pairing.py` on `fix/paid-break-outside-shift`: `_account`
+  previously credited all outside minutes as paid breaks, including time before
+  or after the shift. Each gap is now intersected with the scheduled shift
+  before applying the paid-break allowance. Raw outside time and overtime
+  calculations remain intact.
+- Reproduced Dia's September 28 defect before fixing it. After recalculation,
+  scans 09:00, 18:00, 19:15, 21:15 produce **540 regular minutes**, not 615,
+  and 120 approved overtime minutes. At BDT 200/hour the read-only equivalent
+  now pays **BDT 2,600**, removing the BDT 250 overpayment. Her monthly salary
+  and all six seeded net salaries remain unchanged. All 180 attendance days
+  now match the independent reference. No employee compensation was changed.
+- Regression cases cover gaps before/after shifts, crossing either boundary,
+  paid lunch mixed with overtime, allowance caps, open overtime and overnight
+  shifts, plus persisted attendance feeding an hourly salary calculation.
+- Validation: **229 attendance/payroll tests pass** (78.865 seconds). All eight
+  inspected app pages and six payslips render; posting Generate salary preserves
+  the draft totals. `git diff --check` passes. No schema changes.
+- No migration or environment-variable change. Review the simulated month in
+  **Payroll → September 2026** and **Attendance → Calendar → Dia → September 28**.
+  The local detailed report and seed scripts are in ignored `.qa/salary-seed/`;
+  local data and reports are not shipped to other computers by a git pull.
+
+**Coordination override:** Nihal is not making changes now. Generate his prompt
+only when Ajay explicitly asks. His remaining plan is N5, N6, N8, then N9 after
+A15; these are not active assignments. Ajay's next build (updated 2026-09-15) is **A15 → A10 → A11 → A12 → A13**; A14 and A8 are complete. A16 awaits the physical SenseFace 3A in the office.
+
+
+## 2026-09-15 — A14: sidebar menus and submenus (Ajay's session)
+
+Built on `feature/a14-sidebar-menus`. Important pages and settings are now
+reachable directly from seven expandable company menus, with 28 submenu links
+for an unrestricted company administrator:
+
+| Menu | Submenus |
+|---|---|
+| Employees | All employees; Create employee |
+| Attendance | Daily list; Calendar |
+| Leave | Leave list; Record leave; Leave types |
+| Salary | Salary by month; Salary settings; Penalty rules; Overtime; Overtime settings |
+| Shifts | Overview; Shifts; Department shifts; Weekly off days; Holidays; Holiday calendar; Attendance settings |
+| Organisation | Branches; Departments |
+| Devices | All devices; Register device; Enrollments; Punches; Messages; Unresolved; Which devices count |
+
+- **Existing links and buttons on individual pages remain.** Penalty rules and
+  Overtime settings link to their existing Salary settings sections. Shifts,
+  Department shifts and Weekly off days link to anchored cards on the overview.
+  Device users still requires choosing a device; its existing device-page link
+  is preserved. No replacement settings screens, new lists or duplicated forms.
+- `base_template/navigation.py` owns the company menu destinations and their
+  edit/detail aliases. Namespaced routes prevent cross-app highlighting clashes.
+  The current menu opens on page load; the selected page has the solid ink
+  state and `aria-current`. Fragment navigation updates the selected submenu.
+- Create/settings links follow structure-manager access. Device navigation and
+  the broad employee list/dashboard follow unrestricted administrator access.
+  Root and employee/branch-manager sidebars remain separate. Existing endpoint
+  and service permissions are unchanged; the sidebar grants no access.
+- Shared `navigation.js` handles tablet/phone navigation for all three surfaces.
+  The drawer has Close, Escape and backdrop dismissal, focus wrapping/return,
+  background page inertness and its own scroll. Native details allow keyboard
+  expansion and a usable navigation fallback without JavaScript.
+- Browser checks at **1440, 768 and 375 px** found no page horizontal overflow.
+  Verified Salary settings, Penalty rules, Overtime settings and Weekly off
+  days navigation; keyboard expansion, Tab/Shift+Tab wrapping and Escape;
+  phone employee/platform menus retain their own destinations. Previews used
+  synthetic test fixtures in a rolled-back transaction, not the local payroll.
+- Eight new tests cover every destination and fragment, record-page selection,
+  retained page actions, HR/scoped administrator restrictions, company switching,
+  employee/manager separation and the platform sidebar.
+- Validation: **916 tests pass** in the full suite, run once with
+  `manage.py test --parallel 4 --keepdb --noinput`. `git diff --check` passes.
+- **No migration; `.env.example` unchanged; no new environment variables.**
+  Normal reload picks up the versioned CSS/JS. No local salary or configuration
+  changes in this step. QA logs/previews live in ignored `.qa/`.
+
+**Next (updated after A8):** A15 shared server-side tables, A10 full leave, A11 salary completeness, A12 access, A13
+payments. A16 still needs the physical SenseFace 3A in the office. Nihal remains
+paused; N5/N6/N8/N9 are planned only. Generate his prompt only when Ajay asks.
+
+
+## 2026-09-15 — A8: employee leave requests and branch-manager approval
+
+Built on `feature/a8-leave-requests`. A7's employee panel now includes the A8
+workflow. **Confirmed by Ajay:** the company administrator handles requests
+when there is no active assigned branch manager, and managers' own requests.
+Nobody may decide their own request. Routing uses current active memberships;
+an unassigned manager manages no branches, and inactive managers do not block
+the administrator fallback.
+
+- **Employee:** My leave → Request leave (`/me/leave/request/`). Choose a leave
+  type, full-day date range, requested paid/unpaid status and a reason. The
+  service gets the employee from the login; posted employee IDs grant no access.
+  Submission creates Pending request/segment rows and **no LeaveDay rows**.
+- **Manager:** My branches → Approval inbox (`/me/leave-inbox/`). Review requests
+  for assigned branches, approve as paid/unpaid or reject with a required note.
+  **Administrator fallback:** Leave → Approval inbox opens the same scoped page.
+  Employees see the status, decision note and approved pay in My leave.
+- Approval locks the request and employee, rechecks dates, placements, existing
+  leave and finalised salary ranges, then uses the same day-expansion helper as
+  admin-recorded leave. Days, decision and audit are atomic. Repeated decisions
+  are refused; failure rolls everything back. Approval refreshes affected
+  attendance. Draft salary is updated using the existing Generate salary flow.
+- Weekly offs/holidays are skipped; empty working-day ranges and overlapping
+  pending/approved leave are refused. Requests spanning branches must be split.
+  Approved pay may differ from requested pay without rewriting the request.
+- **Manager:** My branches → Branch attendance (`/me/branch-attendance/`). Date
+  and employee-name filters, scoped attendance and today's in-office badges.
+  Badges update on page refresh. No payroll amounts or company-wide employee
+  pages are opened to managers; the existing `/me/` gate remains in force.
+- Inbox and branch attendance use database pagination (25 rows), filters and
+  result counts. Shared DataTables paging/search/sorting/page-size integration
+  remains **A15**, the agreed next step; include both new lists in that work.
+- Half-day/hourly leave, partial pay, balances, attachments, amendments and
+  withdrawals remain A10. Existing admin Record leave and Cancel links remain.
+- **166 focused tests pass** (`leaves base_template payroll`, parallel 4,
+  keepdb; 47.121 seconds), including 11 new workflow tests. Coverage includes
+  employee ownership, branch/company refusal, manager/admin routing, replay,
+  audit rollback, posted-range guards, calendar skipping and unpaid salary
+  arithmetic. Brief synthetic browser checks verified request/decision forms,
+  pay-field hiding on rejection, inbox and branch list at 375/1440 px, with no
+  horizontal page overflow. Test fixtures were rolled back; local salaries and
+  company configuration were not changed.
+- **No migration, no new variable, `.env.example` unchanged.** Reused the
+  existing LeaveRequest/Segment/Day tables and statuses. No database password
+  was read or handled. Focused verification replaces a repeated full-suite run
+  for this step following Ajay's usage-cost feedback.
+
+**Next:** A15 → A10 → A11 → A12 → A13. A16 still needs the office SenseFace 3A.
+Nihal remains paused; N5, N6, N8 and N9 are planned only. No prompt until asked.
+
+## A15 completed — 2026-09-15 (Ajay’s session)
+
+- Shared `base_template.tables.paginate/render` handles bounded database pages,
+  allowlisted search/order, counts and DataTables JSON through each existing
+  authenticated view. Existing escaped cell/action markup is reused.
+- Thirteen company/self-service lists converted, including the A8 inbox and
+  manager attendance list. Numbered pages, 10/25/50/100 rows, direct page jump,
+  first/last navigation and a counted HTML fallback replace Next/Previous-only
+  pagination. **Ajay explicitly required the current table styling to remain.**
+  Reused the existing Paper/Ink styles; existing page links remain.
+- Overtime adds Employee and Branch filters; state counts, search and sorting
+  happen before database slicing. SQL state/payment projections were compared
+  against the existing overtime rules for automatic, pending, rejected,
+  short, day-off and disabled-pay cases. Salary formulas were not changed.
+- Salary numeric columns sort numerically; leave requests occupy one table row
+  even when they have several segments. Employee Now badges follow the visible
+  page after a draw. Finalised-only personal payslips and existing access guards
+  remain enforced.
+- Verification: **171 focused tests passed** (`leaves base_template payroll`); dedicated table
+  tests cover real SQL LIMIT/OFFSET, all company adapters/orders, hostile inputs,
+  escaping, tenant/role/self-service restrictions and overtime parity. Browser
+  checked the real local employee and overtime pages: retained styling, changed
+  page length to 10, jumped to page 3 (21–30 of 30), then clicked numbered page 2
+  (11–20 of 30). Browser was closed deliberately after verification.
+- No database migrations, dependencies or `.env.example` changes. No database
+  password was read. No Nihal prompt generated.
+
+**Next:** A10 → A11 → A12 → A13. A16 stays office-only. Nihal is paused;
+N5/N6/N8/N9 are planned work, not active assignments.
+
+## A15 finished — 2026-09-15 (Claude, Ajay's session)
+
+Ajay disputed the A15 completion above. Claude reviewed it read-only, then finished it.
+
+- **Why the pages looked unchanged:** the 13 converted pages were probed against
+  Ajay's real local data with Django's test client (inside a rolled-back
+  transaction; no password used). Every page returned its table JSON, every
+  sortable column and search worked. Most lists are short (Employees 6, Salary by
+  month 6, Holidays 2, Branches/Departments/Leave types 1, Leave 18); only
+  Overtime (30) has more than one page at 25 rows, so the others show a single
+  page "1". The branch-manager pages could not be probed: no manager login exists.
+- **Named tables:** `paginate(..., name=...)` / `data-server-table="name"` lets
+  one page hold several independent lists (`table=<name>` draws, `<name>_page`
+  fallback). Unnamed tables are unchanged. The fallback pager builds its links
+  in Python so each list keeps the others' parameters.
+- **Converted lists A15 had missed:** Shifts → Shifts, Department shifts and
+  Weekly off days (all on the Shifts page; readiness still checks every active
+  department, not one page); the older company department list (designation
+  count now one SQL annotation); root Departments and Designations (their search
+  and status filters stay; browser-only `data-enhance` removed).
+- **Remaining:** N9 — Attendance → Daily list and the device lists. Owner to be
+  decided by Ajay.
+- **Tests:** `manage.py test base_template scheduling organization --parallel 4
+  --keepdb` → **319 tests OK**. Two new table tests cover the named Shifts-page
+  lists (separate counts, order, search by weekday name, per-list fallback page
+  parameters) and the company/root department lists. Not a full-suite run.
+- **Not yet done:** Ajay's in-browser check. Claude cannot sign in to the local
+  app without his password, so the rendered pager was not screenshot-verified
+  in this step.
+- No migrations, dependencies or `.env.example` changes.
+- Ajay then pointed at `/attendance/`; it is N9 (Nihal's). Ajay decided: **Nihal's
+  parts are not built by Ajay's session** — it stays as is for N9.
+
+## A10 split into sub-steps — 2026-09-15 (Claude, Ajay's session)
+
+| Step | Scope | Needs migration |
+|---|---|---|
+| **A10a — done** | HR records/cancels leave; default leave types; employee code in the Record leave picker; employee withdraws a pending request | No |
+| **A10b — done** | Half-day leave: Full day / Half day on Record leave and Request leave; paid or unpaid | No |
+| **A10c — done** | Optional **Days per year** on each leave type; left shown on My leave and the approval page; over-allowance refused when recording, requesting and approving. No accrual, carry-forward or ledger | Yes: `leaves.0002_leave_type_days_per_year` |
+| — | Cancel approved leave: HR/admin use the existing Cancel. Nothing to build | — |
+
+**Simplified 2026-09-15 (Ajay: "keep leave simple").** Dropped: partly paid
+leave (the database allows paid = 100% or unpaid = 0% only, and the attempt was
+discarded unpushed), hourly leave, morning/afternoon choice, attachments, leave
+policies/versions, accrual/carry-forward ledger, amendment, partial cancellation.
+
+## A10a done — 2026-09-15 (Claude, Ajay's session)
+
+- **HR records leave.** `leaves.services.require_leave_recorder` (owner, company
+  admin, HR) guards Record leave and Cancel. Nobody records or cancels their own
+  leave. Recording or cancelling inside a finalised salary month is refused
+  (record previously did not check). Leave types remain owner/admin only.
+  Sidebar: Leave → Record leave now also shows for HR (`record=True` item flag).
+- **Default leave types.** Casual (CL), Sick (SL), Earned (EL), Maternity (ML), no
+  allowances yet (A10c). Created by the platform's Create company screen
+  (`onboard_company(default_leave_types=True)`); seeds/tests are unchanged.
+  Existing companies: Leave → Leave types → **Add default leave types** adds only
+  missing codes, audited. The button hides once all four exist.
+- **Employee code in the picker.** Record leave lists "E1 · Rahim"; Select2 finds
+  people by code or name.
+- **Withdraw.** My leave → Action → **Withdraw** on a pending request → confirm.
+  Status becomes Withdrawn, its segment is cancelled, the dates can be requested
+  again; approved requests cannot be withdrawn. Audited as `leave.withdrawn`.
+- No migrations, dependencies or `.env.example` changes.
+- Tests: **full suite 936 tests OK** (`manage.py test --parallel 4 --keepdb`).
+  New/updated tests cover HR record/cancel and the own-leave refusal, default
+  types (new company, add-missing, admin only), the code in the picker, the HR
+  sidebar link, and withdraw (own pending only; approved refused; dates reusable).
+  Not browser-verified by Claude (the local app needs Ajay's sign-in).
+- Loose end noticed, not changed: Record/Cancel leave do not recalculate
+  attendance immediately (approval does); days update when attendance refreshes.
+
+## A10b done — half-day leave — 2026-09-15 (Claude, Ajay's session)
+
+Ajay allowed attendance changes where a leave step needs them, and asked for
+leave to stay simple.
+
+- **Leave:** Leave → Record leave and My leave → Request leave have **Length:
+  Full day / Half day**. A half day is one date, 0.5 day, half the shift's
+  minutes, paid or unpaid as today. No morning/afternoon choice. Two dates with
+  Half day are refused. Leave list and My leave show "Casual (half day)"; My
+  leave counts 0.5.
+- **Attendance (`attendance/services.py`, Nihal's app, changed with Ajay's
+  permission):** half-day leave and the employee scanned in → Present, no late or
+  early-out minutes, paid day (paid leave) or half paid (unpaid leave); still
+  in progress until the day closes, like any day. No scans → Leave, half paid
+  (paid) or unpaid. Full-day leave is unchanged. `live_status.py`: the Now badge
+  says On leave only for full-day leave.
+- **Salary:** monthly deducts the unpaid half on a worked day too; the
+  "minutes short" method does not count the leave half as short; hourly pays a
+  paid half's minutes on a worked day. Daily pay already followed the day's
+  payable fraction.
+- **Nihal, when he resumes:** pull main before touching attendance; keep the
+  half-day branch in `_write_day` and the `balance_units__gte=1` badge filter.
+- Tests: **full suite 941 tests OK**. New `leaves/tests_half_day.py` runs real
+  scans through attendance and salary (paid/unpaid half day, came in / did not);
+  leave tests cover one-date rule, 0.5 units, request/approval and My leave text.
+  Not browser-verified by Claude (the local app needs Ajay's sign-in).
+
+## A10c done — yearly allowance per leave type — 2026-09-15 (Claude, Ajay's session)
+
+- **Setting:** Leave → Leave types → Add / Edit → **Days per year** (blank = no
+  limit, whole or half days). Leave types list shows the column ("No limit").
+- **Counting:** approved leave days of that type whose date falls in the calendar
+  year (reserved/approved/consumed leave days; a half day is 0.5). Pending
+  requests do not use the allowance. Leave crossing New Year counts per year.
+- **Refusal:** Record leave, Request leave and approval refuse leave that goes
+  over, e.g. "Casual leave: 0 of 1.5 days left in 2026; this leave needs 0.5."
+  Approval rechecks, because other leave may have been approved meanwhile.
+- **Shown:** My leave → **Allowance in {year}** (Days per year, Used, Left) for
+  active types with an allowance; the approval page shows "Casual: 3 of 10 days
+  left in 2026". Record leave shows the remaining days in its refusal message
+  (kept simple: no live balance on the form).
+- **Migration:** `leaves/migrations/0002_leave_type_days_per_year.py` adds the
+  nullable field. **Ajay runs `python manage.py migrate`.** Existing leave types
+  get no limit; no data changes.
+- Tests: `makemigrations --check` → no changes; **full suite 943 tests OK** on
+  fresh test databases (new migration, so no `--keepdb`). New tests: allowance
+  with half days and New Year reset; request allowed while pending, approval
+  and a further request refused; approval page and My leave text. Not
+  browser-verified by Claude (the local app needs Ajay's sign-in).
+- No `.env.example` changes or dependencies.
+
+## A11 plan — salary, kept simple — 2026-09-15 (agreed by Ajay)
+
+| Part | Scope | Migration |
+|---|---|---|
+| **1 — done** | Finalise month (owner/admin) and Undo finalise with a reason | No |
+| **2 — done** | Add bonus / Add deduction lines on a draft payslip (amount + reason); kept on regenerate; removable only while draft | Yes: `payroll.0006` |
+| **3 — done** | Joining/leaving mid-month: monthly salary for the employed days, calendar days of the month | No |
+| **4 — done** | Salary change mid-month: days before at the old rate, the rest at the new rate (one Basic line per rate); monthly salaries only | No |
+| **5 — done** | Payslip PDF as a print layout (browser Save as PDF); no new package | No |
+
+Agreed choices: undo allowed for owner/admin with a reason; proration by calendar
+days; print-layout PDF; one part per turn. Not in A11: email, allowance formulas,
+tax, bank files (payments/advances/dues are A13).
+
+## A11 part 1 done — finalise salary — 2026-09-15 (Claude, Ajay's session)
+
+- **Salary → Salary by month**, with a generated draft: **Finalise {month}** →
+  confirmation → **Finalise**. Owner/company admin only (HR refused).
+  - Status becomes Finalised (badge with date); Generate/Regenerate disappears.
+  - Employees see the payslips under My payslips (already finalised-only).
+  - The month's attendance and overtime stop changing (`locked_ranges`).
+  - Proposed penalties become Posted. Audited as `payroll.finalised`.
+  - Refused when overtime was decided after the draft was generated
+    ("Generate the month again, then finalise"), so a stale draft is not locked.
+- **Undo finalise** (same page, when finalised) → reason required → month becomes
+  a draft; posted penalties return to proposed; audited as `payroll.reopened`
+  with the reason. Generate again after fixing, then finalise.
+- Code: `payroll.services.finalise_payroll` / `reopen_payroll`; views
+  `payroll_finalise` / `payroll_reopen` (`/salary/finalise/`, `/salary/finalise/undo/`);
+  template `payroll/run_action.html`; sidebar keeps Salary by month selected.
+- Tests: new `payroll/tests_finalise.py` (no draft refused, HR refused, lock and
+  no regenerate, reason required, undo unlocks and regenerates, stale draft after
+  an overtime decision refused, page buttons and confirmation pages); **full
+  suite 946 tests OK**. Not browser-verified by Claude (needs Ajay's sign-in).
+- No migrations, dependencies or `.env.example` changes.
+
+## A11 part 2 done — bonus and deduction lines — 2026-09-15 (Claude, Ajay's session)
+
+- **Salary → Salary by month → an employee's payslip → Bonus and deductions**
+  (owner/company admin, draft month only): choose **Bonus** or **Deduction**,
+  amount above zero, reason (shown on the payslip) → **Add line**. The month is
+  regenerated and the payslip shows the line in Earnings or Deductions.
+- Kept across every regeneration; **Remove** marks it removed (nothing deleted)
+  and regenerates. On a finalised month the card says to Undo finalise first.
+  Employees see the lines on their finalised payslip but not the card.
+- Deductions still respect "never below zero" unless Salary settings allow
+  negative salary.
+- Model `PayrollAdjustment` (`payroll_adjustment`: employee, target period, type,
+  amount > 0, reason, status) and `PayrollLine.payroll_adjustment`
+  (`source_type="adjustment"`, `is_manual=True`). Audited as
+  `payroll.adjustment_added` / `payroll.adjustment_removed`.
+- **Migration `payroll/0006_payroll_adjustment.py` — Ajay runs `python manage.py migrate`.**
+- Tests: `makemigrations --check` → no changes. Full suite on fresh databases:
+  949 tests, 948 passed; the one failure was the new test expecting a negative
+  net after removing a bonus (the standard rules cap at zero). Test corrected;
+  `payroll` app rerun fresh: **103 tests OK**. New `payroll/tests_adjustments.py`
+  covers net and regeneration, removal, invalid values, HR refused, finalised
+  month refused, and the payslip page add/remove. Not browser-verified by Claude.
+- No `.env.example` changes or dependencies.
+
+## A11 part 3 done — joining or leaving mid-month — 2026-09-15 (Claude, Ajay's session)
+
+- Uses the employee's existing **Joining date** and **Leaving date** (Edit
+  employee). No new setting.
+- Salary generation now counts only attendance days from the joining date to
+  the leaving date (inclusive). An employee with no days inside employment that
+  month gets no payslip.
+- **Monthly salary:** Basic = monthly salary × employed calendar days ÷ calendar
+  days in the month, e.g. joined 16 Aug → 16 of 31 days → 30,000 × 16/31 =
+  15,483.87. The payslip line reads "Basic salary (16 of 31 days employed)".
+  Absence and other deductions inside the employed days work as before. A full
+  month still shows "Basic salary".
+- **Daily and hourly staff:** unchanged apart from ignoring days outside
+  employment; they are already paid for the days/hours worked.
+- The payslip's calculation snapshot stores `employed_days`.
+- Tests: formula test (15 of 30 days → half salary; full month unchanged) and
+  new `payroll/tests_proration.py` (joining 16 Aug, leaving 10 Aug, full month);
+  **full suite 952 tests OK**. Not browser-verified by Claude.
+- No migrations, dependencies or `.env.example` changes.
+
+## A11 part 4 done — salary change mid-month — 2026-09-15 (Claude, Ajay's session)
+
+- Uses the existing dated salary history: a change from a date closes the old
+  salary at that moment and opens the new one (`employees.services.revise_compensation`,
+  e.g. Edit employee → Salary with a later start date).
+- **Monthly salaries:** when more than one monthly salary is in force during the
+  employed days of the month, the payslip has one Basic line per salary, e.g.
+  "Basic salary 30,000.00 (01 Aug–15 Aug, 15 of 31 days)" = 14,516.13 and
+  "Basic salary 31,000.00 (16 Aug–31 Aug, 16 of 31 days)" = 16,000.00. Works
+  together with joining/leaving mid-month (part 3).
+- Kept simple: one day's pay for absence deductions still uses the salary at
+  month end. A change of pay basis inside a month, and daily/hourly rate changes,
+  still use the rate in force at month end (not split).
+- The payslip snapshot stores `basic_segments` (rate, first day, last day).
+- Tests: new `payroll/tests_salary_change.py` (raise on the 16th → two lines;
+  raise plus joining on the 10th → 6 and 16 days; no change → one line);
+  **full suite 955 tests OK**. Not browser-verified by Claude.
+- No migrations, dependencies or `.env.example` changes.
+
+## A11 part 5 done — printable payslip (PDF) — 2026-09-15 (Claude, Ajay's session)
+
+- Found already present: the payslip page (company and My payslips) had a
+  Print button and `payroll/static/payroll/css/payslip.css` print rules hiding
+  the sidebar, top bar, breadcrumbs and buttons.
+- Completed: the button is now **Print or save as PDF** (tooltip: choose Save as
+  PDF as the printer). Print rules also hide message banners, the footer and the
+  company-only **Bonus and deductions** card (`no-print`), and set 12 mm page
+  margins. The printed/PDF payslip keeps the header, earnings and deductions,
+  net pay and attendance summary. No new package.
+- Tests: payslip page test checks the button and the non-printed card;
+  `payroll` + employee panel tests **117 OK** (small template/CSS change, so
+  the affected apps only, per the testing agreement; full suite last ran at
+  955 OK for part 4). Printing itself is not browser-verified by Claude.
+- **A11 is complete.**
+- No migrations, dependencies or `.env.example` changes.
+
+## Attendance-related items check — 2026-09-15 (asked by Ajay)
+
+Nothing in the A steps is left partial because of Nihal's attendance code:
+- N9 (`/attendance/` Daily list and device lists on server-side tables) is not
+  started by Ajay's session, per Ajay's instruction; the discarded attempt left
+  nothing behind.
+- Half-day leave changed attendance with Ajay's permission and is complete.
+- Hourly and partly paid leave were dropped by Ajay's "keep leave simple"
+  decision, not left partial.
+- Loose end (leave side, not Nihal's code): Record leave and Cancel leave do not
+  recalculate attendance immediately (approving a request does); days update on
+  the next attendance refresh or salary generation. Small fix; awaits Ajay.
+
+## A12 plan — branch access, handed out dynamically — 2026-09-15 (agreed by Ajay)
+
+Ajay's decisions: access is dynamic; a branch manager automatically controls
+everything for their branches and can give any access they hold to HR,
+department heads or anyone else in those branches; branch managers can create
+logins; salary settings are company-wide and untouchable by branches;
+attendance and device pages are left to Nihal. Claude's choices, accepted with
+"go": each branch prepares and reviews its own salary, the owner/admin finalises
+the whole company once; the existing HR role keeps company-wide leave recording
+and overtime.
+
+| Part | Scope | Migration |
+|---|---|---|
+| **1 — done** | Permission list and one access check (`access_control/branch_access.py`), grant/remove services | No |
+| 2 | Organisation → Access page: people in your branches, tick permissions per branch, create logins | No (expected) |
+| 3 | Branch managers and grantees open company pages; sidebar and dashboard by permission and branch | No |
+| 4 | Employees area branch-scoped (list, create/edit, logins) | No |
+| 5 | Leave and overtime branch-scoped (list, record/cancel, approval inbox, overtime) | No |
+| 6 | Salary branch-scoped: Salary by month and payslips by branch; generate only your branches inside the month; bonus/deductions; finalise and settings stay owner/admin | Possibly |
+| 7 | Written note for Nihal: apply `can`/`scope_queryset` to attendance and device pages | No |
+
+Permissions: employees view / create and edit / logins; leave view / record and
+cancel / approve; overtime view / decide; salary view / prepare (generate, bonus
+and deductions); access give to others. Not grantable: company-wide settings,
+branches/departments, finalising a month.
+
+**Confirmed by Ajay (2026-09-15), rules for every later part:**
+1. The company (owner / company admin) keeps **all access in every branch,
+   exactly as it operates today**. Branch scoping in parts 3–6 only limits
+   branch managers and people given access; owner/admin pages stay unchanged.
+2. **A branch without an active branch manager is handled by the company**
+   (owner/admin already hold every branch). Leave approvals already fall back to
+   the company inbox (A8). The company may also grant that branch's HR or anyone
+   else access from the Access page.
+
+## A12 part 1 done — permission list and access check — 2026-09-15 (Claude, Ajay's session)
+
+- `access_control/branch_access.py` answers "may this person do X, and in which
+  branches?": `branches_for`, `can`, `require`, `scope_queryset`.
+  - Owner / company admin → every branch. Branch manager → every branch
+    permission in their own branches (their login's branch list), automatically.
+  - Existing HR role → company-wide `leave.view`, `leave.record`,
+    `overtime.view`, `overtime.decide` (unchanged behaviour).
+  - Everyone else → only live grants: `EmployeePermissionOverride` rows with a
+    branch list (dated; removed grants are ended, not deleted).
+- `grant_access` / `revoke_access`: the granter needs `access.grant` and the
+  permission itself in every chosen branch; nobody changes their own access;
+  granting adds branches to an existing grant; removing keeps the other
+  branches. Audited as `access.granted` / `access.revoked`.
+- It does not use the older `has_permission` (department/designation rules and
+  company feature switches), which no page uses and would deny everything for
+  companies without feature rows.
+- **No migration.** A first attempt seeded the permissions and features in a
+  data migration; it broke 19 older `access_control` tests that create the
+  `leave`/`payroll` features themselves (duplicate feature code). It was removed
+  before pushing. Checking needs no rows; granting creates the permission row
+  (and its feature, if missing) on first use and keeps any existing row with the
+  same code.
+- No page changes yet; nothing visible until parts 2–6.
+- Tests: new `access_control/tests_branch_access.py` (permission row created on
+  first grant; owner everywhere, manager own branches, HR company-wide leave,
+  employee nothing, branch filter, unknown code; manager grants/removes in own
+  branch only with audit rows; a grantee hands on only what they hold, never to
+  themselves, HR cannot grant; grants add branches, removal keeps the rest).
+  **Full suite 960 tests OK** on fresh databases after removing the migration.
+- No `.env.example` changes or dependencies.
+- No migrations, dependencies or `.env.example` changes.
+
+
+## 2026-09-15 — N9: Nihal's lists on the shared server-side table (Nihal)
+
+Branch `feature/n9-server-side-tables`, from fresh `main` at `d8de2d6`.
+**No migration, no dependency, no `.env.example` change.** Built only N9; N5,
+N6 and N8 are on their own branches, pushed 2026-09-14 and not merged yet.
+
+Every list below now counts, searches, sorts and pages on the server through
+`base_template/tables.py` (`paginate` + `render`, `data-server-table`,
+`base_template/includes/table_pagination.html`), with its existing filters,
+links, badges and Paper/Ink styling. The page's own filters narrow the set
+first; the table's search, order and page run on that set, so
+`recordsTotal` / `recordsFiltered` are real counts, never the rows on screen.
+
+| Page | Path | Filters kept | Table search | Sortable columns |
+|---|---|---|---|---|
+| Attendance → Daily list | `/attendance/` | month, year, **Branch (new)**, employee, status | employee name and code, branch, status, note | all 10 |
+| Devices | `/devices/` | name/serial, status, branch | name, serial, branch, model, status | device, serial, branch, status, last seen |
+| Enrollments | `/devices/enrollments/` | search, device | employee, device, user number | employee, device, user number, attendance, grant, period |
+| Message log | `/devices/messages/` | device, status | device, type, status | received, device, type, records, status |
+| Punches | `/devices/punches/` | search, device, authorisation, duplicate status | user number, employee, device, method, outcome | punched, employee, device, method, outcome |
+| Unresolved queue | `/devices/unresolved/` | reason | user number, employee, device, reason | punched, identity, device, reason |
+| Device users | `/devices/<id>/users/` | search, mapped / not mapped | user id, name, role, card, employee | all but "Write to device" |
+
+**Daily list:** a Branch column was added beside Employee (the filter is easier
+to trust when the rows show the branch), and the employee code shows under the
+name and is searchable. The badge reads "N of M days" when a filter is on. The
+query keeps `branch` on every row, which is the field
+`access_control.branch_access.scope_queryset(..., field="branch")` will narrow
+on — not wired in, per Ajay, until the A12 part 7 note.
+
+**Device users is not a database table.** The roster is rebuilt from the
+uploads the device sent (`devices/services/device_roster.py`); there is nothing
+to count or search in SQL without a new model. So `devices/views/ui.py
+_paginate_rows` does the same work on the server over the **whole** roster —
+never client-side only — with the helper's exact contract: the same request
+parameters, 10–100 rows, a literal 200-character search, server-owned sort
+keys, and the same table description registered on the request, so
+`render`, the pager include and `tables.js` are unchanged. User ids sort as
+numbers. If Ajay prefers the roster stored as a model instead, that is a
+separate decision.
+
+**Also changed:** the device base template loads its own DataTables copy and
+the old `devices.js` enhancer only when a page has no server table (base.html
+loads DataTables for those), so no page loads it twice; `data-enhance`, the
+"filter this page" notes and the old `_paginate` helper are gone. The
+screen-reader-only "Actions" headers became visible text: `.sr-only` is
+absolutely positioned and escaped the table's scroll box, widening the page on
+a phone. The Punches and Unresolved tables had an unlabelled action column the
+first column list missed; the helper's "headers and row cells must have the
+same length" guard caught it in the tests.
+
+**Merge note for Ajay:** `feature/n8-device-connection` also edits
+`devices/templates/devices/device_list.html` (Connection column),
+`devices/templates/devices/base.html` (connection script) and the device list
+view. Both changes are small and side by side; expect a textual conflict there
+if N8 is merged after N9, not a logical one.
+
+**Checked** on D Company's real data through the browser with the live
+DataTables draws: Daily list 87 September days, search "Nihal" 14 of 87,
+Late sorted numerically, Branch filter narrowing to 0 for an office with no
+attendance; Punches 240, search 63 of 240; Messages 595; Unresolved 191;
+Device users 4, user ids sorted as numbers. No page overflow at 1440, 768 or
+375 on any of the seven lists.
+
+**Tests:** 10 in `attendance/tests_daily_list.py`, 12 in
+`devices/tests_server_tables.py` — whole-set counts, database search across
+pages, every orderable column, hostile parameters, tenant boundaries, the
+counted HTML pager keeping filters, headers kept on an empty search, escaping,
+and a single DataTables script per device page.
+
+**Navigation (A14):** no new pages. The Daily list and the device lists keep
+their paths.
+
 ## 2026-09-14 — N5: fixing a day by hand, and the days to review (Nihal)
 
 Branch `feature/n5-corrections`, from clean `main` (N4, N7 and A9 merged).
@@ -2069,6 +2713,17 @@ this: the status change refused a closed day nobody had opened yet.)
 
 The day panel's empty state no longer says "Calculate the month" — there has
 been no Calculate button since N1b.
+
+**Brought up to date with main on 2026-09-15** (after N9, `60792e9`):
+`attendance/views.py` conflicted on imports only (N9's `paginate`/`render`
+beside N5's forms and services). Main's half-day leave branch in `_write_day`
+merged beside the corrections untouched. One interaction git could not see:
+a half-day leave day somebody came in on reads "present", but `_write_day`
+applies a status correction only to an ordinary working day — so a status
+change there would have been stored and silently done nothing. *Change the
+status* is now refused on any day with leave recorded ("Change or cancel the
+leave on the Leave page"), and the Fix a day page does not offer it; tested,
+and the test fails without the guard.
 
 **Deviations from MODEL_FIELD_DICTIONARY §35**, deliberately: keyed by
 `employee` + `work_date` instead of an `attendance_record` FK (records are

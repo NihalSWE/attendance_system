@@ -30,12 +30,15 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
     applies_year = forms.TypedChoiceField(label="Year", coerce=int)
 
     monthly_proration_method = forms.ChoiceField(
-        label="One day of a monthly salary is",
+        label="One day's pay for absence deductions",
         choices=[
             choice for choice in Version.MonthlyProration.choices
             if choice[0] != Version.MonthlyProration.NONE
         ],
-        help_text="Used to deduct absent days, unpaid leave and unpaid days off.",
+        help_text=(
+            "How a monthly salary becomes one day's pay for absence and unpaid leave "
+            "deductions. This also sets the daily base of the overtime hourly rate."
+        ),
     )
     monthly_divisor = forms.DecimalField(
         label="Fixed number of days",

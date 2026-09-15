@@ -12,8 +12,9 @@ from collections import defaultdict
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
-from django.shortcuts import redirect, render
+from django.db.models import Case, CharField, Value, When
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -32,6 +33,7 @@ from scheduling import services
 from organization.models import CompanyDepartment
 from scheduling.forms import (
     AttendanceSettingsForm,
+    ChangeWeeklyOffStartForm,
     DepartmentShiftForm,
     EndWeeklyOffForm,
     HolidayForm,
@@ -78,11 +80,28 @@ def schedule_overview(request):
         settings = (
             CompanyAttendanceSettings.objects.select_related("company_shift").first()
         )
-        shifts = list(Shift.objects.order_by("status", "name"))
-        weekly_offs = list(
-            WeeklyOffRule.objects.select_related("branch").order_by(
-                "status", "weekday", "branch__name"
-            )
+        # Three independent server-side lists on one page, named so each
+        # draws, searches and pages on its own.
+        shifts = paginate(
+            request, Shift.objects.order_by("status", "name"), name="shifts",
+            search=("code", "name", "status"),
+            order=("code", "name", "start_time", "end_time", "scheduled_minutes",
+                   "grace_in_minutes", "minimum_full_day_minutes",
+                   "minimum_half_day_minutes", "status", None),
+        )
+        day_names = Case(
+            *(When(weekday=value, then=Value(label))
+              for value, label in WeeklyOffRule.Weekday.choices),
+            output_field=CharField(),
+        )
+        weekly_offs = paginate(
+            request,
+            WeeklyOffRule.objects.select_related("branch")
+            .annotate(table_day=day_names)
+            .order_by("status", "weekday", "branch__name"),
+            name="weekly_offs",
+            search=("table_day", "branch__name", "status"),
+            order=("weekday", "branch__name", "effective_from", "effective_to", "status", None),
         )
         today = timezone.localdate()
         upcoming = list(
@@ -99,23 +118,29 @@ def schedule_overview(request):
             and settings.shift_mode == CompanyAttendanceSettings.ShiftMode.DEPARTMENT_SHIFTS
         )
         current = services.current_department_shifts(company_id, today)
+        active_departments = CompanyDepartment.objects.select_related(
+            "branch", "department"
+        ).filter(status=ActiveStatus.ACTIVE)
+        departments = paginate(
+            request, active_departments.order_by("branch__name", "department__name"),
+            name="department_shifts",
+            search=("department__name", "department__code", "branch__name"),
+            order=("department__name", "branch__name", None, None, None),
+        )
         department_rows = [
-            {
-                "department": adoption,
-                "link": current.get(adoption.pk),
-            }
-            for adoption in CompanyDepartment.objects.select_related("branch", "department")
-            .filter(status=ActiveStatus.ACTIVE)
-            .order_by("branch__name", "department__name")
+            {"department": adoption, "link": current.get(adoption.pk)}
+            for adoption in departments
         ]
 
-    company_shift = settings.company_shift if settings else None
-    uncovered = [
-        row["department"] for row in department_rows
-        if row["link"] is None and company_shift is None
-    ] if by_department else []
+        # Readiness looks at every active department, not only this page.
+        company_shift = settings.company_shift if settings else None
+        uncovered = list(
+            active_departments.exclude(pk__in=list(current))
+            .order_by("branch__name", "department__name")
+        ) if by_department and company_shift is None else []
+        linked = active_departments.filter(pk__in=list(current)).exists()
     ready = bool(company_shift) if not by_department else not uncovered and (
-        bool(company_shift) or any(row["link"] for row in department_rows)
+        bool(company_shift) or linked
     )
     return render(request, "scheduling/overview.html", {
         "settings": settings,
@@ -297,7 +322,7 @@ def weekly_off_create(request):
         form = WeeklyOffForm(
             request.POST or None,
             branches=visible_branches(membership).order_by("name"),
-            initial={"effective_from": timezone.localdate(), "is_paid": True},
+            initial={"effective_from": timezone.localdate()},
         )
         return _form_page(
             request,
@@ -309,6 +334,35 @@ def weekly_off_create(request):
                 actor=request.user, company_id=company_id, values=data
             ),
         )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def weekly_off_start(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    _, rule = services.get_weekly_off_for_edit(
+        actor=request.user, company_id=company_id, rule_id=pk
+    )
+    form = ChangeWeeklyOffStartForm(
+        request.POST or None, initial={"effective_from": rule.effective_from}
+    )
+    return _form_page(
+        request,
+        form=form,
+        title=f"Change {rule.get_weekday_display()} start date",
+        submit_label="Change start date",
+        success="Weekly off start date changed. Attendance updated; finalised months kept.",
+        explanation=(
+            f"{rule.get_weekday_display()} currently starts on {rule.effective_from:%d %b %Y}. "
+            "Choose when this weekly off should begin."
+        ),
+        action=lambda data: services.change_weekly_off_start(
+            actor=request.user, company_id=company_id, rule_id=rule.pk,
+            effective_from=data["effective_from"],
+        ),
+    )
 
 
 @login_required
@@ -362,9 +416,9 @@ def holiday_list(request):
         if status in dict(Holiday.Status.choices):
             queryset = queryset.filter(status=status)
         filtered_total = queryset.count()
-        page = Paginator(
-            queryset.order_by("holiday_date", "name"), 25
-        ).get_page(request.GET.get("page"))
+        page = paginate(request, queryset.order_by("holiday_date", "name"),
+            search=("name", "branch__name", "status"),
+            order=("holiday_date", "name", "branch__name", "status", None))
         years = sorted(
             {d.year for d in Holiday.objects.dates("holiday_date", "year")}
             | {today.year, today.year + 1},
@@ -394,7 +448,6 @@ def holiday_create(request):
         form = HolidayForm(
             request.POST or None,
             branches=visible_branches(membership).order_by("name"),
-            initial={"is_paid": True},
         )
         return _form_page(
             request,
@@ -498,8 +551,7 @@ def holiday_year(request):
             try:
                 added = services.add_holidays(
                     actor=request.user, company_id=company_id,
-                    values={"branch": data["branch"], "is_paid": data["is_paid"],
-                            "days": data["days"]},
+                    values={"branch": data["branch"], "days": data["days"]},
                 )
             except ValidationError as exc:
                 apply_service_errors(form, exc)

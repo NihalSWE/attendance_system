@@ -943,7 +943,34 @@ class CommKeyOnEditTests(ServerAddressTestCase):
         self.device.refresh_from_db()
         self.assertNotEqual(self.device.authentication_secret_hash, "")
 
-    def test_registering_a_device_still_issues_a_key(self):
+    def test_removing_a_key_lets_a_locked_out_device_in(self):
+        """The SenseFace 3A, 2026-09-14: registered with an invented key, every
+        push refused with 401 because the device cannot send one."""
+        self._edit(comm_key="abc123def456")
+        locked = self.client.get(
+            "/iclock/getrequest", {"SN": self.device.serial_number},
+            HTTP_HOST=OLD_HOST, HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(locked.status_code, 401)
+
+        page = self.client.get(reverse("devices:device_edit", args=[self.device.public_id]))
+        self.assertContains(page, "Remove the communication key")
+        self._edit(remove_comm_key="on")
+        self.device.refresh_from_db()
+        self.assertEqual(
+            (self.device.authentication_secret_hash, self.device.authentication_key_id), ("", "")
+        )
+        let_in = self.client.get(
+            "/iclock/getrequest", {"SN": self.device.serial_number},
+            HTTP_HOST=OLD_HOST, HTTP_X_FORWARDED_PROTO="https",
+        )
+        self.assertEqual(let_in.status_code, 200)
+
+    def test_a_keyless_device_is_not_offered_the_removal(self):
+        page = self.client.get(reverse("devices:device_edit", args=[self.device.public_id]))
+        self.assertNotContains(page, "Remove the communication key")
+
+    def test_registering_a_device_issues_no_key_unless_one_is_typed(self):
         response = self.client.post(reverse("devices:device_register"), {
             "name": "Back Door",
             "serial_number": "SN-NEW-1",
@@ -960,7 +987,10 @@ class CommKeyOnEditTests(ServerAddressTestCase):
         }, follow=True)
         self.assertEqual(response.status_code, 200)
         created = BiometricDevice.all_objects.get(serial_number="SN-NEW-1")
-        self.assertNotEqual(created.authentication_secret_hash, "")
+        # A ZKTeco push device cannot send a key; one it was never given
+        # would lock it out from its first request.
+        self.assertEqual(created.authentication_secret_hash, "")
+        self.assertNotContains(response, "Communication key:")
 
 
 # ------------------------------------------------- permissions and auditing
