@@ -20,8 +20,8 @@ from django.views.decorators.http import require_http_methods
 from devices.adapters import UnknownAdapterError, get_adapter
 from devices.adapters.base import ParsedMessage
 from devices.models import BiometricDevice, DeviceMessage, DeviceServerAddressChange
-from devices.services import server_address
-from devices.services.commands import take_pending_commands
+from devices.services import protocol, server_address
+from devices.services.commands import catch_up_after_gap, note_poll, take_pending_commands
 from devices.services.ingestion import (
     DeviceAuthenticationError,
     authenticate_device,
@@ -90,6 +90,11 @@ def cdata(request):
         # Registration/handshake: the device asks how to behave. No message is
         # stored for this; it carries no evidence.
         stamp = request.GET.get("Stamp", "0")
+        # Which command dialect it speaks (devices/services/protocol.py).
+        protocol.note_announcement(
+            device, pushver=request.GET.get("pushver", ""),
+            device_type=request.GET.get("DeviceType", ""),
+        )
         return _text(
             adapter.handshake_response(
                 device=device,
@@ -141,9 +146,13 @@ def getrequest(request):
         logger.warning("Rejected device command poll: %s", exc)
         return _unauthorized()
 
+    now = timezone.now()
     BiometricDevice.all_objects.filter(pk=device.pk).update(
-        last_seen_at=timezone.now(), ip_address_last_seen=_client_ip(request)
+        last_seen_at=now, ip_address_last_seen=_client_ip(request)
     )
+    # A 2.x device does not re-send scans made while it could not reach us;
+    # after a gap, ask it for them (devices/services/commands.py).
+    catch_up_after_gap(device, note_poll(device, now), now)
 
     body, issued = take_pending_commands(device)
     if issued:

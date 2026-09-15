@@ -46,7 +46,61 @@ COMMAND_LABELS = {
     "query_users": "Refresh user list",
     "query_biodata": "Refresh biometric inventory",
     "query_options": "Refresh device settings",
+    "query_attlog": "Fetch attendance history (last 31 days)",
 }
+
+# The attendance push 2.x forms (devices/services/protocol.py ATT2). Each was
+# sent to the SenseFace 3A (ZAM70-NF28VA-3.3.12, Push 3.1.2S announcing
+# pushver 2.4.1) on 2026-09-15 and answered Return=0:
+#
+#   DATA QUERY USERINFO          every user re-sent as ``USER PIN=…`` lines in
+#                                the operation log, with ``BIODATA`` rows
+#   DATA QUERY USERINFO PIN=1    that one user
+#   DATA QUERY ATTLOG StartTime=<local>\tEndTime=<local>
+#                                the attendance records in the range re-sent as
+#                                ATTLOG rows (ones we hold arrive as duplicates
+#                                and are not counted twice)
+#
+# The 3.x table form above answers ``Return=-1004`` on the same device.
+ATT2_COMMANDS = {
+    "query_users": "DATA QUERY USERINFO",
+}
+HISTORY_DAYS = 31
+
+
+def attlog_query(start, end):
+    """The 2.x attendance-history request; times are the device's local time."""
+    return (
+        f"DATA QUERY ATTLOG StartTime={start:%Y-%m-%d %H:%M:%S}"
+        f"\tEndTime={end:%Y-%m-%d %H:%M:%S}"
+    )
+
+
+def _device_now(device, now=None):
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    try:
+        zone = ZoneInfo(device.timezone or "UTC")
+    except ZoneInfoNotFoundError:
+        zone = ZoneInfo("UTC")
+    return (now or timezone.now()).astimezone(zone).replace(tzinfo=None), zone
+
+
+def command_body(device, command_key):
+    """The body for ``command_key`` in the dialect this device speaks, or None."""
+    from datetime import timedelta
+
+    from devices.services import protocol
+
+    dialect = protocol.dialect(device)
+    if command_key not in protocol.SUPPORTED[dialect]:
+        return None
+    if dialect == protocol.ATT2:
+        if command_key == "query_attlog":
+            local_now, _ = _device_now(device)
+            return attlog_query(local_now - timedelta(days=HISTORY_DAYS), local_now + timedelta(minutes=5))
+        return ATT2_COMMANDS[command_key]
+    return SAFE_COMMANDS[command_key]
 
 # Settings we are willing to write back to the device. The key is what the UI
 # may send; the value is (device option name, validator, help text). Anything
@@ -166,11 +220,12 @@ def _sync_state(device):
 def queue_command(*, device, command_key, requested_by=None):
     """Queue one safe command for the device's next poll.
 
-    Returns the queued entry, or None when the key is not recognised. Queuing
-    the same command twice while one is still pending is a no-op: the device
-    would answer both with identical data.
+    Returns the queued entry, or None when the key is not recognised or this
+    device's dialect has no such request. Queuing the same command twice while
+    one is still pending is a no-op: the device would answer both with
+    identical data.
     """
-    body = SAFE_COMMANDS.get(command_key)
+    body = command_body(device, command_key)
     if body is None:
         return None
 
@@ -271,6 +326,24 @@ def _validated_user_id(device_user_id):
     return value, ""
 
 
+def _unverified_user_writes(device):
+    """Refuse user writes a device's dialect has not been verified for.
+
+    The write forms here were measured on the 3.x SenseFace 2A, where one
+    wrong key deleted every user. Nothing has been written to a 2.x device
+    yet, so none is sent to one until its own form is measured.
+    """
+    from devices.services import protocol
+
+    if protocol.dialect(device) == protocol.ATT2:
+        return (
+            "Adding or removing users from the software is not verified on this "
+            "device's protocol yet. Add or edit the user on the terminal; the user "
+            "list here updates by itself."
+        )
+    return ""
+
+
 def queue_user_push(*, device, device_user_id, name="", card_number="",
                     privilege=0, requested_by=None):
     """Queue creation/update of one user on the device.
@@ -280,6 +353,9 @@ def queue_user_push(*, device, device_user_id, name="", card_number="",
     template and we never hold it.
     """
     clean_id, error = _validated_user_id(device_user_id)
+    if error:
+        return None, error
+    error = _unverified_user_writes(device)
     if error:
         return None, error
     if int(privilege) not in (0, 2, 6, 14):
@@ -308,6 +384,9 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
     clean_id, error = _validated_user_id(device_user_id)
     if error:
         return None, error
+    error = _unverified_user_writes(device)
+    if error:
+        return None, error
 
     body = build_user_delete(device_user_id=clean_id)
     # Belt and braces: a uid-keyed delete wipes the whole device (see
@@ -323,6 +402,58 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
         body=body,
         requested_by=requested_by,
     )
+
+
+#: A 2.x device that was silent this long is asked for what it scanned meanwhile.
+CATCH_UP_AFTER_MINUTES = 10
+
+
+def note_poll(device, now=None):
+    """Record a command poll; return the previous one (None if never recorded).
+
+    Kept apart from ``last_seen_at``, which uploads stamp too: after a gap the
+    device may upload before it polls, and that must not hide the gap.
+    """
+    from datetime import datetime
+
+    now = now or timezone.now()
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        data = dict(state.state_data or {})
+        previous = data.get("last_poll_at")
+        data["last_poll_at"] = now.isoformat()
+        state.state_data = data
+        state.save(update_fields=["state_data", "updated_at"])
+    return datetime.fromisoformat(previous) if previous else None
+
+
+def catch_up_after_gap(device, previous_poll, now=None):
+    """Ask a reconnecting 2.x device for the scans it made while unreachable.
+
+    Measured on the SenseFace 3A on 2026-09-15: a scan made while the server
+    was unreachable (15:35) was not sent when the device reconnected; it only
+    arrived when asked for with ``DATA QUERY ATTLOG``. So on its first poll
+    after a gap — or its first poll ever — the history since an hour before
+    it went quiet is requested. Returns the queued entry or None.
+    """
+    from datetime import timedelta
+
+    from devices.services import protocol
+
+    now = now or timezone.now()
+    if previous_poll is not None and now - previous_poll < timedelta(minutes=CATCH_UP_AFTER_MINUTES):
+        return None
+    if protocol.dialect(device) != protocol.ATT2:
+        return None
+    oldest = now - timedelta(days=HISTORY_DAYS)
+    since = max(previous_poll - timedelta(hours=1), oldest) if previous_poll else oldest
+    local_now, zone = _device_now(device, now)
+    local_since = since.astimezone(zone).replace(tzinfo=None)
+    entry, _ = _queue_raw(
+        device=device, key="query_attlog",
+        body=attlog_query(local_since, local_now + timedelta(minutes=5)),
+    )
+    return entry
 
 
 def _queue_raw(*, device, key, body, requested_by=None):
