@@ -16,9 +16,19 @@
     </div>
 
     <div class="card">
-        {% if payslips %}
+        {% if not payslips %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    No payslips yet
+                </div>
+                <div class="empty__text">
+                    A month's payslip appears here once the company has finalised that month's salary.
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or payslips %}
             <div class="table-wrap">
-                <table class="table">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
                             <th>
@@ -65,6 +75,7 @@
                     </tbody>
                 </table>
             </div>
+        {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">

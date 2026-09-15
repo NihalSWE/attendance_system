@@ -1,47 +1,6 @@
 /* Real DataTables over the server-rendered, paginated fallback. */
 document.addEventListener("DOMContentLoaded", function () {
-    const toggle = document.querySelector(".mobile-menu");
-    const side = document.getElementById("platform-sidebar");
-    if (toggle && side) {
-        const close = function () {
-            side.classList.remove("is-open");
-            toggle.setAttribute("aria-expanded", "false");
-        };
-        toggle.addEventListener("click", function () {
-            const open = side.classList.toggle("is-open");
-            toggle.setAttribute("aria-expanded", String(open));
-        });
-        document.addEventListener("keydown", function (event) {
-            if (event.key === "Escape") {
-                close();
-                toggle.focus();
-            }
-        });
-        document.addEventListener("click", function (event) {
-            if (!side.contains(event.target) && !toggle.contains(event.target)) close();
-        });
-    }
-
-    /* Server-rendered platform tables that only want client-side sorting and
-       filtering over the current page. Same `data-enhance` contract the device
-       screens use, so there is one convention rather than two. The server's own
-       count and pager stay authoritative. */
-    if (window.DataTable) {
-        document.querySelectorAll("table[data-enhance]").forEach(function (enhanced) {
-            new DataTable(enhanced, {
-                paging: false,
-                info: false,
-                autoWidth: false,
-                order: [],
-                columnDefs: [{targets: "no-sort", orderable: false}],
-                language: {
-                    search: "Filter this page:",
-                    zeroRecords: "No rows match that filter."
-                }
-            });
-        });
-    }
-
+    /* Other platform lists use the shared server-side tables (tables.js). */
     const table = document.getElementById("companies-table");
     if (!table) return;
     if (!window.DataTable) {

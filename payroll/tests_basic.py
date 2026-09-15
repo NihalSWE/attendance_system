@@ -65,6 +65,15 @@ class FormulaTests(TestCase):
         # 20 x 8h + 260 min = 164.33h, plus 8h paid leave
         self.assertEqual(result["net"], Decimal("17233.33"))
 
+    def test_monthly_salary_for_part_of_the_month_pays_the_employed_days(self):
+        result = calculate_pay("monthly", Decimal("30000"), [day(S.PRESENT)] * 15,
+                               days_in_month=30, employed_days=15)
+        self.assertEqual(result["net"], Decimal("15000.00"))
+        self.assertIn("15 of 30 days employed", result["lines"][0][2])
+        full = calculate_pay("monthly", Decimal("30000"), [day(S.PRESENT)] * 30,
+                             days_in_month=30, employed_days=30)
+        self.assertEqual(full["lines"][0][2], "Basic salary")
+
     def test_salary_never_goes_negative(self):
         result = calculate_pay("monthly", Decimal("3000"), [day(S.ABSENT, "0", 0)] * 31)
         self.assertEqual(result["net"], Decimal("0.00"))

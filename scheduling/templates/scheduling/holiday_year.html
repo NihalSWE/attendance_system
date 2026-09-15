@@ -117,7 +117,7 @@
                                         <span class="yc-month__holiday-day">
                                             {{ holiday.holiday_date|date:"j" }}
                                         </span>
-                                        {{ holiday.name }}{% if holiday.branch %} · {{ holiday.branch.name }}{% endif %}{% if not holiday.is_paid %} · Unpaid{% endif %}
+                                        {{ holiday.name }}{% if holiday.branch %} · {{ holiday.branch.name }}{% endif %}
                                     </li>
                                 {% endfor %}
                             </ul>
@@ -153,12 +153,6 @@
                     {% endif %}
                 </button>
                 {% include "leaves/includes/field.html" with field=form.branch %}
-                <label class="check">
-                    {{ form.is_paid }}
-                    <span>
-                        {{ form.is_paid.label }}
-                    </span>
-                </label>
                 <p class="yc-panel__hint" data-empty {% if rows %}hidden{% endif %}>
                     Click days on the calendar to select them. Shift-click selects every day between two dates.
                 </p>

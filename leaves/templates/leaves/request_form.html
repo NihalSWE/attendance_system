@@ -1,0 +1,57 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}{{ title }} · Attendance{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <h1 class="page__title">{{ title }}</h1>
+    </div>
+    <div class="form-page">
+        <div class="card">
+            <div class="card__body stack">
+                {% if leave %}
+                    <h2>{{ leave.employee.full_name }}</h2>
+                    <p>{{ segment.leave_type.name }} · {{ segment.start_date|date:"d M Y" }} – {{ segment.end_date|date:"d M Y" }}</p>
+                    <p>{{ segment.requested_units|floatformat:"-1" }} working day(s) · Requested {{ segment.get_requested_pay_type_display|lower }}</p>
+                    <p>{{ leave.reason }}</p>
+                    <p>Status: {{ leave.get_status_display }}</p>
+                    {% if allowance_left is not None %}
+                        <p>{{ segment.leave_type.name }}: {{ allowance_left|floatformat:"-1" }} of {{ segment.leave_type.days_per_year|floatformat:"-1" }} days left in {{ segment.start_date.year }}</p>
+                    {% endif %}
+                {% else %}
+                    <p class="field__help">Request full working days, or a half day on one date. Holidays and weekly off days are skipped. Your branch manager reviews the request; managers' requests and branches without a manager go to the company administrator.</p>
+                {% endif %}
+                {% if not leave or leave.status == 'pending' %}
+                    <form method="post" class="stack" novalidate>
+                        {% csrf_token %}
+                        {{ form.non_field_errors }}
+                        {% if form.start_date %}
+                            {% include "leaves/includes/field.html" with field=form.leave_type %}
+                            {% include "leaves/includes/field.html" with field=form.duration %}
+                            <div class="field">
+                                <label class="field__label" for="{{ form.start_date.id_for_label }}">Leave dates *</label>
+                                {{ form.start_date }}{{ form.end_date }}
+                                {{ form.start_date.errors }}{{ form.end_date.errors }}
+                            </div>
+                            {% include "leaves/includes/field.html" with field=form.pay_type %}
+                            {% include "leaves/includes/field.html" with field=form.reason %}
+                        {% else %}
+                            {% for field in form %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        {% endif %}
+                        <div class="row">
+                            <button class="btn btn--primary" type="submit">{{ submit_label }}</button>
+                            <a class="btn btn--ghost" href="{% url back_url %}">Cancel</a>
+                        </div>
+                    </form>
+                {% else %}
+                    <p>{{ leave.decision_snapshot.reason }}</p>
+                    <a class="btn btn--ghost" href="{% url back_url %}">Back to inbox</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

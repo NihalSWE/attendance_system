@@ -150,9 +150,8 @@ class DeviceScreenTests(TestCase):
 
         device = BiometricDevice.all_objects.get(serial_number="SN-NEW")
         self.assertEqual(device.company_id, self.company.pk)
-        # A key was generated and stored only as a hash.
-        self.assertTrue(device.authentication_secret_hash)
-        self.assertNotIn(device.authentication_secret_hash, response.content.decode())
+        # No key is invented: a ZKTeco push device could never send it.
+        self.assertEqual(device.authentication_secret_hash, "")
         # The settings JSON is written from named fields, not hand-typed JSON.
         self.assertEqual(device.settings["push_interval_seconds"], 10)
         self.assertTrue(

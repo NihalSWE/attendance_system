@@ -12,6 +12,7 @@ urlpatterns = [
 
     path("types/", views.leave_type_list, name="leave_type_list"),
     path("types/add/", views.leave_type_create, name="leave_type_create"),
+    path("types/defaults/", views.leave_type_defaults, name="leave_type_defaults"),
     path("types/<int:pk>/edit/", views.leave_type_edit, name="leave_type_edit"),
     path("types/<int:pk>/status/", views.leave_type_status, name="leave_type_status"),
 ]

@@ -1,0 +1,21 @@
+{% extends "base_template/base.html" %}
+{% block title %}Withdraw leave request · Attendance{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <h1 class="page__title">Withdraw leave request</h1>
+    </div>
+    <div class="form-page">
+        <div class="card">
+            <div class="card__body stack">
+                <p>{{ segment.leave_type.name }} · {{ segment.start_date|date:"d M Y" }} – {{ segment.end_date|date:"d M Y" }}</p>
+                <p>{{ segment.requested_units|floatformat:"-1" }} working day(s) · Requested {{ segment.get_requested_pay_type_display|lower }}</p>
+                <p class="field__help">The request stops waiting for approval and stays in your list as withdrawn. You can submit a new request for these dates.</p>
+                <form method="post" class="row">
+                    {% csrf_token %}
+                    <button class="btn btn--danger" type="submit">Withdraw request</button>
+                    <a class="btn btn--ghost" href="{% url 'me:leave' %}">Keep request</a>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}

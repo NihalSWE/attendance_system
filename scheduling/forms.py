@@ -242,7 +242,6 @@ class WeeklyOffForm(StyledFormMixin, forms.Form):
         label="Starts from",
         widget=_date_widget("Select start date"),
     )
-    is_paid = forms.BooleanField(label="Paid day off", required=False)
 
     def __init__(self, *args, branches=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -251,6 +250,14 @@ class WeeklyOffForm(StyledFormMixin, forms.Form):
         # The day buttons are visually hidden inputs styled by the day picker,
         # not the shared checkbox.
         self.fields["weekdays"].widget.attrs["class"] = "day-picker__input"
+
+
+class ChangeWeeklyOffStartForm(StyledFormMixin, forms.Form):
+    effective_from = forms.DateField(
+        label="Starts from",
+        help_text="Attendance is updated for the dates that change. Finalised salary months stay locked.",
+        widget=_date_widget("Select start date"),
+    )
 
 
 class EndWeeklyOffForm(StyledFormMixin, forms.Form):
@@ -314,7 +321,7 @@ def posted_holiday_rows(data):
 class HolidayYearForm(StyledFormMixin, forms.Form):
     """Many holidays at once from the year calendar.
 
-    The branch and paid flag apply to every selected date; each date carries
+    The branch applies to every selected date; each date carries
     its own name. The dates arrive as rows (see ``posted_holiday_rows``), not
     as a form field, because the calendar adds and removes them.
     """
@@ -325,7 +332,6 @@ class HolidayYearForm(StyledFormMixin, forms.Form):
         label="Applies to",
         empty_label="All branches",
     )
-    is_paid = forms.BooleanField(required=False, initial=True, label="Paid holidays")
 
     def __init__(self, *args, branches=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -354,11 +360,10 @@ class HolidayForm(StyledFormMixin, forms.ModelForm):
 
     class Meta:
         model = Holiday
-        fields = ("holiday_date", "name", "branch", "is_paid", "description")
+        fields = ("holiday_date", "name", "branch", "description")
         labels = {
             "holiday_date": "Date",
             "name": "Holiday name",
-            "is_paid": "Paid holiday",
         }
         widgets = {
             "holiday_date": _date_widget("Select date"),

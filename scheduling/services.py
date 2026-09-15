@@ -600,6 +600,7 @@ def add_weekly_offs(*, actor, company_id, values):
     """
     membership = require_structure_manager(actor, company_id)
     values = _writable(values, WEEKLY_OFF_FIELDS)
+    values["is_paid"] = True
     weekdays = sorted(set(int(day) for day in (values.pop("weekdays", None) or [])))
     if not weekdays:
         raise ValidationError({"weekdays": "Select at least one day."})
@@ -608,18 +609,12 @@ def add_weekly_offs(*, actor, company_id, values):
         raise ValidationError({"weekdays": "Unknown day selected."})
 
     with use_company(company_id):
+        _lock_weekly_offs(company_id)
         _check_branch(membership, values)
-        clashes = WeeklyOffRule.objects.filter(
-            weekday__in=weekdays,
-            branch=values.get("branch"),
-            status=WeeklyOffRule.Status.ACTIVE,
-        ).order_by("weekday")
-        if clashes.exists():
-            names = ", ".join(rule.get_weekday_display() for rule in clashes)
-            scope = "for this branch" if values.get("branch") else "company-wide"
-            raise ValidationError({
-                "weekdays": f"Already a weekly off {scope}: {names}. Unselect it."
-            })
+        _refuse_weekly_off_overlap(
+            branch=values.get("branch"), weekdays=weekdays,
+            start=values.get("effective_from"), field="weekdays",
+        )
 
         rules = []
         for day in weekdays:
@@ -640,6 +635,108 @@ def add_weekly_offs(*, actor, company_id, values):
     return rules
 
 
+def _lock_weekly_offs(company_id):
+    # Serialize even when there is no rule yet. All weekly-off writers take
+    # this same lock before reading dates; the exclusion constraint remains.
+    from tenants.models import Company
+
+    Company.objects.select_for_update().get(pk=company_id)
+
+
+def _refuse_weekly_off_overlap(*, branch, weekdays, start, field, end=None, exclude_pk=None):
+    """Periods are [start, end), including the history of stopped rules."""
+    if start is None:
+        raise ValidationError({"effective_from": "Choose a start date."})
+    clashes = WeeklyOffRule.objects.filter(branch=branch, weekday__in=weekdays).filter(
+        Q(effective_to__isnull=True) | Q(effective_to__gt=start)
+    )
+    if end is not None:
+        clashes = clashes.filter(effective_from__lt=end)
+    if exclude_pk is not None:
+        clashes = clashes.exclude(pk=exclude_pk)
+    errors = []
+    for rule in clashes.order_by("weekday", "effective_from"):
+        scope = f"for {rule.branch.name}" if rule.branch_id else "company-wide"
+        period = f"from {rule.effective_from:%d %b %Y}"
+        if rule.effective_to:
+            period += f" until {rule.effective_to:%d %b %Y} (excluding that date)"
+        errors.append(
+            f"{rule.get_weekday_display()} is already a weekly off {scope} {period}; "
+            "change its start date instead, or choose a period that does not overlap."
+        )
+    if errors:
+        raise ValidationError({field: errors})
+
+
+def _recalculate_weekly_off_dates(company_id, rule, start, end):
+    """Rebuild the changed range in monthly batches, bounded by employment.
+
+    Calling the existing attendance service preserves finalised months and
+    overtime decisions. Keep this inside the write transaction so a failure
+    cannot save a new calendar with only part of its attendance updated.
+    """
+    from attendance.services import recalculate
+    from employees.models import EmployeeAssignment
+
+    tz = _company_zone(rule.company)
+    end = min(end, timezone.now().astimezone(tz).date())
+    placements = EmployeeAssignment.objects.exclude(status="cancelled").filter(
+        effective_from__lt=_midnight(tz, end + datetime.timedelta(days=1)),
+    ).filter(Q(effective_to__isnull=True) | Q(effective_to__gt=_midnight(tz, start)))
+    if rule.branch_id:
+        placements = placements.filter(branch_id=rule.branch_id)
+    first = placements.order_by("effective_from").first()
+    if first is None:
+        return
+    start = max(start, first.effective_from.astimezone(tz).date())
+    employee_ids = list(placements.values_list("employee_id", flat=True).distinct())
+    while start <= end:
+        next_month = (start.replace(day=28) + datetime.timedelta(days=4)).replace(day=1)
+        batch_end = min(end, next_month - datetime.timedelta(days=1))
+        recalculate(company_id, employee_ids=employee_ids, start=start, end=batch_end)
+        start = next_month
+
+
+@transaction.atomic
+def change_weekly_off_start(*, actor, company_id, rule_id, effective_from):
+    """Correct a rule's start and rebuild the dates gained or removed."""
+    require_structure_manager(actor, company_id)
+    _lock_weekly_offs(company_id)
+    membership, rule = get_weekly_off_for_edit(
+        actor=actor, company_id=company_id, rule_id=rule_id
+    )
+    if effective_from is None:
+        raise ValidationError({"effective_from": "Choose a start date."})
+    if rule.effective_to is not None and effective_from >= rule.effective_to:
+        raise ValidationError({
+            "effective_from": f"The start must be before {rule.effective_to:%d %b %Y}, when it stops."
+        })
+    with use_company(company_id):
+        _refuse_weekly_off_overlap(
+            branch=rule.branch, weekdays=[rule.weekday], start=effective_from,
+            end=rule.effective_to, exclude_pk=rule.pk, field="effective_from",
+        )
+        previous_start = rule.effective_from
+        if previous_start == effective_from:
+            return rule
+        before = _snapshot(rule, WEEKLY_OFF_RULE_FIELDS)
+        rule.effective_from = effective_from
+        rule.is_paid = True
+        rule.updated_by = actor
+        rule.full_clean()
+        rule.save()
+        _recalculate_weekly_off_dates(
+            company_id, rule, min(previous_start, effective_from),
+            max(previous_start, effective_from) - datetime.timedelta(days=1),
+        )
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="weekly_off.start_changed", obj=rule,
+            before=before, after=_snapshot(rule, WEEKLY_OFF_RULE_FIELDS),
+        )
+    return rule
+
+
 def get_weekly_off_for_edit(*, actor, company_id, rule_id):
     membership = require_structure_manager(actor, company_id)
     with use_company(company_id):
@@ -654,6 +751,8 @@ def get_weekly_off_for_edit(*, actor, company_id, rule_id):
 @transaction.atomic
 def end_weekly_off(*, actor, company_id, rule_id, effective_to):
     """Stop a weekly off from a date. Past months keep using it."""
+    require_structure_manager(actor, company_id)
+    _lock_weekly_offs(company_id)
     membership, rule = get_weekly_off_for_edit(
         actor=actor, company_id=company_id, rule_id=rule_id
     )
@@ -713,6 +812,7 @@ def _refuse_duplicate_holiday(values, exclude_pk=None):
 def create_holiday(*, actor, company_id, values):
     membership = require_structure_manager(actor, company_id)
     values = _writable(values, HOLIDAY_FIELDS)
+    values["is_paid"] = True
     with use_company(company_id):
         _check_branch(membership, values)
         _refuse_duplicate_holiday(values)
@@ -735,8 +835,8 @@ def create_holiday(*, actor, company_id, values):
 def add_holidays(*, actor, company_id, values):
     """Add many holidays in one step, from the year calendar.
 
-    ``days`` is a list of ``(date, name)`` pairs; the branch and paid flag
-    apply to all of them. All or nothing, like adding weekly offs: if any date
+    ``days`` is a list of ``(date, name)`` pairs; the branch applies to all
+    of them and holidays are always paid. All or nothing: if any date
     is already a holiday for the same scope, none are added and every clash is
     named, so the administrator unselects them and saves again.
     """
@@ -782,7 +882,7 @@ def add_holidays(*, actor, company_id, values):
                 branch=branch,
                 holiday_date=day,
                 name=name,
-                is_paid=values.get("is_paid", True),
+                is_paid=True,
             )
             record_company_event(
                 actor=actor, membership=membership, company=membership.company,
@@ -812,6 +912,7 @@ def update_holiday(*, actor, company_id, holiday_id, values):
     if holiday.status == Holiday.Status.CANCELLED:
         raise ValidationError("A cancelled holiday cannot be edited.")
     values = _writable(values, HOLIDAY_FIELDS)
+    values["is_paid"] = True
     with use_company(company_id):
         _check_branch(membership, values)
         _refuse_duplicate_holiday(

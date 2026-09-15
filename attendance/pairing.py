@@ -305,7 +305,14 @@ def _account(day, *, scheduled_start, scheduled_end, break_minutes,
         overtime = 0
 
     # Only a break taken during the shift can be paid back.
-    paid_break = min(day.outside_minutes, int(break_minutes or 0)) if break_is_paid else 0
+    paid_break = 0
+    if break_is_paid:
+        shift_break_minutes = sum(
+            _overlap(earlier.ended_at, later.started_at, scheduled_start, scheduled_end)
+            for earlier, later in zip(day.sessions, day.sessions[1:])
+            if earlier.ended_at is not None
+        )
+        paid_break = min(shift_break_minutes, int(break_minutes or 0))
     day.worked_minutes = regular + paid_break
     day.overtime_minutes = overtime
 

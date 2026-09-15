@@ -151,13 +151,21 @@ attendance behind it. Tokens only — no colour is defined here.
     }
 }
 
-/* On paper: no navigation, no buttons, and the two tables side by side. */
+/* On paper (and "Save as PDF"): no navigation, no buttons, no company-only
+   cards or messages, and the two tables side by side. */
+@page {
+    margin: 12mm;
+}
+
 @media print {
     .sidebar,
     .topbar,
     .crumbs,
     .page__actions,
-    .slip-line__action {
+    .slip-line__action,
+    .alert,
+    .site-footer,
+    .no-print {
         display: none !important;
     }
     .shell,

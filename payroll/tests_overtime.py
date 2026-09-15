@@ -108,6 +108,19 @@ class OvertimeBase(LiveTestCase):
 
 
 class DecidingTests(OvertimeBase):
+    def test_after_shift_break_does_not_inflate_hourly_salary(self):
+        self.shift.default_break_minutes = 120
+        self.shift.break_is_paid = True
+        self.shift.overtime_after_minutes = 60
+        with use_company(self.company):
+            self.shift.save()
+        record = self.work(MONDAY, (9, 0), (18, 0), (19, 15), (21, 15))
+        self.assertEqual(record.worked_minutes, 540)
+        self.assertEqual(record.approved_overtime_minutes, 120)
+        result = calculate_pay("hourly", "200", [record])
+        self.assertEqual(line(result, "OVERTIME")[5], Decimal("800.00"))
+        self.assertEqual(result["net"], Decimal("2600.00"))
+
     def test_staying_late_and_scanning_out_is_approved_automatically(self):
         # Ajay, 2026-09-14: scanned out means the time is known; nobody approves it.
         record = self.work(MONDAY, (9, 0), (20, 0))

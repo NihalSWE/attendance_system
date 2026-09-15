@@ -34,6 +34,7 @@ from common.tenant import use_company
 from employees.models import EmployeeCompensation
 from organization.services import require_structure_manager
 from payroll.models import (
+    PayrollAdjustment,
     PayrollLine,
     PenaltyAssessment,
     PenaltyAssessmentAttendance,
@@ -68,6 +69,39 @@ def _compensation_at(employee, at):
     )
 
 
+def _monthly_segments(employee, start, end):
+    """(rate, first day, last day) for each monthly salary in force between two dates.
+
+    A11 part 4, kept simple: None unless the salary changed inside the range and
+    every salary in it is monthly. Daily/hourly changes keep the month-end rate.
+    ``revise_compensation`` closes the old row at the instant the new one starts.
+    Call inside the company's tenant context.
+    """
+    begin = timezone.make_aware(datetime.datetime.combine(start, datetime.time.min))
+    finish = timezone.make_aware(datetime.datetime.combine(end, datetime.time.max))
+    compensations = list(
+        EmployeeCompensation.objects.filter(employee=employee, effective_from__lte=finish)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=begin))
+        .exclude(status__in=["cancelled", "draft"])
+        .order_by("effective_from")
+    )
+    if len(compensations) < 2 or any(
+        c.pay_basis != EmployeeCompensation.PayBasis.MONTHLY for c in compensations
+    ):
+        return None
+    segments, next_free = [], start
+    for compensation in compensations:
+        first = max(next_free, timezone.localtime(compensation.effective_from).date())
+        last = end
+        if compensation.effective_to is not None:
+            ends = timezone.localtime(compensation.effective_to) - datetime.timedelta(microseconds=1)
+            last = min(end, ends.date())
+        if last >= first:
+            segments.append((compensation.base_rate, first, last))
+            next_free = last + datetime.timedelta(days=1)
+    return segments if len(segments) > 1 else None
+
+
 def summarise(records):
     """Day counts for one employee's month, as shown on the payslip."""
     counts = Counter()
@@ -88,6 +122,10 @@ def summarise(records):
                 counts["unpaid_off"] += 1
         else:
             counts[status] += 1
+        leave_day = getattr(record, "leave_day", None)
+        if status != Status.LEAVE and leave_day is not None and leave_day.approved_pay_type == "paid":
+            # A paid half-day leave on a day the employee also worked.
+            paid_leave_minutes += leave_day.leave_minutes
         counts["late_minutes"] += record.late_minutes
         counts["overtime_minutes"] += getattr(record, "approved_overtime_minutes", 0)
     counts["worked_minutes"] = worked_minutes
@@ -135,8 +173,10 @@ def _monthly_deductions(rules, per_day, records):
     absent = Decimal(sum(1 for r in records if r.attendance_status == Status.ABSENT))
     half_days = [r for r in records if r.attendance_status == Status.HALF_DAY]
     incomplete = Decimal(sum(1 for r in records if r.attendance_status == Status.INCOMPLETE))
+    # Leave days, and days worked with a half-day leave (unpaid half = 0.5).
     unpaid_leave = sum(
-        (ONE - r.payable_fraction for r in records if r.attendance_status == Status.LEAVE),
+        (ONE - r.payable_fraction for r in records
+         if r.attendance_status == Status.LEAVE or getattr(r, "leave_day", None) is not None),
         Decimal("0"),
     )
     unpaid_off = Decimal(sum(
@@ -158,7 +198,9 @@ def _monthly_deductions(rules, per_day, records):
         for record in records:
             if record.attendance_status not in (Status.PRESENT, Status.HALF_DAY):
                 continue
-            expected = expected_minutes(record)
+            leave_day = getattr(record, "leave_day", None)
+            # The half on leave is not "short": it is leave, paid or deducted above.
+            expected = max(0, expected_minutes(record) - (leave_day.leave_minutes if leave_day else 0))
             short = max(0, expected - record.worked_minutes)
             if expected and short:
                 short_minutes += short
@@ -256,7 +298,8 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 
 
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
-                  penalty_rules=(), waived=frozenset(), employee_key=""):
+                  penalty_rules=(), waived=frozenset(), employee_key="", adjustments=(),
+                  employed_days=None, basic_segments=None):
     """Lines and totals for one employee. Pure: no database writes.
 
     ``penalty_rules`` add one deduction line per penalty found; the
@@ -275,7 +318,30 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     ]
 
     if pay_basis == EmployeeCompensation.PayBasis.MONTHLY:
-        lines.append(("earning", "BASIC", "Basic salary", ONE, rate, money(rate)))
+        if basic_segments:
+            # The monthly salary changed inside the month (A11 part 4): one Basic
+            # line per rate for the calendar days it was in force.
+            for segment_rate, segment_first, segment_last in basic_segments:
+                days = (segment_last - segment_first).days + 1
+                share = Decimal(days) / Decimal(days_in_month)
+                segment_rate = Decimal(segment_rate)
+                lines.append((
+                    "earning", "BASIC",
+                    f"Basic salary {segment_rate:,.2f} ({segment_first:%d %b}–{segment_last:%d %b}, "
+                    f"{days} of {days_in_month} days)",
+                    share, segment_rate, money(segment_rate * share),
+                ))
+        elif employed_days is not None and employed_days < days_in_month:
+            # Joined or left inside the month (A11 part 3): pay the employed
+            # calendar days only.
+            share = Decimal(employed_days) / Decimal(days_in_month)
+            lines.append((
+                "earning", "BASIC",
+                f"Basic salary ({employed_days} of {days_in_month} days employed)",
+                share, rate, money(rate * share),
+            ))
+        else:
+            lines.append(("earning", "BASIC", "Basic salary", ONE, rate, money(rate)))
         per_day = _per_day(rules, rate, records, days_in_month)
         if per_day:
             lines.extend(_monthly_deductions(rules, per_day, records))
@@ -315,6 +381,16 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
 
     overtime_lines, overtime = _overtime_lines(pay_basis, rate, rules, records, days_in_month)
     lines.extend(overtime_lines)
+
+    # One-time bonus and deduction lines added on the draft (A11 part 2).
+    adjustment_lines = []
+    for adjustment in adjustments:
+        kind = "earning" if adjustment.adjustment_type == "earning" else "deduction"
+        adjustment_lines.append((len(lines), adjustment.pk))
+        lines.append((
+            kind, "BONUS" if kind == "earning" else "DEDUCTION",
+            adjustment.reason, ONE, adjustment.amount, money(adjustment.amount),
+        ))
 
     gross = sum((amount for kind, *_, amount in lines if kind == "earning"), Decimal("0"))
 
@@ -361,6 +437,7 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
         "rules": rules.describe(),
         "penalties": penalties,
         "overtime": overtime,
+        "adjustments": adjustment_lines,
     }
 
 
@@ -482,6 +559,11 @@ def generate_payroll(*, actor, company_id, year, month):
                 payroll_period=period, status=PenaltyAssessment.Status.WAIVED
             ).values_list("occurrence_identity", flat=True)
         )
+        adjustments_by_employee = {}
+        for adjustment in PayrollAdjustment.objects.filter(
+            target_payroll_period=period, status=PayrollAdjustment.Status.ACTIVE
+        ).order_by("pk"):
+            adjustments_by_employee.setdefault(adjustment.employee_id, []).append(adjustment)
 
         records_by_employee = {}
         for record in (
@@ -496,16 +578,31 @@ def generate_payroll(*, actor, company_id, year, month):
         totals = Counter()
         skipped = []
         for employee, records in records_by_employee.items():
+            # Only days inside the employment count; a monthly salary is paid
+            # for the employed calendar days of the month.
+            start = max(first, employee.joining_date or first)
+            end = min(last, employee.leaving_date or last)
+            records = [record for record in records if start <= record.work_date <= end]
+            if not records:
+                continue
+            employed_days = (end - start).days + 1
             compensation = _compensation_at(employee, period_end) or _compensation_at(
                 employee, timezone.make_aware(datetime.datetime.combine(records[-1].work_date, datetime.time.max))
             )
             if compensation is None:
                 skipped.append(employee.full_name)
                 continue
+            basic_segments = (
+                _monthly_segments(employee, start, end)
+                if compensation.pay_basis == EmployeeCompensation.PayBasis.MONTHLY else None
+            )
             result = calculate_pay(
                 compensation.pay_basis, compensation.base_rate, records,
                 rules=rules, days_in_month=last.day,
                 penalty_rules=penalty_rules, waived=waived, employee_key=f"{employee.pk}:",
+                adjustments=adjustments_by_employee.get(employee.pk, ()),
+                employed_days=employed_days,
+                basic_segments=basic_segments,
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,
@@ -517,6 +614,11 @@ def generate_payroll(*, actor, company_id, year, month):
                     "pay_basis": compensation.pay_basis,
                     "base_rate": str(compensation.base_rate),
                     "compensation_id": compensation.pk,
+                    "employed_days": employed_days,
+                    "basic_segments": [
+                        [str(rate), first_day.isoformat(), last_day.isoformat()]
+                        for rate, first_day, last_day in (basic_segments or [])
+                    ],
                     "counts": result["counts"],
                     "rules": result["rules"],
                     "overtime": result["overtime"],
@@ -529,13 +631,19 @@ def generate_payroll(*, actor, company_id, year, month):
                 )
                 for index, occurrence in result["penalties"]
             }
+            adjusted = dict(result["adjustments"])
             PayrollLine.objects.bulk_create([
                 PayrollLine(
                     company=membership.company, payroll_record=payroll_record,
                     line_type=kind, code=code, description=label,
                     quantity=money(quantity), rate=rate, amount=amount, sequence=index,
                     penalty_assessment=assessments.get(index),
-                    source_type="penalty" if index in assessments else "",
+                    payroll_adjustment_id=adjusted.get(index),
+                    is_manual=index in adjusted,
+                    source_type=(
+                        "penalty" if index in assessments
+                        else "adjustment" if index in adjusted else ""
+                    ),
                 )
                 for index, (kind, code, label, quantity, rate, amount) in enumerate(result["lines"])
             ])
@@ -569,3 +677,156 @@ def generate_payroll(*, actor, company_id, year, month):
             action="payroll.generated", obj=run, after=run.totals_snapshot,
         )
     return run
+
+
+def _run_for_month(company_id, year, month, status):
+    first, last = month_bounds(year, month)
+    return PayrollRun.objects.select_for_update(of=("self",)).select_related("payroll_period").filter(
+        payroll_period__start_date=first, payroll_period__end_date=last, status=status,
+    ).first()
+
+
+@transaction.atomic
+def finalise_payroll(*, actor, company_id, year, month):
+    """Finalise a month's draft salary (A11, kept simple).
+
+    Employees then see their payslips, and the month's attendance and overtime
+    stop changing (``attendance.services.locked_ranges`` reads the status).
+    """
+    from payroll import overtime
+
+    membership = require_structure_manager(actor, company_id)
+    first, last = month_bounds(year, month)
+    with use_company(company_id):
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.DRAFT)
+        if run is None:
+            raise ValidationError("Generate this month's salary before finalising it.")
+        if overtime.decided_after(company_id, first, last, run.calculation_finished_at):
+            raise ValidationError(
+                "Overtime was decided after this salary was generated. "
+                "Generate the month again, then finalise."
+            )
+        run.status = PayrollRun.Status.POSTED
+        run.posted_by = actor
+        run.posted_at = timezone.now()
+        run.updated_by = actor
+        run.save()
+        PenaltyAssessment.objects.filter(
+            payroll_period=run.payroll_period, status=PenaltyAssessment.Status.PROPOSED
+        ).update(status=PenaltyAssessment.Status.POSTED)
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.finalised", obj=run,
+            before={"status": PayrollRun.Status.DRAFT},
+            after={"status": PayrollRun.Status.POSTED, "net": run.totals_snapshot.get("net")},
+        )
+    return run
+
+
+@transaction.atomic
+def reopen_payroll(*, actor, company_id, year, month, reason):
+    """Undo a finalise, for a mistake: the month becomes a draft again. Audited with the reason."""
+    membership = require_structure_manager(actor, company_id)
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError({"reason": "Give a reason for undoing the finalise."})
+    with use_company(company_id):
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.POSTED)
+        if run is None:
+            raise ValidationError("This month's salary is not finalised.")
+        before = {"status": run.status, "posted_by": run.posted_by_id,
+                  "posted_at": run.posted_at.isoformat() if run.posted_at else None}
+        run.status = PayrollRun.Status.DRAFT
+        run.posted_by = None
+        run.posted_at = None
+        run.updated_by = actor
+        run.save()
+        PenaltyAssessment.objects.filter(
+            payroll_period=run.payroll_period, status=PenaltyAssessment.Status.POSTED
+        ).update(status=PenaltyAssessment.Status.PROPOSED)
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.reopened", obj=run, before=before,
+            after={"status": PayrollRun.Status.DRAFT, "reason": reason},
+        )
+    return run
+
+
+def _regenerated_record(actor, company_id, period, employee_id):
+    run = generate_payroll(
+        actor=actor, company_id=company_id,
+        year=period.start_date.year, month=period.start_date.month,
+    )
+    with use_company(company_id):
+        return run.records.filter(employee_id=employee_id).first()
+
+
+@transaction.atomic
+def add_adjustment(*, actor, company_id, record_id, adjustment_type, amount, reason):
+    """Add a one-time bonus or deduction to a draft payslip, then regenerate the month."""
+    membership = require_structure_manager(actor, company_id)
+    if adjustment_type not in PayrollAdjustment.AdjustmentType.values:
+        raise ValidationError({"adjustment_type": "Choose Bonus or Deduction."})
+    try:
+        amount = Decimal(str(amount))
+    except ArithmeticError:
+        amount = Decimal("0")
+    if not amount > 0:
+        raise ValidationError({"amount": "Enter an amount above zero."})
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError({"reason": "Give a reason; it is shown on the payslip."})
+    with use_company(company_id):
+        record = PayrollRecord.objects.select_related("payroll_run__payroll_period").filter(
+            pk=record_id
+        ).first()
+        if record is None:
+            raise PermissionDenied("Payslip not found in this company.")
+        if record.payroll_run.status != PayrollRun.Status.DRAFT:
+            raise ValidationError(
+                "Bonus and deduction lines can only change while the salary is a draft."
+            )
+        period = record.payroll_run.payroll_period
+        adjustment = PayrollAdjustment(
+            company=membership.company, employee_id=record.employee_id,
+            target_payroll_period=period, adjustment_type=adjustment_type,
+            amount=amount, reason=reason, created_by=actor, updated_by=actor,
+        )
+        adjustment.full_clean()
+        adjustment.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.adjustment_added", obj=adjustment,
+            after={"employee_id": record.employee_id, "type": adjustment_type,
+                   "amount": str(amount), "reason": reason},
+        )
+        employee_id = record.employee_id
+    return _regenerated_record(actor, company_id, period, employee_id)
+
+
+@transaction.atomic
+def remove_adjustment(*, actor, company_id, adjustment_id):
+    """Remove a bonus or deduction from a draft month (kept as removed), then regenerate."""
+    membership = require_structure_manager(actor, company_id)
+    with use_company(company_id):
+        adjustment = PayrollAdjustment.objects.select_for_update(of=("self",)).select_related(
+            "target_payroll_period"
+        ).filter(pk=adjustment_id, status=PayrollAdjustment.Status.ACTIVE).first()
+        if adjustment is None:
+            raise PermissionDenied("Line not found in this company.")
+        period = adjustment.target_payroll_period
+        if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.POSTED).exists():
+            raise ValidationError(
+                "Bonus and deduction lines can only change while the salary is a draft."
+            )
+        adjustment.status = PayrollAdjustment.Status.CANCELLED
+        adjustment.updated_by = actor
+        adjustment.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.adjustment_removed", obj=adjustment,
+            before={"status": "active"},
+            after={"status": "cancelled", "amount": str(adjustment.amount), "reason": adjustment.reason},
+        )
+        employee_id = adjustment.employee_id
+    return _regenerated_record(actor, company_id, period, employee_id)

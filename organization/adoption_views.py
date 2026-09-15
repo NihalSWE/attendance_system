@@ -8,10 +8,10 @@ the same rules without re-implementing them.
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import JsonResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
+from base_template.tables import paginate, render
 from django.views.decorators.http import require_http_methods
 
 from common.choices import ActiveStatus
@@ -74,9 +74,9 @@ def adoption_list(request):
             queryset = queryset.filter(status=status)
 
         filtered_total = queryset.count()
-        page = Paginator(
-            queryset.order_by("branch__name", "department__name"), 25
-        ).get_page(request.GET.get("page"))
+        page = paginate(request, queryset.order_by("branch__name", "department__name"),
+            search=("branch__name", "department__name", "department__code", "head__first_name", "head__last_name", "status"),
+            order=("branch__name", "department__name", "title_count", ("head__first_name", "head__last_name"), "status", "employee_count", None))
 
         return render(request, "organization/adoption_list.html", {
             "page": page,

@@ -158,6 +158,8 @@ def statuses_for(company_id, *, employee_ids=None, now=None):
             LeaveDay.objects.filter(
                 employee_id__in=assignments_by_employee.keys(),
                 work_date=today, status__in=LIVE_LEAVE,
+                # A half-day leave still expects the employee for the other half.
+                balance_units__gte=1,
             ).values_list("employee_id", flat=True)
         )
 

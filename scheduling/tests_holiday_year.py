@@ -105,7 +105,7 @@ class HolidayYearPageTests(CalendarBase):
 
     def test_saving_adds_every_row_and_returns_to_the_same_year(self):
         response = self.client.post(reverse(URL), {
-            "year": "2026", "save": "1", "is_paid": "on",
+            "year": "2026", "save": "1",
             "date": ["2026-03-26", "2026-04-14", "2026-04-15"],
             "name": ["Independence Day", "Bengali New Year", "Bengali New Year"],
         })
@@ -120,7 +120,7 @@ class HolidayYearPageTests(CalendarBase):
                     "branch": None, "is_paid": True, "description": ""},
         )
         response = self.client.post(reverse(URL), {
-            "year": "2026", "save": "1", "is_paid": "on",
+            "year": "2026", "save": "1",
             "date": ["2026-03-26", "2026-12-16"],
             "name": ["Independence Day", "Again"],
         })

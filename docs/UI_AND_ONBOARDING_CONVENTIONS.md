@@ -160,3 +160,39 @@ uses `overflow: hidden` for its rounded corners, so a panel positioned inside a
 card gets cut off. Placement prefers below the trigger, flips above only when
 below will not fit, clamps to the viewport edges, and re-anchors on scroll and
 resize.
+
+
+## Sidebar navigation (A14, 2026-09-15)
+
+- Important pages and settings belong in the sidebar under their area. Maintain
+  company destinations in `base_template/navigation.py`, including edit/detail
+  aliases and appropriate access visibility. Keep existing page-level links and
+  buttons; sidebar links are additional navigation, not replacements.
+- Link to an existing section with a stable fragment when settings share a page.
+  Do not duplicate a form just to give it a sidebar destination. Context-specific
+  actions (such as a particular device's users) remain on that record's page.
+- The current menu opens on navigation. Selected links use solid ink and
+  `aria-current`; disclosure headings use native `details`/`summary` controls.
+- At 1024 px and below, the shared Menu button opens a labelled, scrollable
+  drawer. Keep Close, Escape, focus wrapping/return and backdrop dismissal.
+  Root, company and self-service menus retain separate destinations.
+
+
+## Server-side tables (A15, 2026-09-15)
+
+Keep the existing table/row/badge/button styling. Ajay explicitly requested
+pagination without a table redesign, and rejected Next/Previous-only paging.
+Use numbered pages, first/last controls, page size, a direct page jump and the
+real result count. Keep page-level filters and links. Reuse the Paper/Ink
+rules in `vendor-controls.css`; do not import a stock DataTables theme.
+
+Company and employee lists use `base_template.tables.paginate/render` and
+`base_template/js/tables.js`. Search and ordering run against the authorised
+queryset before slicing, never only against the browser’s current page. Action
+and live/composite columns without a faithful database ordering are explicitly
+not sortable. See `SERVER_SIDE_TABLES.md` for integration and the N9 boundary.
+
+A page with several lists gives each a name (`paginate(..., name="shifts")`,
+`data-server-table="shifts"`) so they page, search and sort independently; the
+Shifts page is the example. A list of 25 rows or fewer shows one page "1" at the
+default size — that is the pager working, not missing (2026-09-15).

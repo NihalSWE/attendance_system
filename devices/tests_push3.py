@@ -187,6 +187,18 @@ class Push3HandshakeTests(TestCase):
         self.assertIn("TransFlag=TransData AttLog", body)
         self.assertNotIn("ServerVer=", body)
 
+    def test_a_device_set_to_push3_is_answered_as_3x_even_when_it_says_2x(self):
+        """The SenseFace 3A: Push 3.1.2 in its menu, pushver=2.4.1 on the wire."""
+        self.device.settings = {**(self.device.settings or {}), "push_protocol": "3"}
+        self.device.save(update_fields=["settings"])
+        response = self.client.get(
+            "/iclock/cdata?SN=NYU7251601501&options=all&pushver=2.4.1&DeviceType=att"
+        )
+        body = response.content.decode()
+        self.assertIn("TransFlag=1111000000", body)
+        self.assertIn("ServerVer=", body)
+        self.assertIn("PushProtVer=", body)
+
     def test_rtlog_upload_creates_a_punch_event(self):
         response = self.client.post(
             "/iclock/cdata?SN=NYU7251601501&table=rtlog",

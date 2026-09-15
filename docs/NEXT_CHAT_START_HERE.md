@@ -1,5 +1,14 @@
 # Next chat — start the attendance implementation here
 
+## Current handoff — 2026-09-14 (read this first)
+
+**Read [HANDOFF_2026-09-14.md](HANDOFF_2026-09-14.md).** It is the complete,
+current handoff: the project, people and roles, where to pull from and push to,
+home setup, architecture, the design system, every final decision, what is done,
+what is left for Ajay's session and for Nihal (in order), the SenseFace 3A test
+for tomorrow, and where to start (A5c). Everything below this section is
+historical and must not restart finished work.
+
 ## Platform corrections — 2026-09-07
 
 User feedback corrected the onboarding contract. Read [UI_AND_ONBOARDING_CONVENTIONS.md](UI_AND_ONBOARDING_CONVENTIONS.md) and [PLATFORM_IMPLEMENTATION.md](PLATFORM_IMPLEMENTATION.md). Implemented one current master administrator per company with backend/database uniqueness, account editing, generated string codes/slugs, Bangladesh defaults, scoped Django admin forms, explicit `/platform/companies/`, centered responsive pages and readable four-space templates. No new environment variables. Existing data preserved; only the two shared demo memberships were ended with explicit user approval and audit entries. Full suite: 131 tests passed; the strengthened settings-admin valid-POST check also passed in the seven-test focused rerun. Browser creation/admin/feature flows and screenshots checked at 1440/768/375px. P1 remains in progress: next is company organization/scheduling writes and scoped authorization, then employee lifecycle pages. This supersedes earlier existing-account/role-picker examples.

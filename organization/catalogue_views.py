@@ -15,12 +15,12 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
+from base_template import tables
 from common.choices import ActiveStatus
 from organization import catalogue_services as services
 from organization.forms import (
@@ -101,14 +101,19 @@ def department_list(request):
     if status in dict(ActiveStatus.choices):
         queryset = queryset.filter(status=status)
 
-    page = Paginator(queryset.order_by("name"), 25).get_page(request.GET.get("page"))
-    return render(request, "organization/platform/department_list.html", {
+    filtered_total = queryset.count()
+    page = tables.paginate(
+        request, queryset.order_by("name"), total=filtered_total,
+        search=("code", "name", "description"),
+        order=("code", "name", "description", "status", "adoption_count", None),
+    )
+    return tables.render(request, "organization/platform/department_list.html", {
         "page": page,
         "query": query,
         "status": status,
         "statuses": ActiveStatus.choices,
         "total": total,
-        "filtered_total": queryset.count(),
+        "filtered_total": filtered_total,
     })
 
 
@@ -197,14 +202,19 @@ def designation_list(request):
     if status in dict(ActiveStatus.choices):
         queryset = queryset.filter(status=status)
 
-    page = Paginator(queryset.order_by("name"), 25).get_page(request.GET.get("page"))
-    return render(request, "organization/platform/designation_list.html", {
+    filtered_total = queryset.count()
+    page = tables.paginate(
+        request, queryset.order_by("name"), total=filtered_total,
+        search=("code", "name"),
+        order=("code", "name", "status", "adoption_count", None),
+    )
+    return tables.render(request, "organization/platform/designation_list.html", {
         "page": page,
         "query": query,
         "status": status,
         "statuses": ActiveStatus.choices,
         "total": total,
-        "filtered_total": queryset.count(),
+        "filtered_total": filtered_total,
     })
 
 

@@ -379,3 +379,40 @@ The authoritative order is now in IMPLEMENTATION_ROADMAP.md:
 Ordinary mistakes and posted corrections cannot wait for P7. P4/P5 already need immutable posting, approved correction/reversal and accurate outstanding balances; only richer automation is deferred.
 
 Automatic bank transfers, tax filing connectors, general-ledger accounting, expense claim workflows, and subscription invoicing remain separate integration scopes. They are not implied by recording a payment, adjustment, or remittance.
+
+
+## Implemented A8 workflow — 2026-09-15
+
+Employees submit full-day paid/unpaid requests from My leave. Pending requests
+have no payable leave days. Active assigned branch managers decide requests;
+company administrators handle branches with no manager and managers' requests
+(confirmed by Ajay). Self-approval is forbidden. Reviewers may approve paid or
+unpaid, or reject with a note visible to the employee. Approval revalidates the
+working calendar, conflicts and finalised salary ranges, creates existing
+LeaveDay records, records an audit event and refreshes attendance atomically.
+Regenerate draft salary to pick up the approved leave. Partial pay, half-day/
+hourly leave, balances, attachments and withdrawal/amendment remain A10.
+
+A10a (2026-09-15): HR records and cancels leave (not their own, not in a
+finalised month); default Casual/Sick/Earned/Maternity leave types; employee
+code in the Record leave picker; employees withdraw pending requests.
+
+A10b (2026-09-15): half-day leave — one date, 0.5 day, paid or unpaid. Came in
+→ full day with no late mark (unpaid half deducted); no scans → only the leave
+half counts. **Leave is kept simple (Ajay):** A10c (2026-09-15) adds an optional
+Days per year per leave type — approved leave in the calendar year counts, a
+half day is 0.5, and leave over the allowance is refused. That completes the
+simple leave scope. Partly paid and hourly leave, attachments, policies,
+accrual ledgers and amendments are not planned for now; the larger design above
+remains reference only.
+
+
+## A15 list navigation — 2026-09-15
+
+Salary month, Overtime, Penalty rules, Leave, Leave types, Holidays, My leave,
+My payslips and Approval inbox now use the shared server-side table controls.
+The existing appearance and action links remain. Use numbered pages, page size,
+page jump and search across all results; overtime also has Employee and Branch
+filters. Month/status filters continue to apply before table search and paging.
+My payslips still shows only finalised salary; these navigation changes do not
+finalise salary or change its calculation. A10 is the next implementation.
