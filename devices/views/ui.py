@@ -14,7 +14,7 @@ from functools import wraps
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.paginator import Paginator
+from django.core.paginator import Page, Paginator
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import JsonResponse
@@ -24,6 +24,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from auditlog.models import AuditLog
+from base_template.tables import integer, paginate, render as table_render
 from common.forms import company_timezone
 from devices.forms import (
     BiometricDeviceForm,
@@ -87,14 +88,85 @@ def company_user_required(view):
     return wrapped
 
 
-def _paginate(request, queryset, default_per_page=25):
-    try:
-        per_page = min(int(request.GET.get("per_page", default_per_page)), 100)
-    except (TypeError, ValueError):
-        per_page = default_per_page
-    paginator = Paginator(queryset, per_page)
-    page = paginator.get_page(request.GET.get("page"))
-    return paginator, page, per_page
+def _paginate_rows(request, rows, *, search=(), order=()):
+    """base_template.tables.paginate for a list that is not in the database.
+
+    A device's user roster is rebuilt from the uploads it sent
+    (devices/services/device_roster.py); there is no table to count, search or
+    order in SQL. So this does the same work on the server over the *whole*
+    roster — never just the rows on screen — and speaks the helper's exact
+    contract: the same request parameters, the same limits (10–100 rows, a
+    200-character literal search, server-owned sort keys, a stable tie-break),
+    and it registers the same table description, so ``table_render``, the
+    ``table_pagination`` include and ``tables.js`` work unchanged.
+    """
+    params = {"page": "page", "per_page": "per_page", "query": "table_q"}
+    ajax = request.method == "GET" and request.GET.get("table") == "1"
+    length = integer(request.GET.get("length" if ajax else params["per_page"]), 25, 10, 100)
+    total = len(rows)
+
+    def text(row, key):
+        value = row.get(key)
+        return "" if value is None else str(value)
+
+    query = request.GET.get("search[value]" if ajax else params["query"], "").strip()[:200]
+    if query and search:
+        needle = query.lower()
+        rows = [r for r in rows if any(needle in text(r, key).lower() for key in search)]
+
+    if ajax:
+        keys = []
+        for index in range(min(len(order), 8)):
+            column = integer(request.GET.get(f"order[{index}][column]"), -1)
+            if 0 <= column < len(order) and order[column]:
+                keys.append((order[column], request.GET.get(f"order[{index}][dir]") == "desc"))
+        # Stable sorts applied last key first give a multi-column order; the
+        # roster's own order (mapped first, then name, then pin) is the tie-break.
+        for key, descending in reversed(keys):
+            rows = sorted(rows, key=lambda r, k=key: _sort_value(r.get(k)), reverse=descending)
+
+    paginator = Paginator(rows, length)
+    if ajax:
+        start = integer(request.GET.get("start"), 0)
+        page = Page(rows[start:start + length], start // length + 1, paginator)
+    else:
+        page = paginator.get_page(request.GET.get(params["page"]))
+
+    def link(number):
+        values = request.GET.copy()
+        values.pop("table", None)
+        values[params["page"]] = number
+        return f"?{values.urlencode()}"
+
+    numbers = []
+    if not ajax:
+        for number in paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1):
+            current, dots = number == page.number, number == paginator.ELLIPSIS
+            numbers.append({"number": number, "current": current, "dots": dots,
+                            "url": None if current or dots else link(number)})
+    table = {
+        "ajax": ajax, "draw": integer(request.GET.get("draw"), 0), "name": "",
+        "total": total, "page": page, "query": query, "params": params,
+        "orderable": ",".join(str(i) for i, key in enumerate(order) if key),
+        "columns": len(order), "start": max(0, page.start_index() - 1), "numbers": numbers,
+        "previous": link(page.previous_page_number()) if not ajax and page.has_previous() else None,
+        "next": link(page.next_page_number()) if not ajax and page.has_next() else None,
+    }
+    request.server_tables = {**getattr(request, "server_tables", {}), "": table}
+    request.server_table = table
+    return page
+
+
+def _sort_value(value):
+    """Numbers as numbers (device user ids are digits), text case-blind, blanks last."""
+    if value is None or value == "":
+        return (2, "")
+    if isinstance(value, bool):
+        return (0, int(value))
+    text = str(value)
+    if text.isdigit():
+        return (0, int(text))
+    return (1, text.lower())
 
 
 def _audit(request, action, obj, before=None, after=None):
@@ -148,18 +220,19 @@ def device_list(request):
     if branch.isdigit():
         queryset = queryset.filter(branch_id=int(branch))
 
-    paginator, page, per_page = _paginate(request, queryset)
+    page = paginate(
+        request, queryset,
+        search=("name", "serial_number", "branch__name", "device_model__name", "status"),
+        order=("name", "serial_number", "branch__name", "status", "last_seen_at", None, None),
+    )
 
-    return render(request, "devices/device_list.html", {
+    return table_render(request, "devices/device_list.html", {
         "page": page,
-        "paginator": paginator,
-        "per_page": per_page,
         "search": search,
         "status": status,
         "branch": branch,
         "statuses": BiometricDevice.Status.choices,
         "branches": _branch_options(),
-        "total_count": paginator.count,
     })
 
 
@@ -513,16 +586,20 @@ def enrollment_list(request):
     if device.isdigit():
         queryset = queryset.filter(device_id=int(device))
 
-    paginator, page, per_page = _paginate(request, queryset)
+    page = paginate(
+        request, queryset,
+        search=("employee__first_name", "employee__last_name", "device__name", "device_user_id"),
+        order=(
+            ("employee__first_name", "employee__last_name"), "device__name", "device_user_id",
+            "attendance_enabled", "assigned_device_authorized", "effective_from", None,
+        ),
+    )
 
-    return render(request, "devices/enrollment_list.html", {
+    return table_render(request, "devices/enrollment_list.html", {
         "page": page,
-        "paginator": paginator,
-        "per_page": per_page,
         "search": search,
         "device": device,
         "devices": BiometricDevice.objects.order_by("name"),
-        "total_count": paginator.count,
     })
 
 
@@ -645,17 +722,19 @@ def message_list(request):
     if status:
         queryset = queryset.filter(processing_status=status)
 
-    paginator, page, per_page = _paginate(request, queryset, default_per_page=50)
+    page = paginate(
+        request, queryset,
+        search=("device__name", "message_type", "processing_status"),
+        order=("received_at", "device__name", "message_type", "record_count",
+               "processing_status", None),
+    )
 
-    return render(request, "devices/message_list.html", {
+    return table_render(request, "devices/message_list.html", {
         "page": page,
-        "paginator": paginator,
-        "per_page": per_page,
         "device": device,
         "status": status,
         "statuses": DeviceMessage.ProcessingStatus.choices,
         "devices": BiometricDevice.objects.order_by("name"),
-        "total_count": paginator.count,
     })
 
 
@@ -706,12 +785,16 @@ def punch_list(request):
             | Q(employee__last_name__icontains=search)
         )
 
-    paginator, page, per_page = _paginate(request, queryset, default_per_page=50)
+    page = paginate(
+        request, queryset,
+        search=("device_user_id", "employee__first_name", "employee__last_name",
+                "device__name", "verification_method", "authorization_status"),
+        order=("punched_at_device", ("employee__first_name", "employee__last_name"),
+               "device__name", "verification_method", "authorization_status", None, None),
+    )
 
-    return render(request, "devices/punch_list.html", {
+    return table_render(request, "devices/punch_list.html", {
         "page": page,
-        "paginator": paginator,
-        "per_page": per_page,
         "device": device,
         "authorization": authorization,
         "dedupe": dedupe,
@@ -719,7 +802,6 @@ def punch_list(request):
         "authorization_statuses": PunchEvent.AuthorizationStatus.choices,
         "dedupe_statuses": PunchEvent.DedupeStatus.choices,
         "devices": BiometricDevice.objects.order_by("name"),
-        "total_count": paginator.count,
     })
 
 
@@ -771,7 +853,13 @@ def unresolved_queue(request):
     elif reason:
         queryset = queryset.filter(authorization_status=reason)
 
-    paginator, page, per_page = _paginate(request, queryset)
+    page = paginate(
+        request, queryset,
+        search=("device_user_id", "employee__first_name", "employee__last_name",
+                "device__name", "authorization_status", "dedupe_status"),
+        order=("punched_at_device", "device_user_id", "device__name",
+               "authorization_status", None, None),
+    )
 
     counts = {
         "unknown_employee": PunchEvent.objects.filter(
@@ -788,13 +876,10 @@ def unresolved_queue(request):
         ).count(),
     }
 
-    return render(request, "devices/unresolved_queue.html", {
+    return table_render(request, "devices/unresolved_queue.html", {
         "page": page,
-        "paginator": paginator,
-        "per_page": per_page,
         "reason": reason,
         "counts": counts,
-        "total_count": paginator.count,
     })
 
 
@@ -812,7 +897,8 @@ def device_users(request, public_id):
     device = get_object_or_404(
         BiometricDevice.objects.select_related("branch"), public_id=public_id
     )
-    roster = build_roster(device)
+    full_roster = build_roster(device)
+    roster = full_roster
 
     search = request.GET.get("q", "").strip()
     if search:
@@ -830,17 +916,20 @@ def device_users(request, public_id):
     elif mapping == "unmapped":
         roster = [r for r in roster if not r["is_mapped"]]
 
-    paginator, page, per_page = _paginate(request, roster, default_per_page=25)
+    page = _paginate_rows(
+        request, roster,
+        search=("pin", "name", "privilege_label", "card_number", "employee_name"),
+        order=("pin", "name", "privilege_label", "fingerprint_count", "face_count",
+               "card_number", "has_password", "has_photo", "employee_name", None,
+               "counts_for_attendance"),
+    )
 
-    return render(request, "devices/device_users.html", {
+    return table_render(request, "devices/device_users.html", {
         "device": device,
         "page": page,
-        "paginator": paginator,
-        "per_page": per_page,
         "search": search,
         "mapping": mapping,
-        "total_count": paginator.count,
-        "unmapped_count": sum(1 for r in build_roster(device) if not r["is_mapped"]),
+        "unmapped_count": sum(1 for r in full_roster if not r["is_mapped"]),
         "last_sync": (
             DeviceMessage.objects.filter(
                 device=device,

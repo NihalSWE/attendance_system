@@ -36,7 +36,7 @@
                 {{ month_name }} {{ year }}
             </h2>
             <span class="badge badge--neutral">
-                {{ filtered_total }} of {{ total }} days
+                {% if filtered %}{{ server_table.total }} of {% endif %}{{ month_total }} days
             </span>
         </div>
         <form method="get" class="toolbar">
@@ -57,6 +57,19 @@
                 {% for option in years %}
                     <option value="{{ option }}" {% if option == year %}selected{% endif %}>
                         {{ option }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="att-branch">
+                Branch
+            </label>
+            <select class="input select js-select" id="att-branch" name="branch">
+                <option value="">
+                    All branches
+                </option>
+                {% for branch in branches %}
+                    <option value="{{ branch.pk }}" {% if branch_id == branch.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ branch.name }}
                     </option>
                 {% endfor %}
             </select>
@@ -89,21 +102,37 @@
             <button class="btn btn--ghost" type="submit">
                 Apply
             </button>
+            {% if filtered %}
+                <a class="btn btn--quiet" href="{% url 'attendance:attendance_list' %}?month={{ month }}&year={{ year }}">
+                    Clear
+                </a>
+            {% endif %}
         </form>
-        {% if page.object_list %}
+        {% if not page.object_list %}
+            <div class="empty server-table-empty">
+                {% if filtered or server_table.query %}
+                    <div class="empty__title">
+                        No days match
+                    </div>
+                    <div class="empty__text">
+                        Nothing in {{ month_name }} {{ year }} matches these filters. Try clearing them.
+                    </div>
+                {% else %}
+                    <div class="empty__title">
+                        No attendance for {{ month_name }} {{ year }}
+                    </div>
+                    <div class="empty__text">
+                        Attendance is built from the month's scans, leave and working
+                        calendar as they arrive — there is nothing to press. Nothing here
+                        means no scans and no working days yet, or no shift set up under
+                        Shifts.
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+        {% if server_table.total %}
             <div class="table-wrap">
-                <table class="table">
-                    <colgroup>
-                        <col style="width: 11%">
-                        <col style="width: 18%">
-                        <col style="width: 11%">
-                        <col style="width: 8%">
-                        <col style="width: 8%">
-                        <col style="width: 10%">
-                        <col style="width: 9%">
-                        <col style="width: 8%">
-                        <col style="width: 17%">
-                    </colgroup>
+                <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
                     <thead>
                         <tr>
                             <th class="numeric">
@@ -111,6 +140,9 @@
                             </th>
                             <th>
                                 Employee
+                            </th>
+                            <th>
+                                Branch
                             </th>
                             <th>
                                 Status
@@ -143,6 +175,14 @@
                                 </td>
                                 <td>
                                     {{ record.employee.full_name }}
+                                    {% if record.employee_assignment.employee_code %}
+                                        <div class="t-faint">
+                                            {{ record.employee_assignment.employee_code }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ record.branch.name }}
                                 </td>
                                 <td>
                                     {% if record.attendance_status == 'present' %}
@@ -190,35 +230,7 @@
                     </tbody>
                 </table>
             </div>
-            <div class="pagination">
-                <span class="pagination__info">
-                    Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
-                </span>
-                <div class="pagination__links">
-                    {% if page.has_previous %}
-                        <a class="btn btn--ghost btn--sm" href="?page={{ page.previous_page_number }}&month={{ month }}&year={{ year }}&employee={{ employee_id }}&status={{ status }}">
-                            Previous
-                        </a>
-                    {% endif %}
-                    {% if page.has_next %}
-                        <a class="btn btn--ghost btn--sm" href="?page={{ page.next_page_number }}&month={{ month }}&year={{ year }}&employee={{ employee_id }}&status={{ status }}">
-                            Next
-                        </a>
-                    {% endif %}
-                </div>
-            </div>
-        {% else %}
-            <div class="empty">
-                <div class="empty__title">
-                    No attendance for {{ month_name }} {{ year }}
-                </div>
-                <div class="empty__text">
-                    Attendance is built from the month's scans, leave and working
-                    calendar as they arrive — there is nothing to press. Nothing here
-                    means no scans and no working days yet, or no shift set up under
-                    Shifts.
-                </div>
-            </div>
+            {% include "base_template/includes/table_pagination.html" %}
         {% endif %}
     </div>
 {% endblock %}

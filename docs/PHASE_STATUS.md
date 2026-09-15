@@ -543,7 +543,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N6 | **Employee detail page + terminate screen** | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
 | N7 | **Payslip redesign** - done 2026-09-14, branch `feature/n7-payslip`, merged with the employee's view (A7) (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/. Also (A7): the employee opens the same template with `for_employee=True` — breadcrumbs then lead to My payslips, never company pages — and the "Draft" label must come from the run's status (a finalised month says Finalised) | — | (new) |
 | N8 | **Device connection check** (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. (4) **Change server address on a device that has never checked in** is refused with what to do instead — "This device has never connected to this server. Set the server address on the terminal itself first (COMM → Cloud Server)" — rather than queuing a command nobody will collect. Ajay hit this 2026-09-14 with the new SenseFace 3A: registered, never checked in, the change sat as "in progress" and then ended as "lost" ("device not reachable at the new address"), which blamed the address when the device had simply never been connected. Builds on the existing server-address status panel | — | (new) |
-| N9 | **Data tables on Nihal's pages** (see A15) | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
+| N9 | **Data tables on Nihal's pages** (see A15) - done 2026-09-15, branch `feature/n9-server-side-tables` | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
 
 #### Ajay's session
 
@@ -2575,3 +2575,77 @@ branches/departments, finalising a month.
   **Full suite 960 tests OK** on fresh databases after removing the migration.
 - No `.env.example` changes or dependencies.
 - No migrations, dependencies or `.env.example` changes.
+
+
+## 2026-09-15 — N9: Nihal's lists on the shared server-side table (Nihal)
+
+Branch `feature/n9-server-side-tables`, from fresh `main` at `d8de2d6`.
+**No migration, no dependency, no `.env.example` change.** Built only N9; N5,
+N6 and N8 are on their own branches, pushed 2026-09-14 and not merged yet.
+
+Every list below now counts, searches, sorts and pages on the server through
+`base_template/tables.py` (`paginate` + `render`, `data-server-table`,
+`base_template/includes/table_pagination.html`), with its existing filters,
+links, badges and Paper/Ink styling. The page's own filters narrow the set
+first; the table's search, order and page run on that set, so
+`recordsTotal` / `recordsFiltered` are real counts, never the rows on screen.
+
+| Page | Path | Filters kept | Table search | Sortable columns |
+|---|---|---|---|---|
+| Attendance → Daily list | `/attendance/` | month, year, **Branch (new)**, employee, status | employee name and code, branch, status, note | all 10 |
+| Devices | `/devices/` | name/serial, status, branch | name, serial, branch, model, status | device, serial, branch, status, last seen |
+| Enrollments | `/devices/enrollments/` | search, device | employee, device, user number | employee, device, user number, attendance, grant, period |
+| Message log | `/devices/messages/` | device, status | device, type, status | received, device, type, records, status |
+| Punches | `/devices/punches/` | search, device, authorisation, duplicate status | user number, employee, device, method, outcome | punched, employee, device, method, outcome |
+| Unresolved queue | `/devices/unresolved/` | reason | user number, employee, device, reason | punched, identity, device, reason |
+| Device users | `/devices/<id>/users/` | search, mapped / not mapped | user id, name, role, card, employee | all but "Write to device" |
+
+**Daily list:** a Branch column was added beside Employee (the filter is easier
+to trust when the rows show the branch), and the employee code shows under the
+name and is searchable. The badge reads "N of M days" when a filter is on. The
+query keeps `branch` on every row, which is the field
+`access_control.branch_access.scope_queryset(..., field="branch")` will narrow
+on — not wired in, per Ajay, until the A12 part 7 note.
+
+**Device users is not a database table.** The roster is rebuilt from the
+uploads the device sent (`devices/services/device_roster.py`); there is nothing
+to count or search in SQL without a new model. So `devices/views/ui.py
+_paginate_rows` does the same work on the server over the **whole** roster —
+never client-side only — with the helper's exact contract: the same request
+parameters, 10–100 rows, a literal 200-character search, server-owned sort
+keys, and the same table description registered on the request, so
+`render`, the pager include and `tables.js` are unchanged. User ids sort as
+numbers. If Ajay prefers the roster stored as a model instead, that is a
+separate decision.
+
+**Also changed:** the device base template loads its own DataTables copy and
+the old `devices.js` enhancer only when a page has no server table (base.html
+loads DataTables for those), so no page loads it twice; `data-enhance`, the
+"filter this page" notes and the old `_paginate` helper are gone. The
+screen-reader-only "Actions" headers became visible text: `.sr-only` is
+absolutely positioned and escaped the table's scroll box, widening the page on
+a phone. The Punches and Unresolved tables had an unlabelled action column the
+first column list missed; the helper's "headers and row cells must have the
+same length" guard caught it in the tests.
+
+**Merge note for Ajay:** `feature/n8-device-connection` also edits
+`devices/templates/devices/device_list.html` (Connection column),
+`devices/templates/devices/base.html` (connection script) and the device list
+view. Both changes are small and side by side; expect a textual conflict there
+if N8 is merged after N9, not a logical one.
+
+**Checked** on D Company's real data through the browser with the live
+DataTables draws: Daily list 87 September days, search "Nihal" 14 of 87,
+Late sorted numerically, Branch filter narrowing to 0 for an office with no
+attendance; Punches 240, search 63 of 240; Messages 595; Unresolved 191;
+Device users 4, user ids sorted as numbers. No page overflow at 1440, 768 or
+375 on any of the seven lists.
+
+**Tests:** 10 in `attendance/tests_daily_list.py`, 12 in
+`devices/tests_server_tables.py` — whole-set counts, database search across
+pages, every orderable column, hostile parameters, tenant boundaries, the
+counted HTML pager keeping filters, headers kept on an empty search, escaping,
+and a single DataTables script per device page.
+
+**Navigation (A14):** no new pages. The Daily list and the device lists keep
+their paths.
