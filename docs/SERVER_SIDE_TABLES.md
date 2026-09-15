@@ -123,5 +123,6 @@ not a database table — the roster is rebuilt from the device's uploads — so
 `devices/views/ui.py _paginate_rows` pages, searches and sorts it on the server
 over the whole roster with this same contract (parameters, limits, table
 description), and `render`, the pager include and `tables.js` work unchanged.
+Decided by Ajay (2026-09-15): no roster table; keep it paged from the uploads.
 
 No migrations, dependency changes or environment variables are required.

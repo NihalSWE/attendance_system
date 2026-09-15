@@ -1988,6 +1988,8 @@ Devices.
 `scheduling/`. It is on a Devices page instead so `scheduling/` was not
 touched, and because choosing the rule and re-checking the punches it affects
 belong on one screen. The company column is the same one either way.
+**Decided by Ajay, 2026-09-15:** the company device scope stays on Devices →
+Which devices count.
 
 **What a re-check does** (`attendance_rules.recheck_punches()`):
 
@@ -2748,8 +2750,8 @@ never client-side only — with the helper's exact contract: the same request
 parameters, 10–100 rows, a literal 200-character search, server-owned sort
 keys, and the same table description registered on the request, so
 `render`, the pager include and `tables.js` are unchanged. User ids sort as
-numbers. If Ajay prefers the roster stored as a model instead, that is a
-separate decision.
+numbers. **Decided by Ajay, 2026-09-15:** keep it this way — paged on the
+server from the device's uploads, no new table.
 
 **Also changed:** the device base template loads its own DataTables copy and
 the old `devices.js` enhancer only when a page has no server table (base.html
@@ -3028,3 +3030,26 @@ mistake worth recording: inserting the redirect helper above
 the helper, leaving Register unprotected. The existing tests failed at once;
 the decorators are back on `device_register` and the diff against `main` shows
 no decorator change on any existing view.
+
+## 2026-09-15 — Nihal's steps after the N5/N8 merge (Nihal)
+
+Main at `f17f054` (N5 and N8 merged, 1097 tests). `attendance.0004_corrections`
+applied. Nothing left to build in the N-series.
+
+**Settled (Ajay, 2026-09-15)** — no longer open:
+
+- **Device users** stay paged on the server from the device's own uploads
+  (`devices/views/ui.py _paginate_rows`); no roster table.
+- **The company device scope** stays on Devices → Which devices count
+  (`devices:attendance_rules`), not Attendance settings.
+
+**Waiting for the A12 part 7 note:** my pages stay owner/admin and are **not**
+added to `access_control/page_access.py` `BRANCH_PAGES` until then — Days to
+review, Fix a day, the device pages and connection test, Daily list, Calendar,
+the employee page and End employment, and the live "Now" refresh. The note will
+say how to limit each to the viewer's branches with `branches_for` /
+`scope_queryset`; the queries already carry `branch`.
+
+**Still needs data, not code:** first salaries for Nihal, Dia and Ajay (D
+Company, skipped by the September draft) — pay basis and rate from Nihal.
+
