@@ -179,7 +179,16 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
             settings = self.instance.settings or {}
             saved = server_address.current_address(self.instance)
             self.fields["server_address"].initial = saved.text if saved else ""
-            if server_address.in_flight_change(self.instance) is not None:
+            if self.instance.last_seen_at is None:
+                # Never checked in, so it would never collect the change. The
+                # address has to be typed on the terminal (N8 part 4); the
+                # service refuses it too, so this is the courtesy, not the guard.
+                self.fields["server_address"].disabled = True
+                self.fields["server_address_confirmed"].disabled = True
+                self.fields["server_address"].help_text = (
+                    server_address.NEVER_CONNECTED_MESSAGE
+                )
+            elif server_address.in_flight_change(self.instance) is not None:
                 # A second change while one is running would race the first to
                 # decide what the device's address is, so the control is
                 # closed rather than left to fail on submit.

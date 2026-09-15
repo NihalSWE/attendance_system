@@ -35,7 +35,8 @@
             </a>
         </div>
     </div>
-    <div class="card">
+    {% include "devices/includes/stopped_devices_alert.html" %}
+    <div class="card" data-connection-board data-connections-url="{% url 'devices:device_connections' %}">
         <form class="toolbar" method="get">
             <div class="toolbar__grow">
                 <label class="sr-only" for="q">
@@ -108,7 +109,7 @@
                                 Status
                             </th>
                             <th>
-                                Last seen
+                                Connection
                             </th>
                             <th>
                                 Health
@@ -159,13 +160,14 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if device.last_seen_at %}
-                                        {{ device.last_seen_at|date:"j M Y, H:i" }}
-                                    {% else %}
-                                        <span class="t-faint">
-                                            Never
+                                    {% with state=device.connection %}
+                                        <span class="badge badge--{{ state.tone }}" data-connection-for="{{ device.public_id }}">
+                                            {{ state.label }}
                                         </span>
-                                    {% endif %}
+                                        <div class="t-faint" data-connection-detail-of="{{ device.public_id }}">
+                                            {{ state.detail }}
+                                        </div>
+                                    {% endwith %}
                                 </td>
                                 <td>
                                     {% if device.sync_state.consecutive_error_count %}

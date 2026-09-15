@@ -43,6 +43,7 @@ from devices.models import (
 )
 from devices.services import (
     attendance_rules,
+    connection,
     panel_access,
     server_address,
     setup_instructions,
@@ -225,6 +226,11 @@ def device_list(request):
         search=("name", "serial_number", "branch__name", "device_model__name", "status"),
         order=("name", "serial_number", "branch__name", "status", "last_seen_at", None, None),
     )
+    # Each row's connection, worked out once. The page's queryset is evaluated
+    # here and cached, so the template (and a table draw) reads these objects.
+    now = timezone.now()
+    for device in page.object_list:
+        device.connection = connection.connection_of(device, now)
 
     return table_render(request, "devices/device_list.html", {
         "page": page,
@@ -233,6 +239,7 @@ def device_list(request):
         "branch": branch,
         "statuses": BiometricDevice.Status.choices,
         "branches": _branch_options(),
+        "stopped_devices": connection.stopped_devices(request.company_id),
     })
 
 
@@ -240,6 +247,32 @@ def _branch_options():
     from organization.models import Branch
 
     return Branch.objects.order_by("name")
+
+
+def _detail_with_test(device):
+    """The device page, starting a connection test from now.
+
+    After registering or editing, the next thing anybody wants to know is
+    whether the terminal can reach us, so the page starts waiting straight
+    away rather than asking for another click.
+    """
+    url = reverse("devices:device_detail", args=[device.public_id])
+    return redirect(f"{url}?{_test_query(timezone.now())}#connection")
+
+
+def _test_query(started, command_id=None):
+    """``test=<start>[&command=<id>]``, encoded.
+
+    Encoded because an ISO time ends in "+00:00", and an unencoded "+" in a
+    query string is read back as a space — the start time would not parse and
+    the page would silently show no test at all.
+    """
+    from urllib.parse import urlencode
+
+    params = {"test": started.isoformat()}
+    if command_id:
+        params["command"] = command_id
+    return urlencode(params)
 
 
 @login_required
@@ -262,7 +295,7 @@ def device_register(request):
             request,
             f"{device.name} registered. Enter the settings below on the device.",
         )
-        return redirect("devices:device_detail", public_id=device.public_id)
+        return _detail_with_test(device)
 
     return render(request, "devices/device_form.html", {
         "form": form,
@@ -334,6 +367,8 @@ def device_detail(request, public_id):
         "address_status": server_address.status_payload(device, address_change),
         "address_history": server_address.history(device),
         "saved_address": server_address.current_address(device),
+        "connection": connection.connection_of(device),
+        "connection_test": _test_from_query(request, device),
     })
 
 
@@ -369,7 +404,7 @@ def device_edit(request, public_id):
         # happens once the device has connected at the new one.
         if form.requested_address is not None:
             _start_address_change(request, device, form.requested_address)
-        return redirect("devices:device_detail", public_id=device.public_id)
+        return _detail_with_test(device)
 
     return render(request, "devices/device_form.html", {
         "form": form,
@@ -1260,3 +1295,116 @@ def attendance_recheck(request):
     level = messages.success if result.now_count else messages.info
     level(request, " ".join(parts))
     return redirect(back)
+
+
+
+# --------------------------------------------------------------------------
+# Connection: live badges and the connection test (plan step N8)
+# --------------------------------------------------------------------------
+
+
+def _parse_instant(value):
+    from django.utils.dateparse import parse_datetime
+
+    moment = parse_datetime(value or "")
+    if moment is None:
+        return None
+    if timezone.is_naive(moment):
+        moment = timezone.make_aware(moment, datetime.timezone.utc)
+    return moment
+
+
+def _test_from_query(request, device):
+    """A test the page should show, from ``?test=<start>&command=<id>``."""
+    from urllib.parse import urlencode
+
+    started = _parse_instant(request.GET.get("test"))
+    if started is None:
+        return None
+    command = request.GET.get("command", "")
+    command_id = int(command) if command.isdigit() else None
+    result = connection.test_status(device, since=started, command_id=command_id)
+    return {
+        "result": result,
+        "command_id": command_id,
+        "status_url": (
+            reverse("devices:device_connection_test", args=[device.public_id])
+            + "?" + urlencode(
+                {"since": started.isoformat(), **({"command": command_id} if command_id else {})}
+            )
+        ),
+        "advice": (
+            connection.advice(device, setup_instructions.build(request, device))
+            if result.gave_up else []
+        ),
+    }
+
+
+@login_required
+@company_user_required
+def device_connections(request):
+    """Live badges for the devices on a page, as JSON."""
+    wanted = [v for v in request.GET.get("devices", "").split(",") if v.strip()]
+    devices = BiometricDevice.objects.filter(public_id__in=_valid_uuids(wanted))
+    return JsonResponse({"devices": connection.connections(devices)})
+
+
+def _valid_uuids(values):
+    import uuid
+
+    valid = []
+    for value in values:
+        try:
+            valid.append(uuid.UUID(value.strip()))
+        except ValueError:
+            continue
+    return valid
+
+
+@login_required
+@company_user_required
+def device_connection_test(request, public_id):
+    """GET: where a test has got to, as JSON. POST: start a test."""
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+
+    if request.method == "POST":
+        if device.status == BiometricDevice.Status.RETIRED:
+            messages.error(request, "A retired device is not tested.")
+            return redirect("devices:device_detail", public_id=device.public_id)
+        started = timezone.now()
+        url = reverse("devices:device_detail", args=[device.public_id])
+        command_id = None
+        if request.POST.get("with_command"):
+            entry = queue_command(
+                device=device, command_key=connection.TEST_COMMAND,
+                requested_by=request.user,
+            )
+            if entry is None:
+                # Already queued and not yet picked up: follow that one.
+                entry = next(
+                    (e for e in pending_summary(device)
+                     if e.get("key") == connection.TEST_COMMAND),
+                    None,
+                )
+            if entry is not None:
+                command_id = entry["id"]
+                _audit(request, "device.command_queued", device, after={
+                    "command": entry["body"], "purpose": "connection test",
+                })
+        return redirect(f"{url}?{_test_query(started, command_id)}#connection")
+
+    started = _parse_instant(request.GET.get("since"))
+    if started is None:
+        return JsonResponse({"error": "since is required"}, status=400)
+    command = request.GET.get("command", "")
+    result = connection.test_status(
+        device, since=started, command_id=int(command) if command.isdigit() else None,
+    )
+    advice = []
+    if result.gave_up:
+        advice = [
+            {"title": item["title"], "text": item["text"],
+             "values": [list(pair) for pair in item["values"]]}
+            for item in connection.advice(device, setup_instructions.build(request, device))
+        ]
+    return JsonResponse(result.as_dict(advice))

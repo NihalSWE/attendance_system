@@ -1,0 +1,25 @@
+{% comment %}
+    Active devices that have stopped checking in (plan step N8). Shown on the
+    device list and the dashboard. Pending devices are not listed: one that
+    has not made first contact is being set up, not broken.
+{% endcomment %}
+{% if stopped_devices %}
+    <div class="alert alert--danger" role="alert">
+        <div>
+            <strong>
+                {{ stopped_devices|length }} device{{ stopped_devices|length|pluralize }} {{ stopped_devices|length|pluralize:"has,have" }} stopped checking in.
+            </strong>
+            Punches made on {{ stopped_devices|length|pluralize:"it,them" }} will not arrive until {{ stopped_devices|length|pluralize:"it reconnects,they reconnect" }}.
+            <ul class="stopped-list">
+                {% for device, state in stopped_devices|slice:":5" %}
+                    <li>
+                        <a href="{% url 'devices:device_detail' device.public_id %}#connection">
+                            {{ device.name }}
+                        </a>
+                        — {{ device.branch.name }}, {{ state.detail|lower }}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endif %}

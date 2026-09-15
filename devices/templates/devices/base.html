@@ -6,6 +6,9 @@
     server-rendered and paginated first; DataTables enhances them where the
     script loads, matching the pattern already used by the platform screens.
 {% endcomment %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'devices/css/connection.css' %}">
+{% endblock %}
 {% block extra_js %}
     {% if not server_tables %}
         <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
@@ -14,5 +17,7 @@
         </script>
     {% endif %}
     <script defer src="{% static 'devices/js/server_address.js' %}">
+    </script>
+    <script defer src="{% static 'devices/js/connection.js' %}">
     </script>
 {% endblock %}
