@@ -45,12 +45,12 @@ from devices.services import (
     attendance_rules,
     connection,
     panel_access,
+    protocol,
     server_address,
     setup_instructions,
 )
 from devices.services.commands import (
     COMMAND_LABELS,
-    SAFE_COMMANDS,
     WRITABLE_OPTIONS,
     pending_summary,
     queue_command,
@@ -353,7 +353,11 @@ def device_detail(request, public_id):
         .select_related("department")
         .order_by("-effective_from"),
         "enrollment_count": DeviceEnrollment.objects.filter(device=device).count(),
-        "command_options": [(k, COMMAND_LABELS[k]) for k in SAFE_COMMANDS],
+        # Only the requests this device's dialect has (devices/services/protocol.py).
+        "command_options": [
+            (k, COMMAND_LABELS[k]) for k in COMMAND_LABELS if protocol.supports(device, k)
+        ],
+        "dialect_label": protocol.LABELS[protocol.dialect(device)],
         "writable_options": [
             {
                 "key": key,
@@ -965,6 +969,9 @@ def device_users(request, public_id):
         "search": search,
         "mapping": mapping,
         "unmapped_count": sum(1 for r in full_roster if not r["is_mapped"]),
+        "can_refresh": protocol.supports(device, "query_users"),
+        # No user writes to a 2.x device until its write form is measured.
+        "user_writes": protocol.dialect(device) != protocol.ATT2,
         "last_sync": (
             DeviceMessage.objects.filter(
                 device=device,
@@ -990,15 +997,24 @@ def device_command(request, public_id):
     """
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
     command_key = request.POST.get("command", "")
+    # The Device users page asks to come back to itself.
+    back = (
+        redirect("devices:device_users", public_id=device.public_id)
+        if request.POST.get("next") == "users"
+        else redirect("devices:device_detail", public_id=device.public_id)
+    )
 
-    if command_key not in SAFE_COMMANDS:
+    if command_key not in COMMAND_LABELS:
         messages.error(request, "Unknown command.")
-        return redirect("devices:device_detail", public_id=device.public_id)
+        return back
+    label = COMMAND_LABELS[command_key]
+    if not protocol.supports(device, command_key):
+        messages.error(request, f"This device does not take “{label}”.")
+        return back
 
     entry = queue_command(
         device=device, command_key=command_key, requested_by=request.user
     )
-    label = COMMAND_LABELS.get(command_key, command_key)
     if entry is None:
         messages.info(request, f"“{label}” is already queued for this device.")
     else:
@@ -1007,7 +1023,7 @@ def device_command(request, public_id):
             f"“{label}” queued. The device collects it on its next check-in "
             "(usually within a minute); it is not sent immediately.",
         )
-    return redirect("devices:device_detail", public_id=device.public_id)
+    return back
 
 
 @require_POST

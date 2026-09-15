@@ -93,6 +93,17 @@ On the device page:
 A device that reaches us but whose punches do not count is usually an
 enrollment problem, not a connection problem: check the unresolved queue.
 
+**Two command dialects** (`devices/services/protocol.py`). The SenseFace 2A
+(PushSDK 3.x, `DeviceType=acc`) takes the table form, `DATA QUERY
+tablename=user,…`. The SenseFace 3A (announces `pushver=2.4.1`,
+`DeviceType=att`) answers that with `Return=-1004` and takes `DATA QUERY
+USERINFO` (every user, sent back as `USER PIN=…` lines) and `DATA QUERY ATTLOG
+StartTime=…⇥EndTime=…` (attendance history). The device page offers only what
+the device speaks. A 2.x device does not re-send scans made while it could not
+reach the server, and answers the history request with only the records it has
+not handed over yet; so the server asks on its first poll after 2 minutes of
+silence, and once an hour anyway (measured 2026-09-15).
+
 ## 6. Changing the server address from the software
 
 Devices → the device → **Edit** has a **Server address** field. Changing it

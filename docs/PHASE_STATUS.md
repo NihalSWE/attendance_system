@@ -567,7 +567,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A6b | **First salary for an employee without one** (bug, Ajay 2026-09-14) — ✅ done 2026-09-14, branch `feature/a6b-first-salary` | Employees created from a device's users (`devices/services/user_sync.py`) get a placement but no salary row, and Edit employee → Salary refuses: "This employee has no current salary to change" — so they can never be given one. Fix: when there is no salary, the Salary card **sets the first one** (button "Set salary", from the placement's start date by default) instead of refusing; the salary page keeps listing such people under "Skipped, no salary set" until then | — | (bug) |
 | A15 | **Server-side tables — done 2026-09-15**, branch `feature/a15-server-side-tables` | Shared queryset/JSON helper and one initializer, retaining the current Paper/Ink table styles. Numbered pages, page-size choice, direct page jump, result counts, database search/order and an HTML fallback. Converted Salary month, Overtime (Employee + Branch filters), Leave, Leave types, Holidays, Penalty rules, Employees, Branches, Departments, My leave, My payslips, Approval inbox and Branch attendance. Nihal’s device/attendance lists remain N9. See SERVER_SIDE_TABLES.md. | — | (new) |
 | A5c | **Calendar and salary-settings fixes** — done 2026-09-14, branch `feature/a5c-calendar-fixes` | Weekly-off conflicts compare date ranges, including stopped history. **Change start date** on Shifts → Weekly off days corrects an active or stopped rule and rebuilds changed attendance dates while preserving finalised months. Paid holiday / weekly-off fields are removed; writes force True and the calendar treats legacy flags as paid. Daily/hourly pay remains on Salary settings. The day-value label explains absence deductions and the overtime hourly-rate base. See progress below. | — | (new) |
-| A16 | **SenseFace 3A** (Ajay, 2026-09-14: "add this to my task") | **Catalogue row — ✅ done 2026-09-14** (`devices/migrations/0004_seed_senseface_3a.py`, branch `feature/senseface-3a`): ZKTeco, `senseface-3a`, ADMS push, same adapter as the 2A; capabilities set conservatively (push, face) until confirmed; appears under Register device after `migrate`. **Connected 2026-09-14 19:02 (Dhaka)** in company Ajay ("Main Entrance", serial VGU6262600120), through Ajay's ngrok tunnel: set on the terminal (COMM → Cloud Server: domain only, port 443, HTTPS on) — the software's Change server address only moves a device that is already connected. It reports **pushver 2.4.1** (the 2A: 3.0.4S) and `DeviceType=att`. It was refused with 401 at first because registration had invented a communication key the device cannot send — fixed on main (5ed6d10: no key unless typed; Edit device → "Remove the communication key"). **Still to do, on the real 3A:** first contact (note its firmware version from the first contact); scans arrive as punches; Device users reads its roster; the server-address change works. Then widen the capabilities that were confirmed (card, fingerprint, commands) and write what was verified in the migration note and here, like the 2A's notes | 4 | (new) |
+| A16 | **SenseFace 3A** (Ajay, 2026-09-14: "add this to my task") | **Catalogue row — ✅ done 2026-09-14** (`devices/migrations/0004_seed_senseface_3a.py`, branch `feature/senseface-3a`): ZKTeco, `senseface-3a`, ADMS push, same adapter as the 2A; capabilities set conservatively (push, face) until confirmed; appears under Register device after `migrate`. **Connected 2026-09-14 19:02 (Dhaka)** in company Ajay ("Main Entrance", serial VGU6262600120), through Ajay's ngrok tunnel: set on the terminal (COMM → Cloud Server: domain only, port 443, HTTPS on) — the software's Change server address only moves a device that is already connected. It reports **pushver 2.4.1** (the 2A: 3.0.4S) and `DeviceType=att`. It was refused with 401 at first because registration had invented a communication key the device cannot send — fixed on main (5ed6d10: no key unless typed; Edit device → "Remove the communication key"). **Data retrieval ✅ 2026-09-15 (office, on the real 3A — see "A16: SenseFace 3A data retrieval" below):** firmware ZAM70-NF28VA-3.3.12, PushVersion 3.1.2S; scans arrive (ATTLOG); Device users lists its users and fingerprints (2.x `USER PIN=` / `BIODATA` lines); "Refresh user list" = `DATA QUERY USERINFO`; attendance history = `DATA QUERY ATTLOG`, asked for automatically after a gap. **Still to do:** mapping users to employees (next, automated from the employee list — Ajay); user writes (add/remove on the device) and the server-address change, measured on this protocol first; widen the catalogue capabilities (card, fingerprint) | 4 | (new) |
 
 #### Ajay's session — progress
 
@@ -999,7 +999,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **parts 4, 5 and 6 are done** (the Employees area, Leave and Overtime, then Salary, limited by branch — each branch prepares its own salary, the owner/admin finalises); **part 7 is done** (the note for Nihal, [A12_BRANCH_ACCESS_FOR_NIHAL.md](A12_BRANCH_ACCESS_FOR_NIHAL.md); A12 is complete on Ajay's side). Next: **A13 payments/advances/dues — a short simple plan first, for Ajay's agreement**; then the leave-recalculation loose end on request, and A16 (office 3A test). N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9, N6, N5 and N8 merged** (office session; N5 brings migration `attendance.0004_corrections`, which Ajay runs). Nihal's pages get branch permissions only after the A12 part 7 note. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **parts 4, 5 and 6 are done** (the Employees area, Leave and Overtime, then Salary, limited by branch — each branch prepares its own salary, the owner/admin finalises); **part 7 is done** (the note for Nihal, [A12_BRANCH_ACCESS_FOR_NIHAL.md](A12_BRANCH_ACCESS_FOR_NIHAL.md); A12 is complete on Ajay's side). Ajay (2026-09-15): salary (A13) waits. **A16 3A data retrieval is done** (see "A16: SenseFace 3A data retrieval"); next is **mapping device users to employees, automated and from the employee list** (Ajay's request), then A13 (plan first) and the leave-recalculation loose end on request. The September 2026 salary seed for company Ajay is in the git-ignored `.qa/seed_september_office.py` (check: `.qa/inspect_september_office.py`). N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9, N6, N5 and N8 merged** (office session; N5 brings migration `attendance.0004_corrections`, which Ajay runs). Nihal's pages get branch permissions only after the A12 part 7 note. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2692,6 +2692,55 @@ employee's branch** (a branch manager has every permission in their branches):
   pushing.**
 - No migration, dependency or `.env.example` change.
 
+
+## A16: SenseFace 3A data retrieval — 2026-09-15 (Claude, Ajay's session, office)
+
+Tested live on the 3A (company Ajay, "Main Entrance", VGU6262600120; firmware
+ZAM70-NF28VA-3.3.12-OCM-2535, PushVersion 3.1.2S-20250616, announces
+`pushver=2.4.1`, `DeviceType=att`; options: 2 users, 2 fingerprints, 0 faces).
+It speaks the **attendance push 2.x** command dialect whatever the Push
+protocol setting says:
+
+| Sent | Answer |
+|---|---|
+| `DATA QUERY tablename=user,fielddesc=*,filter=*` (3.x, what "Refresh user list" sent) | `Return=-1004` |
+| `DATA QUERY USERINFO PIN=1` | `Return=0`; `USER PIN=1 Name=NIHAL Pri=14 Card=196793 …` in the operation log, and his `BIODATA` fingerprint row |
+| `DATA QUERY USERINFO` | `Return=0`; **every** user (1 NIHAL, 2 RYHAN) and their fingerprint rows |
+| `DATA QUERY ATTLOG StartTime=2026-09-01 00:00:00⇥EndTime=2026-09-15 23:59:59` | `Return=0`; all 10 records: 7 new (six from before it first connected, and one from 15:35 today) and the 3 we held (stored as confirmed duplicates, not counted twice) |
+
+The 15:35 scan was made while the ngrok tunnel was down and was **not** sent
+when the device reconnected — a 2.x device can silently keep scans back.
+
+What changed (branch `feature/a16-3a-users`):
+
+- `devices/services/protocol.py` (new): which dialect a device speaks —
+  `PUSH3` (2A) or `ATT2` (3A) — from what it announces at the handshake (now
+  kept in `settings["announced"]`), or, before that, from the 2.x operation-log
+  lines it has sent.
+- Commands follow the dialect: on the 3A, **Refresh user list** sends `DATA
+  QUERY USERINFO`; **Fetch attendance history (last 31 days)** sends `DATA QUERY
+  ATTLOG`; the 3.x-only requests are not offered. The 2A is unchanged.
+- **Catch-up:** asked again, the same ATTLOG request returned nothing — the
+  3A sends only records it has not handed over, so asking is cheap and never
+  repeats. A 2.x device is therefore asked (last 31 days) on its first command
+  poll after 2 minutes of silence (or its first ever), and once an hour
+  regardless. Tracked as `last_poll_at` / `last_catch_up_at` in the sync
+  state, because uploads also stamp `last_seen_at`.
+- **Device users** reads both formats (3.x `user pin=` / `biodata`; 2.x `USER
+  PIN=` / `BIODATA` / `FP` / `FACE`), and also lists numbers that only scanned
+  ("seen in scans; name not received yet") so they can be mapped. A "Refresh
+  user list" button is on the page. `table=BIODATA` uploads are filed as
+  enrollment data.
+- Push/Remove user are refused for a 2.x device until its write form is
+  measured (the 3.x forms were measured on the 2A, where a wrong key deleted
+  every user).
+- Tests: `devices/tests_att2.py` (13, from the captured payloads);
+  `devices/tests_server_tables.py` counts the scan-only numbers in the roster.
+  No migration or `.env.example` change.
+
+**Advice:** set the 3A's Edit device → Push protocol back to "As the device
+announces": everything above worked in 2.x; the 3.x answer (set 2026-09-14)
+was never shown to help this device.
 
 ## A12 part 7 done — the note for Nihal — 2026-09-15 (Claude, Ajay's session, office)
 

@@ -31,6 +31,17 @@
             </p>
         </div>
         <div class="page__actions">
+            {% if can_refresh %}
+                <form method="post" action="{% url 'devices:device_command' device.public_id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="command" value="query_users">
+                    <input type="hidden" name="next" value="users">
+                    <button class="btn btn--ghost" type="submit"
+                            title="The device sends its users (and their fingerprint/face records) on its next check-in.">
+                        Refresh user list
+                    </button>
+                </form>
+            {% endif %}
             <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
                 View punches
             </a>
@@ -150,6 +161,10 @@
                                 <td>
                                     {% if row.name %}
                                         {{ row.name }}
+                                    {% elif row.only_in_scans %}
+                                        <span class="t-faint" title="This number has scanned, but the device has not sent its user record yet. Refresh user list fetches it.">
+                                            (seen in scans; name not received yet)
+                                        </span>
                                     {% else %}
                                         <span class="t-faint">
                                             (no name set)
@@ -204,7 +219,7 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if row.enrollment %}
+                                    {% if row.enrollment and user_writes %}
                                         <form method="post"
                                               action="{% url 'devices:device_user_push' device.public_id %}">
                                             {% csrf_token %}

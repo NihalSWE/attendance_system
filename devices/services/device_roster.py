@@ -19,7 +19,7 @@ DeviceEnrollment and the scope rules (DEVICE_ATTENDANCE_POLICY.md).
 """
 
 from devices.adapters.zkteco_adms import parse_kv_row
-from devices.models import DeviceEnrollment, DeviceMessage
+from devices.models import DeviceEnrollment, DeviceMessage, PunchEvent
 
 # ZKTeco biodata template types seen on SenseFace 2A firmware
 # ZAM70-NF24HA-Ver3.0.15. Anything else is counted under "other" rather than
@@ -39,18 +39,21 @@ PRIVILEGE_LABELS = {
 }
 
 
-def _tabledata_rows(device, tablename, row_prefix):
-    """Yield parsed rows from every stored ``tabledata`` upload of one table.
+def _tabledata_rows(device, row_prefix):
+    """Yield parsed rows from every stored upload of one table.
 
     Messages are read oldest-first so a later upload's values overwrite an
     earlier one — the device re-sends its whole table, so the newest wins.
+    Keys are lower-cased: the 3.x ``tabledata`` rows spell them ``pin`` and
+    ``name``, the 2.x operation-log rows ``PIN`` and ``Name``.
     """
-    # Matched on the payload prefix rather than message_type: rows captured
-    # before this firmware's tables were understood are typed 'unknown', and
-    # that historical evidence must still be readable.
+    # Matched on the payload rather than message_type: rows captured before
+    # this firmware's tables were understood are typed 'unknown', and that
+    # historical evidence must still be readable. "Contains", because a 2.x
+    # operation log mixes USER lines in among OPLOG lines.
     messages = (
         DeviceMessage.all_objects.filter(
-            device=device, raw_payload_text__startswith=row_prefix
+            device=device, raw_payload_text__contains=row_prefix
         )
         .order_by("received_at")
         .values_list("raw_payload_text", flat=True)
@@ -60,7 +63,24 @@ def _tabledata_rows(device, tablename, row_prefix):
             line = line.strip()
             if not line.startswith(row_prefix):
                 continue
-            yield parse_kv_row(line[len(row_prefix):].strip())
+            fields = parse_kv_row(line[len(row_prefix):].strip())
+            yield {key.lower(): value for key, value in fields.items()}
+
+
+# Where each table's rows are found. The 3.x form first (SenseFace 2A,
+# ``tabledata``), then the 2.x form (SenseFace 3A, captured 2026-09-15):
+#   USER PIN=1  Name=NIHAL  Pri=14  Passwd=  Card=196793  Grp=1 ...
+#   BIODATA Pin=1  No=6  Index=0  Valid=1  Duress=0  Type=1 ...
+# FP/FACE are the older 2.x template lines (PIN, FID).
+USER_PREFIXES = ("user ", "USER ")
+BIODATA_PREFIXES = ("biodata ", "BIODATA ")
+LEGACY_TEMPLATE_PREFIXES = (("FP ", "fingerprint"), ("FACE ", "face"))
+PHOTO_PREFIXES = ("userpic ", "biophoto ", "USERPIC ", "BIOPHOTO ")
+
+
+def _rows(device, prefixes):
+    for prefix in prefixes:
+        yield from _tabledata_rows(device, prefix)
 
 
 def build_roster(device):
@@ -72,37 +92,38 @@ def build_roster(device):
     """
     users = {}
 
-    for fields in _tabledata_rows(device, "user", "user "):
+    def blank(pin):
+        return {
+            "pin": pin, "uid": "", "name": "", "card_number": "", "has_password": False,
+            "privilege_code": "", "disabled_on_device": False, "fingerprint_count": 0,
+            "face_count": 0, "other_biometric_count": 0, "has_photo": False,
+            "only_in_scans": False,
+        }
+
+    for fields in _rows(device, USER_PREFIXES):
         pin = (fields.get("pin") or "").strip()
         if not pin:
             continue
-        users[pin] = {
-            "pin": pin,
+        row = blank(pin)
+        row.update({
             "uid": fields.get("uid", ""),
             "name": (fields.get("name") or "").strip(),
-            "card_number": (fields.get("cardno") or "").strip(),
-            "has_password": bool((fields.get("password") or "").strip()),
-            "privilege_code": (fields.get("privilege") or "").strip(),
+            "card_number": (fields.get("cardno") or fields.get("card") or "").strip(),
+            "has_password": bool((fields.get("password") or fields.get("passwd") or "").strip()),
+            "privilege_code": (fields.get("privilege") or fields.get("pri") or "").strip(),
             "disabled_on_device": (fields.get("disable") or "0").strip() == "1",
-            "fingerprint_count": 0,
-            "face_count": 0,
-            "other_biometric_count": 0,
-            "has_photo": False,
-        }
+        })
+        users[pin] = row
 
     # Credentials are counted per (pin, template index) so a re-sent table does
     # not inflate the totals.
     seen_bio = set()
-    for fields in _tabledata_rows(device, "biodata", "biodata "):
-        pin = (fields.get("pin") or "").strip()
+
+    def count(pin, marker, kind):
         row = users.get(pin)
-        if row is None:
-            continue
-        marker = (pin, fields.get("type", ""), fields.get("no", ""), fields.get("index", ""))
-        if marker in seen_bio:
-            continue
+        if row is None or marker in seen_bio:
+            return
         seen_bio.add(marker)
-        kind = BIO_TYPES.get((fields.get("type") or "").strip())
         if kind == "fingerprint":
             row["fingerprint_count"] += 1
         elif kind == "face":
@@ -110,11 +131,31 @@ def build_roster(device):
         else:
             row["other_biometric_count"] += 1
 
-    for tablename, prefix in (("userpic", "userpic "), ("biophoto", "biophoto ")):
-        for fields in _tabledata_rows(device, tablename, prefix):
-            row = users.get((fields.get("pin") or "").strip())
-            if row is not None:
-                row["has_photo"] = True
+    for fields in _rows(device, BIODATA_PREFIXES):
+        pin = (fields.get("pin") or "").strip()
+        marker = (pin, fields.get("type", ""), fields.get("no", ""), fields.get("index", ""))
+        count(pin, marker, BIO_TYPES.get((fields.get("type") or "").strip()))
+    for prefix, kind in LEGACY_TEMPLATE_PREFIXES:
+        for fields in _rows(device, (prefix,)):
+            pin = (fields.get("pin") or "").strip()
+            count(pin, (pin, kind, fields.get("fid", "")), kind)
+
+    for fields in _rows(device, PHOTO_PREFIXES):
+        row = users.get((fields.get("pin") or "").strip())
+        if row is not None:
+            row["has_photo"] = True
+
+    # A number that scanned but whose user record has not reached us yet
+    # (the 3A reports a user only when it is added, edited or asked for). It
+    # is listed so it can be mapped now; "Refresh user list" fetches the name.
+    scanned = (
+        PunchEvent.all_objects.filter(device=device)
+        .exclude(device_user_id="").order_by()
+        .values_list("device_user_id", flat=True).distinct()
+    )
+    for pin in scanned:
+        if pin not in users:
+            users[pin] = {**blank(pin), "only_in_scans": True}
 
     # Join our side: who this device user maps to, and whether it counts.
     enrollments = {

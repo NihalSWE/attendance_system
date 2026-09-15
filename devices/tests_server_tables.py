@@ -152,9 +152,14 @@ class DeviceUsersTableTests(DeviceTablesTestCase):
             )
         self.args = [self.device.public_id]
 
+    # The roster is the 12 users the device uploaded plus the 30 numbers that
+    # only scanned (900-929, from the shared fixture): since A16 those are
+    # listed too, so they can be mapped before their record arrives.
+    ROSTER = 42
+
     def test_the_whole_roster_is_counted_and_one_page_is_sent(self):
         data = self.draw("devices:device_users", self.args)
-        self.assertEqual((data["recordsTotal"], data["recordsFiltered"]), (12, 12))
+        self.assertEqual((data["recordsTotal"], data["recordsFiltered"]), (self.ROSTER, self.ROSTER))
         self.assertEqual(len(data["data"]), 10)
         self.assertEqual(len(data["data"][0]) - 2, 11)
 
@@ -166,8 +171,12 @@ class DeviceUsersTableTests(DeviceTablesTestCase):
     def test_user_ids_sort_as_numbers(self):
         rows = self.draw("devices:device_users", self.args,
                          **{"order[0][column]": 0, "order[0][dir]": "desc"})["data"]
-        self.assertIn("12", rows[0]["0"])
-        self.assertIn("11", rows[1]["0"])
+        self.assertIn("929", rows[0]["0"])
+        self.assertIn("928", rows[1]["0"])
+        rows = self.draw("devices:device_users", self.args,
+                         **{"order[0][column]": 0, "order[0][dir]": "asc"})["data"]
+        self.assertIn(">1<", rows[0]["0"].replace(" ", "").replace("\n", ""))
+        self.assertIn(">2<", rows[1]["0"].replace(" ", "").replace("\n", ""))
 
     def test_every_orderable_column_sorts_and_paging_past_the_end_is_empty(self):
         for column in range(11):
@@ -181,4 +190,4 @@ class DeviceUsersTableTests(DeviceTablesTestCase):
         response = self.client.get(reverse("devices:device_users", args=self.args),
                                    {"per_page": "10"})
         self.assertContains(response, 'aria-label="Result pages"')
-        self.assertContains(response, "12 users")
+        self.assertContains(response, f"{self.ROSTER} users")

@@ -172,13 +172,14 @@ class ZKTecoAdmsAdapter(DeviceAdapter):
                         "tablename": query.get("tablename", ""),
                     },
                 )
-            # OPERLOG carries user/template administration events. We store it
-            # verbatim; interpreting it is not needed for attendance and is not
-            # guessed here.
+            # OPERLOG carries user/template administration events, and on a 2.x
+            # device (SenseFace 3A) the user records themselves as ``USER
+            # PIN=…`` lines; BIODATA its fingerprint/face records. Stored
+            # verbatim; devices/services/device_roster.py reads the users.
             return ParsedMessage(
                 message_type=(
                     DeviceMessage.MessageType.ENROLLMENT_RESULT
-                    if table == "OPERLOG"
+                    if table in ("OPERLOG", "BIODATA")
                     else DeviceMessage.MessageType.UNKNOWN
                 ),
                 vendor_sequence=query.get("Stamp", ""),
