@@ -48,6 +48,10 @@ BRANCH_PERMISSIONS = (
     ("overtime.decide", "Decide overtime", "payroll", "approve"),
     ("salary.view", "View salaries and payslips", "payroll", "view"),
     ("salary.prepare", "Generate salary and add bonus or deduction lines", "payroll", "edit"),
+    # Nihal's attendance pages (A12 part 7 / N10): the Daily list, Calendar and
+    # day panel need view; Days to review, Fix a day and Withdraw need fix.
+    ("attendance.view", "View attendance", "attendance", "view"),
+    ("attendance.fix", "Fix attendance days", "attendance", "edit"),
     ("access.grant", "Give access to others", "access", "manage"),
 )
 CODES = tuple(code for code, *_ in BRANCH_PERMISSIONS)
@@ -55,7 +59,11 @@ LABELS = {code: label for code, label, *_ in BRANCH_PERMISSIONS}
 
 COMPANY_WIDE_ROLES = (Role.OWNER, Role.COMPANY_ADMIN)
 # What the existing HR role already did company-wide before A12 (kept, per Ajay).
-HR_COMPANY_WIDE = frozenset({"leave.view", "leave.record", "overtime.view", "overtime.decide"})
+HR_COMPANY_WIDE = frozenset({
+    "leave.view", "leave.record", "overtime.view", "overtime.decide",
+    # HR already saw and fixed attendance company-wide (the old N5 rule).
+    "attendance.view", "attendance.fix",
+})
 
 
 class _AllBranches:

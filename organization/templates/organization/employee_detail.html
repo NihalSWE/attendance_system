@@ -36,16 +36,18 @@
                 {% endif %}
             </p>
         </div>
-        <div class="page__actions">
-            {% if not is_ended %}
-                <a class="btn btn--ghost" href="{% url 'organization:employee_end' employee.pk %}">
-                    End employment
+        {% if may.edit %}
+            <div class="page__actions">
+                {% if not is_ended and may.end %}
+                    <a class="btn btn--ghost" href="{% url 'organization:employee_end' employee.pk %}">
+                        End employment
+                    </a>
+                {% endif %}
+                <a class="btn btn--primary" href="{% url 'organization:employee_edit' employee.pk %}">
+                    Edit
                 </a>
-            {% endif %}
-            <a class="btn btn--primary" href="{% url 'organization:employee_edit' employee.pk %}">
-                Edit
-            </a>
-        </div>
+            </div>
+        {% endif %}
     </div>
 
     {% if is_ended %}
@@ -82,16 +84,18 @@
                     <dd>
                         {{ employee.joining_date|date:"j M Y"|default:"—" }}
                     </dd>
-                    <dt>
-                        Salary
-                    </dt>
-                    <dd>
-                        {% if compensation %}
-                            {{ compensation.base_rate|money }} {{ compensation.currency }}, {{ compensation.get_pay_basis_display|lower }}
-                        {% else %}
-                            None set
-                        {% endif %}
-                    </dd>
+                    {% if may.salary %}
+                        <dt>
+                            Salary
+                        </dt>
+                        <dd>
+                            {% if compensation %}
+                                {{ compensation.base_rate|money }} {{ compensation.currency }}, {{ compensation.get_pay_basis_display|lower }}
+                            {% else %}
+                                None set
+                            {% endif %}
+                        </dd>
+                    {% endif %}
                     <dt>
                         Login
                     </dt>
@@ -126,9 +130,11 @@
                 <h2>
                     Attendance this month
                 </h2>
-                <a class="btn btn--ghost btn--sm emp-head-action" href="{{ calendar_url }}">
-                    Calendar view
-                </a>
+                {% if calendar_url %}
+                    <a class="btn btn--ghost btn--sm emp-head-action" href="{{ calendar_url }}">
+                        Calendar view
+                    </a>
+                {% endif %}
             </div>
             <div class="card__body">
                 <dl class="emp-counts">
@@ -228,6 +234,7 @@
         {% endif %}
     </div>
 
+    {% if may.salary %}
     <div class="card">
         <div class="card__head">
             <h2>
@@ -302,6 +309,7 @@
             </div>
         {% endif %}
     </div>
+    {% endif %}
 
     <div class="emp-pair">
         <div class="card">

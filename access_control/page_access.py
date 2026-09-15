@@ -23,8 +23,7 @@ BRANCH_PAGES = {
     # (pay only where you may see salaries); Create employee offers only your
     # branches; Edit employee opens details, placement and logins for someone
     # in your branch, and pay where you may prepare salary — own shifts and
-    # making a branch manager stay with the company. The employee page and End
-    # employment (Nihal's N6) are not listed: part 7's note covers them.
+    # making a branch manager stay with the company.
     "employee_list": "employees.view",
     "organization:employee_create": "employees.edit",
     "organization:employee_edit": "employees.edit",
@@ -50,6 +49,23 @@ BRANCH_PAGES = {
     "payroll:payslip": ("salary.view", "salary.prepare"),
     "payroll:payslip_adjustment_add": "salary.prepare",
     "payroll:payslip_adjustment_remove": "salary.prepare",
+    # A12 part 7 (Nihal's N10): attendance and the employee page. The Daily list,
+    # Calendar and day panel show only days worked in your branches and pick
+    # from their people; the live "Now" answers only for people placed in them.
+    # Days to review, Fix a day and Withdraw need Fix attendance in the day's
+    # branch, checked again in the services. The employee page hides pay without
+    # View salaries there; End employment is refused for someone with more than
+    # an Employee login, and for yourself. Devices are not listed: they stay
+    # with the owner and company admin.
+    "attendance:attendance_list": "attendance.view",
+    "attendance:attendance_calendar": "attendance.view",
+    "attendance:attendance_day": "attendance.view",
+    "attendance:attendance_now": ("employees.view", "attendance.view"),
+    "attendance:attendance_review": "attendance.fix",
+    "attendance:attendance_day_fix": "attendance.fix",
+    "attendance:attendance_correction_withdraw": "attendance.fix",
+    "organization:employee_detail": "employees.view",
+    "organization:employee_end": "employees.edit",
 }
 
 
