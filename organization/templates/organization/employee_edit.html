@@ -84,7 +84,12 @@
                 {% endif %}
             </div>
             <div class="card__body stack">
-                {% if not login %}
+                {% if not may.logins %}
+                    <p class="field__help">
+                        {% if login %}Signs in with {{ login.user.email }}.{% else %}No login yet.{% endif %}
+                        Logins for this branch are managed by someone who may create them.
+                    </p>
+                {% elif not login %}
                     <p class="field__help">
                         Give this employee a login to the software. They sign in with this email and
                         password, see only their own pages, and can change the password themselves.
@@ -129,25 +134,27 @@
                         </dd>
                     </dl>
 
-                    {% if login_role.non_field_errors %}
-                        <div class="alert alert--danger">
-                            {{ login_role.non_field_errors }}
-                        </div>
+                    {% if may.role %}
+                        {% if login_role.non_field_errors %}
+                            <div class="alert alert--danger">
+                                {{ login_role.non_field_errors }}
+                            </div>
+                        {% endif %}
+                        <form method="post" class="stack" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="section" value="login_role">
+                            <div class="grid grid--2">
+                                {% for field in login_role %}
+                                    {% include "leaves/includes/field.html" %}
+                                {% endfor %}
+                            </div>
+                            <div class="row">
+                                <button class="btn btn--primary" type="submit">
+                                    Save access
+                                </button>
+                            </div>
+                        </form>
                     {% endif %}
-                    <form method="post" class="stack" novalidate>
-                        {% csrf_token %}
-                        <input type="hidden" name="section" value="login_role">
-                        <div class="grid grid--2">
-                            {% for field in login_role %}
-                                {% include "leaves/includes/field.html" %}
-                            {% endfor %}
-                        </div>
-                        <div class="row">
-                            <button class="btn btn--primary" type="submit">
-                                Save access
-                            </button>
-                        </div>
-                    </form>
 
                     <h3 class="t-card-head">
                         Set a new password
@@ -234,9 +241,13 @@
                 <h2>
                     Salary
                 </h2>
-                {% if compensation %}
+                {% if compensation and may.salary_view %}
                     <span class="badge badge--neutral">
                         {{ compensation.get_pay_basis_display }}, {{ compensation.base_rate|money }} {{ compensation.currency }} since {{ salary_since|date:"d M Y" }}
+                    </span>
+                {% elif compensation %}
+                    <span class="badge badge--neutral">
+                        Has a salary
                     </span>
                 {% else %}
                     <span class="badge badge--warning">
@@ -245,6 +256,11 @@
                 {% endif %}
             </div>
             <div class="card__body">
+                {% if not may.salary %}
+                    <p class="field__help">
+                        Pay is set by the owner, the company administrator or whoever prepares salary for this branch.
+                    </p>
+                {% else %}
                 {% if not compensation %}
                     <div class="alert alert--info">
                         This employee has no salary, so they are left out when a month's salary is
@@ -273,6 +289,7 @@
                         </a>
                     </div>
                 </form>
+                {% endif %}
             </div>
         </div>
 
@@ -293,25 +310,31 @@
                     own shift here: without a last day it stays until changed; with one it is temporary,
                     and afterwards they are back on what they had.
                 </p>
-                {% if shift_form.non_field_errors %}
-                    <div class="alert alert--danger">
-                        {{ shift_form.non_field_errors }}
-                    </div>
+                {% if may.shift %}
+                    {% if shift_form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {{ shift_form.non_field_errors }}
+                        </div>
+                    {% endif %}
+                    <form method="post" class="stack" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="section" value="shift">
+                        <div class="grid grid--2">
+                            {% for field in shift_form %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--primary" type="submit">
+                                Save shift
+                            </button>
+                        </div>
+                    </form>
+                {% else %}
+                    <p class="t-faint">
+                        Own shifts are given by the owner or company administrator.
+                    </p>
                 {% endif %}
-                <form method="post" class="stack" novalidate>
-                    {% csrf_token %}
-                    <input type="hidden" name="section" value="shift">
-                    <div class="grid grid--2">
-                        {% for field in shift_form %}
-                            {% include "leaves/includes/field.html" %}
-                        {% endfor %}
-                    </div>
-                    <div class="row">
-                        <button class="btn btn--primary" type="submit">
-                            Save shift
-                        </button>
-                    </div>
-                </form>
 
                 {% if own_shifts %}
                     <div class="table-wrap">
@@ -360,7 +383,7 @@
                     </div>
                 {% endif %}
 
-                {% if endable %}
+                {% if endable and may.shift %}
                     {% if end_form.non_field_errors %}
                         <div class="alert alert--danger">
                             {{ end_form.non_field_errors }}

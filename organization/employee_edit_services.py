@@ -9,8 +9,12 @@ they are changed through the existing ``employees.services`` functions:
   a mistake, so the current row is fixed in place rather than turned into a
   zero-length piece of history.
 
-Every write: owner/company-admin only, the employee must belong to the company,
-validation through ``full_clean``, and an audit row in the same transaction.
+Every write: the employee must belong to the company, validation through
+``full_clean``, and an audit row in the same transaction. Who may write
+(A12 part 4): details and placement — the owner/company admin, or anyone with
+``employees.edit`` in the employee's current branch (a placement can only move
+to a branch where they have it too); salary — the owner/company admin, or
+anyone with ``salary.prepare`` in that branch.
 """
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -21,7 +25,12 @@ from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from employees.services import revise_compensation, transfer_employee
-from organization.services import assert_branch_in_scope, require_structure_manager
+from access_control.branch_access import COMPANY_WIDE_ROLES, can
+from organization.services import (
+    assert_branch_in_scope,
+    require_company_membership,
+    require_structure_manager,
+)
 
 DETAIL_FIELDS = ("first_name", "last_name", "work_email", "phone", "joining_date")
 
@@ -35,21 +44,57 @@ def _open_row(model, employee):
     )
 
 
-def get_employee_for_edit(*, actor, company_id, employee_id):
-    membership = require_structure_manager(actor, company_id)
+def is_company_wide(membership):
+    return membership.role in COMPANY_WIDE_ROLES
+
+
+def get_employee_for_edit(*, actor, company_id, employee_id, code=None):
+    """The employee, their current placement and salary — if ``actor`` may.
+
+    ``code=None``: owner/company admin only, as before A12 (the employee page
+    and End employment still use this). With a branch permission code, anyone
+    holding it in the employee's current branch may, too.
+    """
+    if code is None:
+        membership = require_structure_manager(actor, company_id)
+    else:
+        membership = require_company_membership(actor, company_id)
     with use_company(company_id):
         employee = Employee.objects.filter(pk=employee_id).first()
         if employee is None:
             raise PermissionDenied("Employee not found in this company.")
         assignment = _open_row(EmployeeAssignment, employee)
         compensation = _open_row(EmployeeCompensation, employee)
+    if code is not None and not is_company_wide(membership):
+        if assignment is None or not can(actor, company_id, code, assignment.branch_id):
+            raise PermissionDenied("This employee is not in a branch you look after.")
     return membership, employee, assignment, compensation
+
+
+def card_permissions(actor, company_id, membership, assignment):
+    """Which Edit employee cards ``actor`` may use for this employee (A12 part 4)."""
+    if is_company_wide(membership):
+        return {"edit": True, "logins": True, "role": True, "salary": True,
+                "salary_view": True, "shift": True, "company": True}
+    branch = assignment.branch_id if assignment else None
+    return {
+        "edit": branch is not None and can(actor, company_id, "employees.edit", branch),
+        "logins": branch is not None and can(actor, company_id, "employees.logins", branch),
+        # Pay follows "prepare salary" in that branch (a branch manager has it).
+        # Making someone a branch manager and own shifts stay with the company
+        # (shifts are the company's Shifts area).
+        "role": False,
+        "salary": branch is not None and can(actor, company_id, "salary.prepare", branch),
+        "salary_view": branch is not None and can(actor, company_id, "salary.view", branch),
+        "shift": False,
+        "company": False,
+    }
 
 
 @transaction.atomic
 def update_employee_details(*, actor, company_id, employee_id, values):
     membership, employee, _, _ = get_employee_for_edit(
-        actor=actor, company_id=company_id, employee_id=employee_id
+        actor=actor, company_id=company_id, employee_id=employee_id, code="employees.edit"
     )
     unsupported = set(values) - set(DETAIL_FIELDS)
     if unsupported:
@@ -73,10 +118,14 @@ def update_employee_details(*, actor, company_id, employee_id, values):
 def change_placement(*, actor, company_id, employee_id, values):
     """New branch / department / designation / code from a date."""
     membership, employee, current, _ = get_employee_for_edit(
-        actor=actor, company_id=company_id, employee_id=employee_id
+        actor=actor, company_id=company_id, employee_id=employee_id, code="employees.edit"
     )
     if current is None:
         raise ValidationError("This employee has no current placement to change.")
+    if not is_company_wide(membership) and not can(
+        actor, company_id, "employees.edit", values["branch"].pk
+    ):
+        raise PermissionDenied("You can only place people in branches you look after.")
     starts = values["effective_at"]
     with use_company(company_id):
         assert_branch_in_scope(membership, values["branch"])
@@ -134,8 +183,10 @@ def change_salary(*, actor, company_id, employee_id, values):
     has a placement but no salary; refusing here left no way to give them one
     (Ajay, 2026-09-14). They get their first salary instead.
     """
+    # Pay: the owner/company admin, or whoever may prepare salary in the
+    # employee's branch (A12 part 4; a branch manager has it).
     membership, employee, _, current = get_employee_for_edit(
-        actor=actor, company_id=company_id, employee_id=employee_id
+        actor=actor, company_id=company_id, employee_id=employee_id, code="salary.prepare"
     )
     if current is None:
         return _set_first_salary(membership, employee, values, actor)

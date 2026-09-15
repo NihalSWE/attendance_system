@@ -34,14 +34,19 @@
             <button class="btn btn--ghost" type="button" disabled title="Export is not available yet">
                 Export (unavailable)
             </button>
-            <a class="btn btn--primary" href="{% url 'organization:employee_create' %}">
-                Create employee
-            </a>
+            {% if can_create %}
+                <a class="btn btn--primary" href="{% url 'organization:employee_create' %}">
+                    Create employee
+                </a>
+            {% endif %}
         </div>
     </div>
-    <div class="card" data-now-board
+    {# The live refresh of the "Now" column is the company's (Nihal's attendance #}
+    {# endpoint, not yet limited to branches); for a branch viewer the column #}
+    {# shows the state when the page was opened. #}
+    <div class="card" {% if company_wide %}data-now-board
          data-now-url="{% url 'attendance:attendance_now' %}"
-         data-now-employees="{{ employee_ids }}">
+         data-now-employees="{{ employee_ids }}"{% endif %}>
         <form class="toolbar" method="get">
             <div class="toolbar__grow">
                 <label class="sr-only" for="q">
@@ -138,9 +143,17 @@
                                     {{ r.a.employee_code|default:"—" }}
                                 </td>
                                 <td>
-                                    <a href="{% url 'organization:employee_detail' r.e.pk %}">
+                                    {% if company_wide %}
+                                        <a href="{% url 'organization:employee_detail' r.e.pk %}">
+                                            {{ r.e.full_name }}
+                                        </a>
+                                    {% elif r.can_edit %}
+                                        <a href="{% url 'organization:employee_edit' r.e.pk %}">
+                                            {{ r.e.full_name }}
+                                        </a>
+                                    {% else %}
                                         {{ r.e.full_name }}
-                                    </a>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {{ r.a.branch.name|default:"—" }}
@@ -187,7 +200,7 @@
                                     {% endif %}
                                 </td>
                                 <td class="numeric">
-                                    {% if r.c %}
+                                    {% if r.c and r.show_rate %}
                                         {{ r.c.base_rate|money }}
                                         <span class="t-faint">
                                             {{ r.c.currency }}
@@ -197,9 +210,11 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a class="btn btn--quiet btn--sm" href="{% url 'organization:employee_edit' r.e.pk %}">
-                                        Edit
-                                    </a>
+                                    {% if r.can_edit %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'organization:employee_edit' r.e.pk %}">
+                                            Edit
+                                        </a>
+                                    {% endif %}
                                 </td>
                             </tr>
                         {% endfor %}

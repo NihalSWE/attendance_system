@@ -9,7 +9,7 @@ database's own constraint failures into readable field errors.
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
@@ -20,8 +20,23 @@ from common.tenant import use_company
 from employees.services import create_employee
 from organization.employee_forms import EmployeeCreateForm
 from organization.models import Branch, CompanyDepartment, CompanyDesignation
-from organization.services import require_structure_manager, visible_branches
+from access_control.branch_access import ALL_BRANCHES, branches_for, can
+from organization.access_services import people
+from organization.services import require_company_membership, visible_branches
 from organization.views import _company_or_redirect
+
+
+def _creator(user, company_id):
+    """The actor's membership and where they may add people (A12 part 4).
+
+    Owner/company admin: every branch (as before). Otherwise the branches where
+    they hold ``employees.edit``; nowhere means no access.
+    """
+    membership = require_company_membership(user, company_id)
+    branch_ids = branches_for(user, company_id, "employees.edit")
+    if not branch_ids:
+        raise PermissionDenied("Adding employees requires owner, company administrator or branch access.")
+    return membership, branch_ids
 
 
 @login_required
@@ -31,13 +46,18 @@ def employee_create(request):
     if bail:
         return bail
 
-    membership = require_structure_manager(request.user, company_id)
+    membership, branch_ids = _creator(request.user, company_id)
 
     with use_company(company_id):
         from employees.models import Employee
 
         branches = visible_branches(membership).filter(status=ActiveStatus.ACTIVE)
         employees = Employee.objects.order_by("first_name", "last_name")
+        if branch_ids is not ALL_BRANCHES:
+            # A12 part 4: only the branches where they may add people, and a
+            # reporting manager from those branches.
+            branches = branches.filter(pk__in=branch_ids)
+            employees = people(branch_ids).order_by("first_name", "last_name")
 
         if request.method == "POST":
             form = EmployeeCreateForm(
@@ -48,6 +68,14 @@ def employee_create(request):
             )
             if form.is_valid():
                 data = form.cleaned_data
+                if branch_ids is not ALL_BRANCHES and data["branch"].pk not in branch_ids:
+                    raise PermissionDenied("You can only add people to branches you look after.")
+                if not can(request.user, company_id, "salary.prepare", data["branch"].pk):
+                    # A new employee comes with their pay, which follows
+                    # "prepare salary" in that branch (a branch manager has it).
+                    raise PermissionDenied(
+                        "Adding someone sets their pay, which needs salary access for that branch."
+                    )
                 try:
                     result = create_employee(
                         company=membership.company,
@@ -99,10 +127,10 @@ def branch_departments(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    require_structure_manager(request.user, company_id)
+    _, branch_ids = _creator(request.user, company_id)
 
     branch = request.GET.get("branch", "").strip()
-    if not branch.isdigit():
+    if not branch.isdigit() or int(branch) not in branch_ids:
         return JsonResponse({"results": []})
 
     with use_company(company_id):
@@ -125,13 +153,18 @@ def department_designations(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    require_structure_manager(request.user, company_id)
+    _, branch_ids = _creator(request.user, company_id)
 
     department = request.GET.get("department", "").strip()
     if not department.isdigit():
         return JsonResponse({"results": []})
 
     with use_company(company_id):
+        branch_of = CompanyDepartment.objects.filter(pk=int(department)).values_list(
+            "branch_id", flat=True
+        ).first()
+        if branch_of is None or branch_of not in branch_ids:
+            return JsonResponse({"results": []})
         rows = (
             CompanyDesignation.objects.filter(
                 company_department_id=int(department), status=ActiveStatus.ACTIVE

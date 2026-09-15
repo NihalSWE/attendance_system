@@ -19,6 +19,17 @@ BRANCH_PAGES = {
     # A12 part 2: who has which access (itself limited to the viewer's branches).
     "organization:access": "access.grant",
     "organization:access_person": "access.grant",
+    # A12 part 4: the Employees area. The list shows only your branches' people
+    # (pay only where you may see salaries); Create employee offers only your
+    # branches; Edit employee opens details, placement and logins for someone
+    # in your branch, and pay where you may prepare salary — own shifts and
+    # making a branch manager stay with the company. The employee page and End
+    # employment (Nihal's N6) are not listed: part 7's note covers them.
+    "employee_list": "employees.view",
+    "organization:employee_create": "employees.edit",
+    "organization:employee_edit": "employees.edit",
+    "organization:employee_branch_departments": "employees.edit",
+    "organization:employee_department_designations": "employees.edit",
 }
 
 

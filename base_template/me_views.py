@@ -148,7 +148,11 @@ def _branch_card(request, membership):
         if "employees.view" in codes:
             placed = list(people(branches_for(request.user, request.company_id, "employees.view"))
                           .values_list("pk", flat=True))
-            card["items"].append({"label": "People placed in your branches", "value": len(placed)})
+            card["items"].append({
+                "label": "People placed in your branches", "value": len(placed),
+                "url": reverse("employee_list") if may_open(
+                    request.user, request.company_id, "employee_list") else "",
+            })
             if placed:
                 statuses = statuses_for(request.company_id, employee_ids=placed)
                 card["items"].append({

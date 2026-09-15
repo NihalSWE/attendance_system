@@ -67,11 +67,38 @@ def dashboard(request):
     })
 
 
+def _employee_list_scope(request):
+    """``(company_wide, view_branches)`` for the Employees list (A12 part 4).
+
+    The owner and company admin see every employee, as before. Anyone else
+    needs ``employees.view`` and sees the people whose latest placement is in
+    those branches.
+    """
+    from access_control.branch_access import ALL_BRANCHES, branches_for
+
+    member = get_active_memberships(request.user).filter(company_id=request.company_id).first()
+    if member and member.role in ("owner", "company_admin") and (
+        member.allowed_branches.exists() or member.allowed_departments.exists()
+    ):
+        # Unchanged from before A12: an administrator restricted to some
+        # branches or departments is refused rather than shown the company.
+        raise PermissionDenied("These company pages currently require unrestricted company administrator access.")
+    branches = branches_for(request.user, request.company_id, "employees.view")
+    if not branches:
+        raise PermissionDenied("Viewing employees requires owner, company administrator or branch access.")
+    # Owner / company admin: every branch, as before.
+    return branches is ALL_BRANCHES, branches
+
+
 @login_required
-@company_admin_required
 def employee_list(request):
+    if request.user.is_superuser:
+        return redirect("platform:company_list")
     if not request.company_id:
         return _no_company(request)
+    from access_control.branch_access import ALL_BRANCHES, branches_for
+
+    company_wide, view_branches = _employee_list_scope(request)
 
     assignment = EmployeeAssignment.objects.filter(employee=OuterRef("pk")).exclude(
         status="cancelled").order_by("-effective_from", "-pk")
@@ -80,10 +107,13 @@ def employee_list(request):
     qs = Employee.objects.select_related("user").annotate(
         table_code=Subquery(assignment.values("employee_code")[:1]),
         table_branch=Subquery(assignment.values("branch__name")[:1]),
+        table_branch_id=Subquery(assignment.values("branch_id")[:1]),
         table_department=Subquery(assignment.values("department__department__name")[:1]),
         table_designation=Subquery(assignment.values("designation__designation__name")[:1]),
         table_rate=Subquery(compensation.values("base_rate")[:1]),
     ).order_by("first_name", "last_name")
+    if view_branches is not ALL_BRANCHES:
+        qs = qs.filter(table_branch_id__in=view_branches)
 
     search = request.GET.get("q", "").strip()
     if search:
@@ -100,7 +130,8 @@ def employee_list(request):
 
     page = paginate(request, qs,
         search=("first_name", "last_name", "work_email", "table_code", "table_branch", "table_department", "table_designation", "employment_status"),
-        order=("table_code", ("first_name", "last_name"), "table_branch", "table_department", "table_designation", None, "employment_status", "table_rate", None))
+        # Sorting by pay would reveal pay order to someone who may not see pay.
+        order=("table_code", ("first_name", "last_name"), "table_branch", "table_department", "table_designation", None, "employment_status", "table_rate" if company_wide else None, None))
     paginator, per_page = page.paginator, page.paginator.per_page
 
     # Current assignment per employee, for code/branch/department columns.
@@ -126,8 +157,16 @@ def employee_list(request):
         request.company_id,
         employee_ids=[row["e"].pk for row in rows],
     )
+    # A12 part 4: what this viewer may do on each row.
+    salary_branches = ALL_BRANCHES if company_wide else branches_for(
+        request.user, request.company_id, "salary.view")
+    edit_branches = ALL_BRANCHES if company_wide else branches_for(
+        request.user, request.company_id, "employees.edit")
     for row in rows:
         row["now"] = now_by_employee.get(row["e"].pk)
+        branch_id = row["a"].branch_id if row["a"] else None
+        row["show_rate"] = branch_id in salary_branches if branch_id else company_wide
+        row["can_edit"] = branch_id in edit_branches if branch_id else company_wide
 
     return render(request, "base_template/employee_list.html", {
         "rows": rows,
@@ -138,6 +177,8 @@ def employee_list(request):
         "status": status,
         "per_page": per_page,
         "statuses": Employee.EmploymentStatus.choices,
+        "company_wide": company_wide,
+        "can_create": bool(edit_branches),
     })
 
 

@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); next is **A12 part 4**: the Employees area limited by branch — each part adds its pages to `BRANCH_PAGES` once they are branch-scoped. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9 and N6 merged** (office session); N5 (migration `attendance.0004`) and N8 wait for Nihal to update them against main, then merge. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **part 4 is done** (the Employees area limited by branch); next is **A12 part 5**: Leave and overtime limited by branch — each part adds its pages to `BRANCH_PAGES` once they are branch-scoped. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9 and N6 merged** (office session); N5 (migration `attendance.0004`) and N8 wait for Nihal to update them against main, then merge. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2524,7 +2524,7 @@ and overtime.
 | **1 — done** | Permission list and one access check (`access_control/branch_access.py`), grant/remove services | No |
 | **2 — done** | Organisation → Access page: people in your branches, tick permissions per branch, create logins | No |
 | **3 — done** | Branch managers and grantees open company pages; sidebar and dashboard by permission and branch | No |
-| 4 | Employees area branch-scoped (list, create/edit, logins) | No |
+| **4 — done** | Employees area branch-scoped (list, create/edit, logins) | No |
 | 5 | Leave and overtime branch-scoped (list, record/cancel, approval inbox, overtime) | No |
 | 6 | Salary branch-scoped: Salary by month and payslips by branch; generate only your branches inside the month; bonus/deductions; finalise and settings stay owner/admin | Possibly |
 | 7 | Written note for Nihal: apply `can`/`scope_queryset` to attendance and device pages | No |
@@ -2650,6 +2650,45 @@ branches/departments, finalising a month.
   `may_open` needs a listed page and its permission. Affected apps
   (organization, access_control, base_template, common, leaves): **314 OK**;
   full suite run before pushing.
+- No migration, dependency or `.env.example` change.
+
+## A12 part 4 done — the Employees area by branch — 2026-09-15 (Claude, Ajay's session, office)
+
+Owner and company admin: unchanged (every employee, every card). For a branch
+manager or a person given access, each part follows its permission **in the
+employee's branch** (a branch manager has every permission in their branches):
+
+| Page / card | Needs | Notes |
+|---|---|---|
+| **Employees list** (`employee_list`) | View employees | Only people whose latest placement is in those branches. **Base rate** only where they may view salaries (and the rate column is not sortable for them, so pay order is not revealed). Name links to Edit (the employee page is the company's); **Edit** and **Create employee** only where they may edit. The live "Now" refresh stays company-only (Nihal's endpoint is not branch-limited yet; the column shows the state when the page was opened). |
+| **Create employee** | Create and edit employees **and** Prepare salary | Only their branches in the Branch list, reporting managers from their branches; the department/designation lookups answer only for their branches. A new person comes with their pay, so salary access for that branch is needed too. |
+| Edit → **Details**, **Placement** | Create and edit employees | A placement can only move to a branch where they may edit people. |
+| Edit → **Salary** | Prepare salary | Otherwise read-only: the rate shows only with View salaries ("Has a salary" otherwise). |
+| Edit → **Login** | Create and manage logins | Create, new password, disable/enable an **Employee** login. Making someone a branch manager, and a branch manager's own login, stay with the owner/admin. |
+| Edit → **Shift** (own shift) | Owner/admin | Shifts are the company's Shifts area. |
+| Employee page, End employment (N6) | Owner/admin | Nihal's; covered by the part 7 note. |
+
+- Added to `BRANCH_PAGES`: `employee_list`, `organization:employee_create`,
+  `organization:employee_edit`, and the two department/designation lookups. The
+  sidebar (Employees menu) and My account ("People placed in your branches"
+  now links to the list) follow.
+- Services check the same rules (a crafted post is refused):
+  `employee_edit_services.get_employee_for_edit(code=...)` (no code = the old
+  owner/admin rule, still used by Nihal's pages), `card_permissions`,
+  `change_placement` (target branch), `change_salary` (`salary.prepare`),
+  `employee_login._existing(company_only=...)` (password and disable/enable
+  for Employee logins in the branch), `employee_views._creator`.
+- A company admin restricted to some branches (a platform-side setting) is
+  still refused the Employees list, exactly as before — nothing was widened.
+- Tests: `organization/tests_branch_employees.py` (16): manager's list with pay
+  and actions; view-only hides pay and editing; another branch's access shows
+  that branch; owner unchanged; HR 403 and plain employee gated; manager edits
+  details, another branch 403; placement to another branch refused; pay
+  follows prepare-salary (edit-only sees no rate, salary post 403); shift and
+  role stay company; manager resets and disables an Employee login, not
+  another manager's, not in another branch; create in own branch only;
+  lookups stay in branch; edit-only cannot create. **Full suite run before
+  pushing.**
 - No migration, dependency or `.env.example` change.
 
 

@@ -167,8 +167,18 @@ def give_login(*, actor, company_id, employee_id, values):
     return member
 
 
-def _existing(actor, company_id, employee_id):
-    membership = require_structure_manager(actor, company_id)
+def _existing(actor, company_id, employee_id, *, company_only=True):
+    """The employee's login, if ``actor`` may manage it.
+
+    ``company_only``: owner/company admin only (changing the role). Otherwise
+    (A12 part 4: new password, disable/enable) also anyone with
+    ``employees.logins`` in the employee's branch — for an **Employee** login;
+    a branch manager's login stays with the company.
+    """
+    if company_only:
+        membership = require_structure_manager(actor, company_id)
+    else:
+        membership = _login_giver(actor, company_id, employee_id, Role.EMPLOYEE)
     employee = _employee(membership, company_id, employee_id)
     member = login_for(company_id, employee)
     if member is None:
@@ -177,6 +187,9 @@ def _existing(actor, company_id, employee_id):
         # The company's owner/administrator account is managed on the
         # platform's company page, not from an employee record.
         raise PermissionDenied("This login is the company administrator's; change it on the company page.")
+    if (not company_only and membership.role not in (Role.OWNER, Role.COMPANY_ADMIN)
+            and member.role != Role.EMPLOYEE):
+        raise PermissionDenied("Only the owner or company administrator manages a branch manager's login.")
     return membership, employee, member
 
 
@@ -202,7 +215,7 @@ def change_login_role(*, actor, company_id, employee_id, values):
 @_in_company
 @transaction.atomic
 def reset_login_password(*, actor, company_id, employee_id, values):
-    membership, employee, member = _existing(actor, company_id, employee_id)
+    membership, employee, member = _existing(actor, company_id, employee_id, company_only=False)
     user = member.user
     if user.is_superuser or user.is_staff:
         raise PermissionDenied("This account's password cannot be changed here.")
@@ -226,7 +239,7 @@ def reset_login_password(*, actor, company_id, employee_id, values):
 @transaction.atomic
 def set_login_active(*, actor, company_id, employee_id, active):
     """Disable (suspend) or enable the login in this company."""
-    membership, employee, member = _existing(actor, company_id, employee_id)
+    membership, employee, member = _existing(actor, company_id, employee_id, company_only=False)
     target = CompanyMembership.Status.ACTIVE if active else CompanyMembership.Status.SUSPENDED
     if member.status == target:
         raise ValidationError("The login is already " + ("enabled." if active else "disabled."))

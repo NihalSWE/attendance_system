@@ -24,6 +24,7 @@ from organization.employee_edit_forms import (
     PlacementForm,
     SalaryForm,
 )
+from access_control.branch_access import scope_queryset
 from organization.services import visible_branches
 from organization.views import _company_or_redirect
 from scheduling import services as schedule
@@ -68,14 +69,26 @@ def employee_edit(request, pk):
     if bail:
         return bail
     membership, employee, assignment, compensation = services.get_employee_for_edit(
-        actor=request.user, company_id=company_id, employee_id=pk
+        actor=request.user, company_id=company_id, employee_id=pk, code="employees.edit"
     )
     company = membership.company
     section = request.POST.get("section", "") if request.method == "POST" else ""
     today = timezone.localdate()
+    # A12 part 4: which cards this person may use for this employee.
+    may = services.card_permissions(request.user, company_id, membership, assignment)
+    needs = {"salary": "salary", "shift": "shift", "shift_end": "shift",
+             "login_give": "logins", "login_password": "logins", "login_disable": "logins",
+             "login_enable": "logins", "login_role": "role"}
+    if section in needs and not may[needs[section]]:
+        raise PermissionDenied("That part of this page is the company's to change.")
 
     with use_company(company_id):
         branches = visible_branches(membership).filter(status=ActiveStatus.ACTIVE)
+        if not may["company"]:
+            # A placement can only move to a branch where they may edit people.
+            branches = scope_queryset(
+                branches, request.user, company_id, "employees.edit", field="pk"
+            )
 
         details = EmployeeDetailsForm(
             request.POST if section == "details" else None, instance=employee
@@ -266,6 +279,7 @@ def employee_edit(request, pk):
                 None,
             ),
             "today": today,
+            "may": may,
             "login": login,
             "login_role_label": employee_login.ROLE_LABELS.get(login.role, "") if login else "",
             "give_login": give_login,
