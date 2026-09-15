@@ -1,0 +1,190 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Access · {{ employee.full_name }} · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{{ back_url }}">
+            Access
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ employee.full_name }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ employee.full_name }}
+            </h1>
+            <p class="page__sub">
+                {{ employee.table_code|default:"No code" }} · {{ employee.table_branch }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{{ back_url }}">
+                Back to access
+            </a>
+        </div>
+    </div>
+
+    <div class="form-page stack">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Login
+                </h2>
+                {% if membership %}
+                    <span class="badge {% if membership.status == 'active' %}badge--success{% else %}badge--neutral{% endif %}">
+                        {{ login_label }}{% if membership.status != 'active' %} · disabled{% endif %}
+                    </span>
+                {% else %}
+                    <span class="badge badge--neutral">
+                        No login
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                {% if membership %}
+                    <dl class="facts facts--wide">
+                        <dt>
+                            Signs in with
+                        </dt>
+                        <dd>
+                            {{ employee.user.email }}
+                        </dd>
+                    </dl>
+                    {% if role_note %}
+                        <p>
+                            {{ role_note }}
+                        </p>
+                    {% endif %}
+                {% elif login_form %}
+                    <p class="field__help">
+                        They get their own pages (attendance, leave, payslips). Anything more is given below.
+                    </p>
+                    <form method="post" class="stack" novalidate>
+                        {% csrf_token %}
+                        <input type="hidden" name="section" value="login">
+                        {% if login_form.non_field_errors %}
+                            <div class="alert alert--danger">
+                                {% for error in login_form.non_field_errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="grid grid--2">
+                            {% for field in login_form %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--primary" type="submit">
+                                Create login
+                            </button>
+                        </div>
+                    </form>
+                {% else %}
+                    <p class="t-faint">
+                        No login. You cannot create logins for this branch.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Access by branch
+                </h2>
+            </div>
+            <div class="card__body stack">
+                {% if everything %}
+                    <div class="alert alert--info">
+                        {{ role_note }} Nothing to give here.
+                    </div>
+                {% elif is_self %}
+                    <div class="alert alert--info">
+                        This is you. Your own access is given by someone else.
+                    </div>
+                {% else %}
+                    {% if role_note %}
+                        <div class="alert alert--info">
+                            {{ role_note }} Ticks below are access given on top of that.
+                        </div>
+                    {% endif %}
+                    <p class="field__help">
+                        Tick what they may do in each branch. You can only give access you hold
+                        yourself, in branches where you may give it; greyed boxes are not yours to change.
+                    </p>
+                {% endif %}
+                <form method="post" class="stack">
+                    {% csrf_token %}
+                    <input type="hidden" name="section" value="access">
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Permission
+                                    </th>
+                                    {% for branch in branches %}
+                                        <th class="numeric">
+                                            {{ branch.name }}
+                                        </th>
+                                    {% endfor %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in rows %}
+                                    <tr>
+                                        <td>
+                                            {{ row.label }}
+                                        </td>
+                                        {% for cell in row.cells %}
+                                            <td class="numeric">
+                                                <label class="check">
+                                                    <input type="checkbox" name="{{ cell.name }}"
+                                                           {% if cell.checked %}checked{% endif %}
+                                                           {% if not cell.editable %}disabled{% endif %}
+                                                           aria-label="{{ row.label }} in {{ cell.branch.name }}">
+                                                </label>
+                                            </td>
+                                        {% endfor %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if not everything and not is_self %}
+                        <div class="field">
+                            <label class="field__label" for="reason">
+                                Reason
+                            </label>
+                            <input class="input" id="reason" name="reason" maxlength="255"
+                                   placeholder="Optional, kept in the audit log">
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--primary" type="submit">
+                                Save access
+                            </button>
+                            <a class="btn btn--ghost" href="{{ back_url }}">
+                                Cancel
+                            </a>
+                        </div>
+                    {% endif %}
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}

@@ -104,7 +104,7 @@ Completed (Ajay's side):
 | Area | Lists |
 |---|---|
 | Employees | All employees |
-| Organisation | Branches, Departments (adoptions), the older company department list |
+| Organisation | Branches, Departments (adoptions), the older company department list, Access (A12, with a Branch filter) |
 | Salary | Salary by month, Overtime (with Employee and Branch filters), Penalty rules |
 | Leave | Leave list, Leave types, Approval inbox |
 | Shifts | Shifts, Department shifts, Weekly off days (one page, named tables), Holidays |

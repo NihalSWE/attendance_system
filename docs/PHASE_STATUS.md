@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). Next is **A12 part 2: Organisation → Access page**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9 and N6 merged** (office session); N5 (migration `attendance.0004`) and N8 wait for Nihal to update them against main, then merge. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 part 2 (Organisation → Access page) is done**; next is **A12 part 3**: branch managers and people given access open company pages; sidebar and dashboard follow permission and branch. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9 and N6 merged** (office session); N5 (migration `attendance.0004`) and N8 wait for Nihal to update them against main, then merge. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2522,7 +2522,7 @@ and overtime.
 | Part | Scope | Migration |
 |---|---|---|
 | **1 — done** | Permission list and one access check (`access_control/branch_access.py`), grant/remove services | No |
-| 2 | Organisation → Access page: people in your branches, tick permissions per branch, create logins | No (expected) |
+| **2 — done** | Organisation → Access page: people in your branches, tick permissions per branch, create logins | No |
 | 3 | Branch managers and grantees open company pages; sidebar and dashboard by permission and branch | No |
 | 4 | Employees area branch-scoped (list, create/edit, logins) | No |
 | 5 | Leave and overtime branch-scoped (list, record/cancel, approval inbox, overtime) | No |
@@ -2575,6 +2575,49 @@ branches/departments, finalising a month.
   **Full suite 960 tests OK** on fresh databases after removing the migration.
 - No `.env.example` changes or dependencies.
 - No migrations, dependencies or `.env.example` changes.
+
+## A12 part 2 done — Organisation → Access page — 2026-09-15 (Claude, Ajay's session, office)
+
+- **Where:** sidebar → **Organisation → Access** (owner and company admin);
+  a **branch manager** gets **Access** under "My branches" in their sidebar.
+  `/organization/access/` (`organization:access`) and
+  `/organization/access/<employee>/` (`organization:access_person`).
+- **The list:** the people placed now in the branches where you may give
+  access (owner/admin: every branch; branch manager: their own). Server-side
+  table (A15 helper) with a Branch filter; columns Code, Employee, Branch,
+  Login (Employee / Branch manager / HR / Owner / Company administrator, or no
+  login; disabled shown), Access (what their role gives, in words, plus every
+  permission given by hand with its branches), Manage.
+- **Manage (one person):** a grid of the 11 branch permissions × your
+  branches. Tick to give, untick to remove, optional reason, **Save access** →
+  `grant_access` / `revoke_access` per permission (audited `access.granted` /
+  `access.revoked`). Only cells you may change are live (you hold that
+  permission there and may give access there); the rest are greyed, and a
+  crafted post for another branch or permission is ignored. Your own access and
+  an owner/admin (who has everything) cannot be changed here. Role-given
+  access is shown in words above the grid ("Branch manager: every permission
+  in Head Office, automatically"; "HR: views and records leave and decides
+  overtime in every branch").
+- **Login card:** someone without a login can be given one right there —
+  email and password → an **Employee** login. Allowed for the owner/admin and
+  for anyone with "Create and manage logins" in that person's branch (a branch
+  manager has it automatically). `give_login` now checks exactly that;
+  **making someone a branch manager stays owner/admin only** (on Edit
+  employee, unchanged). Other login actions (role, password, disable) stay on
+  Edit employee for the owner/admin — part 4 brings the Employees area to
+  branches.
+- **The gate (A6):** a branch-manager login may now open these two pages
+  (`BRANCH_MANAGER_VIEWS` in `common/middleware.py`); every other company page
+  still sends them to My account until part 3. HR (no "give access") gets 403.
+- Tests: `organization/tests_access_page.py` (13): owner sees everyone, manager
+  only their branch; HR refused, Employee login gated; gate opens only these
+  pages; granted access shown; manager ticks/unticks in their branch (audited);
+  crafted tick for another branch ignored; another branch's person refused;
+  own access read-only; owner grants across branches; tick parsing; manager
+  creates an Employee login in their branch, not in another branch, and cannot
+  make a branch manager. organization + access_control + base_template +
+  common: **270 tests OK**.
+- No migration, dependency or `.env.example` change.
 
 
 ## 2026-09-15 — N9: Nihal's lists on the shared server-side table (Nihal)

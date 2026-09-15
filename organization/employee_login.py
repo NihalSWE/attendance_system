@@ -27,7 +27,7 @@ from django.utils import timezone
 from accounts.models import CompanyMembership
 from auditlog.services import record_company_event
 from common.tenant import use_company
-from employees.models import Employee
+from employees.models import Employee, EmployeeAssignment
 from organization.services import assert_branch_in_scope, require_structure_manager
 
 User = get_user_model()
@@ -98,11 +98,40 @@ def _snapshot(member):
     }
 
 
+def _login_giver(actor, company_id, employee_id, role):
+    """The actor's membership, if they may give this employee this login.
+
+    Owner / company admin: any login. Otherwise (A12, Ajay 2026-09-15: branch
+    managers create logins) only an **Employee** login, and only for someone
+    placed in a branch where the actor holds ``employees.logins``. Making
+    somebody a branch manager stays with the owner and company admin.
+    """
+    from access_control.branch_access import can
+    from accounts.services import get_active_memberships
+
+    membership = get_active_memberships(actor).filter(company_id=company_id).select_related(
+        "company"
+    ).first() if actor is not None and actor.is_authenticated else None
+    if membership is None:
+        raise PermissionDenied("You are not an active member of this company.")
+    if membership.role in (Role.OWNER, Role.COMPANY_ADMIN):
+        return membership
+    placement = (
+        EmployeeAssignment.objects.filter(employee_id=employee_id, effective_to__isnull=True)
+        .exclude(status__in=["cancelled", "draft"]).order_by("-effective_from").first()
+    )
+    if placement is None or not can(actor, company_id, "employees.logins", placement.branch_id):
+        raise PermissionDenied("You cannot create logins for people in that branch.")
+    if role != Role.EMPLOYEE:
+        raise PermissionDenied("Only the owner or company administrator can make someone a branch manager.")
+    return membership
+
+
 @_in_company
 @transaction.atomic
 def give_login(*, actor, company_id, employee_id, values):
     """A new login for an employee who has none."""
-    membership = require_structure_manager(actor, company_id)
+    membership = _login_giver(actor, company_id, employee_id, values.get("role"))
     employee = _employee(membership, company_id, employee_id)
     if employee.user_id is not None:
         raise ValidationError("This employee already has a login.")
