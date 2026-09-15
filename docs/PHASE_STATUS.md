@@ -544,6 +544,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N7 | **Payslip redesign** - done 2026-09-14, branch `feature/n7-payslip`, merged with the employee's view (A7) (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/. Also (A7): the employee opens the same template with `for_employee=True` — breadcrumbs then lead to My payslips, never company pages — and the "Draft" label must come from the run's status (a finalised month says Finalised) | — | (new) |
 | N8 | **Device connection check** - done 2026-09-15 incl. part 4, branch `feature/n8-device-connection` (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. (4) **Change server address on a device that has never checked in** is refused with what to do instead — "This device has never connected to this server. Set the server address on the terminal itself first (COMM → Cloud Server)" — rather than queuing a command nobody will collect. Ajay hit this 2026-09-14 with the new SenseFace 3A: registered, never checked in, the change sat as "in progress" and then ended as "lost" ("device not reachable at the new address"), which blamed the address when the device had simply never been connected. Builds on the existing server-address status panel | — | (new) |
 | N9 | **Data tables on Nihal's pages** (see A15) - done 2026-09-15, branch `feature/n9-server-side-tables` | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
+| N10 | **Branch access on Nihal's pages** (A12 part 7, [A12_BRANCH_ACCESS_FOR_NIHAL.md](A12_BRANCH_ACCESS_FOR_NIHAL.md)) - done 2026-09-15, branch `feature/n10-branch-attendance` | Codes `attendance.view` and `attendance.fix` (HR company-wide); Daily list, Calendar, day panel, Now, Days to review, Fix a day, Withdraw, the employee page and End employment limited to the viewer's branches, checked in the services too, and listed in `BRANCH_PAGES`. Devices unchanged | — | (new) |
 
 #### Ajay's session
 
@@ -3189,3 +3190,56 @@ mistake worth recording: inserting the redirect helper above
 the helper, leaving Register unprotected. The existing tests failed at once;
 the decorators are back on `device_register` and the diff against `main` shows
 no decorator change on any existing view.
+
+## 2026-09-15 — N10: branch access on attendance and the employee page (Nihal)
+
+Branch `feature/n10-branch-attendance`, from main `fd85eda`, following
+[A12_BRANCH_ACCESS_FOR_NIHAL.md](A12_BRANCH_ACCESS_FOR_NIHAL.md). No migration,
+no `.env.example` change.
+
+**Codes.** `attendance.view` ("View attendance") and `attendance.fix` ("Fix
+attendance days") added to `BRANCH_PERMISSIONS`, both in `HR_COMPANY_WIDE` —
+HR keeps seeing and fixing attendance everywhere, as under N5.
+
+**Who sees what.** `attendance/access.py` holds the rules. Company logins
+(owner, admin, HR, payroll manager, auditor) see attendance in every branch as
+before; only an Employee or Branch-manager login is limited, to branches where
+it holds `attendance.view`. Fixing needs `attendance.fix` in the **day's**
+branch — the branch on the day's record, or the placement at midday that date
+when no record is written yet; a day with no placement only for someone who
+may fix every branch. Payroll manager and auditor still cannot fix unless given
+the code.
+
+| Page | Now |
+|---|---|
+| Daily list | rows, Branch and Employee filters limited to the viewer's branches |
+| Calendar | picker offers people placed in those branches; asking for anyone else falls back to the first; the grid leaves out days worked in another branch |
+| Day panel | 403 for a day in another branch, checked before it is recalculated; Fix link only with `attendance.fix` there |
+| Now | a branch login gets only people placed where it may view employees or attendance; other ids are dropped, and none left answers `{}` (an empty list would otherwise mean everybody) |
+| Days to review | `review_queue(company_id, branches)` |
+| Fix a day / Withdraw | `correction_services.require_corrector(actor, company_id, employee_id, work_date)`; `add_scan`, `change_status`, `accept_review` check it, `withdraw` checks the corrected day's branch inside its lock. `CORRECTION_ROLES` is gone. Calendar link only when the viewer could open that person there |
+| Employee page | `get_employee_for_edit(code="employees.view")`; salary card, salary history and salary audit events only with `salary.view` in the branch; Edit / End employment links only with `employees.edit`; Calendar link and month counts follow `attendance.view` |
+| End employment | `code="employees.edit"`; a branch login cannot end someone with more than an Employee login (a branch manager) or its own employment; disabling the login needs `employees.logins` in the branch, checked before anything is written |
+
+Two things found while testing End employment as a branch manager: the login
+was disabled *after* the placement closed, so `set_login_active`'s branch check
+found no placement and refused — it now runs first, in the same transaction.
+And once ended the person is placed nowhere, so a branch login cannot open
+their page any more; it is sent to the Employees list instead (the company
+still lands on the employee page).
+
+All nine views are in `BRANCH_PAGES`. Ajay's two "link follows BRANCH_PAGES"
+tests (`organization/tests_branch_employees.py`,
+`payroll/tests_branch_overtime.py`) assumed the pages were not listed yet; they
+now check the link is there and goes when the entry is removed. `access_control/tests_branch_access.py` counts 13 permissions
+now instead of 11.
+
+**Tests:** 32 in `attendance/tests_branch_attendance.py` on `TwoBranchCase` —
+per page: branch manager sees own branch only; a grant in the other branch
+shows that branch only; without the code the gate redirects to My account;
+owner and HR unchanged; crafted posts and direct service calls refused. Also:
+auditor still sees the list but cannot fix; devices still closed to a branch
+manager. Full suite: 1153 tests, OK after the count update. Pages checked at 1440,
+768 and 375 px as the D Company owner (no branch-manager login exists in the
+dev data; the limited views are covered by the tests).
+

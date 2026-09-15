@@ -7,6 +7,12 @@ salary — with what a screen needs around it: who may do it, what date it can
 be, an audit record, and the knock-on effects a person would otherwise have to
 remember one by one.
 
+Branch access (A12 part 7): the page needs ``employees.view`` in the person's
+current branch, ending employment ``employees.edit`` there. Owner and company
+admin keep both everywhere. Salary shows only with ``salary.view`` in that
+branch, and a branch login cannot end a login holder's employment (a branch
+manager's, or its own) — that stays with the company.
+
 Dates are asked for the way HR says them: the **last working day**. Everything
 dated ends at the midnight after it, in company time, which is how the rest of
 the system stores an end (a shift's last day is its end minus one day), and
@@ -18,11 +24,13 @@ import datetime
 import zoneinfo
 from dataclasses import dataclass
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
+from access_control.branch_access import ALL_BRANCHES as ALL_ATTENDANCE
+from access_control.branch_access import can
 from accounts.models import CompanyMembership
 from attendance.models import AttendanceRecord
 from auditlog.models import AuditLog
@@ -31,7 +39,7 @@ from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from employees.services import terminate_employee
 from organization import employee_login
-from organization.employee_edit_services import get_employee_for_edit
+from organization.employee_edit_services import get_employee_for_edit, is_company_wide
 
 #: What ending employment can be recorded as. Suspension is not an ending.
 ENDING_STATUSES = (
@@ -40,6 +48,9 @@ ENDING_STATUSES = (
     (Employee.EmploymentStatus.RETIRED, "Retired"),
 )
 ENDED = {value for value, _ in ENDING_STATUSES}
+
+#: Audit actions about pay, left out for somebody who may not see salaries.
+SALARY_ACTIONS = ("employee.salary_changed", "employee.salary_set")
 
 #: Audit actions shown on the history page, in words.
 ACTION_LABELS = {
@@ -96,17 +107,62 @@ class Period:
         return self.last_day is None
 
 
+def page_permissions(actor, company_id, membership, assignment, employee):
+    """What the history page offers ``actor`` for this person (A12 part 7)."""
+    from attendance import access as attendance_access
+
+    if is_company_wide(membership):
+        return {"salary": True, "edit": True, "end": True, "logins": True,
+                "attendance": ALL_ATTENDANCE}
+    branch = assignment.branch_id if assignment else None
+
+    def held(code):
+        return branch is not None and can(actor, company_id, code, branch)
+
+    try:
+        _m, attendance = attendance_access.view_branches(actor, company_id)
+    except PermissionDenied:
+        attendance = set()
+    if not attendance_access.in_branches(branch, attendance):
+        attendance = set()
+    return {
+        "salary": held("salary.view"),
+        "edit": held("employees.edit"),
+        "end": held("employees.edit") and _branch_may_end(actor, company_id, employee) is None,
+        "logins": held("employees.logins"),
+        "attendance": attendance,
+    }
+
+
+def _branch_may_end(actor, company_id, employee):
+    """Why a branch login may not end this person's employment, or None."""
+    if employee.user_id is not None and employee.user_id == actor.pk:
+        return "You cannot end your own employment. Ask the company."
+    login = employee_login.login_for(company_id, employee)
+    if login is not None and login.role != CompanyMembership.Role.EMPLOYEE:
+        return (
+            f"{employee.full_name} has {login.get_role_display().lower()} access. "
+            "Ending their employment is the company's to do."
+        )
+    return None
+
+
 def employee_history(*, actor, company_id, employee_id):
     """Everything the history page shows. Read-only."""
     from devices.models import DeviceEnrollment
     from scheduling import services as schedule
 
     membership, employee, assignment, compensation = get_employee_for_edit(
-        actor=actor, company_id=company_id, employee_id=employee_id
+        actor=actor, company_id=company_id, employee_id=employee_id,
+        code="employees.view",
     )
     company = membership.company
     tz = _zone(company)
     today = company_today(company)
+    with use_company(company_id):
+        may = page_permissions(actor, company_id, membership, assignment, employee)
+    if not may["salary"]:
+        compensation = None
 
     with use_company(company_id):
         placements = [
@@ -123,7 +179,7 @@ def employee_history(*, actor, company_id, employee_id):
             for row in EmployeeCompensation.objects.filter(employee=employee)
             .exclude(status=EmployeeCompensation.Status.CANCELLED)
             .order_by("-effective_from")
-        ]
+        ] if may["salary"] else []
         devices = [
             Period(row, _local_day(row.effective_from, tz), _last_day(row.effective_to, tz))
             for row in DeviceEnrollment.objects.select_related("device", "device__branch")
@@ -131,22 +187,25 @@ def employee_history(*, actor, company_id, employee_id):
             .order_by("-effective_from")
         ]
         month_start = today.replace(day=1)
+        month_records = AttendanceRecord.objects.filter(
+            employee=employee, work_date__gte=month_start, work_date__lte=today,
+        )
+        if may["attendance"] is not ALL_ATTENDANCE:
+            # Only days worked in branches whose attendance they may see.
+            month_records = month_records.filter(branch_id__in=may["attendance"])
         month_counts = dict(
-            AttendanceRecord.objects.filter(
-                employee=employee, work_date__gte=month_start, work_date__lte=today,
-            )
+            month_records
             .values_list("attendance_status")
             .annotate(total=Count("pk"))
             .values_list("attendance_status", "total")
         )
-        events = list(
-            AuditLog.objects.select_related("actor_user")
-            .filter(
-                object_app="employees", object_model="employee",
-                object_id=str(employee.pk),
-            )
-            .order_by("-occurred_at", "-pk")[:15]
+        events = AuditLog.objects.select_related("actor_user").filter(
+            object_app="employees", object_model="employee",
+            object_id=str(employee.pk),
         )
+        if not may["salary"]:
+            events = events.exclude(action__in=SALARY_ACTIONS)
+        events = list(events.order_by("-occurred_at", "-pk")[:15])
         # The login's branches are tenant-scoped, so it is read in here too.
         login = employee_login.login_for(company_id, employee)
     for event in events:
@@ -156,6 +215,7 @@ def employee_history(*, actor, company_id, employee_id):
 
     return {
         "membership": membership,
+        "may": may,
         "employee": employee,
         "assignment": assignment,
         "compensation": compensation,
@@ -200,11 +260,18 @@ def end_employment(*, actor, company_id, employee_id, last_day, status, reason,
     from devices.models import DeviceEnrollment
 
     membership, employee, assignment, compensation = get_employee_for_edit(
-        actor=actor, company_id=company_id, employee_id=employee_id
+        actor=actor, company_id=company_id, employee_id=employee_id,
+        code="employees.edit",
     )
     company = membership.company
     tz = _zone(company)
     reason = (reason or "").strip()
+    company_wide = is_company_wide(membership)
+    if not company_wide:
+        with use_company(company_id):
+            refusal = _branch_may_end(actor, company_id, employee)
+        if refusal:
+            raise PermissionDenied(refusal)
 
     if status not in ENDED:
         raise ValidationError({"status": "Choose resigned, terminated or retired."})
@@ -241,6 +308,19 @@ def end_employment(*, actor, company_id, employee_id, last_day, status, reason,
                         "last working day cannot be before that."
         })
 
+    if disable_login and not company_wide:
+        with use_company(company_id):
+            login = employee_login.login_for(company_id, employee)
+        if (
+            login is not None and login.status == CompanyMembership.Status.ACTIVE
+            and not can(actor, company_id, "employees.logins", assignment.branch_id)
+        ):
+            # Checked before anything is written, rather than failing half way.
+            raise ValidationError({
+                "disable_login": "You cannot manage logins in this branch. Leave "
+                                 "this unticked, or ask someone who can."
+            })
+
     ends_at = datetime.datetime.combine(
         last_day + datetime.timedelta(days=1), datetime.time.min, tzinfo=tz
     )
@@ -253,6 +333,18 @@ def end_employment(*, actor, company_id, employee_id, last_day, status, reason,
             "assignment_id": assignment.pk if assignment else None,
             "compensation_id": compensation.pk if compensation else None,
         }
+        if disable_login:
+            # Before the placement closes: a branch login may manage logins only
+            # for someone placed in its branch (A12 part 7). Same transaction, so
+            # a refusal below still leaves the login as it was.
+            with use_company(company_id):
+                login = employee_login.login_for(company_id, employee)
+                if login is not None and login.status == CompanyMembership.Status.ACTIVE:
+                    employee_login.set_login_active(
+                        actor=actor, company_id=company_id, employee_id=employee.pk,
+                        active=False,
+                    )
+                    summary["login_disabled"] = True
         terminate_employee(
             employee=employee, effective_at=ends_at, employment_status=status,
             reason=reason, actor=actor,
@@ -295,16 +387,6 @@ def end_employment(*, actor, company_id, employee_id, last_day, status, reason,
                     "enrollments_ended": summary["enrollments_ended"],
                 },
             )
-
-        if disable_login:
-            with use_company(company_id):
-                login = employee_login.login_for(company_id, employee)
-            if login is not None and login.status == CompanyMembership.Status.ACTIVE:
-                employee_login.set_login_active(
-                    actor=actor, company_id=company_id, employee_id=employee.pk,
-                    active=False,
-                )
-                summary["login_disabled"] = True
 
     # Days after the last one no longer belong to them; the recalculation
     # removes any that were written (a finalised month is never touched).

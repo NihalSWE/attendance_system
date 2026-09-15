@@ -18,7 +18,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
-from attendance import correction_services, live_status, month_view
+from access_control.branch_access import ALL_BRANCHES
+from attendance import access, correction_services, live_status, month_view
 from attendance.forms import (
     AcceptReviewForm,
     AddScanForm,
@@ -31,8 +32,8 @@ from base_template.tables import paginate, render
 from common.forms import apply_service_errors
 from common.tenant import use_company
 from employees.models import Employee
-from organization.models import Branch
-from organization.services import STRUCTURE_ROLES, require_company_membership
+from organization.access_services import branch_choices, people
+from organization.services import STRUCTURE_ROLES
 from organization.views import _company_or_redirect
 
 MONTHS = [
@@ -72,14 +73,14 @@ def attendance_list(request):
     then applied to that set in SQL (base_template/tables.py), so its counts
     are the real counts, not what happens to be on screen.
 
-    Branch-aware on purpose: every row carries ``branch``, which is the field
-    ``access_control.branch_access.scope_queryset`` will narrow on once that
-    step is wired in (A12).
+    Limited by branch (A12 part 7): a branch login sees only the days worked
+    in branches where it holds ``attendance.view``, and only those branches
+    and their people in the filters. Company logins see every branch.
     """
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership = require_company_membership(request.user, company_id)
+    membership, visible = access.view_branches(request.user, company_id)
     year, month = read_month(request.GET)
     first, last = month_bounds(year, month)
     branch_id = request.GET.get("branch", "").strip()
@@ -89,9 +90,12 @@ def attendance_list(request):
     refresh(company_id, start=first, end=last)
 
     with use_company(company_id):
-        queryset = AttendanceRecord.objects.select_related(
-            "employee", "branch", "employee_assignment",
-        ).filter(work_date__gte=first, work_date__lte=last)
+        queryset = access.scope(
+            AttendanceRecord.objects.select_related(
+                "employee", "branch", "employee_assignment",
+            ).filter(work_date__gte=first, work_date__lte=last),
+            visible,
+        )
         month_total = queryset.count()
         if branch_id.isdigit():
             queryset = queryset.filter(branch_id=int(branch_id))
@@ -120,8 +124,8 @@ def attendance_list(request):
                 "note",
             ),
         )
-        employees = Employee.objects.order_by("first_name", "last_name")
-        branches = Branch.objects.order_by("name")
+        employees = _pickable(visible).order_by("first_name", "last_name")
+        branches = branch_choices(company_id, visible)
 
     return render(request, "attendance/attendance_list.html", {
         **month_context(year, month),
@@ -154,24 +158,28 @@ def attendance_calendar(request):
 
     The page picks the employee; the grid itself is an include so the employee
     panel (A7) can render exactly the same month for whoever is logged in.
+
+    A branch login picks only from people placed in its branches, and the grid
+    leaves out days worked in any other branch (A12 part 7).
     """
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership = require_company_membership(request.user, company_id)
+    membership, visible = access.view_branches(request.user, company_id)
     year, month = read_month(request.GET)
     company_tz = membership.company.timezone or "UTC"
     requested = request.GET.get("employee", "").strip()
 
     with use_company(company_id):
-        employees = list(Employee.objects.order_by("first_name", "last_name"))
+        employees = list(_pickable(visible).order_by("first_name", "last_name"))
         employee = None
         if requested.isdigit():
             employee = next(
                 (e for e in employees if e.pk == int(requested)), None
             )
         # Default to somebody rather than an empty screen: a calendar with no
-        # employee chosen has nothing to say.
+        # employee chosen has nothing to say. Somebody outside the viewer's
+        # branches is not in the list, so asking for them falls back too.
         if employee is None and employees:
             employee = employees[0]
 
@@ -186,11 +194,12 @@ def attendance_calendar(request):
                 employee=employee, year=year, month=month,
                 company_timezone=company_tz,
                 today=timezone.localdate(),
+                branches=visible,
             )
             if employee is not None
             else None
         )
-        has_any_record = AttendanceRecord.objects.exists()
+        has_any_record = access.scope(AttendanceRecord.objects.all(), visible).exists()
 
     previous, following = _month_steps(year, month)
     return render(request, "attendance/attendance_calendar.html", {
@@ -214,16 +223,28 @@ def attendance_now(request):
 
     Polled by the Employees page once a minute. Derived on read from today's
     scans — nothing is stored, so this can be called as often as it likes.
+
+    A branch login gets only people placed in branches where it may view
+    employees or attendance; any other id asked for is dropped (A12 part 7).
     """
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    require_company_membership(request.user, company_id)
+    _membership, visible = access.now_branches(request.user, company_id)
 
     wanted = request.GET.get("employees", "").strip()
     employee_ids = [
         int(value) for value in wanted.split(",") if value.strip().isdigit()
     ] or None
+    if visible is not ALL_BRANCHES:
+        with use_company(company_id):
+            allowed = set(people(visible).values_list("pk", flat=True))
+        employee_ids = sorted(
+            allowed if employee_ids is None else allowed.intersection(employee_ids)
+        )
+        if not employee_ids:
+            # An empty list would read as "everybody" below.
+            return JsonResponse({"employees": {}})
 
     statuses = live_status.statuses_for(company_id, employee_ids=employee_ids)
     return JsonResponse({
@@ -246,17 +267,22 @@ def attendance_day(request, employee_id, on):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership = require_company_membership(request.user, company_id)
+    membership, visible = access.view_branches(request.user, company_id)
     company_tz = membership.company.timezone or "UTC"
 
-    import datetime as _dt
-
-    try:
-        day = _dt.date.fromisoformat(str(on))
-    except ValueError:
-        day = None
-    if day is not None:
+    day = _parse_day(on)
+    if day is None:
+        if visible is not ALL_BRANCHES:
+            raise PermissionDenied("That is not a date.")
+    else:
+        # Before anything is worked out: a day in another branch is refused.
+        access.require_view_day(
+            request.user, company_id, employee_id, day, month_view.zone(company_tz)
+        )
         refresh(company_id, employee_ids=[employee_id], start=day, end=day)
+    may_correct = day is not None and correction_services.may_correct(
+        request.user, company_id, employee_id, day
+    )
 
     with use_company(company_id):
         record = (
@@ -270,8 +296,7 @@ def attendance_day(request, employee_id, on):
             return render(request, "attendance/includes/day_panel.html", {
                 "on": on, "detail": None,
                 "may_correct": (
-                    correction_services.may_correct(request.user, company_id)
-                    and Employee.objects.filter(pk=employee_id).exists()
+                    may_correct and Employee.objects.filter(pk=employee_id).exists()
                 ),
                 "employee_id": employee_id,
             })
@@ -281,7 +306,7 @@ def attendance_day(request, employee_id, on):
         detail["employee"] = record.employee
     return render(request, "attendance/includes/day_panel.html", {
         "on": on, "detail": detail,
-        "may_correct": correction_services.may_correct(request.user, company_id),
+        "may_correct": may_correct,
         "employee_id": employee_id,
     })
 
@@ -301,6 +326,26 @@ def _fix_url(employee_id, day):
     return reverse("attendance:attendance_day_fix", args=[employee_id, day.isoformat()])
 
 
+def _pickable(branches):
+    """Who the pickers offer. Call inside the company.
+
+    Company logins: every employee, as before. A branch login: people placed now
+    in its branches.
+    """
+    return Employee.objects.all() if branches is ALL_BRANCHES else people(branches)
+
+
+def _may_see_calendar(user, company_id, employee_id):
+    try:
+        _membership, visible = access.view_branches(user, company_id)
+    except PermissionDenied:
+        return False
+    if visible is ALL_BRANCHES:
+        return True
+    with use_company(company_id):
+        return people(visible).filter(pk=employee_id).exists()
+
+
 def _parse_day(on):
     import datetime as _dt
 
@@ -317,11 +362,15 @@ def attendance_day_fix(request, employee_id, on):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership = correction_services.require_corrector(request.user, company_id)
+    access.fix_branches(request.user, company_id)
     day = _parse_day(on)
     if day is None:
         messages.error(request, "That is not a date.")
         return redirect("attendance:attendance_review")
+    # attendance.fix in this day's branch (A12 part 7); the services check again.
+    membership = correction_services.require_corrector(
+        request.user, company_id, employee_id, day
+    )
 
     with use_company(company_id):
         employee = Employee.objects.filter(pk=employee_id).first()
@@ -397,10 +446,12 @@ def attendance_day_fix(request, employee_id, on):
         and correction_services.is_rule_check_out(record),
         "is_open_overtime": record is not None and record.review_status == "needs_review"
         and correction_services.is_open_overtime(record),
+        # The Calendar picks only from people placed in the viewer's branches
+        # now, so the link is offered only where it would open this person.
         "calendar_url": (
             reverse("attendance:attendance_calendar")
             + f"?employee={employee_id}&year={day.year}&month={day.month}"
-        ),
+        ) if _may_see_calendar(request.user, company_id, employee_id) else "",
     })
 
 
@@ -410,11 +461,15 @@ def attendance_correction_withdraw(request, pk):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    correction_services.require_corrector(request.user, company_id)
+    access.fix_branches(request.user, company_id)
     with use_company(company_id):
         correction = AttendanceCorrection.objects.filter(pk=pk).first()
     if correction is None:
         raise PermissionDenied("Correction not found in this company.")
+    # The corrected day's branch; withdraw() checks again inside its lock.
+    correction_services.require_corrector(
+        request.user, company_id, correction.employee_id, correction.work_date
+    )
     form = WithdrawForm(request.POST)
     form.is_valid()
     try:
@@ -432,17 +487,20 @@ def attendance_correction_withdraw(request, pk):
 @login_required
 @require_http_methods(["GET"])
 def attendance_review(request):
-    """Days that closed without a clear answer and need a person."""
+    """Days that closed without a clear answer and need a person.
+
+    Only days in branches where the viewer may fix attendance (A12 part 7).
+    """
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership = correction_services.require_corrector(request.user, company_id)
+    membership, fixable = access.fix_branches(request.user, company_id)
     # Bring this month and last up to date first: a day that has closed since
     # anybody last looked is exactly the kind that lands here.
     today = timezone.now().astimezone(month_view.zone(membership.company.timezone)).date()
     last_month_start = (today.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
     refresh(company_id, start=last_month_start, end=today)
-    rows = correction_services.review_queue(company_id)
+    rows = correction_services.review_queue(company_id, fixable)
     paginator = Paginator(rows, 25)
     page = paginator.get_page(request.GET.get("page"))
     return render(request, "attendance/review_list.html", {

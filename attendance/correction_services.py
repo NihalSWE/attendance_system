@@ -2,8 +2,9 @@
 
 Every action here follows the same shape:
 
-1. Check the person may do it — owner, company administrator or HR, the same
-   people who decide overtime.
+1. Check the person may do it — ``attendance.fix`` in the day's branch
+   (owner, company administrator and HR everywhere; a branch manager in their
+   own branches; anyone else where it was given — A12 part 7).
 2. Refuse a day inside a finalised salary month. Its salary has been paid.
 3. Write the correction, recalculate that day, and check the result is what
    was asked for. A scan that would land in a different day's window, or be
@@ -19,21 +20,18 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from accounts.models import CompanyMembership
+from access_control.branch_access import ALL_BRANCHES
+from attendance import access
 from attendance.models import AttendanceCorrection, AttendanceRecord, ReviewStatus
 from attendance.services import _is_locked, locked_ranges, recalculate
 from auditlog.services import record_company_event
 from common.tenant import use_company
 from employees.models import Employee
-from organization.services import STRUCTURE_ROLES, require_company_membership
+from organization.services import require_company_membership
 
 Type = AttendanceCorrection.CorrectionType
 Status = AttendanceCorrection.Status
 DayStatus = AttendanceRecord.AttendanceStatus
-
-#: Who may fix attendance. Matches payroll.overtime.OVERTIME_ROLES: "the admin
-#: or HR" (Ajay, 2026-09-14).
-CORRECTION_ROLES = (*STRUCTURE_ROLES, CompanyMembership.Role.HR)
 
 #: The rule's check-out is something a person can confirm. An open overtime
 #: session is decided on the Overtime page instead (A9).
@@ -47,21 +45,19 @@ CORRECTABLE_DAY_STATUSES = (
 )
 
 
-def require_corrector(actor, company_id):
-    membership = require_company_membership(actor, company_id)
-    if membership.role not in CORRECTION_ROLES:
-        raise PermissionDenied(
-            "Fixing attendance needs owner, company administrator or HR access."
-        )
-    return membership
+def require_corrector(actor, company_id, employee_id, work_date):
+    """The actor's membership, if they may fix this employee-day (A12 part 7).
+
+    ``attendance.fix`` in the day's branch: owner, company admin and HR hold it
+    everywhere, a branch manager in their own branches, anyone else only where
+    it was given. Checked here, not only on the page, so a crafted post for
+    another branch's day is refused too.
+    """
+    return access.require_fix_day(actor, company_id, employee_id, work_date)
 
 
-def may_correct(actor, company_id):
-    try:
-        require_corrector(actor, company_id)
-    except PermissionDenied:
-        return False
-    return True
+def may_correct(actor, company_id, employee_id, work_date):
+    return access.may_fix_day(actor, company_id, employee_id, work_date)
 
 
 def snapshot(record):
@@ -153,7 +149,7 @@ def _new(*, actor, membership, employee_id, work_date, correction_type, reason, 
 
 def add_scan(*, actor, company_id, employee_id, work_date, at, reason):
     """A scan the device never got, on this day."""
-    membership = require_corrector(actor, company_id)
+    membership = require_corrector(actor, company_id, employee_id, work_date)
     reason = _clean_reason(reason)
     if at is None:
         raise ValidationError({"at": "Choose the date and time of the scan."})
@@ -192,7 +188,7 @@ def add_scan(*, actor, company_id, employee_id, work_date, at, reason):
 
 def change_status(*, actor, company_id, employee_id, work_date, status, reason):
     """Say what the day was: present, half day or absent."""
-    membership = require_corrector(actor, company_id)
+    membership = require_corrector(actor, company_id, employee_id, work_date)
     reason = _clean_reason(reason)
     if status not in AttendanceCorrection.SETTABLE_STATUSES:
         raise ValidationError({"status": "Choose present, half day or absent."})
@@ -240,7 +236,7 @@ def change_status(*, actor, company_id, employee_id, work_date, status, reason):
 
 def accept_review(*, actor, company_id, employee_id, work_date, reason):
     """The check-out the rule set is right; stop asking."""
-    membership = require_corrector(actor, company_id)
+    membership = require_corrector(actor, company_id, employee_id, work_date)
     reason = _clean_reason(reason)
     _refuse_if_locked(company_id, work_date)
 
@@ -267,7 +263,7 @@ def accept_review(*, actor, company_id, employee_id, work_date, reason):
 
 def withdraw(*, actor, company_id, correction_id, note):
     """Take a correction back. The day is rebuilt without it."""
-    membership = require_corrector(actor, company_id)
+    require_company_membership(actor, company_id)
     note = (note or "").strip()
     with transaction.atomic(), use_company(company_id):
         correction = (
@@ -276,6 +272,10 @@ def withdraw(*, actor, company_id, correction_id, note):
         )
         if correction is None:
             raise PermissionDenied("Correction not found in this company.")
+        # The corrected day's branch decides, as for making the fix.
+        membership = require_corrector(
+            actor, company_id, correction.employee_id, correction.work_date
+        )
         if correction.status != Status.APPLIED:
             raise ValidationError("Only a correction in force can be withdrawn.")
         _refuse_if_locked(company_id, correction.work_date)
@@ -321,8 +321,8 @@ def corrections_for_day(company_id, employee_id, work_date):
         )
 
 
-def review_queue(company_id):
-    """Closed days waiting for a person, oldest first.
+def review_queue(company_id, branches=ALL_BRANCHES):
+    """Closed days waiting for a person, oldest first, in ``branches``.
 
     Two reasons put a day here (DEVICE_ATTENDANCE_POLICY.md step 7): the day
     closed on an IN and was checked out at the shift end by rule, or somebody
@@ -331,13 +331,14 @@ def review_queue(company_id):
     """
     locked = locked_ranges(company_id)
     with use_company(company_id):
-        rows = list(
+        rows = list(access.scope(
             AttendanceRecord.objects.select_related(
                 "employee", "shift", "employee_assignment__department__department",
             )
             .filter(review_status=ReviewStatus.NEEDS_REVIEW, is_open=False)
-            .order_by("work_date", "employee__first_name", "pk")
-        )
+            .order_by("work_date", "employee__first_name", "pk"),
+            branches,
+        ))
     return [row for row in rows if not _is_locked(row.work_date, locked)]
 
 

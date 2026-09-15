@@ -61,9 +61,11 @@ class BranchOvertimeTests(TwoBranchCase):
     def test_the_calendar_link_follows_branch_pages(self):
         self.client.force_login(self.manager)
         calendar = reverse("attendance:attendance_calendar")
-        self.assertNotContains(self.client.get(self.day_url(self.near)), calendar)
-        with patch.dict(BRANCH_PAGES, {"attendance:attendance_calendar": "employees.view"}):
-            self.assertContains(self.client.get(self.day_url(self.near)), calendar)
+        self.assertContains(self.client.get(self.day_url(self.near)), calendar)
+        with patch.dict(BRANCH_PAGES):
+            # N10 listed the Calendar; without the entry the link goes again.
+            del BRANCH_PAGES["attendance:attendance_calendar"]
+            self.assertNotContains(self.client.get(self.day_url(self.near)), calendar)
 
     def test_decide_access_in_another_branch_stays_there(self):
         self.grant("overtime.decide", self.unit)

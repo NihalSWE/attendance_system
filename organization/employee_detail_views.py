@@ -2,7 +2,7 @@
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
@@ -11,6 +11,7 @@ from attendance.models import AttendanceRecord
 from common.forms import apply_service_errors
 from organization import employee_detail_services as services
 from organization.employee_detail_forms import EndEmploymentForm
+from organization.employee_edit_services import is_company_wide
 from organization.views import _company_or_redirect
 
 #: The month summary, in the order a person reads it.
@@ -37,10 +38,12 @@ def employee_detail(request, pk):
     return render(request, "organization/employee_detail.html", {
         **page,
         "month_rows": [(label, counts.get(status, 0)) for status, label in MONTH_ROWS],
+        # The Calendar opens only people placed in branches whose attendance
+        # the viewer may see (A12 part 7).
         "calendar_url": (
             reverse("attendance:attendance_calendar")
             + f"?employee={pk}&year={today.year}&month={today.month}"
-        ),
+        ) if page["may"]["attendance"] else "",
     })
 
 
@@ -52,13 +55,19 @@ def employee_end(request, pk):
         return bail
     page = services.employee_history(actor=request.user, company_id=company_id, employee_id=pk)
     employee = page["employee"]
+    if not page["may"]["end"]:
+        # end_employment refuses too; this keeps the form from being offered.
+        raise PermissionDenied("Ending this person's employment is not yours to do.")
     if page["is_ended"]:
         messages.info(request, f"{employee.full_name} has already left.")
         return redirect("organization:employee_detail", pk=employee.pk)
 
     form = EndEmploymentForm(
         request.POST or None,
-        initial={"last_day": page["today"], "disable_login": True, "end_device_enrollments": True},
+        initial={
+            "last_day": page["today"], "disable_login": page["may"]["logins"],
+            "end_device_enrollments": True,
+        },
     )
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
@@ -81,6 +90,10 @@ def employee_end(request, pk):
             if summary["login_disabled"]:
                 parts.append("Their login is disabled.")
             messages.success(request, " ".join(parts))
+            if not is_company_wide(page["membership"]):
+                # Once ended they are placed nowhere, so no longer in a branch
+                # this login looks after; their page stays with the company.
+                return redirect("employee_list")
             return redirect("organization:employee_detail", pk=employee.pk)
 
     active_devices = [d for d in page["devices"] if d.is_current]
@@ -88,5 +101,9 @@ def employee_end(request, pk):
         **page,
         "form": form,
         "active_devices": active_devices,
-        "has_active_login": bool(page["login"] and page["login"].status == "active"),
+        # A login is disabled with the ending only by someone who may manage
+        # logins in the branch; the service checks the same.
+        "has_active_login": bool(
+            page["login"] and page["login"].status == "active" and page["may"]["logins"]
+        ),
     })

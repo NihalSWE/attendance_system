@@ -13,6 +13,7 @@ import calendar as month_calendar
 import datetime
 import zoneinfo
 
+from access_control.branch_access import ALL_BRANCHES
 from attendance.models import AttendanceRecord
 
 # Monday first, as the spec asks and as the rest of the project's calendars do.
@@ -164,8 +165,11 @@ class Filler:
         self.number = date.day
 
 
-def build_month(*, employee, year, month, company_timezone, today=None):
+def build_month(*, employee, year, month, company_timezone, today=None, branches=None):
     """The weeks of one employee's month, plus a summary strip.
+
+    ``branches`` (ids) leaves out days worked in any other branch, for a viewer
+    limited to some branches (A12 part 7); None or ALL_BRANCHES shows them all.
 
     Must be called inside the employee's tenant context.
     """
@@ -174,12 +178,12 @@ def build_month(*, employee, year, month, company_timezone, today=None):
     first = datetime.date(year, month, 1)
     last = datetime.date(year, month, month_calendar.monthrange(year, month)[1])
 
-    records = {
-        record.work_date: record
-        for record in AttendanceRecord.objects.filter(
-            employee=employee, work_date__gte=first, work_date__lte=last
-        ).select_related("shift", "leave_day")
-    }
+    queryset = AttendanceRecord.objects.filter(
+        employee=employee, work_date__gte=first, work_date__lte=last
+    ).select_related("shift", "leave_day")
+    if branches is not None and branches is not ALL_BRANCHES:
+        queryset = queryset.filter(branch_id__in=branches)
+    records = {record.work_date: record for record in queryset}
 
     days = [
         Day(first + datetime.timedelta(days=offset), records.get(

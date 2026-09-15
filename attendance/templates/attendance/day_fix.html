@@ -34,11 +34,13 @@
                 {{ day|date:"l j F Y" }}{% if detail.shift_name %} · {{ detail.shift_name }} {{ detail.shift_times }}{% endif %}
             </p>
         </div>
-        <div class="page__actions">
-            <a class="btn btn--ghost" href="{{ calendar_url }}">
-                Calendar view
-            </a>
-        </div>
+        {% if calendar_url %}
+            <div class="page__actions">
+                <a class="btn btn--ghost" href="{{ calendar_url }}">
+                    Calendar view
+                </a>
+            </div>
+        {% endif %}
     </div>
 
     {% if locked %}

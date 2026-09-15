@@ -74,13 +74,15 @@ class EmployeeListTests(BranchEmployeesBase):
         self.login_as(self.manager)
         detail = 'href="%s"' % reverse("organization:employee_detail", args=[self.clerk.pk])
         page = self.client.get(reverse("employee_list"))
-        self.assertNotContains(page, "data-now-board")
-        self.assertNotContains(page, detail)
-        with patch.dict(BRANCH_PAGES, {"attendance:attendance_now": "employees.view",
-                                       "organization:employee_detail": "employees.view"}):
-            page = self.client.get(reverse("employee_list"))
         self.assertContains(page, "data-now-board")
         self.assertContains(page, detail)
+        with patch.dict(BRANCH_PAGES):
+            # N10 listed both; without the entries the links go again.
+            del BRANCH_PAGES["attendance:attendance_now"]
+            del BRANCH_PAGES["organization:employee_detail"]
+            page = self.client.get(reverse("employee_list"))
+        self.assertNotContains(page, "data-now-board")
+        self.assertNotContains(page, detail)
 
 
 class EditEmployeeTests(BranchEmployeesBase):
