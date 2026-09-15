@@ -78,6 +78,18 @@ MAX_DEADLINE_SECONDS = 1800
 # already requires an unrestricted company administrator.
 MAX_PROBES_PER_HOUR = 10
 
+#: Said when a change is asked for on a device that has never called in (plan
+#: step N8 part 4). The software changes the address by leaving a command for
+#: the device's next check-in; a device that has never checked in will never
+#: collect it, and the change used to sit "in progress" and then end as "lost",
+#: blaming the new address for a device that had simply never been connected.
+NEVER_CONNECTED_MESSAGE = (
+    "This device has never connected to this server. Set the server address "
+    "on the terminal itself first (COMM \u2192 Cloud Server), using the values "
+    "under \u201cEnter these on the device\u201d on its page. Once it has "
+    "checked in, its address can be changed from here."
+)
+
 DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
@@ -446,6 +458,10 @@ def request_change(*, device, actor, raw_address, fetch=None):
         raise ServerAddressError(
             "This device is retired. It no longer accepts data or commands."
         )
+    if device.last_seen_at is None:
+        # Refused before anything is written: no attempt row, no probe, no
+        # command waiting for a device that is not there to collect it.
+        raise ServerAddressError(NEVER_CONNECTED_MESSAGE)
 
     target = parse_address(raw_address)
     saved = current_address(device)

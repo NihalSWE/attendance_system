@@ -287,3 +287,67 @@ class PageTests(ConnectionTestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 302)
                 self.assertIn("login", response["Location"])
+
+
+class NeverConnectedTests(ConnectionTestCase):
+    """N8 part 4: no server address change for a device that never checked in.
+
+    The change is a command left for the device's next check-in. A device that
+    has never checked in never collects it; before this, the change sat "in
+    progress" and then ended as "lost", blaming the address (Ajay, SenseFace 3A,
+    2026-09-14).
+    """
+
+    _ok_probe = base.ServerAddressTestCase._ok_probe
+    _request_change = base.ServerAddressTestCase._request_change
+
+    def setUp(self):
+        super().setUp()
+        self.seen(None)  # registered, never connected
+
+    def test_the_change_is_refused_before_anything_is_written(self):
+        from devices.models import DeviceServerAddressChange
+        from devices.services import server_address
+        from devices.services.commands import pending_summary
+
+        probes = []
+
+        def fetch(url):
+            probes.append(url)
+            return 200, "unused"
+
+        with self.assertRaises(server_address.ServerAddressError) as caught:
+            self._request_change(fetch=fetch)
+        self.assertIn("never connected to this server", str(caught.exception))
+        self.assertIn("COMM", str(caught.exception))
+        self.assertEqual(probes, [])
+        self.assertFalse(DeviceServerAddressChange.all_objects.exists())
+        self.assertEqual(pending_summary(self.device), [])
+
+    def test_once_it_has_checked_in_the_change_goes_ahead(self):
+        from devices.models import DeviceServerAddressChange
+
+        self.seen(30, now=timezone.now())
+        attempt = self._request_change()
+        self.assertEqual(attempt.status, DeviceServerAddressChange.Status.QUEUED)
+
+    def test_the_edit_form_closes_the_field_and_says_why(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("devices:device_edit", args=[self.device.public_id]))
+        field = response.context["form"].fields["server_address"]
+        self.assertTrue(field.disabled)
+        self.assertContains(response, "never connected to this server")
+
+    def test_a_crafted_edit_cannot_start_a_change(self):
+        from devices.models import DeviceServerAddressChange
+
+        self.client.force_login(self.admin)
+        self.client.post(reverse("devices:device_edit", args=[self.device.public_id]), {
+            "name": self.device.name, "serial_number": self.device.serial_number,
+            "branch": self.branch.pk, "device_model": self.device.device_model_id,
+            "external_device_id": "", "timezone": "Asia/Dhaka", "installed_at": "",
+            "status": "active", "comm_key": "", "push_interval_seconds": 10,
+            "error_delay_seconds": 30, "realtime": "on", "push_protocol": "auto",
+            "server_address": f"https://{base.NEW_HOST}", "server_address_confirmed": "on",
+        })
+        self.assertFalse(DeviceServerAddressChange.all_objects.exists())

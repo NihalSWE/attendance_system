@@ -79,6 +79,10 @@ class ServerAddressTestCase(TestCase):
                 timezone="Asia/Dhaka",
                 status=BiometricDevice.Status.ACTIVE,
                 settings={"push_interval_seconds": 10},
+                # Already connected: it has been checking in at OLD_HOST. A
+                # device that never has cannot be moved from the software
+                # (N8 part 4, tests_connection.py).
+                last_seen_at=timezone.now(),
                 server_scheme="https",
                 server_host=OLD_HOST,
                 server_port=443,
