@@ -53,11 +53,18 @@ BADGES = {
 class Status:
     """One employee's badge, ready for a template or for JSON."""
 
-    def __init__(self, key, *, since=None, detail=""):
+    def __init__(self, key, *, since=None, detail="", shift_end=None, on=None):
         self.key = key
         self.label, self.tone = BADGES.get(key, BADGES["not_in_yet"])
         self.since = since
         self.detail = detail
+        # When today's shift ends, for "still in after the shift" (N11).
+        self.shift_end = shift_end
+        self.on = on
+
+    @property
+    def shift_end_text(self):
+        return self.shift_end.strftime("%H:%M") if self.shift_end else ""
 
     @property
     def since_text(self):
@@ -83,6 +90,35 @@ def _zone(name):
         return zoneinfo.ZoneInfo(name or "UTC")
     except zoneinfo.ZoneInfoNotFoundError:
         return zoneinfo.ZoneInfo("UTC")
+
+
+#: Still scanned in this long after the shift ended: working late, or gone
+#: home without scanning out? Worth a look the same evening (N11), rather than
+#: weeks later on Days to review.
+STILL_IN_ALERT_MINUTES = 120
+
+
+def still_in_after_shift(company_id, *, employee_ids=None, now=None):
+    """``[(employee, Status)]`` still in long after today's shift ended, by name."""
+    from django.utils import timezone
+
+    from employees.models import Employee
+
+    now = now or timezone.now()
+    limit = datetime.timedelta(minutes=STILL_IN_ALERT_MINUTES)
+    late = {
+        employee_id: status
+        for employee_id, status in statuses_for(
+            company_id, employee_ids=employee_ids, now=now,
+        ).items()
+        if status.key == "in_office" and status.shift_end is not None
+        and now >= status.shift_end + limit
+    }
+    if not late:
+        return []
+    with use_company(company_id):
+        employees = Employee.objects.filter(pk__in=late).order_by("first_name", "last_name")
+        return [(employee, late[employee.pk]) for employee in employees]
 
 
 def _assignment_on(assignments, at):
@@ -252,7 +288,11 @@ def _status_for(*, employee_id, assignments, punches, is_on_leave, calendar,
     since = last.at.astimezone(tz)
 
     if last.direction == "in":
-        return Status("in_office", since=since)
+        return Status(
+            "in_office", since=since,
+            shift_end=window.scheduled_end.astimezone(tz) if window.scheduled_end else None,
+            on=today,
+        )
 
     # Out, and the shift is over: they have gone home. Out, and the shift is
     # still running: they are on a break. The stored record keeps the day open

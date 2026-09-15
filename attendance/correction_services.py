@@ -23,7 +23,13 @@ from django.utils import timezone
 from access_control.branch_access import ALL_BRANCHES
 from attendance import access
 from attendance.models import AttendanceCorrection, AttendanceRecord, ReviewStatus
-from attendance.services import _is_locked, locked_ranges, recalculate
+from attendance.services import (
+    EARLY_CHECK_OUT,
+    LONG_OUTSIDE,
+    _is_locked,
+    locked_ranges,
+    recalculate,
+)
 from auditlog.services import record_company_event
 from common.tenant import use_company
 from employees.models import Employee
@@ -37,6 +43,9 @@ DayStatus = AttendanceRecord.AttendanceStatus
 #: session is decided on the Overtime page instead (A9).
 RULE_CHECK_OUT = "check-out by rule, no scan"
 OPEN_OVERTIME = "overtime session with no check-out"
+#: What "Accept as it is" can confirm. An open overtime session is not here:
+#: it is decided on the Overtime page. The last two are N11's unusual days.
+ACCEPTABLE_REASONS = (RULE_CHECK_OUT, EARLY_CHECK_OUT, LONG_OUTSIDE)
 
 #: The days a status can be set on: working days. Leave, holidays and weekly
 #: offs have their own pages.
@@ -147,9 +156,51 @@ def _new(*, actor, membership, employee_id, work_date, correction_type, reason, 
 # --------------------------------------------------------------------------
 
 
+#: Why a scan cannot be added to a day. Kept as names so the missed-scan
+#: request (N11) can say the same thing in the employee's words.
+OTHER_DAY = (
+    "That time belongs to a different day's attendance. Open that day and add it there."
+)
+REPEAT = (
+    "There is already a scan within seconds of that time, so this one would be "
+    "ignored as a repeat."
+)
+
+
 def add_scan(*, actor, company_id, employee_id, work_date, at, reason):
     """A scan the device never got, on this day."""
     membership = require_corrector(actor, company_id, employee_id, work_date)
+    return _add_scan(
+        actor=actor, membership=membership, company_id=company_id,
+        employee_id=employee_id, work_date=work_date, at=at, reason=reason,
+    )
+
+
+class _TryOnly(Exception):
+    pass
+
+
+def check_scan_fits(*, actor, membership, company_id, employee_id, work_date, at):
+    """Raise add_scan's ValidationError if this scan would not count on this day.
+
+    Tried for real inside a transaction that is always rolled back, so the
+    answer is exactly what approving would do — and nothing is written. Used
+    when an employee reports a missed scan (N11); the permission to fix is
+    checked when somebody approves it, not here.
+    """
+    try:
+        with transaction.atomic():
+            _add_scan(
+                actor=actor, membership=membership, company_id=company_id,
+                employee_id=employee_id, work_date=work_date, at=at,
+                reason="Checking a missed-scan request",
+            )
+            raise _TryOnly
+    except _TryOnly:
+        pass
+
+
+def _add_scan(*, actor, membership, company_id, employee_id, work_date, at, reason):
     reason = _clean_reason(reason)
     if at is None:
         raise ValidationError({"at": "Choose the date and time of the scan."})
@@ -171,15 +222,9 @@ def add_scan(*, actor, company_id, employee_id, work_date, at, reason):
         )
         if allocation is None:
             # Rolls the correction back with the transaction.
-            raise ValidationError({
-                "at": "That time belongs to a different day's attendance. Open "
-                      "that day and add it there."
-            })
+            raise ValidationError({"at": OTHER_DAY})
         if not allocation.is_included:
-            raise ValidationError({
-                "at": "There is already a scan within seconds of that time, so "
-                      "this one would be ignored as a repeat."
-            })
+            raise ValidationError({"at": REPEAT})
         return _finish(
             actor=actor, membership=membership, correction=correction,
             before=before, record=record, action="attendance.scan_added",
@@ -235,7 +280,7 @@ def change_status(*, actor, company_id, employee_id, work_date, status, reason):
 
 
 def accept_review(*, actor, company_id, employee_id, work_date, reason):
-    """The check-out the rule set is right; stop asking."""
+    """The day is right as it stands (the rule's check-out, or an unusual day); stop asking."""
     membership = require_corrector(actor, company_id, employee_id, work_date)
     reason = _clean_reason(reason)
     _refuse_if_locked(company_id, work_date)
@@ -244,7 +289,7 @@ def accept_review(*, actor, company_id, employee_id, work_date, reason):
         record = _rebuild(company_id, employee_id, work_date)
         if record is None or record.review_status != ReviewStatus.NEEDS_REVIEW:
             raise ValidationError("This day does not need a review.")
-        if record.review_reason != RULE_CHECK_OUT:
+        if record.review_reason not in ACCEPTABLE_REASONS:
             raise ValidationError(
                 "An open overtime session is decided on the Overtime page."
             )
@@ -344,6 +389,10 @@ def review_queue(company_id, branches=ALL_BRANCHES):
 
 def is_rule_check_out(record):
     return record.review_reason == RULE_CHECK_OUT
+
+
+def is_unusual(record):
+    return record.review_reason in (EARLY_CHECK_OUT, LONG_OUTSIDE)
 
 
 def is_open_overtime(record):

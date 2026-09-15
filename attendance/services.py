@@ -70,6 +70,19 @@ from scheduling.models import CompanyAttendanceSettings
 logger = logging.getLogger(__name__)
 
 ONE, HALF, NONE = Decimal("1"), Decimal("0.5"), Decimal("0")
+
+# Unusual days (plan step N11). A missed scan does not always leave a day
+# without a check-out: somebody who scans out for tea and walks back in behind a
+# colleague ends the day on that tea-break OUT, and the day simply looks short.
+# These send such a finished working day to Days to review. They change nothing
+# the day counts or pays; somebody looks, then adds the missing scan or accepts
+# the day as it is.
+EARLY_CHECK_OUT = "checked out long before the shift end"
+LONG_OUTSIDE = "long time outside during the shift"
+#: Checked out at least this long before the shift end.
+EARLY_CHECK_OUT_REVIEW_MINUTES = 120
+#: Outside during the shift for this much longer than the shift's break.
+LONG_OUTSIDE_REVIEW_MINUTES = 60
 LIVE_LEAVE = (LeaveDay.Status.RESERVED, LeaveDay.Status.APPROVED, LeaveDay.Status.CONSUMED)
 
 
@@ -124,12 +137,44 @@ def _measurements(day):
     }
 
 
-def _classify_working_day(shift, settings, day):
+def _outside_during_shift(day, scheduled_start, scheduled_end):
+    """Minutes between sessions that fall inside the scheduled shift."""
+    if scheduled_start is None or scheduled_end is None:
+        return day.outside_minutes
+    total = 0
+    for earlier, later in zip(day.sessions, day.sessions[1:]):
+        if earlier.ended_at is None:
+            continue
+        start = max(earlier.ended_at, scheduled_start)
+        end = min(later.started_at, scheduled_end)
+        if end > start:
+            total += int((end - start).total_seconds() // 60)
+    return total
+
+
+def unusual_reason(shift, day, scheduled_start=None, scheduled_end=None):
+    """Why a finished, otherwise clear working day should get a look, or ""."""
+    if not day.is_closed or not day.kept or day.needs_review:
+        return ""
+    if day.early_out_minutes >= EARLY_CHECK_OUT_REVIEW_MINUTES:
+        return EARLY_CHECK_OUT
+    allowance = getattr(shift, "default_break_minutes", 0) or 0
+    outside = _outside_during_shift(day, scheduled_start, scheduled_end)
+    if outside > allowance + LONG_OUTSIDE_REVIEW_MINUTES:
+        return LONG_OUTSIDE
+    return ""
+
+
+def _classify_working_day(shift, settings, day, *, scheduled_start=None,
+                          scheduled_end=None, flag_unusual=True):
     """Turn a paired day into the record's status and minute fields.
 
     ``day`` is an ``attendance.pairing.Day``: the labelling, the minutes, the
     lateness and the review reason are already decided there. This maps them
     onto the record and applies the company's missing-punch policy.
+
+    ``flag_unusual`` sends a short day or a long time outside to review
+    (N11). Off for a half-day leave, where leaving early is the point.
     """
     minutes = _measurements(day)
 
@@ -194,6 +239,11 @@ def _classify_working_day(shift, settings, day):
             f"{day.outside_minutes} min outside."
         )
     minutes["note"] = " ".join(notes)[:255]
+    if flag_unusual:
+        reason = unusual_reason(shift, day, scheduled_start, scheduled_end)
+        if reason:
+            minutes["review_status"] = ReviewStatus.NEEDS_REVIEW
+            minutes["review_reason"] = reason
     return status, punch_status, fraction, minutes
 
 
@@ -545,7 +595,7 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         if day_punches:
             paired = _pair(day_punches, window, settings, is_closed)
             status, punch_status, _, minutes = _classify_working_day(
-                window.shift, settings, paired
+                window.shift, settings, paired, flag_unusual=False,
             )
             values.update(punch_status=punch_status, **minutes)
             values.update(
@@ -610,7 +660,8 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
             return None
         paired = _pair(day_punches, window, settings, is_closed)
         status, punch_status, fraction, minutes = _classify_working_day(
-            window.shift, settings, paired
+            window.shift, settings, paired,
+            scheduled_start=window.scheduled_start, scheduled_end=window.scheduled_end,
         )
         values.update(
             attendance_status=status, punch_status=punch_status,

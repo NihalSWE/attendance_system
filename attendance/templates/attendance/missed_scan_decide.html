@@ -1,0 +1,164 @@
+{% extends "base_template/base.html" %}
+{% load static tz %}
+{% block title %}
+    Missed scan · {{ item.employee.full_name }} · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+    <link rel="stylesheet" href="{% static 'base_template/css/attendance-calendar.css' %}">
+    <link rel="stylesheet" href="{% static 'attendance/css/corrections.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'attendance:attendance_list' %}">
+            Attendance
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'attendance:missed_scan_list' %}">
+            Missed scans
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ item.employee.full_name }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ item.employee.full_name }}
+            </h1>
+            <p class="page__sub">
+                Says they scanned at {{ item.scan_at|timezone:company_tz|date:"H:i" }} on {{ item.work_date|date:"l j F Y" }} · {{ item.branch.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{{ fix_url }}">
+                Fix a day
+            </a>
+        </div>
+    </div>
+
+    <div class="fix-grid">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    The request
+                </h2>
+                {% if item.status == "pending" %}
+                    <span class="badge badge--warning">
+                        Waiting
+                    </span>
+                {% elif item.status == "approved" %}
+                    <span class="badge badge--success">
+                        Approved
+                    </span>
+                {% elif item.status == "rejected" %}
+                    <span class="badge badge--danger">
+                        Rejected
+                    </span>
+                {% else %}
+                    <span class="badge badge--neutral">
+                        Withdrawn
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body">
+                <dl class="facts">
+                    <dt>
+                        Scan
+                    </dt>
+                    <dd>
+                        {{ item.scan_at|timezone:company_tz|date:"H:i, j M Y" }}
+                    </dd>
+                    <dt>
+                        What happened
+                    </dt>
+                    <dd>
+                        {{ item.reason }}
+                    </dd>
+                    <dt>
+                        Sent
+                    </dt>
+                    <dd>
+                        {{ item.submitted_at|timezone:company_tz|date:"j M Y, H:i" }}
+                    </dd>
+                    {% if item.decided_at %}
+                        <dt>
+                            Decided
+                        </dt>
+                        <dd>
+                            {{ item.decided_at|timezone:company_tz|date:"j M Y, H:i" }} · {{ item.decided_by.email|default:"—" }}
+                        </dd>
+                    {% endif %}
+                    {% if item.decision_note %}
+                        <dt>
+                            Note
+                        </dt>
+                        <dd>
+                            {{ item.decision_note }}
+                        </dd>
+                    {% endif %}
+                </dl>
+            </div>
+            {% if item.status == "pending" %}
+                <form method="post" action="">
+                    {% csrf_token %}
+                    <div class="card__body stack">
+                        {% include "attendance/includes/fix_fields.html" %}
+                    </div>
+                    <div class="card__foot">
+                        <button class="btn btn--ghost" type="submit" name="decision" value="reject">
+                            Reject
+                        </button>
+                        <button class="btn btn--primary" type="submit" name="decision" value="approve">
+                            Approve and add the scan
+                        </button>
+                    </div>
+                </form>
+            {% endif %}
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    The day now
+                </h2>
+                {% if detail %}
+                    <span class="badge badge--{{ detail.tone }}">
+                        {{ detail.status_label }}
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                {% if detail.scans %}
+                    <ol class="timeline">
+                        {% for scan in detail.scans %}
+                            <li class="timeline__item{% if not scan.is_included %} timeline__item--muted{% endif %}">
+                                <span class="timeline__time">
+                                    {{ scan.time }}
+                                </span>
+                                <span class="timeline__label">
+                                    {{ scan.label }}
+                                </span>
+                                <span class="timeline__device t-faint">
+                                    {{ scan.device|default:"—" }}
+                                </span>
+                            </li>
+                        {% endfor %}
+                    </ol>
+                {% else %}
+                    <p class="t-muted fix-lead">
+                        No scans recorded on this day.
+                    </p>
+                {% endif %}
+                {% if detail.note %}
+                    <p class="t-muted fix-lead">
+                        {{ detail.note }}
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

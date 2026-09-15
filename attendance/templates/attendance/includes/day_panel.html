@@ -41,6 +41,10 @@
                 <a class="btn btn--ghost btn--sm" href="{% url 'attendance:attendance_day_fix' employee_id detail.date|date:'Y-m-d' %}">
                     Fix this day
                 </a>
+            {% elif request.resolver_match.namespace == "me" %}
+                <a class="btn btn--ghost btn--sm" href="{% url 'me:missed_scan_report' %}?date={{ detail.date|date:'Y-m-d' }}">
+                    Report a missed scan
+                </a>
             {% endif %}
         </div>
 
@@ -139,6 +143,10 @@
         {% if may_correct %}
             <a class="btn btn--ghost btn--sm" href="{% url 'attendance:attendance_day_fix' employee_id on %}">
                 Fix this day
+            </a>
+        {% elif request.resolver_match.namespace == "me" %}
+            <a class="btn btn--ghost btn--sm" href="{% url 'me:missed_scan_report' %}?date={{ on }}">
+                Report a missed scan
             </a>
         {% endif %}
     </div>

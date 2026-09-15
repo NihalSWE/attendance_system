@@ -20,6 +20,11 @@
                 {{ month_name }} {{ year }} · {{ employee.full_name }}. Click a day to see every scan.
             </p>
         </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'me:missed_scans' %}">
+                Missed scans
+            </a>
+        </div>
     </div>
 
     <div class="card">

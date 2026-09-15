@@ -1,0 +1,47 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Report a missed scan · My account
+{% endblock %}
+{% block page %}
+    <div class="form-page">
+    <div class="crumbs">
+        <a href="{% url 'me:home' %}">
+            My account
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'me:missed_scans' %}">
+            Missed scans
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Report
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Report a missed scan
+            </h1>
+            <p class="page__sub">
+                The time you scanned, or should have. Your branch manager or HR approves it, and the day is worked out again with it.
+            </p>
+        </div>
+    </div>
+    <form class="card" method="post" action="">
+        {% csrf_token %}
+        <div class="card__body stack">
+            {% include "attendance/includes/fix_fields.html" %}
+        </div>
+        <div class="card__foot">
+            <a class="btn btn--ghost" href="{% url 'me:missed_scans' %}">
+                Cancel
+            </a>
+            <button class="btn btn--primary" type="submit">
+                Send for approval
+            </button>
+        </div>
+    </form>
+    </div>
+{% endblock %}

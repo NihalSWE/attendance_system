@@ -75,6 +75,23 @@
                             Nobody scanned out, so the day was closed at {{ record.scheduled_end_at|timezone:company_tz|date:"H:i" }}. Add the real check-out below, or accept the rule's time if it is right.
                         </div>
                     </div>
+                {% elif is_unusual %}
+                    <div class="alert alert--warning fix-review">
+                        <div>
+                            <strong>
+                                {% if record.review_reason == early_check_out %}
+                                    Needs review — checked out long before the shift end.
+                                {% else %}
+                                    Needs review — a long time outside during the shift.
+                                {% endif %}
+                            </strong>
+                            {% if record.review_reason == early_check_out %}
+                                The last scan was {{ record.last_out_at|timezone:company_tz|date:"H:i" }}, well before {{ record.scheduled_end_at|timezone:company_tz|date:"H:i" }}. If they came back in without scanning, add that scan below; if they really left, accept the day as it is.
+                            {% else %}
+                                They were out for {{ record.outside_minutes }} min. If they came back earlier without scanning, add that scan below; if the time is right, accept the day as it is.
+                            {% endif %}
+                        </div>
+                    </div>
                 {% elif is_open_overtime %}
                     <div class="alert alert--warning fix-review">
                         <div>
@@ -213,18 +230,26 @@
             </form>
         </div>
 
-        {% if is_rule_check_out %}
+        {% if is_rule_check_out or is_unusual %}
             <form class="card" method="post" action="">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="accept_review">
                 <div class="card__head">
                     <h2>
-                        Accept the rule's check-out
+                        {% if is_rule_check_out %}
+                            Accept the rule's check-out
+                        {% else %}
+                            Accept the day as it is
+                        {% endif %}
                     </h2>
                 </div>
                 <div class="card__body stack">
                     <p class="t-muted fix-lead">
-                        If they really left at the shift end, confirm it. The day stays as it is and leaves the review list.
+                        {% if is_rule_check_out %}
+                            If they really left at the shift end, confirm it. The day stays as it is and leaves the review list.
+                        {% else %}
+                            If the scans are right, confirm it. The day stays as it is and leaves the review list.
+                        {% endif %}
                     </p>
                     {% include "attendance/includes/fix_fields.html" with form=forms.accept_review %}
                 </div>

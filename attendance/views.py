@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from access_control.branch_access import ALL_BRANCHES
-from attendance import access, correction_services, live_status, month_view
+from attendance import access, correction_services, live_status, month_view, scan_requests
 from attendance.forms import (
     AcceptReviewForm,
     AddScanForm,
@@ -446,6 +446,9 @@ def attendance_day_fix(request, employee_id, on):
         and correction_services.is_rule_check_out(record),
         "is_open_overtime": record is not None and record.review_status == "needs_review"
         and correction_services.is_open_overtime(record),
+        "is_unusual": record is not None and record.review_status == "needs_review"
+        and correction_services.is_unusual(record),
+        "early_check_out": correction_services.EARLY_CHECK_OUT,
         # The Calendar picks only from people placed in the viewer's branches
         # now, so the link is offered only where it would open this person.
         "calendar_url": (
@@ -506,7 +509,12 @@ def attendance_review(request):
     return render(request, "attendance/review_list.html", {
         "page": page,
         "total": paginator.count,
+        "still_in": access.still_in_for(request.user, company_id),
+        "missed_scans_waiting": scan_requests.waiting_count(request.user, company_id),
+        "still_in_hours": live_status.STILL_IN_ALERT_MINUTES // 60,
         "rule_check_out": correction_services.RULE_CHECK_OUT,
+        "early_check_out": correction_services.EARLY_CHECK_OUT,
+        "long_outside": correction_services.LONG_OUTSIDE,
         "open_overtime": correction_services.OPEN_OVERTIME,
         "company_tz": membership.company.timezone or "UTC",
     })

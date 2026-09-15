@@ -6,7 +6,7 @@ only collect the input with the project's own controls.
 
 from django import forms
 
-from common.forms import CompanyDateTimeField, StyledFormMixin
+from common.forms import CompanyDateTimeField, StyledFormMixin, date_widget
 
 REASON_HELP = "Kept with the change, so the next person reading the day knows why."
 
@@ -58,3 +58,37 @@ class WithdrawForm(StyledFormMixin, forms.Form):
         label="Why it is being withdrawn", required=False,
         widget=forms.TextInput(attrs={"placeholder": "Optional"}),
     )
+
+
+class MissedScanForm(StyledFormMixin, forms.Form):
+    """An employee reporting a scan the device missed (N11)."""
+
+    work_date = forms.DateField(
+        label="Attendance day", widget=date_widget("Choose a date"),
+        help_text="The day whose attendance is missing the scan.",
+    )
+    at = CompanyDateTimeField(
+        label="When you scanned", placeholder="Choose a date",
+        help_text="Usually the same date. On a night shift, a scan after midnight is on the next date.",
+    )
+    reason = forms.CharField(
+        label="What happened",
+        help_text="Whoever approves it reads this.",
+        widget=forms.Textarea(attrs={
+            "rows": 3, "placeholder": "e.g. Came back from tea with Karim and walked in on his scan",
+        }),
+    )
+
+    def clean_at(self):
+        if not (self.data.get(self.add_prefix("at") + "_1") or "").strip():
+            raise forms.ValidationError("Enter the time of the scan.")
+        return self.cleaned_data["at"]
+
+
+class DecideMissedScanForm(StyledFormMixin, forms.Form):
+    note = forms.CharField(
+        label="Note", required=False,
+        help_text="Needed when rejecting. The employee can read it.",
+        widget=forms.Textarea(attrs={"rows": 2, "placeholder": "e.g. Checked with the guard at the gate"}),
+    )
+
