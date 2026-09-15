@@ -147,3 +147,22 @@ def require_view_day(user, company_id, employee_id, work_date, company_tz=None):
     if not in_branches(day_branch(company_id, employee_id, work_date, company_tz), branches):
         raise PermissionDenied("That day is in a branch you do not look after.")
     return membership
+
+
+def still_in_for(user, company_id, now=None):
+    """The still-in-after-shift list for someone who may fix attendance (N11).
+
+    Limited to the branches where they may fix it; empty for anyone else.
+    """
+    from attendance.live_status import still_in_after_shift
+    from organization.access_services import people
+
+    try:
+        _membership, branches = fix_branches(user, company_id)
+    except PermissionDenied:
+        return []
+    if branches is ALL_BRANCHES:
+        return still_in_after_shift(company_id, now=now)
+    with use_company(company_id):
+        ids = list(people(branches).values_list("pk", flat=True))
+    return still_in_after_shift(company_id, employee_ids=ids, now=now) if ids else []

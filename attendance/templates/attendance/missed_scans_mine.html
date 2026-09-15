@@ -1,0 +1,141 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    Missed scans · My account
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'me:home' %}">
+            My account
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'me:attendance' %}">
+            My attendance
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Missed scans
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Missed scans
+            </h1>
+            <p class="page__sub">
+                Scanned and the device did not count it, or walked in behind someone? Report it here. Your attendance changes once it is approved.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'me:missed_scan_report' %}">
+                Report a missed scan
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                What you reported
+            </h2>
+            <span class="badge badge--neutral">
+                {{ server_table.total }}
+            </span>
+        </div>
+        {% if server_table.total %}
+            <div class="table-wrap">
+                <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                    <thead>
+                        <tr>
+                            <th>
+                                Day
+                            </th>
+                            <th class="numeric">
+                                Scan
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th>
+                                What happened
+                            </th>
+                            <th class="numeric">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in page.object_list %}
+                            <tr>
+                                <td>
+                                    {{ item.work_date|date:"D j M Y" }}
+                                </td>
+                                <td class="numeric">
+                                    {{ item.scan_at|timezone:company_tz|date:"H:i" }}
+                                    {% if item.scan_at|timezone:company_tz|date:"Y-m-d" != item.work_date|date:"Y-m-d" %}
+                                        <span class="t-faint">
+                                            {{ item.scan_at|timezone:company_tz|date:"j M" }}
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if item.status == "pending" %}
+                                        <span class="badge badge--warning">
+                                            Waiting
+                                        </span>
+                                    {% elif item.status == "approved" %}
+                                        <span class="badge badge--success">
+                                            Approved
+                                        </span>
+                                    {% elif item.status == "rejected" %}
+                                        <span class="badge badge--danger">
+                                            Rejected
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Withdrawn
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ item.reason }}
+                                    {% if item.decision_note %}
+                                        <div class="t-muted">
+                                            Reply: {{ item.decision_note }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {% if item.status == "pending" %}
+                                        <form method="post" action="{% url 'me:missed_scan_withdraw' item.pk %}">
+                                            {% csrf_token %}
+                                            <button class="btn btn--ghost btn--sm" type="submit">
+                                                Withdraw
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    Nothing reported
+                </div>
+                <div class="empty__text">
+                    If a day on your calendar is missing a scan, report it and it goes to your branch manager or HR.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

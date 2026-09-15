@@ -1,0 +1,32 @@
+{% comment %}
+    People still scanned in long after today's shift ended (plan step N11):
+    working late, or gone home without scanning out. Shown on Days to review
+    and the dashboard to people who may fix attendance, for their branches.
+{% endcomment %}
+{% load static %}
+{% if still_in %}
+    <link rel="stylesheet" href="{% static 'attendance/css/still_in.css' %}">
+    <div class="alert alert--warning" role="status">
+        <div>
+            <strong>
+                {{ still_in|length }} {{ still_in|length|pluralize:"person is,people are" }} still scanned in more than {{ still_in_hours }} hours after {{ still_in|length|pluralize:"their shift,their shifts" }} ended.
+            </strong>
+            Working late, or gone home without scanning out? Without a scan out the day closes at the shift end and pays no overtime.
+            <ul class="still-in-list">
+                {% for employee, status in still_in|slice:":8" %}
+                    <li>
+                        <a href="{% url 'attendance:attendance_day_fix' employee.pk status.on|date:'Y-m-d' %}">
+                            {{ employee.full_name }}
+                        </a>
+                        — in since {{ status.since_text }}, shift ended {{ status.shift_end_text }}
+                    </li>
+                {% endfor %}
+            </ul>
+            {% if still_in|length > 8 %}
+                <span class="t-muted">
+                    and {{ still_in|length|add:"-8" }} more.
+                </span>
+            {% endif %}
+        </div>
+    </div>
+{% endif %}

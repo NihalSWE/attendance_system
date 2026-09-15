@@ -1,6 +1,6 @@
 from django.urls import path
 
-from attendance import views
+from attendance import scan_request_views, views
 
 app_name = "attendance"
 
@@ -18,6 +18,12 @@ urlpatterns = [
         "day/<int:employee_id>/<slug:on>/fix/",
         views.attendance_day_fix,
         name="attendance_day_fix",
+    ),
+    path("missed-scans/", scan_request_views.missed_scan_list, name="missed_scan_list"),
+    path(
+        "missed-scans/<int:pk>/",
+        scan_request_views.missed_scan_decide,
+        name="missed_scan_decide",
     ),
     path(
         "corrections/<int:pk>/withdraw/",

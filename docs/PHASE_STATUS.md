@@ -545,6 +545,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N8 | **Device connection check** - done 2026-09-15 incl. part 4, branch `feature/n8-device-connection` (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. (4) **Change server address on a device that has never checked in** is refused with what to do instead — "This device has never connected to this server. Set the server address on the terminal itself first (COMM → Cloud Server)" — rather than queuing a command nobody will collect. Ajay hit this 2026-09-14 with the new SenseFace 3A: registered, never checked in, the change sat as "in progress" and then ended as "lost" ("device not reachable at the new address"), which blamed the address when the device had simply never been connected. Builds on the existing server-address status panel | — | (new) |
 | N9 | **Data tables on Nihal's pages** (see A15) - done 2026-09-15, branch `feature/n9-server-side-tables` | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
 | N10 | **Branch access on Nihal's pages** (A12 part 7, [A12_BRANCH_ACCESS_FOR_NIHAL.md](A12_BRANCH_ACCESS_FOR_NIHAL.md)) - done 2026-09-15, branch `feature/n10-branch-attendance` | Codes `attendance.view` and `attendance.fix` (HR company-wide); Daily list, Calendar, day panel, Now, Days to review, Fix a day, Withdraw, the employee page and End employment limited to the viewer's branches, checked in the services too, and listed in `BRANCH_PAGES`. Devices unchanged | — | (new) |
+| N11 | **Missed scans and attendance alerts** - done 2026-09-15, branch `feature/n11-scan-requests` (built on N10) | (1) Employees report a missed scan from My attendance; whoever may fix the day's branch approves it, which adds the scan as a normal correction. (2) "Still in 2 hours after the shift" alert on Days to review and the dashboard. (3) A finished day that checked out 2 hours or more before the shift end, or was outside more than the break plus an hour during the shift, goes to Days to review | — | attendance.0005 |
 
 #### Ajay's session
 
@@ -3242,4 +3243,59 @@ auditor still sees the list but cannot fix; devices still closed to a branch
 manager. Full suite: 1153 tests, OK after the count update. Pages checked at 1440,
 768 and 375 px as the D Company owner (no branch-manager login exists in the
 dev data; the limited views are covered by the tests).
+
+## 2026-09-15 — N11: missed scans, still in after the shift, unusual days (Nihal)
+
+Branch `feature/n11-scan-requests`, built on `feature/n10-branch-attendance`
+with main `6fa80d8` (A16) merged in — **merge N10 first**. Migration
+`attendance.0005_missed_scan_requests` (one new table,
+`payroll_missed_scan_request`). No `.env.example` change.
+
+Why: a fingerprint cannot tell a forgotten scan from a person who was not
+there. Nihal's scenarios — walking back in behind a colleague after scanning out
+for tea, forgetting to scan out, staying late without scanning — were either
+silent (a short day with nothing flagged) or waited for HR to notice.
+
+**1. Missed-scan requests.** `MissedScanRequest` (employee, attendance day, scan
+time, reason, the day's branch, status, decision). My attendance has a *Missed
+scans* button and the day panel a *Report a missed scan* link (`me:missed_scans`,
+`me:missed_scan_report`, `me:missed_scan_withdraw`). The scan is tried against
+the day when it is asked — `correction_services.check_scan_fits` runs the real
+add-scan in a transaction that is always rolled back — so "that time is not part
+of this day" or "you already scanned then" is said straight away. Nothing
+changes until approved. *Attendance → Missed scans* (`attendance:missed_scan_list`,
+`attendance:missed_scan_decide`, in `BRANCH_PAGES` under `attendance.fix`) lists
+requests for the branches where the viewer may fix attendance: a branch manager
+their own, HR and the company everywhere. Approving calls
+`correction_services.add_scan`, the same fix as Fix a day, and links the
+correction (it can be withdrawn there like any other). Rejecting needs a note
+the employee reads. Nobody sees or decides their own request. Days to review
+links to it with the waiting count.
+
+**2. Still in after the shift.** `live_status.still_in_after_shift`: people whose
+last scan today is an IN two hours (`STILL_IN_ALERT_MINUTES = 120`) after
+today's shift ended. Shown as an alert on Days to review and on the dashboard
+(beside N8's stopped-devices alert), limited to the branches where the viewer
+may fix attendance; each name opens Fix a day.
+
+**3. Unusual days to review.** `attendance.services.unusual_reason`, applied
+when a working day closes and nothing else already needs review:
+*checked out long before the shift end* (2 hours or more,
+`EARLY_CHECK_OUT_REVIEW_MINUTES`) and *long time outside during the shift*
+(more than the shift's break plus 60 minutes, counting only time inside the
+scheduled shift, `LONG_OUTSIDE_REVIEW_MINUTES`). They change nothing the day
+counts or pays. Fix a day explains them and offers *Accept the day as it is*
+(`accept_review` now accepts these two reasons as well as the rule's check-out).
+Not applied on a half-day leave, where leaving early is the point.
+
+The three thresholds are constants for now; they can become attendance
+settings if a company wants different numbers.
+
+For Ajay: menu entries not added (sidebar is Ajay's) — suggested *Attendance →
+Missed scans* (`attendance:missed_scan_list`) and *My account → Missed scans*
+(`me:missed_scans`). Small edits outside Nihal's area: `base_template/me_urls.py`
+(three paths), `base_template/templates/base_template/me/attendance.html` (the
+button), `base_template/views.py` and `dashboard.html` (the alert).
+
+**Tests:** 19 in `attendance/tests_missed_scans.py`. Full suite 1185 tests, OK. New pages checked at 768 and 375 px (no overflow) as the Northwind owner, whose login has an employee record; nothing was submitted in the dev data.
 

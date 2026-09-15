@@ -64,6 +64,9 @@ BRANCH_PAGES = {
     "attendance:attendance_review": "attendance.fix",
     "attendance:attendance_day_fix": "attendance.fix",
     "attendance:attendance_correction_withdraw": "attendance.fix",
+    # N11: missed scans employees report, for whoever may fix the day's branch.
+    "attendance:missed_scan_list": "attendance.fix",
+    "attendance:missed_scan_decide": "attendance.fix",
     "organization:employee_detail": "employees.view",
     "organization:employee_end": "employees.edit",
 }

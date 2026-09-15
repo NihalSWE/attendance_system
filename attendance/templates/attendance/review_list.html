@@ -28,11 +28,21 @@
             </p>
         </div>
         <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'attendance:missed_scan_list' %}">
+                Missed scans
+                {% if missed_scans_waiting %}
+                    <span class="badge badge--warning">
+                        {{ missed_scans_waiting }}
+                    </span>
+                {% endif %}
+            </a>
             <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}">
                 Calendar view
             </a>
         </div>
     </div>
+
+    {% include "attendance/includes/still_in_alert.html" %}
 
     <div class="card">
         <div class="card__head">
@@ -97,6 +107,20 @@
                                         </span>
                                         <span class="review-table__sub review-table__why t-muted">
                                             No scan out; closed at the shift end.
+                                        </span>
+                                    {% elif record.review_reason == early_check_out %}
+                                        <span class="badge badge--warning">
+                                            Left early
+                                        </span>
+                                        <span class="review-table__sub review-table__why t-muted">
+                                            Last scan long before the shift end. A missed scan?
+                                        </span>
+                                    {% elif record.review_reason == long_outside %}
+                                        <span class="badge badge--warning">
+                                            Long time outside
+                                        </span>
+                                        <span class="review-table__sub review-table__why t-muted">
+                                            Out for {{ record.outside_minutes }} min during the shift. A missed scan?
                                         </span>
                                     {% else %}
                                         <span class="badge badge--neutral">

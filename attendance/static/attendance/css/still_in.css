@@ -1,0 +1,5 @@
+/* People still in long after their shift (N11). The alert's names, as a list. */
+.still-in-list {
+    margin: var(--s1) 0 0;
+    padding-left: var(--s5);
+}

@@ -370,3 +370,67 @@ class AttendanceCorrection(TenantOwned, ActorTracked):
 
     def __str__(self):
         return f"{self.get_correction_type_display()} {self.employee_id} {self.work_date}"
+
+
+class MissedScanRequest(TenantOwned, ActorTracked):
+    """An employee saying "I scanned in (or out) and the device missed it" (N11).
+
+    Nothing counts until someone who may fix attendance in the day's branch
+    approves it. Approving adds the scan as an ordinary ``AttendanceCorrection``
+    (add_scan), so the day is rebuilt with it exactly as if HR had typed it on
+    Fix a day, and the correction is linked here. Rejecting needs a note.
+    Nobody decides their own request.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Waiting"
+        APPROVED = "approved", "Approved"
+        REJECTED = "rejected", "Rejected"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+
+    employee = models.ForeignKey(
+        "employees.Employee", on_delete=models.PROTECT,
+        related_name="missed_scan_requests",
+    )
+    work_date = models.DateField()
+    scan_at = models.DateTimeField()
+    reason = models.TextField()
+    # The day's branch when it was asked: who sees it waiting. The decision
+    # checks the branch again.
+    branch = models.ForeignKey(
+        "organization.Branch", on_delete=models.PROTECT, related_name="+",
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    submitted_at = models.DateTimeField()
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+    correction = models.ForeignKey(
+        AttendanceCorrection, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="missed_scan_requests",
+    )
+
+    class Meta:
+        db_table = "payroll_missed_scan_request"
+        ordering = ("-submitted_at", "-pk")
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(status="approved") | models.Q(correction__isnull=False),
+                name="missed_scan_request_approved_has_correction",
+            ),
+            models.UniqueConstraint(
+                fields=["company", "employee", "scan_at"],
+                condition=models.Q(status="pending"),
+                name="uniq_missed_scan_request_pending",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["company", "status", "branch"]),
+            models.Index(fields=["company", "employee", "work_date"]),
+        ]
+
+    def __str__(self):
+        return f"Missed scan {self.employee_id} {self.scan_at:%Y-%m-%d %H:%M}"

@@ -67,6 +67,12 @@ def dashboard(request):
         else []
     )
 
+    # People still in long after their shift (N11), for whoever may fix it.
+    from attendance import access as attendance_access
+    from attendance.live_status import STILL_IN_ALERT_MINUTES
+
+    still_in = attendance_access.still_in_for(request.user, request.company_id)
+
     return render(request, "base_template/dashboard.html", {
         "total_employees": employees.count(),
         "active_count": by_status["active"],
@@ -76,6 +82,8 @@ def dashboard(request):
         "department_count": CompanyDepartment.objects.count(),
         "recent": recent,
         "stopped_devices": stopped_devices,
+        "still_in": still_in,
+        "still_in_hours": STILL_IN_ALERT_MINUTES // 60,
     })
 
 

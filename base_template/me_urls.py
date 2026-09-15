@@ -1,6 +1,7 @@
 from django.contrib.auth.decorators import login_required
 from django.urls import path
 
+from attendance import scan_request_views
 from base_template import me_views
 from leaves import request_views
 
@@ -11,6 +12,12 @@ app_name = "me"
 urlpatterns = [
     path("", me_views.my_account, name="home"),
     path("attendance/", me_views.my_attendance, name="attendance"),
+    # Missed-scan requests (Nihal's N11). Not under attendance/, whose <slug:on>
+    # day URL would swallow them.
+    path("missed-scans/", scan_request_views.my_missed_scans, name="missed_scans"),
+    path("missed-scans/report/", scan_request_views.report_missed_scan, name="missed_scan_report"),
+    path("missed-scans/<int:pk>/withdraw/", scan_request_views.withdraw_missed_scan,
+         name="missed_scan_withdraw"),
     path("attendance/<slug:on>/", me_views.my_attendance_day, name="attendance_day"),
     path("leave/", me_views.my_leave, name="leave"),
     path("leave/request/", request_views.request_leave, name="leave_request"),
