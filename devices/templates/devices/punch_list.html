@@ -98,12 +98,12 @@
                 Punch events
             </h2>
             <span class="badge badge--neutral">
-                {{ total_count }}
+                {{ server_table.total }}
             </span>
         </div>
-        {% if page.object_list %}
+        {% if server_table.total %}
             <div class="table-wrap">
-                <table class="table" data-enhance>
+                <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
                     <thead>
                         <tr>
                             <th>
@@ -125,6 +125,7 @@
                                 Why
                             </th>
                             <th class="no-sort">
+                                Actions
                             </th>
                         </tr>
                     </thead>
@@ -202,12 +203,10 @@
                     </tbody>
                 </table>
             </div>
-            <p class="t-faint" data-filter-note hidden>
-                The filter box searches the rows on this page. The count and pager above cover every matching punch.
-            </p>
-            {% include "devices/includes/pagination.html" %}
-        {% else %}
-            <div class="empty">
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+        {% if not page.object_list %}
+            <div class="empty server-table-empty">
                 <div class="empty__title">
                     No punches
                 </div>

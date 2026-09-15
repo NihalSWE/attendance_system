@@ -19,8 +19,18 @@ document.addEventListener("DOMContentLoaded", function () {
     /* ---------------------------------------------------------------- badges */
     document.querySelectorAll("[data-connection-board]").forEach(function (board) {
         const url = board.dataset.connectionsUrl;
-        const ids = board.dataset.connectionDevices || "";
-        if (!url || !ids) return;
+        if (!url) return;
+
+        /* The devices on screen now, read at every poll. A server-side table
+           redraws its rows for another page or a search, so the ids the page
+           was served with are not the ids showing a minute later. */
+        function visibleIds() {
+            const ids = new Set();
+            board.querySelectorAll("[data-connection-for]").forEach(function (el) {
+                ids.add(el.dataset.connectionFor);
+            });
+            return Array.from(ids).join(",");
+        }
 
         function paint(id, state) {
             board.querySelectorAll('[data-connection-for="' + id + '"]').forEach(function (badge) {
@@ -34,6 +44,8 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         function poll() {
+            const ids = visibleIds();
+            if (!ids) return;
             fetch(url + "?devices=" + encodeURIComponent(ids), {
                 headers: {"X-Requested-With": "XMLHttpRequest"}
             })

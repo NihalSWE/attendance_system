@@ -10,10 +10,12 @@
     <link rel="stylesheet" href="{% static 'devices/css/connection.css' %}">
 {% endblock %}
 {% block extra_js %}
-    <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
-    </script>
-    <script defer src="{% static 'devices/js/devices.js' %}">
-    </script>
+    {% if not server_tables %}
+        <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js">
+        </script>
+        <script defer src="{% static 'devices/js/devices.js' %}">
+        </script>
+    {% endif %}
     <script defer src="{% static 'devices/js/server_address.js' %}">
     </script>
     <script defer src="{% static 'devices/js/connection.js' %}">

@@ -540,10 +540,10 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N3 | **In-office badge on the Employees page** - done 2026-09-14, branch `feature/n3-in-office-badge` | "Now" column: In office (green), On break (amber), Left (grey), Not in yet (grey), Absent (red, after shift start plus grace), On leave (blue), Off today (grey); refreshes every minute | 5 | (new) |
 | N4 | **Which devices count + Re-check punches** - done 2026-09-14, branch `feature/n4-device-scope` | Attendance settings: all company devices / branch devices / department devices / assigned devices. "Re-check punches" for a date range re-runs authorisation on excluded punches, audited, then attendance is recalculated | 4 | (new) |
 | N5 | **Attendance corrections** | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b). Approving overtime (set the end time, approved minutes) and its pay are A9's; the list links to A9's approve action (agreed 2026-09-14) | — | Attendance corrections; attendance review status and the Incomplete decision |
-| N6 | **Employee detail page + terminate screen** | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
+| N6 | **Employee detail page + terminate screen** - done 2026-09-14, branch `feature/n6-employee-detail` | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
 | N7 | **Payslip redesign** - done 2026-09-14, branch `feature/n7-payslip`, merged with the employee's view (A7) (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/. Also (A7): the employee opens the same template with `for_employee=True` — breadcrumbs then lead to My payslips, never company pages — and the "Draft" label must come from the run's status (a finalised month says Finalised) | — | (new) |
 | N8 | **Device connection check** - done 2026-09-15 incl. part 4, branch `feature/n8-device-connection` (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. (4) **Change server address on a device that has never checked in** is refused with what to do instead — "This device has never connected to this server. Set the server address on the terminal itself first (COMM → Cloud Server)" — rather than queuing a command nobody will collect. Ajay hit this 2026-09-14 with the new SenseFace 3A: registered, never checked in, the change sat as "in progress" and then ended as "lost" ("device not reachable at the new address"), which blamed the address when the device had simply never been connected. Builds on the existing server-address status panel | — | (new) |
-| N9 | **Data tables on Nihal's pages** (see A15) | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
+| N9 | **Data tables on Nihal's pages** (see A15) - done 2026-09-15, branch `feature/n9-server-side-tables` | Attendance list and every device list (devices, enrollments, punches, messages, unresolved, device users) on A15's shared server-side DataTables helper, with their filters | — | (new) |
 
 #### Ajay's session
 
@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). Next is **A12 part 2: Organisation → Access page**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal remains paused; his planned work is N5/N6/N8/N9. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). Next is **A12 part 2: Organisation → Access page**. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9 and N6 merged** (office session); N5 (migration `attendance.0004`) and N8 wait for Nihal to update them against main, then merge. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2576,6 +2576,141 @@ branches/departments, finalising a month.
 - No `.env.example` changes or dependencies.
 - No migrations, dependencies or `.env.example` changes.
 
+
+## 2026-09-15 — N9: Nihal's lists on the shared server-side table (Nihal)
+
+Branch `feature/n9-server-side-tables`, from fresh `main` at `d8de2d6`.
+**No migration, no dependency, no `.env.example` change.** Built only N9; N5,
+N6 and N8 are on their own branches, pushed 2026-09-14 and not merged yet.
+
+Every list below now counts, searches, sorts and pages on the server through
+`base_template/tables.py` (`paginate` + `render`, `data-server-table`,
+`base_template/includes/table_pagination.html`), with its existing filters,
+links, badges and Paper/Ink styling. The page's own filters narrow the set
+first; the table's search, order and page run on that set, so
+`recordsTotal` / `recordsFiltered` are real counts, never the rows on screen.
+
+| Page | Path | Filters kept | Table search | Sortable columns |
+|---|---|---|---|---|
+| Attendance → Daily list | `/attendance/` | month, year, **Branch (new)**, employee, status | employee name and code, branch, status, note | all 10 |
+| Devices | `/devices/` | name/serial, status, branch | name, serial, branch, model, status | device, serial, branch, status, last seen |
+| Enrollments | `/devices/enrollments/` | search, device | employee, device, user number | employee, device, user number, attendance, grant, period |
+| Message log | `/devices/messages/` | device, status | device, type, status | received, device, type, records, status |
+| Punches | `/devices/punches/` | search, device, authorisation, duplicate status | user number, employee, device, method, outcome | punched, employee, device, method, outcome |
+| Unresolved queue | `/devices/unresolved/` | reason | user number, employee, device, reason | punched, identity, device, reason |
+| Device users | `/devices/<id>/users/` | search, mapped / not mapped | user id, name, role, card, employee | all but "Write to device" |
+
+**Daily list:** a Branch column was added beside Employee (the filter is easier
+to trust when the rows show the branch), and the employee code shows under the
+name and is searchable. The badge reads "N of M days" when a filter is on. The
+query keeps `branch` on every row, which is the field
+`access_control.branch_access.scope_queryset(..., field="branch")` will narrow
+on — not wired in, per Ajay, until the A12 part 7 note.
+
+**Device users is not a database table.** The roster is rebuilt from the
+uploads the device sent (`devices/services/device_roster.py`); there is nothing
+to count or search in SQL without a new model. So `devices/views/ui.py
+_paginate_rows` does the same work on the server over the **whole** roster —
+never client-side only — with the helper's exact contract: the same request
+parameters, 10–100 rows, a literal 200-character search, server-owned sort
+keys, and the same table description registered on the request, so
+`render`, the pager include and `tables.js` are unchanged. User ids sort as
+numbers. If Ajay prefers the roster stored as a model instead, that is a
+separate decision.
+
+**Also changed:** the device base template loads its own DataTables copy and
+the old `devices.js` enhancer only when a page has no server table (base.html
+loads DataTables for those), so no page loads it twice; `data-enhance`, the
+"filter this page" notes and the old `_paginate` helper are gone. The
+screen-reader-only "Actions" headers became visible text: `.sr-only` is
+absolutely positioned and escaped the table's scroll box, widening the page on
+a phone. The Punches and Unresolved tables had an unlabelled action column the
+first column list missed; the helper's "headers and row cells must have the
+same length" guard caught it in the tests.
+
+**Merge note for Ajay:** `feature/n8-device-connection` also edits
+`devices/templates/devices/device_list.html` (Connection column),
+`devices/templates/devices/base.html` (connection script) and the device list
+view. Both changes are small and side by side; expect a textual conflict there
+if N8 is merged after N9, not a logical one.
+
+**Checked** on D Company's real data through the browser with the live
+DataTables draws: Daily list 87 September days, search "Nihal" 14 of 87,
+Late sorted numerically, Branch filter narrowing to 0 for an office with no
+attendance; Punches 240, search 63 of 240; Messages 595; Unresolved 191;
+Device users 4, user ids sorted as numbers. No page overflow at 1440, 768 or
+375 on any of the seven lists.
+
+**Tests:** 10 in `attendance/tests_daily_list.py`, 12 in
+`devices/tests_server_tables.py` — whole-set counts, database search across
+pages, every orderable column, hostile parameters, tenant boundaries, the
+counted HTML pager keeping filters, headers kept on an empty search, escaping,
+and a single DataTables script per device page.
+
+**Navigation (A14):** no new pages. The Daily list and the device lists keep
+their paths.
+
+## 2026-09-14 — N6: an employee's history, and ending employment (Nihal)
+
+Branch `feature/n6-employee-detail`, from clean `main` (after A6b). **No
+migration, no new environment variable.** Owner or company administrator only
+— the same check as Edit employee (`get_employee_for_edit`).
+
+**Pages** — for A14's menu these hang off Employees rather than needing their
+own entries:
+
+- **Employee** — `/organization/employees/<id>/` (`organization:employee_detail`),
+  reached by clicking a name on the Employees list. Read-only; every change
+  still happens on Edit. *Now* (status, joined, salary, login, contact) beside
+  *Attendance this month* (counts + Calendar view); *Placement history* and
+  *Salary history* with first and last day in company time and a "Now" badge
+  on the current row; *Devices* (user number, dates, Assigned / Recognised
+  only / Attendance off / Ended); *Shift of their own*; *Recent changes* from
+  the audit log. Actions: End employment, Edit.
+- **End employment** — `/organization/employees/<id>/end/`
+  (`organization:employee_end`). Says plainly what will happen, then asks for
+  the last working day, resigned / terminated / retired, a note, and two
+  ticked-by-default options shown only when they apply: disable their login,
+  end their device enrollments.
+
+**What ending does** (`organization/employee_detail_services.end_employment`,
+wrapping `employees.services.terminate_employee`, which was not changed):
+
+- Placement and salary end at the **midnight after the last working day**
+  (company time) — how every other end is stored.
+- `leaving_date` is set to the **last working day** itself. The existing
+  service sets it from the end instant, which is the day after; attendance
+  reads `leaving_date` as the last day worked, so without this correction the
+  day after leaving would still get an (absent) record. A test covers it.
+- Attendance is recalculated from the last day to today, which removes any day
+  already written after it. A finalised month is never touched.
+- Device enrollments (if ticked) end at the same instant, each with an audit
+  record whose `before_data` holds the old `effective_to`, as the device policy
+  history requires. The person stays on the terminals until removed on the
+  device's users page — ending does not delete biometrics.
+- The login (if ticked) is suspended through `employee_login.set_login_active`,
+  with its own audit record.
+- One `employee.employment_ended` audit record with before/after.
+
+**Refused:** somebody who has already left; a last working day in the future
+(record it once it has happened — until then they are at work and on
+attendance); a day before the current placement began; a day before the end of
+a finalised salary month; a salary that starts after the last day (closing it
+would break the salary row's end-after-start rule — change the salary first).
+
+**Not done here, on purpose:** part-month salary proration for a leaver
+(A11 — the screen says so); ending leave booked after the last day (leaves/ is
+Ajay's); re-hiring; notice periods recorded ahead of time.
+
+Shared file touched: `employee_list.html` (the name links to the page),
+checked identical to `origin/main` first. `organization/urls.py` gained the two
+routes next to `employee_edit`.
+
+**Tests:** 20 in `organization/tests_employee_detail.py`. Checked on D
+Company's Nihal at 1440, 768 and 375 px (GET only — nobody's employment was
+ended); below 1100 px the history tables drop the Note column so nothing
+scrolls, and on a phone the placement table scrolls inside its own box.
+
 ## 2026-09-14 — N8: is the device connected, and a connection test (Nihal)
 
 Branch `feature/n8-device-connection`, from clean `main` (after A16). **No
@@ -2643,6 +2778,15 @@ words, the way it already did while a change was running. The server-address
 test fixture now sets `last_seen_at` (it always meant an already-connected
 device). 4 tests; removing the service guard fails the refusal test. The
 branch first took main in at `d8de2d6` (only `PHASE_STATUS.md` conflicted).
+
+**Brought up to date with main again on 2026-09-15** (after N9 and N6,
+`53295f8`): `devices/views/ui.py` conflicted in the device list — N9's
+`paginate` kept, each row's connection attached after it, the stopped-devices
+alert kept. One interaction the merge could not show: `connection.js` polled
+the device ids the page was *served* with, so after a table redraw to another
+page or a search the new rows' badges would never refresh. It now reads the
+ids on screen at every poll (`data-connection-for`), and the unused
+`data-connection-devices` attribute is gone.
 
 **Checked on the real terminal** (Main Entrance, NYU7251601501): a test started
 before its last check-in reads *Connected at 18:44:13*; one started after it
