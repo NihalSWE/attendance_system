@@ -111,13 +111,17 @@ Completed (Ajay's side):
 | Employee panel | My leave requests, My payslips |
 | Manager panel | Approval inbox, Branch attendance |
 | Root panel | Departments, Designations; Companies already had its own server-side table |
+| Attendance (N9, Nihal) | Daily list — with a Branch filter |
+| Devices (N9, Nihal) | Devices, Enrollments, Message log, Punches, Unresolved queue, Device users |
 
 Intentionally ordinary HTML: bounded summary tables (Upcoming holidays, a
 payslip's lines, detail pages, the second table on Salary settings and My leave).
 
-Remaining — N9 (Nihal, paused, unless Ajay reassigns it): the main Attendance
-→ Daily list and the device lists (devices, enrollments, punches, messages,
-unresolved and device users). They still use a fixed Django page or
-browser-only paging.
+N9 done (Nihal, 2026-09-15, `feature/n9-server-side-tables`): the Daily list
+and every device list use the helper. **Device users** is the one list that is
+not a database table — the roster is rebuilt from the device's uploads — so
+`devices/views/ui.py _paginate_rows` pages, searches and sorts it on the server
+over the whole roster with this same contract (parameters, limits, table
+description), and `render`, the pager include and `tables.js` work unchanged.
 
 No migrations, dependency changes or environment variables are required.
