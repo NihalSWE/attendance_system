@@ -66,6 +66,9 @@
         <a class="sidebar__link {% active request 'branch_attendance' %}" href="{% url 'me:branch_attendance' %}">
             <span>Branch attendance</span>
         </a>
+        <a class="sidebar__link {% active request 'access' 'access_person' %}" href="{% url 'organization:access' %}">
+            <span>Access</span>
+        </a>
     {% endif %}
     <div class="sidebar__foot">
         <form method="post" action="{% url 'logout' %}">

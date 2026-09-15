@@ -48,6 +48,9 @@ SELF_SERVICE_ROLES = ("employee", "manager")
 # Their pages, plus signing in and out.
 SELF_SERVICE_NAMESPACES = ("me",)
 ALWAYS_OPEN_URL_NAMES = ("login", "logout", "switch_company")
+# Company pages a branch manager may open (A12). Each checks access itself;
+# part 3 of A12 opens the rest of the company pages by permission.
+BRANCH_MANAGER_VIEWS = ("organization:access", "organization:access_person")
 
 
 class SelfServiceGate:
@@ -93,6 +96,8 @@ class SelfServiceGate:
         if match is None:
             return None
         if match.namespace in SELF_SERVICE_NAMESPACES or match.url_name in ALWAYS_OPEN_URL_NAMES:
+            return None
+        if role == CompanyMembership.Role.MANAGER and match.view_name in BRANCH_MANAGER_VIEWS:
             return None
         if request.method in ("GET", "HEAD"):
             return redirect("me:home")
