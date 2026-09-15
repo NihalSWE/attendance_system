@@ -366,6 +366,10 @@ Badges — spec §4. All the colour in the palette lives here.
 Table — spec §4. Row height lands near 38px: standard density.
 ------------------------------------------------------------------------ */
 .table-wrap {
+    /* The positioning context for anything absolutely placed inside a table
+       (screen-reader-only text included), so it stays in the scroll box
+       instead of widening the page on a phone. */
+    position: relative;
     width: 100%;
     overflow-x: auto;
 }

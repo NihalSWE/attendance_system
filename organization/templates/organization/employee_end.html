@@ -1,0 +1,126 @@
+{% extends "base_template/base.html" %}
+{% load static tz %}
+{% block title %}
+    End employment · {{ employee.full_name }}
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'organization/css/employee_detail.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'employee_list' %}">
+            Employees
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'organization:employee_detail' employee.pk %}">
+            {{ employee.full_name }}
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        End employment
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                End {{ employee.full_name }}'s employment
+            </h1>
+            <p class="page__sub">
+                {% if assignment %}
+                    {{ assignment.employee_code }} · {{ assignment.designation.name }} · {{ assignment.branch.name }}
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page stack">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    What happens
+                </h2>
+            </div>
+            <div class="card__body">
+                <ul class="emp-effects">
+                    <li>
+                        Their placement{% if compensation %} and salary{% endif %} end after the last working day. Nothing is deleted — their history, attendance and payslips stay.
+                    </li>
+                    <li>
+                        Attendance is not counted for them after that day; any day already written after it is removed. Days in a finalised salary month are never touched.
+                    </li>
+                    <li>
+                        Their employee code becomes free for somebody else from the next day.
+                    </li>
+                    <li>
+                        Salary for a part month is not prorated yet — check the month's salary before finalising it.
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <form class="card" method="post" novalidate>
+            {% csrf_token %}
+            <div class="card__head">
+                <h2>
+                    Their last day
+                </h2>
+            </div>
+            <div class="card__body stack">
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger" role="alert">
+                        {% for error in form.non_field_errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <div class="grid grid--2">
+                    {% with field=form.last_day %}
+                        {% include "leaves/includes/field.html" %}
+                    {% endwith %}
+                    {% with field=form.status %}
+                        {% include "leaves/includes/field.html" %}
+                    {% endwith %}
+                </div>
+                {% with field=form.reason %}
+                    {% include "leaves/includes/field.html" %}
+                {% endwith %}
+                {% if has_active_login %}
+                    <div class="field">
+                        <label class="check" for="{{ form.disable_login.id_for_label }}">
+                            {{ form.disable_login }}
+                            <span>
+                                {{ form.disable_login.label }} ({{ employee.user.email }})
+                            </span>
+                        </label>
+                        <span class="field__help">
+                            {{ form.disable_login.help_text }}
+                        </span>
+                    </div>
+                {% endif %}
+                {% if active_devices %}
+                    <div class="field">
+                        <label class="check" for="{{ form.end_device_enrollments.id_for_label }}">
+                            {{ form.end_device_enrollments }}
+                            <span>
+                                {{ form.end_device_enrollments.label }} ({{ active_devices|length }})
+                            </span>
+                        </label>
+                        <span class="field__help">
+                            {{ form.end_device_enrollments.help_text }}
+                        </span>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="card__foot emp-end-foot">
+                <a class="btn btn--ghost" href="{% url 'organization:employee_detail' employee.pk %}">
+                    Cancel
+                </a>
+                <button class="btn btn--danger" type="submit">
+                    End employment
+                </button>
+            </div>
+        </form>
+    </div>
+{% endblock %}

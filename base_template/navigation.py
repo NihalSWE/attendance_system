@@ -15,7 +15,8 @@ def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, r
 
 COMPANY_MENUS = (
     ("employees", "Employees", (
-        item("All employees", "employee_list", "organization:employee_edit", unrestricted=True),
+        item("All employees", "employee_list", "organization:employee_edit",
+             "organization:employee_detail", "organization:employee_end", unrestricted=True),
         item("Create employee", "organization:employee_create", manage=True),
     )),
     ("attendance", "Attendance", (
@@ -58,6 +59,7 @@ COMPANY_MENUS = (
         item("Departments", "organization:adoption_list", "organization:adoption_create",
              "organization:adoption_edit", "organization:adoption_copy",
              "organization:adoption_status", "department_list"),
+        item("Access", "organization:access", "organization:access_person", manage=True),
     )),
     ("devices", "Devices", (
         item("All devices", "devices:device_list", "devices:device_detail", "devices:device_edit",

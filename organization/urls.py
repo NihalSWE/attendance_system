@@ -6,7 +6,14 @@ to the platform operator, not a tenant.
 """
 from django.urls import path
 
-from organization import adoption_views, employee_edit_views, employee_views, views
+from organization import (
+    access_views,
+    adoption_views,
+    employee_detail_views,
+    employee_edit_views,
+    employee_views,
+    views,
+)
 
 app_name = "organization"
 
@@ -30,8 +37,14 @@ urlpatterns = [
         name="adoption_status",
     ),
 
+    # Who has which access, per branch (A12). Branch managers reach these too.
+    path("access/", access_views.access_list, name="access"),
+    path("access/<int:employee_id>/", access_views.access_person, name="access_person"),
+
     path("employees/new/", employee_views.employee_create, name="employee_create"),
+    path("employees/<int:pk>/", employee_detail_views.employee_detail, name="employee_detail"),
     path("employees/<int:pk>/edit/", employee_edit_views.employee_edit, name="employee_edit"),
+    path("employees/<int:pk>/end/", employee_detail_views.employee_end, name="employee_end"),
     # Feed the dependent branch -> department -> designation selects.
     path(
         "employees/new/departments/",

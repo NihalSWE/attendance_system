@@ -1,0 +1,156 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Access · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Access
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Access
+            </h1>
+            <p class="page__sub">
+                Who may do what, in which branch. Open a person to give or remove access, or to give them a login.
+            </p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                People in your branches
+            </h2>
+            <span class="spacer">
+            </span>
+            <span class="t-muted">
+                <span class="amount">
+                    {{ server_table.total }}
+                </span>
+                total
+            </span>
+        </div>
+
+        <form class="toolbar" method="get">
+            <label class="sr-only" for="branch">
+                Branch
+            </label>
+            <select class="input select js-select" id="branch" name="branch">
+                <option value="">
+                    All your branches
+                </option>
+                {% for branch in branches %}
+                    <option value="{{ branch.pk }}" {% if branch.pk|stringformat:"s" == branch_id %}selected{% endif %}>
+                        {{ branch.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+            {% if branch_id %}
+                <a class="btn btn--quiet" href="{% url 'organization:access' %}">
+                    Clear
+                </a>
+            {% endif %}
+        </form>
+
+        {% if server_table or rows %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Employee
+                            </th>
+                            <th>
+                                Branch
+                            </th>
+                            <th>
+                                Login
+                            </th>
+                            <th>
+                                Access
+                            </th>
+                            <th>
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for person in rows %}
+                            <tr>
+                                <td>
+                                    {{ person.table_code|default:"—" }}
+                                </td>
+                                <td>
+                                    {{ person.full_name }}
+                                </td>
+                                <td>
+                                    {{ person.table_branch }}
+                                </td>
+                                <td>
+                                    {% if person.login_label %}
+                                        {{ person.login_label }}
+                                        {% if person.login_disabled %}
+                                            <span class="badge badge--neutral">
+                                                Disabled
+                                            </span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="t-faint">
+                                            No login
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if person.role_note %}
+                                        <div>
+                                            {{ person.role_note }}
+                                        </div>
+                                    {% endif %}
+                                    {% for line in person.access_summary %}
+                                        <div class="t-faint">
+                                            {{ line }}
+                                        </div>
+                                    {% empty %}
+                                        {% if not person.role_note %}
+                                            <span class="t-faint">
+                                                None given
+                                            </span>
+                                        {% endif %}
+                                    {% endfor %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--ghost btn--sm" href="{% url 'organization:access_person' person.pk %}">
+                                        Manage
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    Nobody is placed in {% if branch_id %}that branch{% else %}your branches{% endif %} yet
+                </div>
+                <div class="empty__text">
+                    People appear here once they are placed in a branch where you can give access.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
