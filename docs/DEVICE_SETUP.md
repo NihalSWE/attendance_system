@@ -100,8 +100,9 @@ tablename=user,…`. The SenseFace 3A (announces `pushver=2.4.1`,
 USERINFO` (every user, sent back as `USER PIN=…` lines) and `DATA QUERY ATTLOG
 StartTime=…⇥EndTime=…` (attendance history). The device page offers only what
 the device speaks. A 2.x device does not re-send scans made while it could not
-reach the server, so after a gap of 10 minutes the server asks for them on its
-next poll (measured 2026-09-15).
+reach the server, and answers the history request with only the records it has
+not handed over yet; so the server asks on its first poll after 2 minutes of
+silence, and once an hour anyway (measured 2026-09-15).
 
 ## 6. Changing the server address from the software
 

@@ -2719,10 +2719,12 @@ What changed (branch `feature/a16-3a-users`):
 - Commands follow the dialect: on the 3A, **Refresh user list** sends `DATA
   QUERY USERINFO`; **Fetch attendance history (last 31 days)** sends `DATA QUERY
   ATTLOG`; the 3.x-only requests are not offered. The 2A is unchanged.
-- **Catch-up after a gap:** on a 2.x device's first command poll after 10
-  minutes of silence (or its first ever), the scans since an hour before it
-  went quiet are asked for (at most 31 days). Tracked as `last_poll_at` in the
-  sync state, because uploads also stamp `last_seen_at`.
+- **Catch-up:** asked again, the same ATTLOG request returned nothing — the
+  3A sends only records it has not handed over, so asking is cheap and never
+  repeats. A 2.x device is therefore asked (last 31 days) on its first command
+  poll after 2 minutes of silence (or its first ever), and once an hour
+  regardless. Tracked as `last_poll_at` / `last_catch_up_at` in the sync
+  state, because uploads also stamp `last_seen_at`.
 - **Device users** reads both formats (3.x `user pin=` / `biodata`; 2.x `USER
   PIN=` / `BIODATA` / `FP` / `FACE`), and also lists numbers that only scanned
   ("seen in scans; name not received yet") so they can be mapped. A "Refresh

@@ -193,17 +193,22 @@ class CatchUpTests(Att2Case):
         return DeviceSyncState.all_objects.get(device=self.device).state_data
 
     def test_a_reconnecting_2x_device_is_asked_for_what_it_missed(self):
-        # First poll ever: the last month.
+        # First poll ever: asked.
         body = self.client.get(f"/iclock/getrequest?SN={SN}").content.decode()
         self.assertIn("DATA QUERY ATTLOG", body)
+        self.assertIn("last_poll_at", self.state())
+        self.assertIn("last_catch_up_at", self.state())
         # Polling on: nothing more.
         self.assertEqual(self.client.get(f"/iclock/getrequest?SN={SN}").content.decode().strip(), "OK")
-        # Silent for an hour: from an hour before it went quiet.
-        gap_start = timezone.now() - datetime.timedelta(hours=1)
-        entry = catch_up_after_gap(self.device, gap_start)
-        local = (gap_start - datetime.timedelta(hours=1)).astimezone(datetime.timezone(datetime.timedelta(hours=6)))
-        self.assertIn(f"StartTime={local:%Y-%m-%d %H:%M}", entry["body"])
-        self.assertIn("last_poll_at", self.state())
+        now = timezone.now()
+        minutes = lambda n: now - datetime.timedelta(minutes=n)  # noqa: E731
+        # A poll after a three-minute silence: asked.
+        self.assertIsNotNone(catch_up_after_gap(self.device, (minutes(3), minutes(10)), now))
+        # Polling steadily, asked recently: not asked.
+        self.assertIsNone(catch_up_after_gap(self.device, (minutes(0.2), minutes(30)), now))
+        # Polling steadily, but an hour since it was last asked: asked.
+        entry = catch_up_after_gap(self.device, (minutes(0.2), minutes(61)), now)
+        self.assertTrue(entry["body"].startswith("DATA QUERY ATTLOG StartTime="))
 
     def test_a_3x_device_is_left_alone(self):
         self.handshake(pushver="3.1.2", device_type="acc")

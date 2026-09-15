@@ -404,17 +404,23 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
     )
 
 
-#: A 2.x device that was silent this long is asked for what it scanned meanwhile.
-CATCH_UP_AFTER_MINUTES = 10
+#: A 2.x device silent this long (it polls every few seconds) is asked for
+#: what it scanned meanwhile ...
+CATCH_UP_AFTER_MINUTES = 2
+#: ... and every device is asked once an hour anyway.
+CATCH_UP_EVERY_MINUTES = 60
 
 
 def note_poll(device, now=None):
-    """Record a command poll; return the previous one (None if never recorded).
+    """Record a command poll; return ``(previous poll, last catch-up)``.
 
     Kept apart from ``last_seen_at``, which uploads stamp too: after a gap the
     device may upload before it polls, and that must not hide the gap.
     """
     from datetime import datetime
+
+    def read(value):
+        return datetime.fromisoformat(value) if value else None
 
     now = now or timezone.now()
     with transaction.atomic():
@@ -424,35 +430,40 @@ def note_poll(device, now=None):
         data["last_poll_at"] = now.isoformat()
         state.state_data = data
         state.save(update_fields=["state_data", "updated_at"])
-    return datetime.fromisoformat(previous) if previous else None
+    return read(previous), read(data.get("last_catch_up_at"))
 
 
-def catch_up_after_gap(device, previous_poll, now=None):
-    """Ask a reconnecting 2.x device for the scans it made while unreachable.
+def catch_up_after_gap(device, poll, now=None):
+    """Ask a 2.x device for scans it has not handed over.
 
     Measured on the SenseFace 3A on 2026-09-15: a scan made while the server
     was unreachable (15:35) was not sent when the device reconnected; it only
-    arrived when asked for with ``DATA QUERY ATTLOG``. So on its first poll
-    after a gap — or its first poll ever — the history since an hour before
-    it went quiet is requested. Returns the queued entry or None.
+    arrived when asked for with ``DATA QUERY ATTLOG``. Asked again, the same
+    request returned nothing: the device sends only records it has not
+    handed over yet, so asking is cheap and never repeats itself. It is asked
+    on its first poll after a gap of a couple of minutes (or its first poll
+    ever), and once an hour regardless. ``poll`` is what ``note_poll``
+    returned. Returns the queued entry or None.
     """
     from datetime import timedelta
 
     from devices.services import protocol
 
+    previous_poll, last_catch_up = poll
     now = now or timezone.now()
-    if previous_poll is not None and now - previous_poll < timedelta(minutes=CATCH_UP_AFTER_MINUTES):
+    gap = previous_poll is None or now - previous_poll >= timedelta(minutes=CATCH_UP_AFTER_MINUTES)
+    due = last_catch_up is None or now - last_catch_up >= timedelta(minutes=CATCH_UP_EVERY_MINUTES)
+    if not (gap or due) or protocol.dialect(device) != protocol.ATT2:
         return None
-    if protocol.dialect(device) != protocol.ATT2:
-        return None
-    oldest = now - timedelta(days=HISTORY_DAYS)
-    since = max(previous_poll - timedelta(hours=1), oldest) if previous_poll else oldest
-    local_now, zone = _device_now(device, now)
-    local_since = since.astimezone(zone).replace(tzinfo=None)
+    local_now, _ = _device_now(device, now)
     entry, _ = _queue_raw(
         device=device, key="query_attlog",
-        body=attlog_query(local_since, local_now + timedelta(minutes=5)),
+        body=attlog_query(local_now - timedelta(days=HISTORY_DAYS), local_now + timedelta(minutes=5)),
     )
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        state.state_data = {**(state.state_data or {}), "last_catch_up_at": now.isoformat()}
+        state.save(update_fields=["state_data", "updated_at"])
     return entry
 
 
