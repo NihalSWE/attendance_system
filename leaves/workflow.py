@@ -7,6 +7,7 @@ from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
+from access_control.branch_access import ALL_BRANCHES, branches_for
 from accounts.models import CompanyMembership
 from attendance.services import locked_ranges, recalculate
 from auditlog.services import record_company_event
@@ -18,11 +19,23 @@ from leaves.services import check_allowance, is_half_day, plan_leave_days, write
 from organization.services import require_company_membership, STRUCTURE_ROLES
 
 
+def approve_branches(member):
+    """Branches where a non-company member decides leave (A12 part 5).
+
+    A branch manager's own branches, plus any branch where they — or anyone
+    else — were given "Approve leave requests".
+    """
+    return branches_for(member.user, member.company_id, 'leave.approve')
+
+
 def reviewer(actor, company_id):
     member = require_company_membership(actor, company_id)
-    if actor.is_superuser or member.role not in (*STRUCTURE_ROLES, 'manager'):
-        raise PermissionDenied('Leave decisions require a branch manager or company administrator.')
-    return member
+    if actor.is_superuser:
+        raise PermissionDenied('Use your company login to decide leave.')
+    if member.role in (*STRUCTURE_ROLES, 'manager') or approve_branches(member):
+        return member
+    raise PermissionDenied('Leave decisions require a branch manager, access to approve '
+                           'leave, or a company administrator.')
 
 
 def branch_ids(member):
@@ -32,7 +45,12 @@ def branch_ids(member):
 
 
 def reviewable(member):
-    """Scope the inbox before pagination and re-use it at decision time."""
+    """Scope the inbox before pagination and re-use it at decision time.
+
+    Company (owner/admin): requests from branch managers, and from branches
+    with no branch manager. Everyone else: requests from people (not branch
+    managers) in the branches where they approve leave, never their own.
+    """
     requests = LeaveRequest.objects.exclude(employee__user_id=member.user_id)
     departments = list(member.allowed_departments.values_list('pk', flat=True))
     if departments:
@@ -48,9 +66,12 @@ def reviewable(member):
         ).filter(Q(allowed_departments__isnull=True)
                  | Q(allowed_departments=OuterRef('submission_assignment__department_id')))),
     )
-    if member.role == 'manager':
-        return requests.filter(requester_is_manager=False,
-                               submission_assignment__branch_id__in=branch_ids(member))
+    if member.role not in STRUCTURE_ROLES:
+        requests = requests.filter(requester_is_manager=False)
+        branches = approve_branches(member)
+        if branches is ALL_BRANCHES:
+            return requests
+        return requests.filter(submission_assignment__branch_id__in=branches)
     requests = requests.filter(Q(requester_is_manager=True) | Q(has_branch_manager=False))
     allowed = branch_ids(member)
     if allowed:

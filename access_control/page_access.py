@@ -14,7 +14,7 @@ page follow this list, so a page appears the moment it is added.
 
 from access_control.branch_access import CODES, can
 
-# view name -> the branch permission it needs.
+# view name -> the branch permission it needs, or a tuple: any one of them.
 BRANCH_PAGES = {
     # A12 part 2: who has which access (itself limited to the viewer's branches).
     "organization:access": "access.grant",
@@ -30,13 +30,27 @@ BRANCH_PAGES = {
     "organization:employee_edit": "employees.edit",
     "organization:employee_branch_departments": "employees.edit",
     "organization:employee_department_designations": "employees.edit",
+    # A12 part 5: leave and overtime, each limited to your branches. Someone
+    # who may record leave also sees the list (that is where Cancel is); the
+    # overtime day opens to viewers, and only deciders get its form. Leave
+    # types stay the company's. The approval inbox lives under My account.
+    "leaves:leave_list": ("leave.view", "leave.record"),
+    "leaves:leave_record": "leave.record",
+    "leaves:leave_cancel": "leave.record",
+    "payroll:overtime_list": ("overtime.view", "overtime.decide"),
+    "payroll:overtime_decide": ("overtime.view", "overtime.decide"),
+    "payroll:overtime_undo": "overtime.decide",
 }
+
+
+def _codes(view_name):
+    codes = BRANCH_PAGES.get(view_name, ())
+    return (codes,) if isinstance(codes, str) else codes
 
 
 def may_open(user, company_id, view_name):
     """True when ``view_name`` is a branch page and ``user`` holds its permission somewhere."""
-    code = BRANCH_PAGES.get(view_name)
-    return bool(code) and can(user, company_id, code)
+    return any(can(user, company_id, code) for code in _codes(view_name))
 
 
 def held_codes(user, company_id):
@@ -49,7 +63,6 @@ def opener(user, company_id):
     held = held_codes(user, company_id)
 
     def allowed(view_name):
-        code = BRANCH_PAGES.get(view_name)
-        return bool(code) and code in held
+        return any(code in held for code in _codes(view_name))
 
     return allowed

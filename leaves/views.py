@@ -4,7 +4,7 @@ import datetime
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Max, Sum, Exists, Min, OuterRef, Q, Subquery
 from django.shortcuts import redirect
 from base_template.tables import paginate, render
@@ -54,13 +54,35 @@ def _form_page(request, *, form, title, submit_label, action, success, redirect_
 # Leave records
 # --------------------------------------------------------------------------
 
+def _list_scope(user, company_id):
+    """``(company_wide, view_branches, record_branches)`` for the Leave list (A12 part 5).
+
+    Company logins (owner, admin, HR and the other company roles) see every
+    branch's leave, exactly as before. A branch manager or a person given access
+    sees leave in the branches where they may view or record it.
+    """
+    from access_control.branch_access import ALL_BRANCHES, branches_for, branches_for_any
+    from common.middleware import SELF_SERVICE_ROLES
+
+    membership = require_company_membership(user, company_id)
+    record = branches_for(user, company_id, "leave.record")
+    if membership.role not in SELF_SERVICE_ROLES:
+        return True, ALL_BRANCHES, record
+    view = branches_for_any(user, company_id, "leave.view", "leave.record")
+    if not view:
+        raise PermissionDenied("Viewing leave requires access to leave in a branch.")
+    return False, view, record
+
+
 @login_required
 @require_http_methods(["GET"])
 def leave_list(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership = require_company_membership(request.user, company_id)
+    from access_control.branch_access import ALL_BRANCHES
+
+    company_wide, view_branches, record_branches = _list_scope(request.user, company_id)
 
     today = timezone.localdate()
     raw_year = request.GET.get("year", "").strip()
@@ -83,6 +105,11 @@ def leave_list(request):
             LeaveRequest.objects.select_related("employee", "submitted_by")
             .prefetch_related("segments__leave_type")
             .filter(Exists(in_month))
+        )
+        if view_branches is not ALL_BRANCHES:
+            queryset = queryset.filter(submission_assignment__branch_id__in=view_branches)
+        queryset = (
+            queryset.select_related("submission_assignment")
             .annotate(first_day=Min("segments__start_date"), last_day=Max("segments__end_date"),
                       table_type=Min("segments__leave_type__name"), table_pay=Min("segments__requested_pay_type"),
                       table_units=Sum("segments__requested_units"))
@@ -104,6 +131,13 @@ def leave_list(request):
             search=("employee__first_name", "employee__last_name", "table_type", "status"),
             order=(("employee__first_name", "employee__last_name"), "table_type", "first_day", "last_day", "table_units", "table_pay", "status", None))
         has_types = LeaveType.objects.filter(status=ActiveStatus.ACTIVE).exists()
+        # Cancel only where every day of the leave is in a branch they record for.
+        page.object_list = list(page.object_list)
+        for leave in page.object_list:
+            leave.may_cancel = bool(record_branches) and (
+                record_branches is ALL_BRANCHES
+                or all(b in record_branches for b in services.leave_branch_ids(leave))
+            )
 
     return render(request, "leaves/leave_list.html", {
         "page": page,
@@ -121,7 +155,8 @@ def leave_list(request):
         ],
         "query": query,
         "has_types": has_types,
-        "can_record": membership.role in services.LEAVE_RECORDER_ROLES,
+        "can_record": bool(record_branches),
+        "company_wide": company_wide,
     })
 
 
@@ -131,19 +166,26 @@ def leave_record(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    services.require_leave_recorder(request.user, company_id)
+    from access_control.branch_access import ALL_BRANCHES
+
+    _, branches = services.recorder_branches(request.user, company_id)
     with use_company(company_id):
-        current_code = EmployeeAssignment.objects.filter(employee=OuterRef("pk")).exclude(
-            status="cancelled").order_by("-effective_from", "-pk").values("employee_code")[:1]
+        current = EmployeeAssignment.objects.filter(employee=OuterRef("pk")).exclude(
+            status="cancelled").order_by("-effective_from", "-pk")
+        employees = Employee.objects.exclude(
+            employment_status__in=[
+                Employee.EmploymentStatus.RESIGNED,
+                Employee.EmploymentStatus.TERMINATED,
+                Employee.EmploymentStatus.RETIRED,
+            ]
+        ).annotate(table_code=Subquery(current.values("employee_code")[:1]),
+                   table_branch_id=Subquery(current.values("branch_id")[:1]))
+        if branches is not ALL_BRANCHES:
+            # A12 part 5: people placed in their branches (the service re-checks each day).
+            employees = employees.filter(table_branch_id__in=branches)
         form = RecordLeaveForm(
             request.POST or None,
-            employees=Employee.objects.exclude(
-                employment_status__in=[
-                    Employee.EmploymentStatus.RESIGNED,
-                    Employee.EmploymentStatus.TERMINATED,
-                    Employee.EmploymentStatus.RETIRED,
-                ]
-            ).annotate(table_code=Subquery(current_code)).order_by("first_name", "last_name"),
+            employees=employees.order_by("first_name", "last_name"),
             leave_types=LeaveType.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
             initial={"pay_type": "paid", "duration": "full_day"},
         )

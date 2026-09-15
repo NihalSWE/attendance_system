@@ -58,14 +58,18 @@
             Change password
         </span>
     </a>
-    {% if sidebar_branch_manager %}
+    {% if sidebar_branch_manager or sidebar_leave_approver %}
         <div class="sidebar__label">My branches</div>
-        <a class="sidebar__link {% active request 'leave_inbox' 'leave_decide' %}" href="{% url 'me:leave_inbox' %}">
-            <span>Approval inbox</span>
-        </a>
-        <a class="sidebar__link {% active request 'branch_attendance' %}" href="{% url 'me:branch_attendance' %}">
-            <span>Branch attendance</span>
-        </a>
+        {% if sidebar_leave_approver %}
+            <a class="sidebar__link {% active request 'leave_inbox' 'leave_decide' %}" href="{% url 'me:leave_inbox' %}">
+                <span>Approval inbox</span>
+            </a>
+        {% endif %}
+        {% if sidebar_branch_manager %}
+            <a class="sidebar__link {% active request 'branch_attendance' %}" href="{% url 'me:branch_attendance' %}">
+                <span>Branch attendance</span>
+            </a>
+        {% endif %}
     {% endif %}
     {% if branch_menus %}
         {# Company pages they may open, by permission and branch (A12). #}

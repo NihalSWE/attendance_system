@@ -36,9 +36,11 @@
                     Overtime pay settings
                 </a>
             {% endif %}
-            <a class="btn btn--ghost" href="{% url 'payroll:payroll_home' %}?month={{ month }}&year={{ year }}">
-                Salary for {{ month_name }}
-            </a>
+            {% if company_wide %}
+                <a class="btn btn--ghost" href="{% url 'payroll:payroll_home' %}?month={{ month }}&year={{ year }}">
+                    Salary for {{ month_name }}
+                </a>
+            {% endif %}
         </div>
     </div>
 
@@ -243,9 +245,13 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if not locked and row.state != "too_short" %}
+                                    {% if row.may_decide and not locked and row.state != "too_short" %}
                                         <a class="btn {% if row.state == 'waiting' %}btn--primary{% else %}btn--quiet{% endif %} btn--sm" href="{% url 'payroll:overtime_decide' row.record.pk %}">
                                             {% if row.state == "waiting" %}Decide{% else %}Change{% endif %}
+                                        </a>
+                                    {% elif not row.may_decide %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'payroll:overtime_decide' row.record.pk %}">
+                                            View
                                         </a>
                                     {% else %}
                                         <span class="t-faint">

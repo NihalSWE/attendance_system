@@ -117,6 +117,17 @@ def branches_for(user, company_id, code, at=None):
     return branches
 
 
+def branches_for_any(user, company_id, *codes, at=None):
+    """Branches where ``user`` may do at least one of ``codes``."""
+    found = set()
+    for code in codes:
+        branches = branches_for(user, company_id, code, at)
+        if branches is ALL_BRANCHES:
+            return ALL_BRANCHES
+        found |= branches
+    return found
+
+
 def can(user, company_id, code, branch_id=None, at=None):
     """True if ``user`` may do ``code`` in ``branch_id`` (or in any branch when None)."""
     branches = branches_for(user, company_id, code, at)

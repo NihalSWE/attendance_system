@@ -159,7 +159,7 @@ def _branch_card(request, membership):
                     "label": "In the office now",
                     "value": sum(1 for s in statuses.values() if s.key == "in_office"),
                 })
-        if membership.role == "manager":
+        if membership.role == "manager" or "leave.approve" in codes:
             card["items"].append({
                 "label": "Leave waiting for your approval",
                 "value": reviewable(membership).filter(status="pending").count(),

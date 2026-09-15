@@ -33,14 +33,15 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
+from access_control.branch_access import ALL_BRANCHES, branches_for, branches_for_any
 from accounts.models import CompanyMembership
 from attendance.models import AttendanceRecord
 from attendance.services import locked_ranges, month_bounds, recalculate, refresh
 from auditlog.services import record_company_event
 from common.tenant import use_company
+from organization.models import Branch
 from organization.services import (
     STRUCTURE_ROLES,
-    assert_branch_in_scope,
     require_company_membership,
     visible_branches,
 )
@@ -70,11 +71,42 @@ CANDIDATES = (
 )
 
 
-def require_overtime_approver(actor, company_id):
+@dataclass
+class Scope:
+    """Who is looking at overtime, and in which branches (A12 part 5)."""
+
+    membership: object
+    branches: object      # Branch queryset
+    company_wide: bool    # owner, company admin or HR: as before A12
+    decide: object        # ALL_BRANCHES or the branch ids where they may decide
+
+    def may_decide(self, branch_id):
+        return branch_id in self.decide
+
+
+def overtime_scope(actor, company_id, code="overtime.view"):
+    """Owner, company admin and HR: their branches, as before. A branch manager
+    or someone given access: the branches where they may view (or, for
+    ``overtime.decide``, decide) overtime. Nobody else."""
     membership = require_company_membership(actor, company_id)
-    if membership.role not in OVERTIME_ROLES:
-        raise PermissionDenied("Deciding overtime needs owner, company administrator or HR access.")
-    return membership
+    if membership.role in OVERTIME_ROLES:
+        with use_company(company_id):
+            return Scope(membership, visible_branches(membership), True, ALL_BRANCHES)
+    decide = branches_for(actor, company_id, "overtime.decide")
+    if code == "overtime.decide":
+        branches = decide
+    else:
+        branches = branches_for_any(actor, company_id, "overtime.view", "overtime.decide")
+    if not branches:
+        raise PermissionDenied(
+            "Deciding overtime needs owner, company administrator or HR access, "
+            "or access to overtime in a branch."
+        )
+    with use_company(company_id):
+        queryset = Branch.objects.all()
+        if branches is not ALL_BRANCHES:
+            queryset = queryset.filter(pk__in=branches)
+        return Scope(membership, queryset, False, decide)
 
 
 @dataclass
@@ -198,7 +230,7 @@ def _snapshot(decision):
     }
 
 
-def _record_in_scope(membership, record_id):
+def _record_in_scope(scope, record_id):
     record = (
         AttendanceRecord.objects.select_related("employee", "shift", "branch")
         .prefetch_related("sessions")
@@ -207,7 +239,8 @@ def _record_in_scope(membership, record_id):
     )
     if record is None:
         raise PermissionDenied("Day not found in this company.")
-    assert_branch_in_scope(membership, record.branch)
+    if not scope.branches.filter(pk=record.branch_id).exists():
+        raise PermissionDenied("That branch is outside your assigned scope.")
     return record
 
 
@@ -231,7 +264,8 @@ class Row:
 
 def overtime_month(*, actor, company_id, year, month):
     """Every day of a month with overtime to decide, and the decisions made."""
-    membership = require_overtime_approver(actor, company_id)
+    scope = overtime_scope(actor, company_id)
+    membership = scope.membership
     first, last = month_bounds(year, month)
     # Live attendance: bring the month up to date before reading it.
     refresh(company_id, start=first, end=last)
@@ -241,7 +275,7 @@ def overtime_month(*, actor, company_id, year, month):
             AttendanceRecord.objects.select_related("employee", "shift", "branch")
             .prefetch_related("sessions")
             .filter(work_date__gte=first, work_date__lte=last, is_open=False)
-            .filter(branch__in=visible_branches(membership))
+            .filter(branch__in=scope.branches)
             .filter(CANDIDATES)
             .distinct()
             .order_by("work_date", "employee__first_name", "employee__last_name")
@@ -267,6 +301,7 @@ def overtime_month(*, actor, company_id, year, month):
         rows.append(row)
     return {
         "membership": membership,
+        "branches": scope.branches,
         "rows": rows,
         "counts": Counter(row.state for row in rows),
         "rules": rules,
@@ -276,7 +311,8 @@ def overtime_month(*, actor, company_id, year, month):
 
 def overtime_day(*, actor, company_id, record_id):
     """One day's overtime, for the decision page."""
-    membership = require_overtime_approver(actor, company_id)
+    scope = overtime_scope(actor, company_id)
+    membership = scope.membership
     with use_company(company_id):
         stored = AttendanceRecord.objects.filter(pk=record_id).values_list(
             "employee_id", "work_date"
@@ -291,7 +327,7 @@ def overtime_day(*, actor, company_id, record_id):
         )
         if record is None:
             raise PermissionDenied("That day no longer has attendance.")
-        record = _record_in_scope(membership, record)
+        record = _record_in_scope(scope, record)
         decision = OvertimeDecision.objects.select_related("decided_by").filter(
             employee=record.employee, work_date=record.work_date
         ).first()
@@ -304,6 +340,8 @@ def overtime_day(*, actor, company_id, record_id):
     state = state_of(claim, decision, rules)
     return {
         "membership": membership,
+        "company_wide": scope.company_wide,
+        "may_decide": scope.may_decide(record.branch_id),
         "record": record,
         "claim": claim,
         "decision": decision,
@@ -324,9 +362,10 @@ def decide_overtime(*, actor, company_id, record_id, approve, minutes=None,
     attendance counted). For a session nobody scanned out of, ``check_out`` is
     the time they left instead, and the minutes follow from it.
     """
-    membership = require_overtime_approver(actor, company_id)
+    scope = overtime_scope(actor, company_id, "overtime.decide")
+    membership = scope.membership
     with use_company(company_id):
-        record = _record_in_scope(membership, record_id)
+        record = _record_in_scope(scope, record_id)
         claim = claim_for(record)
         if record.is_open:
             raise ValidationError("This day has not finished yet. Decide its overtime once it has.")
@@ -404,9 +443,10 @@ def _rewrite_day(company_id, record):
 @transaction.atomic
 def undo_overtime_decision(*, actor, company_id, record_id):
     """Drop a decision: the day goes back to automatic, or to waiting."""
-    membership = require_overtime_approver(actor, company_id)
+    scope = overtime_scope(actor, company_id, "overtime.decide")
+    membership = scope.membership
     with use_company(company_id):
-        record = _record_in_scope(membership, record_id)
+        record = _record_in_scope(scope, record_id)
         if _is_locked(company_id, record.work_date):
             raise ValidationError("This month's salary is finalised; its overtime cannot change.")
         decision = (

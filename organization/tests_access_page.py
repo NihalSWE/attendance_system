@@ -190,8 +190,10 @@ class BranchPagesTests(AccessPageBase):
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Company")
         self.assertContains(page, f'href="{reverse("organization:access")}"')
-        # Pages not opened to branches yet still send them home.
-        self.assertRedirects(self.client.get(reverse("leaves:leave_list")), reverse("me:home"))
+        # Pages not opened to branches yet still send them home (salary: part 6).
+        self.assertRedirects(self.client.get(reverse("payroll:payroll_home")), reverse("me:home"))
+        # Leave opened in part 5, with View leave.
+        self.assertEqual(self.client.get(reverse("leaves:leave_list")).status_code, 200)
 
     def test_without_access_nothing_opens_and_no_company_menu(self):
         self.login_as(self.clerk_user)

@@ -150,7 +150,7 @@ class TableTests(OvertimeBase):
         month = overtime.overtime_month(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
         for salary_rules in (rules(), rules(minimum_overtime_minutes=60, overtime_rounding_minutes=60), rules(overtime_method="none")):
             with use_company(self.company):
-                annotated = {r.pk: r for r in overtime_queryset(month["membership"], datetime.date(2026, 8, 1), datetime.date(2026, 8, 31), salary_rules)}
+                annotated = {r.pk: r for r in overtime_queryset(month["branches"],datetime.date(2026, 8, 1), datetime.date(2026, 8, 31), salary_rules)}
             self.assertEqual(set(annotated), {row.record.pk for row in month["rows"]})
             for row in month["rows"]:
                 state = overtime.state_of(row.claim, row.decision, salary_rules)

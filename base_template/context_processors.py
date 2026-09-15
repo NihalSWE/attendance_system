@@ -4,6 +4,7 @@ Presentation only. Every view and service still enforces tenant scope and
 permissions itself — a name in this dropdown is not authorisation.
 """
 
+from access_control.branch_access import can
 from access_control.page_access import opener
 from accounts.services import get_active_memberships
 from tenants.models import Company
@@ -35,6 +36,7 @@ def shell(request):
     menus = []
     unrestricted_admin = False
     branch_menus = []
+    leave_approver = False
     if membership and not self_service:
         unrestricted_admin = may_manage_devices(user, company_id)
         menus = company_menus(
@@ -49,6 +51,8 @@ def shell(request):
             request, can_manage=False, can_manage_devices=False,
             allowed=opener(user, company_id),
         )
+        # The approval inbox: a branch manager, or someone given "Approve leave".
+        leave_approver = membership.role == "manager" or can(user, company_id, "leave.approve")
 
     return {
         "memberships": memberships,
@@ -60,4 +64,5 @@ def shell(request):
         "branch_menus": branch_menus,
         "sidebar_unrestricted_admin": unrestricted_admin,
         "sidebar_branch_manager": bool(membership and membership.role == 'manager'),
+        "sidebar_leave_approver": leave_approver,
     }

@@ -10,7 +10,6 @@ from base_template.tables import paginate
 from common.forms import StyledFormMixin
 from common.tenant import use_company
 from employees.models import Employee
-from organization.services import visible_branches
 from payroll import overtime
 from payroll.models import OvertimeDecision
 from payroll.policy import rules_for
@@ -27,7 +26,7 @@ class OvertimeFilters(StyledFormMixin, forms.Form):
         self.fields["branch"].queryset = branches
 
 
-def overtime_queryset(membership, first, last, rules):
+def overtime_queryset(branches, first, last, rules):
     """Express Claim.exists/state_of in SQL so counts and slices stay in SQL.
 
     Finished day-off sessions supply the claim; other days use attendance's
@@ -38,7 +37,7 @@ def overtime_queryset(membership, first, last, rules):
     closed = sessions.filter(ended_at__isnull=False).order_by().values("attendance_record").annotate(minutes=Sum("worked_minutes"))
     decisions = OvertimeDecision.objects.filter(employee_id=OuterRef("employee_id"), work_date=OuterRef("work_date"))
     queryset = AttendanceRecord.objects.select_related("employee", "shift", "branch").prefetch_related("sessions").filter(
-        work_date__range=(first, last), is_open=False, branch__in=visible_branches(membership),
+        work_date__range=(first, last), is_open=False, branch__in=branches,
     ).annotate(
         table_open=Exists(sessions.filter(ended_at__isnull=True, started_at__isnull=False)),
         table_minutes=Case(When(attendance_status__in=overtime.DAYS_OFF, then=Coalesce(Subquery(closed.values("minutes")[:1]), 0)),
@@ -71,15 +70,15 @@ def overtime_queryset(membership, first, last, rules):
 
 
 def overtime_table(request, *, company_id, year, month, states):
-    membership = overtime.require_overtime_approver(request.user, company_id)
+    scope = overtime.overtime_scope(request.user, company_id)
     first, last = month_bounds(year, month)
     refresh(company_id, start=first, end=last)
     rules = rules_for(company_id, first)
     with use_company(company_id):
-        queryset = overtime_queryset(membership, first, last, rules)
+        queryset = overtime_queryset(scope.branches, first, last, rules)
         form = OvertimeFilters(request.GET, employees=Employee.objects.filter(
             pk__in=queryset.values("employee_id")).order_by("first_name", "last_name"),
-            branches=visible_branches(membership).order_by("name"))
+            branches=scope.branches.order_by("name"))
         if form.is_valid():
             if form.cleaned_data["employee"]:
                 queryset = queryset.filter(employee=form.cleaned_data["employee"])
@@ -104,6 +103,8 @@ def overtime_table(request, *, company_id, year, month, states):
             row = overtime.Row(record, claim, decision, record.table_state,
                                paid_minutes=rules.payable_overtime(record.table_approved))
             row.changed = decision is not None and claim.open_from is None and decision.calculated_minutes != claim.minutes
+            row.may_decide = scope.may_decide(record.branch_id)
             rows.append(row)
-    return {"membership": membership, "rows": rows, "counts": counts, "rules": rules,
+    return {"membership": scope.membership, "company_wide": scope.company_wide,
+            "rows": rows, "counts": counts, "rules": rules,
             "filter_form": form, "locked": overtime._is_locked(company_id, first)}

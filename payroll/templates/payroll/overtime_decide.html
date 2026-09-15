@@ -38,9 +38,11 @@
             </p>
         </div>
         <div class="page__actions">
-            <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}?employee={{ record.employee_id }}&month={{ record.work_date.month }}&year={{ record.work_date.year }}">
-                Open in the attendance calendar
-            </a>
+            {% if company_wide %}
+                <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}?employee={{ record.employee_id }}&month={{ record.work_date.month }}&year={{ record.work_date.year }}">
+                    Open in the attendance calendar
+                </a>
+            {% endif %}
             <a class="btn btn--ghost" href="{{ back_url }}">
                 Back to overtime
             </a>
@@ -211,7 +213,7 @@
                             counts {{ claim.minutes|hm }}. Decide again if that changes your answer.
                         </div>
                     {% endif %}
-                    {% if not locked %}
+                    {% if may_decide and not locked %}
                         <form method="post" action="{% url 'payroll:overtime_undo' record.pk %}">
                             {% csrf_token %}
                             <button class="btn btn--ghost btn--sm" type="submit">
@@ -247,6 +249,10 @@
                 This day has not finished yet. Its overtime can be decided once it has.
             </div>
         {% elif state == "too_short" %}
+        {% elif not may_decide %}
+            <div class="alert alert--info">
+                You can see this overtime. Deciding it needs the "Decide overtime" access.
+            </div>
         {% else %}
             <div class="card">
                 <div class="card__head">

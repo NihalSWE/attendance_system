@@ -584,6 +584,9 @@ def overtime_decide(request, pk):
         if decision.status == OvertimeDecision.Status.APPROVED and claim.open_from is None:
             initial["minutes"] = decision.approved_minutes
     form = OvertimeDecisionForm(request.POST or None, claim=claim, initial=initial)
+    if request.method == "POST" and not page["may_decide"]:
+        # A12 part 5: viewing a branch's overtime is not deciding it.
+        raise PermissionDenied("You may view this overtime, not decide it.")
     if request.method == "POST" and form.is_valid():
         approve = request.POST.get("decision") == "approve"
         try:

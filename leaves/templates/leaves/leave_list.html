@@ -24,9 +24,11 @@
             </p>
         </div>
         <div class="page__actions">
-            <a class="btn btn--ghost" href="{% url 'leaves:leave_type_list' %}">
-                Leave types
-            </a>
+            {% if company_wide %}
+                <a class="btn btn--ghost" href="{% url 'leaves:leave_type_list' %}">
+                    Leave types
+                </a>
+            {% endif %}
             {% if can_record and has_types %}
                 <a class="btn btn--primary" href="{% url 'leaves:leave_record' %}">
                     Record leave
@@ -182,7 +184,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if can_record and leave.status == 'approved' %}
+                                        {% if leave.may_cancel and leave.status == 'approved' %}
                                             <a class="btn btn--quiet btn--sm" href="{% url 'leaves:leave_cancel' leave.pk %}">
                                                 Cancel
                                             </a>

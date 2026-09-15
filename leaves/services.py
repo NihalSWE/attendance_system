@@ -114,13 +114,36 @@ def is_half_day(values):
     return half
 
 
-def require_leave_recorder(actor, company_id):
+def recorder_branches(actor, company_id):
+    """``(membership, branches)`` where ``actor`` may record and cancel leave.
+
+    HR, owner and company admin: every branch, as before. A branch manager, or
+    someone given "Record and cancel leave" (A12 part 5): their branches only.
+    """
+    from access_control.branch_access import branches_for
+
     membership = require_company_membership(actor, company_id)
-    if membership.role not in LEAVE_RECORDER_ROLES:
+    branches = branches_for(actor, company_id, "leave.record")
+    if not branches:
         raise PermissionDenied(
-            "Recording leave requires HR, owner or company administrator access."
+            "Recording leave requires HR, owner or company administrator access, "
+            "or access to record leave in a branch."
         )
-    return membership
+    return membership, branches
+
+
+def require_leave_recorder(actor, company_id):
+    return recorder_branches(actor, company_id)[0]
+
+
+def _refuse_outside(branches, days, employee):
+    """Every leave day must fall in a placement in one of ``branches``."""
+    for on, assignment, *_ in days:
+        if assignment.branch_id not in branches:
+            raise ValidationError({"start_date": (
+                f"On {on:%d %b %Y} {employee.full_name} is placed in "
+                f"{assignment.branch.name}, which is outside your branches."
+            )})
 
 
 def _refuse_own_leave(actor, employee):
@@ -352,7 +375,7 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
 @transaction.atomic
 def record_leave(*, actor, company_id, values):
     """Record approved, full-day leave for one employee."""
-    membership = require_leave_recorder(actor, company_id)
+    membership, branches = recorder_branches(actor, company_id)
     values = _writable(values, RECORD_FIELDS)
     employee = values["employee"]
     leave_type = values["leave_type"]
@@ -380,6 +403,7 @@ def record_leave(*, actor, company_id, values):
                     "is no working day to take as leave."
                 )
             })
+        _refuse_outside(branches, days, employee)
 
         clashes = list(
             LeaveDay.objects.filter(
@@ -454,15 +478,28 @@ def record_leave(*, actor, company_id, values):
     return request
 
 
+def leave_branch_ids(request):
+    """Every branch a leave touches: where it was asked for, and each day's placement."""
+    branch_ids = set(
+        LeaveDay.objects.filter(request_segment__leave_request=request)
+        .values_list("employee_assignment__branch_id", flat=True)
+    )
+    if request.submission_assignment_id:
+        branch_ids.add(request.submission_assignment.branch_id)
+    return branch_ids
+
+
 def get_leave_for_edit(*, actor, company_id, request_id):
-    membership = require_leave_recorder(actor, company_id)
+    membership, branches = recorder_branches(actor, company_id)
     with use_company(company_id):
         request = (
-            LeaveRequest.objects.select_related("employee")
+            LeaveRequest.objects.select_related("employee", "submission_assignment")
             .filter(pk=request_id).first()
         )
-    if request is None:
-        raise PermissionDenied("Leave not found in this company.")
+        if request is None:
+            raise PermissionDenied("Leave not found in this company.")
+        if not all(branch_id in branches for branch_id in leave_branch_ids(request)):
+            raise PermissionDenied("This leave is outside your branches.")
     return membership, request
 
 

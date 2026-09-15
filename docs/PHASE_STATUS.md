@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **part 4 is done** (the Employees area limited by branch); next is **A12 part 5**: Leave and overtime limited by branch — each part adds its pages to `BRANCH_PAGES` once they are branch-scoped. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9, N6, N5 and N8 merged** (office session; N5 brings migration `attendance.0004_corrections`, which Ajay runs). Nihal's pages get branch permissions only after the A12 part 7 note. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **parts 4 and 5 are done** (the Employees area, then Leave and Overtime, limited by branch); next is **A12 part 6**: Salary limited by branch — each part adds its pages to `BRANCH_PAGES` once they are branch-scoped. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9, N6, N5 and N8 merged** (office session; N5 brings migration `attendance.0004_corrections`, which Ajay runs). Nihal's pages get branch permissions only after the A12 part 7 note. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2525,7 +2525,7 @@ and overtime.
 | **2 — done** | Organisation → Access page: people in your branches, tick permissions per branch, create logins | No |
 | **3 — done** | Branch managers and grantees open company pages; sidebar and dashboard by permission and branch | No |
 | **4 — done** | Employees area branch-scoped (list, create/edit, logins) | No |
-| 5 | Leave and overtime branch-scoped (list, record/cancel, approval inbox, overtime) | No |
+| **5 — done** | Leave and overtime branch-scoped (list, record/cancel, approval inbox, overtime) | No |
 | 6 | Salary branch-scoped: Salary by month and payslips by branch; generate only your branches inside the month; bonus/deductions; finalise and settings stay owner/admin | Possibly |
 | 7 | Written note for Nihal: apply `can`/`scope_queryset` to attendance and device pages — Daily list, Calendar, Days to review / Fix a day (N5), device pages and connection test (N8), employee page / End employment (N6), the live "Now" refresh. Until the note, these stay owner/admin and get **no** `BRANCH_PAGES` entry (answered to Nihal, 2026-09-15) | No |
 
@@ -2691,6 +2691,45 @@ employee's branch** (a branch manager has every permission in their branches):
   pushing.**
 - No migration, dependency or `.env.example` change.
 
+
+## A12 part 5 done — leave and overtime by branch — 2026-09-15 (Claude, Ajay's session, office)
+
+Owner, company admin and HR: unchanged (every branch's leave and overtime, as
+before; the other company roles keep the Leave list as before). For a branch
+manager or a person given access, each page follows its permission **in the
+branch** (a branch manager has every permission in their branches):
+
+| Page | Needs | Notes |
+|---|---|---|
+| **Leave list** (`leaves:leave_list`) | View leave **or** Record and cancel leave | Only leave asked for in those branches. **Cancel** only where they may record, for every day of the leave. Leave types button hidden (leave types stay the company's). |
+| **Record leave** | Record and cancel leave | Employee list: people placed in those branches. The service refuses a day that falls in a placement outside them, and their own leave, as before. |
+| **Cancel leave** | Record and cancel leave | Every branch the leave touches must be theirs. |
+| **Approval inbox** (My account → My branches) | Approve leave requests | Before: branch managers only. Now also anyone given this access, for requests from people (not branch managers) in those branches, never their own. The company inbox is unchanged (branch managers' requests and branches with no branch manager). Sidebar link and the "Leave waiting for your approval" count on My account follow. |
+| **Overtime list** (`payroll:overtime_list`) | View overtime **or** Decide overtime | Days in those branches; Decide/Change only where they may decide, otherwise **View**. "Salary for …" hidden until part 6. |
+| **Overtime day** (`payroll:overtime_decide`) | View or Decide | View-only: the day and its scans, no form, no Undo; a POST is refused. "Open in the attendance calendar" hidden (Nihal's page). |
+| **Undo an overtime decision** | Decide overtime | |
+
+- Added to `BRANCH_PAGES` (which now accepts "any of these codes"):
+  `leaves:leave_list`, `leaves:leave_record`, `leaves:leave_cancel`,
+  `payroll:overtime_list`, `payroll:overtime_decide`, `payroll:overtime_undo`.
+  The sidebar "Company" section shows Leave (Leave list, Record leave) and
+  Salary → Overtime accordingly.
+- Services check the same rules: `leaves.services.recorder_branches` (record,
+  cancel), `leaves.workflow.approve_branches` / `reviewer` / `reviewable`
+  (inbox and decisions), `payroll.overtime.overtime_scope` (list, day, decide,
+  undo; replaces `require_overtime_approver`). New helper
+  `access_control.branch_access.branches_for_any`.
+- Not changed: leave types, the company approval inbox, salary pages
+  (part 6), attendance pages (Nihal, part 7 note).
+- Tests: `leaves/tests_branch_access.py` (9) and
+  `payroll/tests_branch_overtime.py` (5): manager sees/cancels/decides own
+  branch only; view-only sees without cancel, record or decide (POST and Undo
+  403); access in another branch stays there (crafted record/cancel/decide
+  refused); an employee without access is kept out by the gate; owner and HR
+  unchanged; a person given "Approve leave" gets the inbox, the My account
+  count and decides; the branch manager still decides. **Full suite run
+  before pushing.**
+- No migration, dependency or `.env.example` change.
 
 ## N5 and N8 merged — 2026-09-15 (Claude, Ajay's session, office)
 
