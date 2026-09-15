@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **parts 4, 5 and 6 are done** (the Employees area, Leave and Overtime, then Salary, limited by branch — each branch prepares its own salary, the owner/admin finalises); next is **A12 part 7**: the written note for Nihal on branch-scoping the attendance and device pages. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9, N6, N5 and N8 merged** (office session; N5 brings migration `attendance.0004_corrections`, which Ajay runs). Nihal's pages get branch permissions only after the A12 part 7 note. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **parts 4, 5 and 6 are done** (the Employees area, Leave and Overtime, then Salary, limited by branch — each branch prepares its own salary, the owner/admin finalises); **part 7 is done** (the note for Nihal, [A12_BRANCH_ACCESS_FOR_NIHAL.md](A12_BRANCH_ACCESS_FOR_NIHAL.md); A12 is complete on Ajay's side). Next: **A13 payments/advances/dues — a short simple plan first, for Ajay's agreement**; then the leave-recalculation loose end on request, and A16 (office 3A test). N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9, N6, N5 and N8 merged** (office session; N5 brings migration `attendance.0004_corrections`, which Ajay runs). Nihal's pages get branch permissions only after the A12 part 7 note. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2527,7 +2527,7 @@ and overtime.
 | **4 — done** | Employees area branch-scoped (list, create/edit, logins) | No |
 | **5 — done** | Leave and overtime branch-scoped (list, record/cancel, approval inbox, overtime) | No |
 | **6 — done** | Salary branch-scoped: Salary by month and payslips by branch; generate only your branches inside the month; bonus/deductions; finalise and settings stay owner/admin | No (not needed) |
-| 7 | Written note for Nihal: apply `can`/`scope_queryset` to attendance and device pages — Daily list, Calendar, Days to review / Fix a day (N5), device pages and connection test (N8), employee page / End employment (N6), the live "Now" refresh. Until the note, these stay owner/admin and get **no** `BRANCH_PAGES` entry (answered to Nihal, 2026-09-15) | No |
+| **7 — done** | Written note for Nihal: [A12_BRANCH_ACCESS_FOR_NIHAL.md](A12_BRANCH_ACCESS_FOR_NIHAL.md) — attendance pages (Daily list, Calendar, day panel, Now, Days to review / Fix a day / Withdraw) and the N6 employee page / End employment; devices stay owner/admin | No |
 
 Permissions: employees view / create and edit / logins; leave view / record and
 cancel / approve; overtime view / decide; salary view / prepare (generate, bonus
@@ -2692,6 +2692,35 @@ employee's branch** (a branch manager has every permission in their branches):
 - No migration, dependency or `.env.example` change.
 
 
+## A12 part 7 done — the note for Nihal — 2026-09-15 (Claude, Ajay's session, office)
+
+A12 is complete on Ajay's side. The note
+[A12_BRANCH_ACCESS_FOR_NIHAL.md](A12_BRANCH_ACCESS_FOR_NIHAL.md) tells Nihal
+how to branch-limit his pages, with the same rules and tools as parts 4–6:
+
+- Two new permission codes, added by Nihal together with the pages that use
+  them: **View attendance** (`attendance.view`) and **Fix attendance days**
+  (`attendance.fix`), both company-wide for HR as today.
+- Page by page: Daily list, Calendar, day panel, Now (`employees.view` or
+  `attendance.view`), Days to review / Fix a day / Withdraw (`attendance.fix`,
+  services re-check), employee page (`employees.view`; salary history only
+  with View salaries) and End employment (`employees.edit`; not a branch
+  manager's). **Devices stay owner/admin** (unrestricted), as before.
+- Company logins keep today's behaviour; only Employee and Branch-manager
+  logins are limited. Tests with `leaves/tests_branch_access.TwoBranchCase`.
+
+Code in this part (Ajay's pages only): links to Nihal's pages now follow
+`BRANCH_PAGES` instead of "company-wide", so they switch on by themselves
+when he lists a page — the Employees list's live "Now" refresh and its link
+to the employee page, and the attendance-calendar link on the overtime day
+page and the payslip. Owner/admin: unchanged. Tests: one in
+`organization/tests_branch_employees.py`, one in
+`payroll/tests_branch_overtime.py` (links appear only once the page is
+listed). No migration, dependency or `.env.example` change.
+
+After Nihal's branch: retire My branches → Branch attendance
+(`me:branch_attendance`) in favour of the scoped Daily list, if Ajay agrees.
+
 ## A12 part 6 done — salary by branch — 2026-09-15 (Claude, Ajay's session, office)
 
 One salary run per month for the company, as before; each branch prepares
@@ -2731,8 +2760,9 @@ only). HR and the other company roles keep Salary by month as before.
   button and 403 on another branch's payslip; view-only sees payslips
   without Generate or Add line (POST 403); prepare in another branch adds a
   line there and regenerates only that branch; owner and HR unchanged.
-  `organization/tests_access_page.py`: three checks that used Salary as "not
-  yet open" now use Salary settings. **Full suite run before pushing.**
+  `organization/tests_access_page.py` (two) and `organization/tests_logins.py`
+  (one): checks that used Salary as "not yet open" now use Salary settings.
+  **Full suite run before pushing** (1119 OK).
 - No migration, dependency or `.env.example` change.
 
 ## A12 part 5 done — leave and overtime by branch — 2026-09-15 (Claude, Ajay's session, office)

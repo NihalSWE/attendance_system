@@ -3,8 +3,12 @@
 import datetime
 from decimal import Decimal
 
+from unittest.mock import patch
+
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
+
+from access_control.page_access import BRANCH_PAGES
 
 from accounts.models import CompanyMembership
 from common.tenant import use_company
@@ -63,6 +67,20 @@ class EmployeeListTests(BranchEmployeesBase):
         self.assertEqual(self.client.get(reverse("employee_list")).status_code, 403)
         self.login_as(self.clerk_user)
         self.assertRedirects(self.client.get(reverse("employee_list")), reverse("me:home"))
+
+    def test_nihals_pages_are_linked_once_they_are_branch_pages(self):
+        # A12 part 7: the live "Now" refresh and the employee page follow
+        # BRANCH_PAGES, so adding them there is all it takes.
+        self.login_as(self.manager)
+        detail = 'href="%s"' % reverse("organization:employee_detail", args=[self.clerk.pk])
+        page = self.client.get(reverse("employee_list"))
+        self.assertNotContains(page, "data-now-board")
+        self.assertNotContains(page, detail)
+        with patch.dict(BRANCH_PAGES, {"attendance:attendance_now": "employees.view",
+                                       "organization:employee_detail": "employees.view"}):
+            page = self.client.get(reverse("employee_list"))
+        self.assertContains(page, "data-now-board")
+        self.assertContains(page, detail)
 
 
 class EditEmployeeTests(BranchEmployeesBase):

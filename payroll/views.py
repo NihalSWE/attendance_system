@@ -623,6 +623,11 @@ def overtime_list(request):
     })
 
 
+def _calendar_link(request, company_id, company_wide):
+    """Link to the attendance calendar (Nihal's) once this viewer may open it."""
+    return company_wide or may_open(request.user, company_id, "attendance:attendance_calendar")
+
+
 def _overtime_list_url(day, show="all"):
     return f"{reverse('payroll:overtime_list')}?month={day.month}&year={day.year}&show={show}"
 
@@ -670,6 +675,7 @@ def overtime_decide(request, pk):
             return redirect(_overtime_list_url(day))
     return render(request, "payroll/overtime_decide.html", {
         **page,
+        "calendar_link": _calendar_link(request, company_id, page["company_wide"]),
         "form": form,
         "back_url": _overtime_list_url(record.work_date),
         "company_tz": page["membership"].company.timezone or "UTC",
@@ -735,7 +741,7 @@ def payslip(request, pk):
         )
         # Waiving a penalty stays with the owner and company admin.
         context["can_waive"] = context["can_waive"] and company_wide
-        context["company_wide"] = company_wide
+        context["calendar_link"] = _calendar_link(request, company_id, company_wide)
         context["adjustment_form"] = AdjustmentForm()
     return render(request, "payroll/payslip.html", context)
 

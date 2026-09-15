@@ -342,7 +342,7 @@
             <h2>
                 Attendance in {{ period.name }}
             </h2>
-            {% if for_employee or company_wide %}
+            {% if for_employee or calendar_link %}
                 <a class="btn btn--ghost btn--sm slip-head-action" href="{% if for_employee %}{% url 'me:attendance' %}?year={{ period.start_date.year }}&month={{ period.start_date.month }}{% else %}{% url 'attendance:attendance_calendar' %}?employee={{ record.employee.pk }}&year={{ period.start_date.year }}&month={{ period.start_date.month }}{% endif %}">
                     Calendar view
                 </a>

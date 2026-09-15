@@ -38,7 +38,7 @@
             </p>
         </div>
         <div class="page__actions">
-            {% if company_wide %}
+            {% if calendar_link %}
                 <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}?employee={{ record.employee_id }}&month={{ record.work_date.month }}&year={{ record.work_date.year }}">
                     Open in the attendance calendar
                 </a>

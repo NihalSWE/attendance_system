@@ -16,6 +16,7 @@ from django.shortcuts import redirect
 from base_template.tables import paginate, render
 from django.views.decorators.http import require_POST
 
+from access_control.page_access import may_open
 from accounts.services import ACTIVE_COMPANY_SESSION_KEY, get_active_memberships
 from attendance import live_status
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
@@ -190,6 +191,9 @@ def employee_list(request):
         "statuses": Employee.EmploymentStatus.choices,
         "company_wide": company_wide,
         "can_create": bool(edit_branches),
+        # Nihal's pages: linked once they are open to this viewer (A12 part 7).
+        "live_now": company_wide or may_open(request.user, request.company_id, "attendance:attendance_now"),
+        "detail_links": company_wide or may_open(request.user, request.company_id, "organization:employee_detail"),
     })
 
 

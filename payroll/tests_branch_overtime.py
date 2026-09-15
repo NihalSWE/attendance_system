@@ -1,7 +1,11 @@
 """A12 part 5: overtime limited to the viewer's branches."""
 
+from unittest.mock import patch
+
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
+
+from access_control.page_access import BRANCH_PAGES
 
 from attendance.models import AttendanceRecord
 from attendance.services import recalculate
@@ -53,6 +57,13 @@ class BranchOvertimeTests(TwoBranchCase):
         self.assertEqual(self.client.post(self.day_url(self.near), post).status_code, 403)
         self.assertEqual(self.client.post(
             reverse("payroll:overtime_undo", args=[self.near.pk])).status_code, 403)
+
+    def test_the_calendar_link_follows_branch_pages(self):
+        self.client.force_login(self.manager)
+        calendar = reverse("attendance:attendance_calendar")
+        self.assertNotContains(self.client.get(self.day_url(self.near)), calendar)
+        with patch.dict(BRANCH_PAGES, {"attendance:attendance_calendar": "employees.view"}):
+            self.assertContains(self.client.get(self.day_url(self.near)), calendar)
 
     def test_decide_access_in_another_branch_stays_there(self):
         self.grant("overtime.decide", self.unit)

@@ -41,10 +41,10 @@
             {% endif %}
         </div>
     </div>
-    {# The live refresh of the "Now" column is the company's (Nihal's attendance #}
-    {# endpoint, not yet limited to branches); for a branch viewer the column #}
-    {# shows the state when the page was opened. #}
-    <div class="card" {% if company_wide %}data-now-board
+    {# The live refresh of the "Now" column uses Nihal's attendance endpoint. A #}
+    {# branch viewer gets it once that endpoint is a branch page (A12 part 7); #}
+    {# until then the column shows the state when the page was opened. #}
+    <div class="card" {% if live_now %}data-now-board
          data-now-url="{% url 'attendance:attendance_now' %}"
          data-now-employees="{{ employee_ids }}"{% endif %}>
         <form class="toolbar" method="get">
@@ -143,7 +143,7 @@
                                     {{ r.a.employee_code|default:"—" }}
                                 </td>
                                 <td>
-                                    {% if company_wide %}
+                                    {% if detail_links %}
                                         <a href="{% url 'organization:employee_detail' r.e.pk %}">
                                             {{ r.e.full_name }}
                                         </a>
