@@ -539,7 +539,7 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | N2 | **Attendance calendar** ⬆ — ✅ done 2026-09-13, on main | **A planner-style month view, not the small date-picker grid** (Ajay, 2026-09-13): one big square per day holding a brief summary — status, check-in → check-out, in-office time, breaks — with a month summary above. Clicking a date opens that day's history: every check-in, break-out, break-in and check-out with time and device, plus total, in-office and out-of-office time. On a phone the month becomes a day-by-day list with the same summary. Built as a reusable piece so the employee panel (A7) shows the same calendar for "my attendance" | 3 | (new) |
 | N3 | **In-office badge on the Employees page** - done 2026-09-14, branch `feature/n3-in-office-badge` | "Now" column: In office (green), On break (amber), Left (grey), Not in yet (grey), Absent (red, after shift start plus grace), On leave (blue), Off today (grey); refreshes every minute | 5 | (new) |
 | N4 | **Which devices count + Re-check punches** - done 2026-09-14, branch `feature/n4-device-scope` | Attendance settings: all company devices / branch devices / department devices / assigned devices. "Re-check punches" for a date range re-runs authorisation on excluded punches, audited, then attendance is recalculated | 4 | (new) |
-| N5 | **Attendance corrections** | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b). Approving overtime (set the end time, approved minutes) and its pay are A9's; the list links to A9's approve action (agreed 2026-09-14) | — | Attendance corrections; attendance review status and the Incomplete decision |
+| N5 | **Attendance corrections** - done 2026-09-14, branch `feature/n5-corrections` | Fix a day (add a missed scan or change status) with reason and audit; review list for days checked out by rule and open overtime sessions (N1b). Approving overtime (set the end time, approved minutes) and its pay are A9's; the list links to A9's approve action (agreed 2026-09-14) | — | Attendance corrections; attendance review status and the Incomplete decision |
 | N6 | **Employee detail page + terminate screen** - done 2026-09-14, branch `feature/n6-employee-detail` | Employee history (placement, salary, devices) and ending employment (`terminate_employee` exists) | — | Employee detail/history page and terminate screen |
 | N7 | **Payslip redesign** - done 2026-09-14, branch `feature/n7-payslip`, merged with the employee's view (A7) (Ajay, 2026-09-14: "the worst UI … not organized … amounts messy … no padding") | Redesign `payroll/templates/payroll/payslip.html` only: a clear header (employee, period, pay basis, rules), earnings and deductions as separate, padded sections with right-aligned amounts, a totals block where net pay stands out, then attendance counts and penalties (Waive stays). Every amount through `{% load money %}{{ value\|money }}`. Template and CSS only — no change to payroll calculation or views; Ajay's session owns payroll/. Also (A7): the employee opens the same template with `for_employee=True` — breadcrumbs then lead to My payslips, never company pages — and the "Draft" label must come from the run's status (a finalised month says Finalised) | — | (new) |
 | N8 | **Device connection check** (Ajay, 2026-09-14: "if the device is connected to server after changing the device then there should be an alert or ping test or something to check if the device has connected") | A device cannot be pinged — it calls the server, not the other way round — so the check is its next check-in. (1) A live **Connected / Last seen … ago / Not connected** badge on the device list and detail, worked out from `last_seen_at` and the device's poll interval, refreshing itself. (2) After **Register** or **Edit** (and after the terminal's server address is typed on the device), a **Test connection** panel that waits for the next check-in (optionally queues a harmless command and waits for its answer) and says "Connected at 14:32" or, after a couple of minutes, what to check (the server address to type on the terminal, serial number, network). (3) An alert on the device list and the dashboard when an active device stops checking in. (4) **Change server address on a device that has never checked in** is refused with what to do instead — "This device has never connected to this server. Set the server address on the terminal itself first (COMM → Cloud Server)" — rather than queuing a command nobody will collect. Ajay hit this 2026-09-14 with the new SenseFace 3A: registered, never checked in, the change sat as "in progress" and then ended as "lost" ("device not reachable at the new address"), which blamed the address when the device had simply never been connected. Builds on the existing server-address status panel | — | (new) |
@@ -2825,3 +2825,96 @@ routes next to `employee_edit`.
 Company's Nihal at 1440, 768 and 375 px (GET only — nobody's employment was
 ended); below 1100 px the history tables drop the Note column so nothing
 scrolls, and on a phone the placement table scrolls inside its own box.
+
+## 2026-09-14 — N5: fixing a day by hand, and the days to review (Nihal)
+
+Branch `feature/n5-corrections`, from clean `main` (N4, N7 and A9 merged).
+**One migration: `attendance/0004_corrections`** — a new table
+`payroll_attendance_correction`, a nullable `PunchAllocation.attendance_correction`
+column, and a check that every allocation has exactly one source (a punch or a
+correction). Checked first: no existing allocation lacked a punch.
+
+**The design rule.** Attendance recalculates itself whenever a punch arrives,
+so a fix made by editing the record would be gone by the next scan. A
+correction is an *input* instead: `recalculate()` reads the corrections in
+force for every employee-day it builds (`attendance/corrections.py`), exactly
+as it reads A9's `OvertimeDecision`. Corrections are keyed by employee and
+date, not by record, because a record can be removed and written again. A
+PunchEvent is never edited.
+
+**Three fixes** (`attendance/correction_services.py`), each audited, each with
+a required reason, each refused inside a finalised salary month, and each
+applied straight away by owner, company administrator or HR (the same people
+as A9's overtime):
+
+- **Add a missed scan** — joins the day's stream and is labelled by pairing
+  like any other scan (a scan added between two real ones becomes a break,
+  not a check-out). After recalculating, the service checks the scan really
+  landed on that day: a time that belongs to another day's window, or one
+  seconds after a real scan (swallowed as a repeat), is refused and nothing
+  is kept. The timeline shows it as "Added by hand". The Now badge sees it too.
+- **Change the status** — present, half day or absent, on a finished working
+  day. Scans and minutes stay as measured; status, payable fraction and a
+  "Marked … by hand: reason" note follow the correction, and the day is
+  reviewed. One in force per day: a new one supersedes the last. Leave,
+  holidays and weekly offs are refused — they have their own pages.
+- **Accept as it is** — "the rule's check-out is right". Kept only while the
+  day still needs review for that same reason; a different reason turning up
+  later is a new question.
+
+**Withdraw** takes any correction back and rebuilds the day without it. The
+correction keeps what it did (before/after), with the withdrawal's own
+before/after beside it. Every action writes an AuditLog row with the day
+before and after.
+
+Each action first brings the day up to date, then judges it — a day may have
+closed, or never been written, since anybody last looked. (A test caught
+this: the status change refused a closed day nobody had opened yet.)
+
+**Pages** — for A14's menu, under **Attendance**:
+
+- **Days to review** — `/attendance/review/` (`attendance:attendance_review`).
+  Closed days waiting for a person: "Check-out by rule" rows link to Fix this
+  day; "Overtime, no check-out" rows link to A9's approval,
+  `payroll:overtime_decide record.pk`. Days in a finalised salary month are
+  not listed. The page refreshes this month and last before listing.
+- **Fix a day** — `/attendance/day/<employee_id>/<date>/fix/`
+  (`attendance:attendance_day_fix`). The day now (status, review banner,
+  totals, every scan), Add a missed scan, Change the status, Accept the rule's
+  check-out (only on that kind of day), and Changes made to this day with
+  Withdraw. An open overtime day's banner links to A9 instead of offering
+  Accept. Reached from Days to review and from a **Fix this day** link in the
+  calendar's day panel (shown only to people who may fix, and never for
+  another company's employee).
+
+The day panel's empty state no longer says "Calculate the month" — there has
+been no Calculate button since N1b.
+
+**Brought up to date with main on 2026-09-15** (after N9, `60792e9`):
+`attendance/views.py` conflicted on imports only (N9's `paginate`/`render`
+beside N5's forms and services). Main's half-day leave branch in `_write_day`
+merged beside the corrections untouched. One interaction git could not see:
+a half-day leave day somebody came in on reads "present", but `_write_day`
+applies a status correction only to an ordinary working day — so a status
+change there would have been stored and silently done nothing. *Change the
+status* is now refused on any day with leave recorded ("Change or cancel the
+leave on the Leave page"), and the Fix a day page does not offer it; tested,
+and the test fails without the guard.
+
+**Deviations from MODEL_FIELD_DICTIONARY §35**, deliberately: keyed by
+`employee` + `work_date` instead of an `attendance_record` FK (records are
+derived and can be rewritten); types are `add_scan` / `change_status` /
+`accept_review` (only what is built); statuses are `applied` / `superseded` /
+`withdrawn` (no request-and-approve workflow yet); no attachment. The
+dictionary's `approved_by`, `approved_at`, `decision_note`, `before_snapshot`,
+`after_snapshot` and `proposed_event_at` names are kept.
+
+**Tests:** 29 in `attendance/tests_corrections.py`; two calendar fixtures now
+give their allocations a real punch (required by the new check). Checked on
+D Company's real review days (Nihal's rule check-outs on 9, 10 and 13 Sep and
+open overtime on 12 Sep; Ajay and Moin on 13 Sep) at 1440, 768 and 375 —
+the review list folds times under the date below 1100 px and becomes one card
+per day on a phone, so the action is never behind a sideways scroll. None of
+those days was corrected.
+
+**No new environment variable.**

@@ -252,10 +252,16 @@ def build_day_detail(*, record, company_timezone):
         "punch_event__device"
     ).order_by("sequence_number"):
         device = getattr(allocation.punch_event, "device", None)
+        if allocation.attendance_correction_id:
+            # Added by hand (N5): there is no device, and saying so is the point.
+            source = "Added by hand"
+        else:
+            source = device.name if device else ""
         scans.append({
             "time": allocation.event_at.astimezone(tz).strftime("%H:%M:%S"),
             "label": ALLOCATION_LABEL.get(allocation.label, allocation.label),
-            "device": device.name if device else "",
+            "device": source,
+            "is_manual": bool(allocation.attendance_correction_id),
             "is_included": allocation.is_included,
             "note": allocation.interpretation_note,
         })

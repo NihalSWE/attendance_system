@@ -1,0 +1,150 @@
+/* ============================================================================
+Fixing a day, and the days to review (plan step N5). Tokens only.
+========================================================================= */
+
+.fix-lead {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+/* The review banner: the explanation, and its one action beside it. */
+.fix-review {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+}
+.fix-review .btn {
+    flex: none;
+}
+
+/* The two fixes side by side; they stack before a form gets cramped. */
+.fix-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s4);
+    align-items: start;
+    margin-bottom: var(--s4);
+}
+.fix-grid > .card {
+    margin: 0;
+}
+
+/* What was changed, newest first. */
+.fix-history {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.fix-history__item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--s4);
+    padding: var(--s3) var(--s4);
+    border-top: 1px solid var(--border);
+}
+.fix-history__item:first-child {
+    border-top: 0;
+}
+.fix-history__item--past .fix-history__title strong,
+.fix-history__item--past .fix-history__reason {
+    color: var(--muted);
+}
+.fix-history__main {
+    min-width: 0;
+}
+.fix-history__title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
+.fix-history__reason {
+    margin: var(--s1) 0 0;
+    overflow-wrap: anywhere;
+}
+.fix-history__who {
+    margin: 2px 0 0;
+    font-size: 12px;
+}
+.fix-history__action {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    flex: none;
+}
+.fix-history__action .input {
+    width: 180px;
+}
+
+.review-table__sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+}
+.review-table__date,
+.review-table__times {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.review-table__times-inline {
+    display: none;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+    .fix-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    /* The badge already says why; the sentence under it is for wide screens. */
+    .review-table__why {
+        display: none;
+    }
+    /* The times move under the date, so the action stays in view. */
+    .review-table .review-table__times {
+        display: none;
+    }
+    .review-table__times-inline {
+        display: block;
+    }
+}
+@media (max-width: 680px) {
+    /* On a phone each day is a small card: who and when on the left, the
+       action on the right, so the button never sits behind a sideways scroll. */
+    .review-table thead {
+        display: none;
+    }
+    .review-table,
+    .review-table tbody {
+        display: block;
+    }
+    .review-table tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: var(--s1) var(--s3);
+        padding: var(--s3) var(--s4);
+        border-top: 1px solid var(--border);
+    }
+    .review-table tbody td {
+        display: block;
+        padding: 0;
+        border: 0;
+    }
+    .review-table tbody td.numeric {
+        grid-column: 2;
+        grid-row: 1 / span 4;
+        align-self: center;
+    }
+    .fix-review,
+    .fix-history__item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .fix-history__action .input {
+        width: auto;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+}

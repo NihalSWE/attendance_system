@@ -37,6 +37,11 @@
                     {{ detail.note }}
                 </p>
             {% endif %}
+            {% if may_correct %}
+                <a class="btn btn--ghost btn--sm" href="{% url 'attendance:attendance_day_fix' employee_id detail.date|date:'Y-m-d' %}">
+                    Fix this day
+                </a>
+            {% endif %}
         </div>
 
         <div class="cal-totals">
@@ -125,11 +130,16 @@
     <div class="cal-panel__body-inner">
         <div class="empty">
             <div class="empty__title">
-                Nothing calculated for this day
+                Nothing recorded for this day
             </div>
             <div class="empty__text">
-                Calculate the month to build it from the day's scans.
+                A working day is written once its shift has finished or a scan arrives.
             </div>
         </div>
+        {% if may_correct %}
+            <a class="btn btn--ghost btn--sm" href="{% url 'attendance:attendance_day_fix' employee_id on %}">
+                Fix this day
+            </a>
+        {% endif %}
     </div>
 {% endif %}

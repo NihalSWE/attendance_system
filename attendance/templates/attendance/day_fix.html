@@ -1,0 +1,312 @@
+{% extends "base_template/base.html" %}
+{% load static tz %}
+{% block title %}
+    Fix a day · {{ employee.full_name }} · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/attendance-calendar.css' %}">
+    <link rel="stylesheet" href="{% static 'attendance/css/corrections.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="page__head">
+        <div>
+            <nav class="crumbs">
+                <a href="{% url 'attendance:attendance_list' %}">
+                    Attendance
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <a href="{% url 'attendance:attendance_review' %}">
+                    Days to review
+                </a>
+                <span class="crumbs__sep">
+                    /
+                </span>
+                <span>
+                    Fix a day
+                </span>
+            </nav>
+            <h1 class="page__title">
+                {{ employee.full_name }}
+            </h1>
+            <p class="page__sub">
+                {{ day|date:"l j F Y" }}{% if detail.shift_name %} · {{ detail.shift_name }} {{ detail.shift_times }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{{ calendar_url }}">
+                Calendar view
+            </a>
+        </div>
+    </div>
+
+    {% if locked %}
+        <div class="alert alert--info">
+            This day is in a finalised salary month. Its salary has been paid, so it can no longer be changed.
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                The day now
+            </h2>
+            {% if detail %}
+                <span class="badge badge--{{ detail.tone }}">
+                    {{ detail.status_label }}
+                </span>
+            {% endif %}
+        </div>
+        <div class="card__body stack">
+            {% if not detail %}
+                <p class="t-muted fix-lead">
+                    Nothing is recorded for this day yet. A working day is written once its shift has finished; a scan added below creates it straight away.
+                </p>
+            {% else %}
+                {% if is_rule_check_out %}
+                    <div class="alert alert--warning fix-review">
+                        <div>
+                            <strong>
+                                Needs review — checked out at the shift end by rule.
+                            </strong>
+                            Nobody scanned out, so the day was closed at {{ record.scheduled_end_at|timezone:company_tz|date:"H:i" }}. Add the real check-out below, or accept the rule's time if it is right.
+                        </div>
+                    </div>
+                {% elif is_open_overtime %}
+                    <div class="alert alert--warning fix-review">
+                        <div>
+                            <strong>
+                                Needs review — an overtime session with no check-out.
+                            </strong>
+                            They came back after the shift and never scanned out. Overtime is decided on the Overtime page.
+                        </div>
+                        <a class="btn btn--primary btn--sm" href="{% url 'payroll:overtime_decide' record.pk %}">
+                            Decide overtime
+                        </a>
+                    </div>
+                {% endif %}
+                {% if detail.note %}
+                    <p class="t-muted fix-lead">
+                        {{ detail.note }}
+                    </p>
+                {% endif %}
+                <div class="cal-totals">
+                    <div class="cal-totals__item">
+                        <span class="cal-totals__value">
+                            {{ detail.total }}
+                        </span>
+                        <span class="cal-totals__label">
+                            Total time
+                        </span>
+                    </div>
+                    <div class="cal-totals__item">
+                        <span class="cal-totals__value">
+                            {{ detail.in_office }}
+                        </span>
+                        <span class="cal-totals__label">
+                            In office
+                        </span>
+                    </div>
+                    <div class="cal-totals__item">
+                        <span class="cal-totals__value">
+                            {{ detail.outside }}
+                        </span>
+                        <span class="cal-totals__label">
+                            Out of office
+                        </span>
+                    </div>
+                    <div class="cal-totals__item">
+                        <span class="cal-totals__value">
+                            {{ detail.break_count }}
+                        </span>
+                        <span class="cal-totals__label">
+                            Breaks
+                        </span>
+                    </div>
+                </div>
+                {% if detail.scans %}
+                    <ol class="timeline">
+                        {% for scan in detail.scans %}
+                            <li class="timeline__item{% if not scan.is_included %} timeline__item--muted{% endif %}">
+                                <span class="timeline__time">
+                                    {{ scan.time }}
+                                </span>
+                                <span class="timeline__label">
+                                    {{ scan.label }}
+                                </span>
+                                <span class="timeline__device t-faint">
+                                    {{ scan.device|default:"—" }}
+                                </span>
+                            </li>
+                        {% endfor %}
+                    </ol>
+                {% else %}
+                    <p class="t-muted fix-lead">
+                        No scans on this day.
+                    </p>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not locked %}
+        <div class="fix-grid">
+            <form class="card" method="post" action="">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_scan">
+                <div class="card__head">
+                    <h2>
+                        Add a missed scan
+                    </h2>
+                </div>
+                <div class="card__body stack">
+                    <p class="t-muted fix-lead">
+                        For a scan the device never got. It joins the day's other scans and is labelled the same way — check-in, break or check-out follow from its place in the day.
+                    </p>
+                    {% include "attendance/includes/fix_fields.html" with form=forms.add_scan %}
+                </div>
+                <div class="card__foot">
+                    <button class="btn btn--primary" type="submit">
+                        Add scan
+                    </button>
+                </div>
+            </form>
+
+            <form class="card" method="post" action="">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="change_status">
+                <div class="card__head">
+                    <h2>
+                        Change the status
+                    </h2>
+                </div>
+                <div class="card__body stack">
+                    {% if can_change_status %}
+                        <p class="t-muted fix-lead">
+                            Say what the day was when the scans cannot show it. The scans and minutes stay as they are; the status and what the day pays follow this.
+                        </p>
+                        {% include "attendance/includes/fix_fields.html" with form=forms.change_status %}
+                    {% else %}
+                        <p class="t-muted fix-lead">
+                            {% if not record %}
+                                There is no finished day to change yet.
+                            {% elif record.is_open %}
+                                This day has not finished yet.
+                            {% elif record.leave_day_id %}
+                                This day has leave recorded. Change or cancel the leave on the Leave page.
+                            {% else %}
+                                This day is {{ record.get_attendance_status_display|lower }}. Leave, holidays and weekly offs are changed on their own pages.
+                            {% endif %}
+                        </p>
+                    {% endif %}
+                </div>
+                {% if can_change_status %}
+                    <div class="card__foot">
+                        <button class="btn btn--primary" type="submit">
+                            Change status
+                        </button>
+                    </div>
+                {% endif %}
+            </form>
+        </div>
+
+        {% if is_rule_check_out %}
+            <form class="card" method="post" action="">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="accept_review">
+                <div class="card__head">
+                    <h2>
+                        Accept the rule's check-out
+                    </h2>
+                </div>
+                <div class="card__body stack">
+                    <p class="t-muted fix-lead">
+                        If they really left at the shift end, confirm it. The day stays as it is and leaves the review list.
+                    </p>
+                    {% include "attendance/includes/fix_fields.html" with form=forms.accept_review %}
+                </div>
+                <div class="card__foot">
+                    <button class="btn btn--primary" type="submit">
+                        Accept as it is
+                    </button>
+                </div>
+            </form>
+        {% endif %}
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Changes made to this day
+            </h2>
+            <span class="badge badge--neutral">
+                {{ corrections|length }}
+            </span>
+        </div>
+        {% if corrections %}
+            <ul class="fix-history">
+                {% for correction in corrections %}
+                    <li class="fix-history__item{% if correction.status != 'applied' %} fix-history__item--past{% endif %}">
+                        <div class="fix-history__main">
+                            <div class="fix-history__title">
+                                <strong>
+                                    {% if correction.correction_type == "add_scan" %}
+                                        Added a scan at {{ correction.proposed_event_at|timezone:company_tz|date:"H:i, j M" }}
+                                    {% elif correction.correction_type == "change_status" %}
+                                        Marked {% if correction.proposed_status == "half_day" %}half day{% elif correction.proposed_status == "present" %}present{% else %}absent{% endif %}
+                                    {% else %}
+                                        Accepted the rule's check-out
+                                    {% endif %}
+                                </strong>
+                                {% if correction.status == "applied" %}
+                                    <span class="badge badge--success">
+                                        In force
+                                    </span>
+                                {% elif correction.status == "superseded" %}
+                                    <span class="badge badge--neutral">
+                                        Replaced
+                                    </span>
+                                {% else %}
+                                    <span class="badge badge--neutral">
+                                        Withdrawn
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <p class="fix-history__reason">
+                                {{ correction.reason }}
+                            </p>
+                            <p class="t-faint fix-history__who">
+                                {{ correction.approved_by.email|default:"—" }} · {{ correction.approved_at|timezone:company_tz|date:"j M Y, H:i" }}
+                                {% if correction.status == "withdrawn" %}
+                                    — withdrawn by {{ correction.withdrawn_by.email|default:"—" }}, {{ correction.withdrawn_at|timezone:company_tz|date:"j M Y, H:i" }}{% if correction.decision_note %}: {{ correction.decision_note }}{% endif %}
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% if correction.status == "applied" and not locked %}
+                            <form class="fix-history__action" method="post" action="{% url 'attendance:attendance_correction_withdraw' correction.pk %}">
+                                {% csrf_token %}
+                                <label class="sr-only" for="withdraw-note-{{ correction.pk }}">
+                                    Why it is being withdrawn
+                                </label>
+                                <input class="input" id="withdraw-note-{{ correction.pk }}" name="note" placeholder="Why (optional)">
+                                <button class="btn btn--ghost btn--sm" type="submit">
+                                    Withdraw
+                                </button>
+                            </form>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    No changes
+                </div>
+                <div class="empty__text">
+                    This day is exactly what the scans, leave and calendar say.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

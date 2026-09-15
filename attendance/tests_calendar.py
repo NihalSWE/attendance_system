@@ -61,6 +61,50 @@ class CalendarTestCase(TestCase):
             },
         )
 
+    def scan_evidence(self, at):
+        """A stored punch for an allocation to point at.
+
+        Every allocation comes from a punch or a correction
+        (``punch_allocation_exactly_one_source``), so even a display fixture
+        needs one. The device is made on first use.
+        """
+        from devices.models import (
+            BiometricDevice, DeviceMessage, DeviceModel, DeviceVendor, PunchEvent,
+        )
+
+        with use_company(self.company):
+            if not hasattr(self, "_message"):
+                vendor = DeviceVendor.objects.get_or_create(
+                    code="zkteco",
+                    defaults={"name": "ZKTeco", "adapter_key": "zkteco_adms_push"},
+                )[0]
+                model = DeviceModel.objects.get_or_create(
+                    vendor=vendor, model_code="senseface-2a",
+                    defaults={"name": "SenseFace 2A",
+                              "protocol": DeviceModel.Protocol.ADMS_PUSH},
+                )[0]
+                device = BiometricDevice.objects.create(
+                    branch=self.branch, device_model=model, name="Front",
+                    serial_number="SN-CAL", timezone="Asia/Dhaka",
+                    status=BiometricDevice.Status.ACTIVE,
+                )
+                self._message = DeviceMessage.objects.create(
+                    device=device, branch=self.branch,
+                    message_type=DeviceMessage.MessageType.PUNCH_BATCH,
+                    received_at=at, raw_payload_text="x", payload_hash="ph-cal",
+                )
+                self._index = 0
+            self._index += 1
+            return PunchEvent.objects.create(
+                device_message=self._message, device=self._message.device,
+                branch=self.branch, employee=self.employee, device_user_id="1",
+                source_record_index=self._index,
+                punched_at_device_raw=at.strftime("%Y-%m-%d %H:%M:%S"),
+                punched_at_device=at, punched_at_utc=at, received_at=at,
+                raw_record={},
+                authorization_status=PunchEvent.AuthorizationStatus.AUTHORIZED,
+            )
+
     def record(self, day, status=S.PRESENT, **kwargs):
         """One stored day. Times are given as UTC instants."""
         values = {
@@ -244,10 +288,12 @@ class DayPanelTests(CalendarTestCase):
                  (12, "check_out")],
                 start=1,
             ):
+                at = datetime.datetime(2026, 9, 1, hour, tzinfo=UTC)
                 PunchAllocation.objects.create(
                     company=self.company, attendance_record=record,
+                    punch_event=self.scan_evidence(at),
                     sequence_number=index,
-                    event_at=datetime.datetime(2026, 9, 1, hour, tzinfo=UTC),
+                    event_at=at,
                     label=label,
                     interpreted_direction="in" if index % 2 else "out",
                 )
@@ -274,11 +320,15 @@ class DayPanelTests(CalendarTestCase):
         with use_company(self.company):
             PunchAllocation.objects.create(
                 company=self.company, attendance_record=record, sequence_number=1,
+                punch_event=self.scan_evidence(datetime.datetime(2026, 9, 1, 3, tzinfo=UTC)),
                 event_at=datetime.datetime(2026, 9, 1, 3, tzinfo=UTC),
                 label="check_in", interpreted_direction="in",
             )
             PunchAllocation.objects.create(
                 company=self.company, attendance_record=record, sequence_number=2,
+                punch_event=self.scan_evidence(
+                    datetime.datetime(2026, 9, 1, 3, 0, 10, tzinfo=UTC)
+                ),
                 event_at=datetime.datetime(2026, 9, 1, 3, 0, 10, tzinfo=UTC),
                 label="ignored", interpreted_direction="ignored",
                 is_included=False, exclusion_reason="duplicate",
@@ -361,7 +411,7 @@ class CalendarScreenTests(CalendarTestCase):
             )
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Nothing calculated for this day")
+        self.assertContains(response, "Nothing recorded for this day")
 
     def test_another_company_cannot_read_a_day(self):
         other = onboard_company(code="OTH", slug="oth", name="Other Ltd")
@@ -378,8 +428,10 @@ class CalendarScreenTests(CalendarTestCase):
                 args=[self.employee.pk, "2026-09-01"],
             )
         )
-        # Scoped away: the other company's day is simply not there.
-        self.assertContains(response, "Nothing calculated for this day")
+        # Scoped away: the other company's day is simply not there, and there
+        # is no way offered to fix it either.
+        self.assertContains(response, "Nothing recorded for this day")
+        self.assertNotContains(response, "Fix this day")
 
     def test_the_calendar_needs_a_login(self):
         self.client.logout()
