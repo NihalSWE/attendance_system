@@ -30,6 +30,15 @@
             My attendance
         </span>
     </a>
+    <a class="sidebar__link {% active request 'missed_scans' 'missed_scan_report' 'missed_scan_withdraw' %}" href="{% url 'me:missed_scans' %}" aria-label="Missed scans">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="8.5"/>
+            <path d="M12 7.5V12l3 2"/>
+        </svg>
+        <span>
+            Missed scans
+        </span>
+    </a>
     <a class="sidebar__link {% active request 'leave' 'leave_request' %}" href="{% url 'me:leave' %}" aria-label="My leave">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <path d="M5 3.5h14v17l-3.5-2.2L12 20.5l-3.5-2.2L5 20.5z"/>

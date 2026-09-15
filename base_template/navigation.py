@@ -24,6 +24,7 @@ COMPANY_MENUS = (
         item("Calendar", "attendance:attendance_calendar", "attendance:attendance_day"),
         item("Days to review", "attendance:attendance_review", "attendance:attendance_day_fix",
              "attendance:attendance_correction_withdraw"),
+        item("Missed scans", "attendance:missed_scan_list", "attendance:missed_scan_decide"),
     )),
     ("leave", "Leave", (
         item("Leave list", "leaves:leave_list", "leaves:leave_cancel"),
