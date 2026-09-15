@@ -8,7 +8,7 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import DecimalField, Exists, IntegerField, OuterRef, Q
+from django.db.models import Count, DecimalField, Exists, IntegerField, OuterRef, Q, Sum
 from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Coalesce
 from django.shortcuts import redirect
@@ -17,6 +17,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from access_control.branch_access import ALL_BRANCHES, branches_for_any
+from access_control.page_access import may_open
 from attendance.models import AttendanceRecord
 from attendance.services import month_bounds
 from attendance.views import month_context, read_month
@@ -24,9 +26,9 @@ from common.forms import StyledFormMixin, apply_service_errors
 from common.tenant import use_company
 from organization.services import (
     STRUCTURE_ROLES,
-    require_company_membership,
     require_structure_manager,
 )
+from organization.models import Branch
 from organization.views import _company_or_redirect
 from payroll import overtime, penalties, policy
 from payroll.forms import (
@@ -49,9 +51,11 @@ from payroll.models import (
 from payroll.services import (
     add_adjustment,
     finalise_payroll,
+    record_branch_id,
     remove_adjustment,
     generate_payroll,
     reopen_payroll,
+    salary_branches,
     summarise,
     waive_penalty,
 )
@@ -63,7 +67,7 @@ def payroll_home(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership = require_company_membership(request.user, company_id)
+    membership, view_branches, prepare_branches, company_wide = _salary_scope(request.user, company_id)
     year, month = read_month(request.GET)
     first, last = month_bounds(year, month)
 
@@ -73,8 +77,15 @@ def payroll_home(request):
             PayrollRun.objects.filter(payroll_period=period).order_by("-pk").first()
             if period else None
         )
+        shown = run.records.all() if run else PayrollRecord.objects.none()
+        if view_branches is not ALL_BRANCHES:
+            # A12 part 6: the payslips of people placed in their branches.
+            shown = shown.filter(employee_assignment_at_period_end__branch_id__in=view_branches)
+        totals = shown.aggregate(employees=Count("pk"), gross=Sum("gross_earnings"),
+                                 deductions=Sum("total_deductions"), net=Sum("net_pay"))
+        shown_ids = list(shown.values_list("employee_id", flat=True))
         records = paginate(request,
-            (run.records.all() if run else PayrollRecord.objects.none()).select_related("employee")
+            shown.select_related("employee")
             .annotate(table_rate=Cast(KT("calculation_snapshot__base_rate"), DecimalField(max_digits=18, decimal_places=2)),
                 **{f"table_{key}": Coalesce(Cast(KT(f"calculation_snapshot__counts__{key}"), IntegerField()), 0)
                    for key in ("present", "half_day", "absent", "unpaid_leave")})
@@ -84,22 +95,51 @@ def payroll_home(request):
                    "table_present", "table_half_day", "table_absent",
                    "table_unpaid_leave", "gross_earnings", "total_deductions", "net_pay", None))
 
-    decides_overtime = membership.role in overtime.OVERTIME_ROLES
+    if company_wide:
+        decides_overtime = membership.role in overtime.OVERTIME_ROLES
+        overtime_branches = ALL_BRANCHES
+    else:
+        overtime_branches = branches_for_any(
+            request.user, company_id, "overtime.view", "overtime.decide")
+        decides_overtime = bool(overtime_branches)
     return render(request, "payroll/payroll_home.html", {
         **month_context(year, month),
         "run": run,
         "records": records,
+        "totals": totals,
+        "company_wide": company_wide,
         "can_manage": membership.role in STRUCTURE_ROLES,
+        # Owner/admin generate the whole month; a branch its own people.
+        "can_generate": bool(prepare_branches),
         "decides_overtime": decides_overtime,
         "overtime_waiting": (
-            overtime.undecided_count(company_id, first, last) if decides_overtime else 0
+            overtime.undecided_count(company_id, first, last, overtime_branches)
+            if decides_overtime else 0
         ),
         # Decisions made since the draft was generated are not in it yet.
         "overtime_since_run": (
-            overtime.decided_after(company_id, first, last, run.calculation_finished_at)
+            overtime.decided_after(company_id, run, None if company_wide else shown_ids)
             if run and run.status == PayrollRun.Status.DRAFT else 0
         ),
     })
+
+
+def _salary_scope(user, company_id):
+    """``(membership, view_branches, prepare_branches, company_wide)`` (A12 part 6).
+
+    Company logins see Salary by month as before (owner and admin also
+    generate it). A branch manager or a person given access sees the payslips
+    of people placed in their branches, and generates those.
+    """
+    from common.middleware import SELF_SERVICE_ROLES
+
+    membership, prepare = salary_branches(user, company_id, "salary.prepare")
+    if membership.role not in SELF_SERVICE_ROLES:
+        return membership, ALL_BRANCHES, prepare, True
+    _, view = salary_branches(user, company_id, "salary.view", "salary.prepare")
+    if not view:
+        raise PermissionDenied("Salary needs owner or company administrator access, or salary access in a branch.")
+    return membership, view, prepare, False
 
 
 @login_required
@@ -109,18 +149,35 @@ def payroll_generate(request):
     if bail:
         return bail
     year, month = read_month(request.POST)
+    _, prepare = salary_branches(request.user, company_id, "salary.prepare")
+    if not prepare:
+        raise PermissionDenied("Generating salary needs owner or company administrator access, "
+                               "or access to prepare salary in a branch.")
+    branch_ids = None if prepare is ALL_BRANCHES else prepare
     try:
         run = generate_payroll(
-            actor=request.user, company_id=company_id, year=year, month=month
+            actor=request.user, company_id=company_id, year=year, month=month,
+            branch_ids=branch_ids,
         )
     except ValidationError as exc:
         messages.error(request, " ".join(exc.messages))
     else:
-        skipped = run.totals_snapshot.get("skipped_without_salary") or []
-        message = (
-            f"Salary generated for {run.totals_snapshot['employees']} employee(s). "
-            "It is a draft and can be regenerated at any time."
-        )
+        skipped = run.skipped_now
+        if branch_ids is None:
+            message = (
+                f"Salary generated for {run.totals_snapshot['employees']} employee(s). "
+                "It is a draft and can be regenerated at any time."
+            )
+        else:
+            # A branch's own people; other branches' payslips were not touched.
+            with use_company(company_id):
+                mine = run.records.filter(
+                    employee_assignment_at_period_end__branch_id__in=branch_ids).count()
+                names = sorted(Branch.objects.filter(pk__in=branch_ids).values_list("name", flat=True))
+            message = (
+                f"Salary generated for {mine} employee(s) in {', '.join(names)}. "
+                "It is a draft; the owner or company administrator finalises the month."
+            )
         if skipped:
             message += f" Skipped, no salary set: {', '.join(skipped)}."
         messages.success(request, message)
@@ -562,6 +619,7 @@ def overtime_list(request):
         "summary": overtime_summary(page["rules"]),
         "can_manage": page["membership"].role in STRUCTURE_ROLES,
         "company_tz": page["membership"].company.timezone or "UTC",
+        "salary_link": page["company_wide"] or may_open(request.user, company_id, "payroll:payroll_home"),
     })
 
 
@@ -652,17 +710,32 @@ def payslip(request, pk):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    require_structure_manager(request.user, company_id)
+    # Owner/admin: any payslip, as before. A12 part 6: someone with salary
+    # access in the payslip's branch sees it; preparing adds Bonus/Deduction.
+    _, view = salary_branches(request.user, company_id, "salary.view", "salary.prepare")
+    _, prepare = salary_branches(request.user, company_id, "salary.prepare")
+    if not view:
+        raise PermissionDenied("Payslips need owner or company administrator access, or salary access in a branch.")
     with use_company(company_id):
         record = payslip_records().filter(pk=pk).first()
-        if record is None:
-            raise PermissionDenied("Payslip not found in this company.")
+        if record is None or record_branch_id(record) not in view:
+            raise PermissionDenied("Payslip not found in your branches.")
+        company_wide = view is ALL_BRANCHES
         context = payslip_context(record)
         context["adjustments"] = list(PayrollAdjustment.objects.filter(
             employee=record.employee, target_payroll_period=context["period"],
             status=PayrollAdjustment.Status.ACTIVE,
         ))
-        context["can_adjust"] = record.payroll_run.status == PayrollRun.Status.DRAFT
+        draft = record.payroll_run.status == PayrollRun.Status.DRAFT
+        context["can_adjust"] = draft and (
+            prepare is ALL_BRANCHES or record_branch_id(record) in prepare)
+        context["adjust_note"] = (
+            "This salary is finalised. Undo finalise on Salary by month to change these lines."
+            if not draft else "Adding lines needs access to prepare salary."
+        )
+        # Waiving a penalty stays with the owner and company admin.
+        context["can_waive"] = context["can_waive"] and company_wide
+        context["company_wide"] = company_wide
         context["adjustment_form"] = AdjustmentForm()
     return render(request, "payroll/payslip.html", context)
 

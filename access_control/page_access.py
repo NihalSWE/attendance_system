@@ -40,6 +40,16 @@ BRANCH_PAGES = {
     "payroll:overtime_list": ("overtime.view", "overtime.decide"),
     "payroll:overtime_decide": ("overtime.view", "overtime.decide"),
     "payroll:overtime_undo": "overtime.decide",
+    # A12 part 6: salary. Salary by month and payslips show the people placed
+    # in your branches; Generate rebuilds only their payslips, and bonus or
+    # deduction lines need Prepare salary in the payslip's branch. Finalise,
+    # Undo finalise, salary settings, penalty rules and waiving a penalty are
+    # not listed: they stay with the owner and company admin.
+    "payroll:payroll_home": ("salary.view", "salary.prepare"),
+    "payroll:payroll_generate": "salary.prepare",
+    "payroll:payslip": ("salary.view", "salary.prepare"),
+    "payroll:payslip_adjustment_add": "salary.prepare",
+    "payroll:payslip_adjustment_remove": "salary.prepare",
 }
 
 

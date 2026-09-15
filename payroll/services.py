@@ -24,15 +24,21 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 
+from access_control.branch_access import ALL_BRANCHES, branches_for_any, can
 from attendance.models import AttendanceRecord
-from attendance.services import calculate_attendance, month_bounds
+from attendance.services import calculate_attendance, month_bounds, recalculate
 from auditlog.services import record_company_event
 from common.tenant import use_company
-from employees.models import EmployeeCompensation
-from organization.services import require_structure_manager
+from employees.models import EmployeeAssignment, EmployeeCompensation
+from organization.services import (
+    STRUCTURE_ROLES,
+    require_company_membership,
+    require_structure_manager,
+)
+from scheduling.calendar import WorkCalendar
 from payroll.models import (
     PayrollAdjustment,
     PayrollLine,
@@ -514,11 +520,69 @@ def waive_penalty(*, actor, company_id, assessment_id):
         return run.records.filter(employee_id=employee_id).first()
 
 
+def salary_branches(actor, company_id, *codes):
+    """``(membership, branches)`` for the salary pages (A12 part 6).
+
+    Owner and company admin: every branch, as before. Anyone else: the
+    branches where they hold one of ``codes`` (a branch manager holds them
+    all in their own branches). Finalising and salary settings are not
+    branch permissions and stay with the owner and company admin.
+    """
+    membership = require_company_membership(actor, company_id)
+    if membership.role in STRUCTURE_ROLES:
+        return membership, ALL_BRANCHES
+    return membership, branches_for_any(actor, company_id, *codes)
+
+
+def record_branch_id(record):
+    assignment = record.employee_assignment_at_period_end
+    return assignment.branch_id if assignment else None
+
+
+def _bring_branches_up_to_date(company_id, year, month, branch_ids):
+    """``calculate_attendance`` for the people placed in some branches, for a
+    branch's own salary: the same checks, without recalculating the company."""
+    first, last = month_bounds(year, month)
+    today = timezone.localdate()
+    if first > today:
+        raise ValidationError("That month has not started yet.")
+    if not WorkCalendar(company_id, first, min(last, today)).has_any_shift:
+        raise ValidationError(
+            "Set up shifts under Shifts first: a shift for each department, or a "
+            "company shift. Attendance is measured against the shift."
+        )
+    begin = timezone.make_aware(datetime.datetime.combine(first, datetime.time.min))
+    finish = timezone.make_aware(datetime.datetime.combine(last, datetime.time.max))
+    with use_company(company_id):
+        employee_ids = set(
+            EmployeeAssignment.objects.filter(branch_id__in=branch_ids, effective_from__lte=finish)
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=begin))
+            .exclude(status="cancelled").values_list("employee_id", flat=True)
+        )
+    if employee_ids:
+        recalculate(company_id, employee_ids=employee_ids, start=first, end=last)
+
+
 @transaction.atomic
-def generate_payroll(*, actor, company_id, year, month):
-    """Recalculate the month's attendance, then (re)build its draft salary run."""
-    membership = require_structure_manager(actor, company_id)
-    calculate_attendance(actor=actor, company_id=company_id, year=year, month=month)
+def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
+    """Recalculate the month's attendance, then (re)build its draft salary run.
+
+    ``branch_ids`` (A12 part 6): a branch prepares its own salary. Only the
+    people whose placement at the end of the month is in those branches are
+    rebuilt; everybody else's draft payslip stays exactly as it was. The run
+    stays one per month for the company, finalised once by the owner or admin.
+    """
+    if branch_ids is None:
+        membership = require_structure_manager(actor, company_id)
+        calculate_attendance(actor=actor, company_id=company_id, year=year, month=month)
+    else:
+        membership = require_company_membership(actor, company_id)
+        branch_ids = {int(branch_id) for branch_id in branch_ids}
+        if not branch_ids or not all(
+            can(actor, company_id, "salary.prepare", branch_id) for branch_id in branch_ids
+        ):
+            raise PermissionDenied("You can generate salary only for branches where you may prepare it.")
+        _bring_branches_up_to_date(company_id, year, month, branch_ids)
     first, last = month_bounds(year, month)
     period_end = timezone.make_aware(
         datetime.datetime.combine(last, datetime.time.max)
@@ -537,21 +601,55 @@ def generate_payroll(*, actor, company_id, year, month):
         if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.POSTED).exists():
             raise ValidationError("This month's salary is finalised and cannot be regenerated.")
 
+        records_by_employee = {}
+        for record in (
+            AttendanceRecord.objects.select_related(
+                "employee", "employee_assignment", "leave_day", "shift"
+            )
+            .filter(work_date__gte=first, work_date__lte=last)
+            .order_by("employee_id", "work_date")
+        ):
+            records_by_employee.setdefault(record.employee, []).append(record)
+        # Only days inside the employment count; a monthly salary is paid for
+        # the employed calendar days of the month.
+        for employee, records in list(records_by_employee.items()):
+            start = max(first, employee.joining_date or first)
+            end = min(last, employee.leaving_date or last)
+            records_by_employee[employee] = [r for r in records if start <= r.work_date <= end]
+        if branch_ids is not None:
+            # A branch's own salary: the people placed there at the month's end.
+            records_by_employee = {
+                employee: records for employee, records in records_by_employee.items()
+                if records and records[-1].employee_assignment.branch_id in branch_ids
+            }
+        rebuilt = {employee.pk for employee in records_by_employee}
+
         run = PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.DRAFT).first()
+        previous_skipped = {}
         if run is None:
             run = PayrollRun.objects.create(
                 company=membership.company, payroll_period=period,
                 created_by=actor, updated_by=actor,
             )
         else:
-            # Regenerating a draft replaces it entirely.
-            PayrollLine.objects.filter(payroll_record__payroll_run=run).delete()
-            run.records.all().delete()
+            # Regenerating a draft replaces it: all of it, or a branch's people.
+            replaced = run.records.all()
+            if branch_ids is not None:
+                replaced = replaced.filter(employee_id__in=rebuilt)
+                previous_skipped = {
+                    int(employee_id): name
+                    for employee_id, name in (run.totals_snapshot.get("skipped") or {}).items()
+                    if int(employee_id) not in rebuilt
+                }
+            PayrollLine.objects.filter(payroll_record__in=replaced).delete()
+            replaced.delete()
         # Proposed penalties are recalculated; a waived one is kept and its
         # occurrence is not charged again.
         proposed = PenaltyAssessment.objects.filter(
             payroll_period=period, status=PenaltyAssessment.Status.PROPOSED
         )
+        if branch_ids is not None:
+            proposed = proposed.filter(employee_id__in=rebuilt)
         PenaltyAssessmentAttendance.objects.filter(penalty_assessment__in=proposed).delete()
         proposed.delete()
         waived = set(
@@ -565,32 +663,20 @@ def generate_payroll(*, actor, company_id, year, month):
         ).order_by("pk"):
             adjustments_by_employee.setdefault(adjustment.employee_id, []).append(adjustment)
 
-        records_by_employee = {}
-        for record in (
-            AttendanceRecord.objects.select_related(
-                "employee", "employee_assignment", "leave_day", "shift"
-            )
-            .filter(work_date__gte=first, work_date__lte=last)
-            .order_by("employee_id", "work_date")
-        ):
-            records_by_employee.setdefault(record.employee, []).append(record)
-
-        totals = Counter()
-        skipped = []
+        skipped = dict(previous_skipped)
+        skipped_now = []
         for employee, records in records_by_employee.items():
-            # Only days inside the employment count; a monthly salary is paid
-            # for the employed calendar days of the month.
-            start = max(first, employee.joining_date or first)
-            end = min(last, employee.leaving_date or last)
-            records = [record for record in records if start <= record.work_date <= end]
             if not records:
                 continue
+            start = max(first, employee.joining_date or first)
+            end = min(last, employee.leaving_date or last)
             employed_days = (end - start).days + 1
             compensation = _compensation_at(employee, period_end) or _compensation_at(
                 employee, timezone.make_aware(datetime.datetime.combine(records[-1].work_date, datetime.time.max))
             )
             if compensation is None:
-                skipped.append(employee.full_name)
+                skipped[employee.pk] = employee.full_name
+                skipped_now.append(employee.full_name)
                 continue
             basic_segments = (
                 _monthly_segments(employee, start, end)
@@ -647,35 +733,42 @@ def generate_payroll(*, actor, company_id, year, month):
                 )
                 for index, (kind, code, label, quantity, rate, amount) in enumerate(result["lines"])
             ])
-            totals["penalties"] += len(assessments)
-            totals["penalty_amount"] += sum(
-                (occurrence.amount for _, occurrence in result["penalties"]), Decimal("0")
-            )
-            totals["employees"] += 1
-            totals["gross"] += result["gross"]
-            totals["deductions"] += result["deductions"]
-            totals["net"] += result["net"]
 
+        # Totals over the whole run: after a branch regenerates, the other
+        # branches' payslips are still in it.
+        totals = run.records.aggregate(
+            employees=Count("pk"), gross=Sum("gross_earnings"),
+            deductions=Sum("total_deductions"), net=Sum("net_pay"),
+        )
+        penalty_totals = PenaltyAssessment.objects.filter(
+            payroll_period=period, status=PenaltyAssessment.Status.PROPOSED
+        ).aggregate(count=Count("pk"), amount=Sum("deduction_amount"))
         run.generated_by = actor
         run.policy_version = rules.version
         run.calculation_finished_at = timezone.now()
         run.totals_snapshot = {
             "employees": totals["employees"],
-            "gross": str(money(totals["gross"])),
-            "deductions": str(money(totals["deductions"])),
-            "net": str(money(totals["net"])),
-            "skipped_without_salary": skipped,
+            "gross": str(money(totals["gross"] or 0)),
+            "deductions": str(money(totals["deductions"] or 0)),
+            "net": str(money(totals["net"] or 0)),
+            "skipped_without_salary": list(skipped.values()),
+            "skipped": {str(employee_id): name for employee_id, name in skipped.items()},
             "rules": rules.describe(),
-            "penalties": totals["penalties"],
-            "penalty_amount": str(money(totals["penalty_amount"])),
+            "penalties": penalty_totals["count"],
+            "penalty_amount": str(money(penalty_totals["amount"] or 0)),
             "penalty_rules": [f"{rule.code} v{rule.version}" for rule in penalty_rules],
         }
         run.updated_by = actor
         run.save()
+        after = dict(run.totals_snapshot)
+        if branch_ids is not None:
+            after.update(branches=sorted(branch_ids), rebuilt=len(rebuilt))
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
-            action="payroll.generated", obj=run, after=run.totals_snapshot,
+            action="payroll.generated", obj=run, after=after,
         )
+    # Who this pass skipped (for the message); the snapshot keeps the month's list.
+    run.skipped_now = skipped_now
     return run
 
 
@@ -701,7 +794,7 @@ def finalise_payroll(*, actor, company_id, year, month):
         run = _run_for_month(company_id, year, month, PayrollRun.Status.DRAFT)
         if run is None:
             raise ValidationError("Generate this month's salary before finalising it.")
-        if overtime.decided_after(company_id, first, last, run.calculation_finished_at):
+        if overtime.decided_after(company_id, run):
             raise ValidationError(
                 "Overtime was decided after this salary was generated. "
                 "Generate the month again, then finalise."
@@ -752,10 +845,26 @@ def reopen_payroll(*, actor, company_id, year, month, reason):
     return run
 
 
-def _regenerated_record(actor, company_id, period, employee_id):
+def _preparer(actor, company_id, record):
+    """``(membership, branch_ids)``: who may change a draft payslip's lines.
+
+    Owner and company admin: any payslip, and the whole month is regenerated
+    as before. Someone who may prepare salary in the payslip's branch (A12
+    part 6): that branch is regenerated.
+    """
+    membership, branches = salary_branches(actor, company_id, "salary.prepare")
+    if branches is ALL_BRANCHES:
+        return membership, None
+    branch_id = record_branch_id(record) if record else None
+    if branch_id is None or branch_id not in branches:
+        raise PermissionDenied("You can change payslips only in branches where you may prepare salary.")
+    return membership, {branch_id}
+
+
+def _regenerated_record(actor, company_id, period, employee_id, branch_ids=None):
     run = generate_payroll(
         actor=actor, company_id=company_id,
-        year=period.start_date.year, month=period.start_date.month,
+        year=period.start_date.year, month=period.start_date.month, branch_ids=branch_ids,
     )
     with use_company(company_id):
         return run.records.filter(employee_id=employee_id).first()
@@ -764,7 +873,8 @@ def _regenerated_record(actor, company_id, period, employee_id):
 @transaction.atomic
 def add_adjustment(*, actor, company_id, record_id, adjustment_type, amount, reason):
     """Add a one-time bonus or deduction to a draft payslip, then regenerate the month."""
-    membership = require_structure_manager(actor, company_id)
+    if not salary_branches(actor, company_id, "salary.prepare")[1]:
+        raise PermissionDenied("Adding bonus or deduction lines needs access to prepare salary.")
     if adjustment_type not in PayrollAdjustment.AdjustmentType.values:
         raise ValidationError({"adjustment_type": "Choose Bonus or Deduction."})
     try:
@@ -777,11 +887,12 @@ def add_adjustment(*, actor, company_id, record_id, adjustment_type, amount, rea
     if not reason:
         raise ValidationError({"reason": "Give a reason; it is shown on the payslip."})
     with use_company(company_id):
-        record = PayrollRecord.objects.select_related("payroll_run__payroll_period").filter(
-            pk=record_id
-        ).first()
+        record = PayrollRecord.objects.select_related(
+            "payroll_run__payroll_period", "employee_assignment_at_period_end"
+        ).filter(pk=record_id).first()
         if record is None:
             raise PermissionDenied("Payslip not found in this company.")
+        membership, branch_ids = _preparer(actor, company_id, record)
         if record.payroll_run.status != PayrollRun.Status.DRAFT:
             raise ValidationError(
                 "Bonus and deduction lines can only change while the salary is a draft."
@@ -801,13 +912,14 @@ def add_adjustment(*, actor, company_id, record_id, adjustment_type, amount, rea
                    "amount": str(amount), "reason": reason},
         )
         employee_id = record.employee_id
-    return _regenerated_record(actor, company_id, period, employee_id)
+    return _regenerated_record(actor, company_id, period, employee_id, branch_ids)
 
 
 @transaction.atomic
 def remove_adjustment(*, actor, company_id, adjustment_id):
     """Remove a bonus or deduction from a draft month (kept as removed), then regenerate."""
-    membership = require_structure_manager(actor, company_id)
+    if not salary_branches(actor, company_id, "salary.prepare")[1]:
+        raise PermissionDenied("Removing bonus or deduction lines needs access to prepare salary.")
     with use_company(company_id):
         adjustment = PayrollAdjustment.objects.select_for_update(of=("self",)).select_related(
             "target_payroll_period"
@@ -815,6 +927,11 @@ def remove_adjustment(*, actor, company_id, adjustment_id):
         if adjustment is None:
             raise PermissionDenied("Line not found in this company.")
         period = adjustment.target_payroll_period
+        # The payslip it sits on decides the branch.
+        record = PayrollRecord.objects.select_related("employee_assignment_at_period_end").filter(
+            payroll_run__payroll_period=period, employee_id=adjustment.employee_id,
+        ).order_by("-pk").first()
+        membership, branch_ids = _preparer(actor, company_id, record)
         if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.POSTED).exists():
             raise ValidationError(
                 "Bonus and deduction lines can only change while the salary is a draft."
@@ -829,4 +946,4 @@ def remove_adjustment(*, actor, company_id, adjustment_id):
             after={"status": "cancelled", "amount": str(adjustment.amount), "reason": adjustment.reason},
         )
         employee_id = adjustment.employee_id
-    return _regenerated_record(actor, company_id, period, employee_id)
+    return _regenerated_record(actor, company_id, period, employee_id, branch_ids)

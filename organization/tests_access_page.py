@@ -111,7 +111,8 @@ class AccessListTests(AccessPageBase):
     def test_the_gate_opens_only_the_access_pages_to_a_branch_manager(self):
         self.login_as(self.manager)
         self.assertEqual(self.client.get(self.person_url(self.clerk)).status_code, 200)
-        self.assertRedirects(self.client.get(reverse("payroll:payroll_home")), reverse("me:home"))
+        # Company settings never open to a branch (salary pages did in A12 part 6).
+        self.assertRedirects(self.client.get(reverse("payroll:salary_settings")), reverse("me:home"))
 
     def test_a_granted_permission_shows_in_the_list(self):
         self.grant(self.owner, self.clerk, "leave.view", self.hq)
@@ -190,7 +191,7 @@ class BranchPagesTests(AccessPageBase):
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "Company")
         self.assertContains(page, f'href="{reverse("organization:access")}"')
-        # Pages not opened to branches yet still send them home (salary: part 6).
+        # A page needing access they do not hold still sends them home.
         self.assertRedirects(self.client.get(reverse("payroll:payroll_home")), reverse("me:home"))
         # Leave opened in part 5, with View leave.
         self.assertEqual(self.client.get(reverse("leaves:leave_list")).status_code, 200)
@@ -210,7 +211,7 @@ class BranchPagesTests(AccessPageBase):
         self.assertContains(home, "People placed in your branches")
         self.assertContains(home, "Leave waiting for your approval")
         self.assertContains(home, "Give access")
-        self.assertRedirects(self.client.get(reverse("payroll:payroll_home")), reverse("me:home"))
+        self.assertRedirects(self.client.get(reverse("payroll:salary_settings")), reverse("me:home"))
 
     def test_a_grant_without_a_page_shows_the_card_but_opens_nothing(self):
         self.grant(self.owner, self.clerk, "leave.view", self.hq)
@@ -232,7 +233,8 @@ class BranchPagesTests(AccessPageBase):
 
         company = self.company.pk
         self.assertTrue(may_open(self.manager, company, "organization:access"))
-        self.assertFalse(may_open(self.manager, company, "payroll:payroll_home"))
+        self.assertFalse(may_open(self.manager, company, "payroll:salary_settings"))
+        self.assertTrue(may_open(self.manager, company, "payroll:payroll_home"))
         self.assertFalse(may_open(self.clerk_user, company, "organization:access"))
 
 

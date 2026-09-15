@@ -19,8 +19,13 @@
                 Salary
             </h1>
             <p class="page__sub">
-                Generating a month recalculates its attendance first. The result is a
-                draft and can be generated again until you finalise it.
+                {% if company_wide %}
+                    Generating a month recalculates its attendance first. The result is a
+                    draft and can be generated again until you finalise it.
+                {% else %}
+                    Salary for the people placed in your branches. Generating rebuilds only
+                    their payslips; the owner or company administrator finalises the month.
+                {% endif %}
             </p>
         </div>
         <div class="page__actions">
@@ -37,21 +42,21 @@
                     <a class="btn btn--ghost" href="{% url 'payroll:payroll_reopen' %}?month={{ month }}&year={{ year }}">
                         Undo finalise
                     </a>
-                {% else %}
-                    {% if run %}
-                        <a class="btn btn--ghost" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}">
-                            Finalise {{ month_name }}
-                        </a>
-                    {% endif %}
-                    <form method="post" action="{% url 'payroll:payroll_generate' %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="month" value="{{ month }}">
-                        <input type="hidden" name="year" value="{{ year }}">
-                        <button class="btn btn--primary" type="submit">
-                            {% if run %}Regenerate{% else %}Generate{% endif %} {{ month_name }} {{ year }}
-                        </button>
-                    </form>
+                {% elif run %}
+                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}">
+                        Finalise {{ month_name }}
+                    </a>
                 {% endif %}
+            {% endif %}
+            {% if can_generate and run.status != 'posted' %}
+                <form method="post" action="{% url 'payroll:payroll_generate' %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="month" value="{{ month }}">
+                    <input type="hidden" name="year" value="{{ year }}">
+                    <button class="btn btn--primary" type="submit">
+                        {% if run %}Regenerate{% else %}Generate{% endif %} {{ month_name }} {{ year }}{% if not can_manage %} for your branches{% endif %}
+                    </button>
+                </form>
             {% endif %}
         </div>
     </div>
@@ -229,16 +234,16 @@
                     <tfoot>
                         <tr>
                             <th colspan="7">
-                                {{ run.totals_snapshot.employees }} employee(s), {{ records.0.currency }}
+                                {{ totals.employees }} employee(s), {{ records.0.currency }}{% if not company_wide %}, in your branches{% endif %}
                             </th>
                             <th class="numeric">
-                                {{ run.totals_snapshot.gross|money }}
+                                {{ totals.gross|money }}
                             </th>
                             <th class="numeric">
-                                {{ run.totals_snapshot.deductions|money }}
+                                {{ totals.deductions|money }}
                             </th>
                             <th class="numeric">
-                                {{ run.totals_snapshot.net|money }}
+                                {{ totals.net|money }}
                             </th>
                             <th>
                             </th>

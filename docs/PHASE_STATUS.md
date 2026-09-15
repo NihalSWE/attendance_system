@@ -998,7 +998,7 @@ Nihal's `feature/device-ui-fixes` (479cc87, 35b7728) and
 - **Database:** existing PostgreSQL data/history preserved; two original auditlog migrations plus three additive corrections for Company defaults, the code sequence and administrator uniqueness. The root-catalogue change adds six migrations across five apps; with the 2026-09-12 designation correction the documented inventory is 86 models / 91 tables / 1,638 columns / 464 FKs. Nihal's organization/0004 is merged, so code and documents now agree.
 - **Architecture/user contract:** modular Django monolith, accounts.User, Django-owned ORM/migrations; future FastAPI and workers reuse services. No DRF or duplicate persistence layer.
 - **Hardware:** D1 remains unverified; the original “roughly a week” estimate is historical, not a current availability claim.
-- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **parts 4 and 5 are done** (the Employees area, then Leave and Overtime, limited by branch); next is **A12 part 6**: Salary limited by branch — each part adds its pages to `BRANCH_PAGES` once they are branch-scoped. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9, N6, N5 and N8 merged** (office session; N5 brings migration `attendance.0004_corrections`, which Ajay runs). Nihal's pages get branch permissions only after the A12 part 7 note. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
+- **Next action (2026-09-15, after A11 part 1):** Leave (A10) is complete and simple. A11 is split into five simple parts (see "A11 plan" at the end); **A11 is complete** (parts 1–5: finalise/undo, bonus and deduction lines, joining/leaving mid-month, salary change mid-month, printable payslip). Ajay must have run `python manage.py migrate` for `payroll.0006` and `leaves.0002`. **A12 branch access** is agreed (see "A12 plan" at the end); **part 1, the permission list and access check, is done** (no migration). **A12 parts 2 and 3 are done** (Access page; company pages open by permission through `access_control/page_access.py` `BRANCH_PAGES`, sidebar "Company" section and "Your branches" card follow it); **parts 4, 5 and 6 are done** (the Employees area, Leave and Overtime, then Salary, limited by branch — each branch prepares its own salary, the owner/admin finalises); next is **A12 part 7**: the written note for Nihal on branch-scoping the attendance and device pages. N9 lists stay with Nihal; attendance code may be changed by Ajay's session only when a leave/salary step needs it (Ajay, 2026-09-15). Ajay's in-browser acceptance of A15, A10a and A10b is still pending. A10 → A11 → A12 → A13 was the prior sequence, not permission to proceed now. Nihal resumed 2026-09-15: **N9, N6, N5 and N8 merged** (office session; N5 brings migration `attendance.0004_corrections`, which Ajay runs). Nihal's pages get branch permissions only after the A12 part 7 note. A16 requires the office SenseFace 3A. Preserve completed setup, A5c, the paid-break fix, A14, A8 and the existing employee panel.
 - **Environment:** no new .env variables.
 - **Verification on 2026-09-07:** 124/124 tests pass on a fresh dedicated PostgreSQL test database (101 existing + 23 new); `check` clean; `makemigrations --check --dry-run` reports no changes; auditlog.0001 and .0002 applied successfully to the development database. Browser onboarding passed without seed_demo at 1440px, 768px and 375px. Full P1 employee onboarding is still pending.
 
@@ -2526,7 +2526,7 @@ and overtime.
 | **3 — done** | Branch managers and grantees open company pages; sidebar and dashboard by permission and branch | No |
 | **4 — done** | Employees area branch-scoped (list, create/edit, logins) | No |
 | **5 — done** | Leave and overtime branch-scoped (list, record/cancel, approval inbox, overtime) | No |
-| 6 | Salary branch-scoped: Salary by month and payslips by branch; generate only your branches inside the month; bonus/deductions; finalise and settings stay owner/admin | Possibly |
+| **6 — done** | Salary branch-scoped: Salary by month and payslips by branch; generate only your branches inside the month; bonus/deductions; finalise and settings stay owner/admin | No (not needed) |
 | 7 | Written note for Nihal: apply `can`/`scope_queryset` to attendance and device pages — Daily list, Calendar, Days to review / Fix a day (N5), device pages and connection test (N8), employee page / End employment (N6), the live "Now" refresh. Until the note, these stay owner/admin and get **no** `BRANCH_PAGES` entry (answered to Nihal, 2026-09-15) | No |
 
 Permissions: employees view / create and edit / logins; leave view / record and
@@ -2691,6 +2691,49 @@ employee's branch** (a branch manager has every permission in their branches):
   pushing.**
 - No migration, dependency or `.env.example` change.
 
+
+## A12 part 6 done — salary by branch — 2026-09-15 (Claude, Ajay's session, office)
+
+One salary run per month for the company, as before; each branch prepares
+its own people inside it, and the owner or company admin finalises the month
+once. Owner and company admin: unchanged (Generate rebuilds the whole month;
+Finalise, Undo finalise, Salary settings, penalty rules and Waive stay theirs
+only). HR and the other company roles keep Salary by month as before.
+
+| Page / action | Needs (in the branch) | What they get |
+|---|---|---|
+| **Salary by month** (`payroll:payroll_home`) | View salaries **or** Prepare salary | Payslips of people placed in their branches at the month's end; totals for those only ("in your branches"). No Finalise, Undo finalise or Salary settings. The Overtime button follows their overtime access. |
+| **Generate … for your branches** | Prepare salary | Rebuilds only their people's payslips (their attendance is brought up to date first); every other branch's draft payslip stays exactly as it was. Refused once the month is finalised. |
+| **Payslip** | View salaries or Prepare salary | Their branches only (another branch's payslip: 403). Waive a penalty: owner/admin only. Calendar view hidden (attendance is Nihal's). |
+| **Bonus / deduction lines** (add, remove) | Prepare salary | Only on a payslip in that branch; that branch is regenerated. |
+
+- How it works: `payroll.services.generate_payroll(..., branch_ids=...)`.
+  With branch ids it rebuilds the people whose last attendance day of the
+  month is in those branches, deletes only their old payslips and proposed
+  penalties, and recomputes the run's totals from all payslips in it.
+  "Skipped, no salary set" is kept per person so a branch pass does not lose
+  the others. Owner/admin pass no branch ids: the whole month, as before.
+- Finalise is still refused while overtime was decided after the payslip it
+  belongs to was generated — now checked **per payslip** (each keeps its own
+  generated time), so a branch regenerating cannot hide another branch's
+  newer overtime decision (`payroll.overtime.decided_after(company, run)`).
+- Added to `BRANCH_PAGES`: `payroll:payroll_home`, `payroll:payroll_generate`,
+  `payroll:payslip`, `payroll:payslip_adjustment_add`,
+  `payroll:payslip_adjustment_remove`. The sidebar "Company" section shows
+  Salary → Salary by month (and Overtime from part 5).
+- Services check the same rules: `payroll.services.salary_branches`,
+  `_preparer` (lines), `generate_payroll` (each branch needs Prepare salary).
+- Tests: `payroll/tests_branch_salary.py` (8): a branch generates its own
+  people and leaves the rest (other payslips keep their ids, totals cover the
+  month); only branches where they may prepare; finalising stays with the
+  company (service and gate); overtime decided after a payslip still blocks
+  finalising after another branch regenerates; manager's page, generate
+  button and 403 on another branch's payslip; view-only sees payslips
+  without Generate or Add line (POST 403); prepare in another branch adds a
+  line there and regenerates only that branch; owner and HR unchanged.
+  `organization/tests_access_page.py`: three checks that used Salary as "not
+  yet open" now use Salary settings. **Full suite run before pushing.**
+- No migration, dependency or `.env.example` change.
 
 ## A12 part 5 done — leave and overtime by branch — 2026-09-15 (Claude, Ajay's session, office)
 

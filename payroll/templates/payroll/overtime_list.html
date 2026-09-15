@@ -36,7 +36,7 @@
                     Overtime pay settings
                 </a>
             {% endif %}
-            {% if company_wide %}
+            {% if salary_link %}
                 <a class="btn btn--ghost" href="{% url 'payroll:payroll_home' %}?month={{ month }}&year={{ year }}">
                     Salary for {{ month_name }}
                 </a>

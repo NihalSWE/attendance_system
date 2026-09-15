@@ -467,17 +467,31 @@ def undo_overtime_decision(*, actor, company_id, record_id):
     return after
 
 
-def decided_after(company_id, first, last, moment):
-    """How many of a month's decisions were made after ``moment``."""
-    if moment is None:
+def decided_after(company_id, run, employee_ids=None):
+    """How many of a month's decisions were made after the payslip they
+    belong to was generated.
+
+    Each payslip carries its own time: since A12 part 6 a branch may
+    regenerate its own people and leave the others as they were. Someone
+    without a payslip (no salary set) counts from the run's last generation.
+    """
+    if run is None or run.calculation_finished_at is None:
         return 0
+    period = run.payroll_period
     with use_company(company_id):
-        return OvertimeDecision.objects.filter(
-            work_date__gte=first, work_date__lte=last, decided_at__gt=moment
-        ).count()
+        generated = dict(run.records.values_list("employee_id", "created_at"))
+        decisions = OvertimeDecision.objects.filter(
+            work_date__gte=period.start_date, work_date__lte=period.end_date
+        )
+        if employee_ids is not None:
+            decisions = decisions.filter(employee_id__in=list(employee_ids))
+        return sum(
+            1 for employee_id, decided_at in decisions.values_list("employee_id", "decided_at")
+            if decided_at > generated.get(employee_id, run.calculation_finished_at)
+        )
 
 
-def undecided_count(company_id, first, last):
+def undecided_count(company_id, first, last, branch_ids=ALL_BRANCHES):
     """Days of a month still waiting for a decision (without recalculating).
 
     Only a day nobody scanned out of waits: the rest is approved automatically
@@ -485,11 +499,14 @@ def undecided_count(company_id, first, last):
     """
     rules = rules_for(company_id, first)
     with use_company(company_id):
-        records = list(
+        records = (
             AttendanceRecord.objects.prefetch_related("sessions").select_related("shift")
             .filter(work_date__gte=first, work_date__lte=last, is_open=False)
             .filter(CANDIDATES).distinct()
         )
+        if branch_ids is not ALL_BRANCHES:
+            records = records.filter(branch_id__in=branch_ids)
+        records = list(records)
         decided = set(
             OvertimeDecision.objects.filter(
                 work_date__gte=first, work_date__lte=last

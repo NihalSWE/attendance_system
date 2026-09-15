@@ -166,12 +166,14 @@ class WhatALoginReachesTests(LoginBase):
         response = self.client.post(reverse("payroll:payroll_generate"), {"year": 2026, "month": 8})
         self.assertEqual(response.status_code, 403)
 
-    def test_a_branch_manager_is_kept_out_too_for_now(self):
+    def test_a_branch_manager_is_kept_out_of_company_settings(self):
         employee_login.change_login_role(
             actor=self.admin, company_id=self.company.pk, employee_id=self.employee.pk,
             values={"role": "manager", "branches": [self.hq]},
         )
-        self.assertRedirects(self.client.get(reverse("payroll:payroll_home")), reverse("me:home"))
+        # Salary by month opens to their branch (A12 part 6); settings never do.
+        self.assertRedirects(self.client.get(reverse("payroll:salary_settings")), reverse("me:home"))
+        self.assertEqual(self.client.get(reverse("payroll:payroll_home")).status_code, 200)
         self.assertContains(self.client.get(reverse("me:home")), "Branch manager of Head Office")
 
     def test_changing_their_own_password(self):

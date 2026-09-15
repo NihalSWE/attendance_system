@@ -330,7 +330,7 @@
                     </form>
                 {% else %}
                     <p class="field__help">
-                        This salary is finalised. Undo finalise on Salary by month to change these lines.
+                        {{ adjust_note }}
                     </p>
                 {% endif %}
             </div>
@@ -342,9 +342,11 @@
             <h2>
                 Attendance in {{ period.name }}
             </h2>
-            <a class="btn btn--ghost btn--sm slip-head-action" href="{% if for_employee %}{% url 'me:attendance' %}?year={{ period.start_date.year }}&month={{ period.start_date.month }}{% else %}{% url 'attendance:attendance_calendar' %}?employee={{ record.employee.pk }}&year={{ period.start_date.year }}&month={{ period.start_date.month }}{% endif %}">
-                Calendar view
-            </a>
+            {% if for_employee or company_wide %}
+                <a class="btn btn--ghost btn--sm slip-head-action" href="{% if for_employee %}{% url 'me:attendance' %}?year={{ period.start_date.year }}&month={{ period.start_date.month }}{% else %}{% url 'attendance:attendance_calendar' %}?employee={{ record.employee.pk }}&year={{ period.start_date.year }}&month={{ period.start_date.month }}{% endif %}">
+                    Calendar view
+                </a>
+            {% endif %}
         </div>
         <div class="card__body">
             <dl class="slip-stats">
