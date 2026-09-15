@@ -6,7 +6,13 @@ to the platform operator, not a tenant.
 """
 from django.urls import path
 
-from organization import adoption_views, employee_edit_views, employee_views, views
+from organization import (
+    adoption_views,
+    employee_detail_views,
+    employee_edit_views,
+    employee_views,
+    views,
+)
 
 app_name = "organization"
 
@@ -31,7 +37,9 @@ urlpatterns = [
     ),
 
     path("employees/new/", employee_views.employee_create, name="employee_create"),
+    path("employees/<int:pk>/", employee_detail_views.employee_detail, name="employee_detail"),
     path("employees/<int:pk>/edit/", employee_edit_views.employee_edit, name="employee_edit"),
+    path("employees/<int:pk>/end/", employee_detail_views.employee_end, name="employee_end"),
     # Feed the dependent branch -> department -> designation selects.
     path(
         "employees/new/departments/",

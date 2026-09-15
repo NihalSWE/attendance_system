@@ -1,0 +1,119 @@
+/* ============================================================================
+An employee's history and the end-employment screen (plan step N6).
+Tokens only.
+========================================================================= */
+
+/* "Now" beside this month's attendance; they stack before either is cramped. */
+.emp-summary,
+.emp-pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s4);
+    align-items: start;
+    margin-bottom: var(--s4);
+}
+.emp-summary > .card,
+.emp-pair > .card {
+    margin: 0;
+}
+.emp-head-action {
+    margin-left: auto;
+}
+
+.emp-counts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+    gap: var(--s2);
+    margin: 0;
+}
+.emp-counts__item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--s2) var(--s3);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    min-width: 0;
+}
+.emp-counts__item dt {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.emp-counts__item dd {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.emp-counts__item--alert dd {
+    color: var(--danger-ink);
+}
+
+.emp-date {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.emp-note {
+    font-size: 12.5px;
+    min-width: 160px;
+}
+
+.emp-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+.emp-list__item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+    padding: var(--s3) var(--s4);
+    border-top: 1px solid var(--border);
+}
+.emp-list__item:first-child {
+    border-top: 0;
+}
+.emp-list__main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.emp-list__main .t-muted,
+.emp-list__dates {
+    font-size: 12px;
+}
+.emp-list__badges {
+    flex: none;
+}
+
+.emp-effects {
+    margin: 0;
+    padding-left: var(--s5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    line-height: 1.5;
+}
+.emp-end-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--s2);
+}
+
+@media (max-width: 1100px) {
+    .emp-summary,
+    .emp-pair {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    /* The note is the first thing to go, so the dates and placement stay in
+       view without a sideways scroll. */
+    .emp-note {
+        display: none;
+    }
+}
