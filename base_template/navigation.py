@@ -74,20 +74,29 @@ COMPANY_MENUS = (
 )
 
 
-def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=None):
+def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=None, allowed=None):
+    """The company menus for this request.
+
+    ``allowed`` (A12): for a branch manager or a person given access, a check
+    on each entry's page (``access_control.page_access``) replaces the role
+    flags — they see exactly the branch pages they may open.
+    """
     current = getattr(getattr(request, "resolver_match", None), "view_name", "")
     can_record_leave = can_manage if can_record_leave is None else can_record_leave
     menus = []
     for key, label, entries in COMPANY_MENUS:
-        if key == "devices" and not can_manage_devices:
+        if key == "devices" and not can_manage_devices and allowed is None:
             continue
         links = []
         for entry in entries:
-            if entry["manage"] and not can_manage:
+            if allowed is not None:
+                if not allowed(entry["view"]):
+                    continue
+            elif entry["manage"] and not can_manage:
                 continue
-            if entry["record"] and not can_record_leave:
+            elif entry["record"] and not can_record_leave:
                 continue
-            if entry["unrestricted"] and not can_manage_devices:
+            elif entry["unrestricted"] and not can_manage_devices:
                 continue
             matches = current == entry["view"] or current in entry["aliases"]
             selected = matches and (not entry["fragment"] or current in entry["aliases"])

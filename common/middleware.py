@@ -48,9 +48,8 @@ SELF_SERVICE_ROLES = ("employee", "manager")
 # Their pages, plus signing in and out.
 SELF_SERVICE_NAMESPACES = ("me",)
 ALWAYS_OPEN_URL_NAMES = ("login", "logout", "switch_company")
-# Company pages a branch manager may open (A12). Each checks access itself;
-# part 3 of A12 opens the rest of the company pages by permission.
-BRANCH_MANAGER_VIEWS = ("organization:access", "organization:access_person")
+# Company pages a branch manager or a person given access may open are listed
+# in access_control.page_access.BRANCH_PAGES (A12), each with its permission.
 
 
 class SelfServiceGate:
@@ -97,7 +96,11 @@ class SelfServiceGate:
             return None
         if match.namespace in SELF_SERVICE_NAMESPACES or match.url_name in ALWAYS_OPEN_URL_NAMES:
             return None
-        if role == CompanyMembership.Role.MANAGER and match.view_name in BRANCH_MANAGER_VIEWS:
+        from access_control.page_access import may_open
+
+        if may_open(user, company_id, match.view_name):
+            # A branch page (A12): open to whoever holds its permission in a
+            # branch; the page itself limits what it shows to those branches.
             return None
         if request.method in ("GET", "HEAD"):
             return redirect("me:home")

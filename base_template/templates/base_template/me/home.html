@@ -24,6 +24,47 @@
     </div>
 
     <div class="form-page stack">
+        {% if branch_card %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        Your branches
+                    </h2>
+                    <span class="t-faint">
+                        {% for branch in branch_card.branches %}{{ branch.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </span>
+                </div>
+                <div class="card__body stack">
+                    {% if branch_card.items %}
+                        <dl class="facts facts--wide">
+                            {% for item in branch_card.items %}
+                                <dt>
+                                    {{ item.label }}
+                                </dt>
+                                <dd>
+                                    {% if item.url %}
+                                        <a href="{{ item.url }}">{{ item.value }}</a>
+                                    {% else %}
+                                        {{ item.value }}
+                                    {% endif %}
+                                </dd>
+                            {% endfor %}
+                        </dl>
+                    {% endif %}
+                    <p class="field__help">
+                        The company pages you can open are under “Company” in the sidebar. More
+                        appear as each area is opened to branches.
+                    </p>
+                    {% if branch_card.access_url %}
+                        <div class="row">
+                            <a class="btn btn--ghost" href="{{ branch_card.access_url }}">
+                                Give access
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
         {% if employee %}
             <div class="card">
                 <div class="card__head">

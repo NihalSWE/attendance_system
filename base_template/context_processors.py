@@ -4,6 +4,7 @@ Presentation only. Every view and service still enforces tenant scope and
 permissions itself — a name in this dropdown is not authorisation.
 """
 
+from access_control.page_access import opener
 from accounts.services import get_active_memberships
 from tenants.models import Company
 from base_template.navigation import company_menus
@@ -33,12 +34,20 @@ def shell(request):
     membership = next((m for m in memberships if m.company_id == company_id), None)
     menus = []
     unrestricted_admin = False
+    branch_menus = []
     if membership and not self_service:
         unrestricted_admin = may_manage_devices(user, company_id)
         menus = company_menus(
             request, can_manage=membership.role in STRUCTURE_ROLES,
             can_manage_devices=unrestricted_admin,
             can_record_leave=membership.role in LEAVE_RECORDER_ROLES,
+        )
+    elif membership and self_service:
+        # A12: the company pages this branch manager / person given access may
+        # open (access_control.page_access), under "Company" in their sidebar.
+        branch_menus = company_menus(
+            request, can_manage=False, can_manage_devices=False,
+            allowed=opener(user, company_id),
         )
 
     return {
@@ -48,6 +57,7 @@ def shell(request):
         # manager login, who gets the small "my" sidebar.
         "self_service": self_service,
         "company_menus": menus,
+        "branch_menus": branch_menus,
         "sidebar_unrestricted_admin": unrestricted_admin,
         "sidebar_branch_manager": bool(membership and membership.role == 'manager'),
     }

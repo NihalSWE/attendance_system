@@ -66,9 +66,30 @@
         <a class="sidebar__link {% active request 'branch_attendance' %}" href="{% url 'me:branch_attendance' %}">
             <span>Branch attendance</span>
         </a>
-        <a class="sidebar__link {% active request 'access' 'access_person' %}" href="{% url 'organization:access' %}">
-            <span>Access</span>
-        </a>
+    {% endif %}
+    {% if branch_menus %}
+        {# Company pages they may open, by permission and branch (A12). #}
+        <div class="sidebar__label">Company</div>
+        {% for menu in branch_menus %}
+            <details class="sidebar__group" data-menu="{{ menu.key }}" {% if menu.active %}open{% endif %}>
+                <summary class="sidebar__link sidebar__heading">
+                    {% include "base_template/includes/navigation_icon.html" with icon=menu.key %}
+                    <span>{{ menu.label }}</span>
+                    <svg class="sidebar__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                        <path d="m9 5 7 7-7 7"/>
+                    </svg>
+                </summary>
+                <ul class="sidebar__submenu">
+                    {% for link in menu.links %}
+                        <li>
+                            <a class="sidebar__link sidebar__child{% if link.active %} is-active{% endif %}" href="{{ link.url }}" {% if link.active %}aria-current="page"{% endif %}>
+                                <span>{{ link.label }}</span>
+                            </a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </details>
+        {% endfor %}
     {% endif %}
     <div class="sidebar__foot">
         <form method="post" action="{% url 'logout' %}">

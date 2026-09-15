@@ -179,6 +179,61 @@ class PersonAccessTests(AccessPageBase):
         )
 
 
+class BranchPagesTests(AccessPageBase):
+    """A12 part 3: company pages open by permission; sidebar and My account follow."""
+
+    def test_a_person_given_access_to_give_access_reaches_the_access_page(self):
+        self.grant(self.owner, self.clerk, "access.grant", self.hq)
+        self.grant(self.owner, self.clerk, "leave.view", self.hq)
+        self.login_as(self.clerk_user)
+        page = self.client.get(reverse("organization:access"))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "Company")
+        self.assertContains(page, f'href="{reverse("organization:access")}"')
+        # Pages not opened to branches yet still send them home.
+        self.assertRedirects(self.client.get(reverse("leaves:leave_list")), reverse("me:home"))
+
+    def test_without_access_nothing_opens_and_no_company_menu(self):
+        self.login_as(self.clerk_user)
+        self.assertRedirects(self.client.get(reverse("organization:access")), reverse("me:home"))
+        home = self.client.get(reverse("me:home"))
+        self.assertNotContains(home, "Your branches")
+        self.assertNotContains(home, 'data-menu="organisation"')
+
+    def test_a_branch_manager_sees_the_company_menu_and_their_branch_card(self):
+        self.login_as(self.manager)
+        home = self.client.get(reverse("me:home"))
+        self.assertContains(home, 'data-menu="organisation"')
+        self.assertContains(home, "Your branches")
+        self.assertContains(home, "People placed in your branches")
+        self.assertContains(home, "Leave waiting for your approval")
+        self.assertContains(home, "Give access")
+        self.assertRedirects(self.client.get(reverse("payroll:payroll_home")), reverse("me:home"))
+
+    def test_a_grant_without_a_page_shows_the_card_but_opens_nothing(self):
+        self.grant(self.owner, self.clerk, "leave.view", self.hq)
+        self.login_as(self.clerk_user)
+        home = self.client.get(reverse("me:home"))
+        self.assertContains(home, "Your branches")
+        self.assertContains(home, "Head Office")
+        self.assertNotContains(home, "Give access")
+        self.assertNotContains(home, 'data-menu="organisation"')
+
+    def test_the_owner_keeps_the_company_sidebar(self):
+        self.login_as(self.owner)
+        page = self.client.get(reverse("organization:access"))
+        self.assertContains(page, 'data-menu="employees"')
+        self.assertContains(page, 'data-menu="salary"')
+
+    def test_may_open_needs_a_listed_page_and_its_permission(self):
+        from access_control.page_access import may_open
+
+        company = self.company.pk
+        self.assertTrue(may_open(self.manager, company, "organization:access"))
+        self.assertFalse(may_open(self.manager, company, "payroll:payroll_home"))
+        self.assertFalse(may_open(self.clerk_user, company, "organization:access"))
+
+
 class BranchLoginTests(AccessPageBase):
     def test_manager_creates_an_employee_login_in_their_branch(self):
         new = self.employee("Newbie", "E9", self.hq)

@@ -35,6 +35,7 @@ from employees.models import Employee, EmployeeAssignment
 from leaves.models import LeaveDay, LeaveRequest, LeaveType
 from leaves.services import allowance_left
 from organization.employee_login import ROLE_LABELS
+from organization.models import Branch
 from payroll.models import PayrollRun
 from payroll.views import payslip_context, payslip_records
 from scheduling.calendar import WorkCalendar
@@ -102,6 +103,7 @@ def my_account(request):
                 company_timezone=membership.company.timezone or "UTC", today=today,
             )["summary"]
     return render(request, "base_template/me/home.html", {
+        "branch_card": _branch_card(request, membership),
         "now_status": now_status,
         "month_summary": summary,
         "month_name": f"{today:%B}",
@@ -116,6 +118,52 @@ def my_account(request):
             if membership and membership.joined_at else None
         ),
     })
+
+
+def _branch_card(request, membership):
+    """"Your branches" on My account (A12 part 3), or None.
+
+    For a branch manager or a person given access: which branches, and — for
+    each permission they hold — a count limited to those branches. Nothing
+    here widens access; it only reads within ``branches_for``.
+    """
+    from access_control.branch_access import ALL_BRANCHES, branches_for
+    from access_control.page_access import held_codes, may_open
+    from leaves.workflow import reviewable
+    from organization.access_services import people
+
+    if membership is None or membership.role not in ("employee", "manager"):
+        return None
+    codes = held_codes(request.user, request.company_id)
+    if not codes:
+        return None
+    branch_ids = set()
+    for code in codes:
+        found = branches_for(request.user, request.company_id, code)
+        if found is not ALL_BRANCHES:
+            branch_ids |= found
+    card = {"items": []}
+    with use_company(request.company_id):
+        card["branches"] = list(Branch.objects.filter(pk__in=branch_ids).order_by("name"))
+        if "employees.view" in codes:
+            placed = list(people(branches_for(request.user, request.company_id, "employees.view"))
+                          .values_list("pk", flat=True))
+            card["items"].append({"label": "People placed in your branches", "value": len(placed)})
+            if placed:
+                statuses = statuses_for(request.company_id, employee_ids=placed)
+                card["items"].append({
+                    "label": "In the office now",
+                    "value": sum(1 for s in statuses.values() if s.key == "in_office"),
+                })
+        if membership.role == "manager":
+            card["items"].append({
+                "label": "Leave waiting for your approval",
+                "value": reviewable(membership).filter(status="pending").count(),
+                "url": reverse("me:leave_inbox"),
+            })
+    if may_open(request.user, request.company_id, "organization:access"):
+        card["access_url"] = reverse("organization:access")
+    return card
 
 
 def _company_tz(request):
