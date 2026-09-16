@@ -2696,6 +2696,33 @@ employee's branch** (a branch manager has every permission in their branches):
 - No migration, dependency or `.env.example` change.
 
 
+## Company profile and branding — 2026-09-16 (Claude, Ajay's session)
+
+Asked for quickly (Ajay, 2026-09-16): a small company profile, the logo shown
+in the panel, and a footer credit.
+
+- **Organisation → Company profile** (`organization:company_profile`, owner and
+  company admin only): company name (required), registered name, contact
+  person, email, phone, address and a logo.
+  `organization/company_profile.py` holds the form and the audited write
+  (`company.profile_updated`); `Company` gains one field, `contact_person`
+  (migration `tenants.0006`, `db_default=""` so the migration tests' historical
+  inserts still work). Every other Company column stays with the platform.
+- **The logo is the panel's brand.** All three sidebars share
+  `base_template/includes/brand.html`: the company's logo when there is one,
+  otherwise `base_template/static/base_template/img/logo.png` — replace that
+  file to change the default. CSS caps it at 120x28 px with `object-fit:
+  contain`, so a 1000x800 upload is scaled, never stretched, and cannot push
+  the sidebar about.
+- **Uploads:** `MEDIA_URL` / `MEDIA_ROOT` (`media/` under the project) are new;
+  Django serves them only while DEBUG is on. **A server needs an Nginx
+  `location /media/` pointing at `/opt/attendance/media/`** — see
+  [DEPLOYMENT.md](DEPLOYMENT.md). Logos are limited to PNG/JPG/WEBP/SVG and
+  2 MB, checked in the form and again in the service.
+- **Footer on every page:** "Designed and developed by IGL Web Ltd.", linking
+  https://iglweb.com/web/.
+- Tests: `organization/tests_company_profile.py` (6). No `.env.example` change.
+
 ## N10, N11 and Nihal's docs merged — 2026-09-15 (Claude, Ajay's session, office)
 
 - Merged on `merge/nihal-n10-n11` from main `da4817e`: N10

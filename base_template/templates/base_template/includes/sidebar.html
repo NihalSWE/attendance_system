@@ -1,13 +1,6 @@
 {% load nav %}
 <aside class="sidebar" id="company-sidebar" aria-label="Company navigation">
-    <div class="sidebar__brand">
-        <span class="sidebar__mark">
-            A
-        </span>
-        <span>
-            Attendance
-        </span>
-    </div>
+    {% include "base_template/includes/brand.html" %}
     <nav class="sidebar__nav" aria-label="Company pages">
         {% if sidebar_unrestricted_admin %}
         <a class="sidebar__link {% active request 'dashboard' %}" href="{% url 'dashboard' %}" {% if request.resolver_match.view_name == 'dashboard' %}aria-current="page"{% endif %}>

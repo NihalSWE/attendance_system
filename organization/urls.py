@@ -7,6 +7,7 @@ to the platform operator, not a tenant.
 from django.urls import path
 
 from organization import (
+    company_views,
     access_views,
     adoption_views,
     employee_detail_views,
@@ -42,6 +43,7 @@ urlpatterns = [
     path("access/<int:employee_id>/", access_views.access_person, name="access_person"),
 
     path("employees/new/", employee_views.employee_create, name="employee_create"),
+    path("company/", company_views.company_profile, name="company_profile"),
     path("employees/<int:pk>/", employee_detail_views.employee_detail, name="employee_detail"),
     path("employees/<int:pk>/edit/", employee_edit_views.employee_edit, name="employee_edit"),
     path("employees/<int:pk>/end/", employee_detail_views.employee_end, name="employee_end"),

@@ -45,16 +45,22 @@
                     {% block page %}
                     {% endblock %}
                 </main>
-                {% if platform_surface %}
-                    <footer class="site-footer">
+                <footer class="site-footer">
+                    {% if platform_surface %}
                         <span>
                             Attendance · Platform management
                         </span>
                         <span>
                             Company data stays company-scoped
                         </span>
-                    </footer>
-                {% endif %}
+                    {% endif %}
+                    <span class="site-footer__credit">
+                        Designed and developed by
+                        <a href="https://iglweb.com/web/" target="_blank" rel="noopener noreferrer">
+                            IGL Web Ltd.
+                        </a>
+                    </span>
+                </footer>
             </div>
         </div>
         <script defer src="https://code.jquery.com/jquery-3.7.1.min.js">

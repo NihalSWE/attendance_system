@@ -1,14 +1,7 @@
 {% load nav %}
 {# The sidebar for an Employee or Branch manager login: the employee panel (A6, A7). #}
 <aside class="sidebar" id="self-service-sidebar" aria-label="My navigation">
-    <div class="sidebar__brand">
-        <span class="sidebar__mark">
-            A
-        </span>
-        <span>
-            Attendance
-        </span>
-    </div>
+    {% include "base_template/includes/brand.html" %}
     <div class="sidebar__label">
         Me
     </div>

@@ -62,6 +62,7 @@ COMPANY_MENUS = (
         item("Departments", "organization:adoption_list", "organization:adoption_create",
              "organization:adoption_edit", "organization:adoption_copy",
              "organization:adoption_status", "department_list"),
+        item("Company profile", "organization:company_profile", manage=True),
         item("Access", "organization:access", "organization:access_person", manage=True),
     )),
     ("devices", "Devices", (

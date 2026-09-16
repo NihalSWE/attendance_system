@@ -1,0 +1,13 @@
+{% load static %}
+{# The company's logo, or the default one. Any shape is scaled to fit. #}
+<div class="sidebar__brand">
+    {# The platform operator's own screens are not a company: always the default. #}
+    {% if active_company.logo and not platform_surface %}
+        <img class="sidebar__logo" src="{{ active_company.logo.url }}" alt="{{ active_company.name }}">
+    {% else %}
+        <img class="sidebar__logo" src="{% static 'base_template/img/logo.png' %}" alt="{{ active_company.name|default:'Attendance' }}">
+    {% endif %}
+    <span class="sidebar__brand-name">
+        {{ active_company.name|default:"Attendance" }}
+    </span>
+</div>

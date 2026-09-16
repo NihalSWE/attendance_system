@@ -1,5 +1,7 @@
 """Root URL configuration."""
 
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
@@ -41,3 +43,7 @@ urlpatterns = [
     # POST logs out; GET asks rather than returning a bare 405.
     path("logout/", views.ConfirmingLogoutView.as_view(next_page="login"), name="logout"),
 ]
+
+# Development only: with DEBUG off the web server serves /media/ itself.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

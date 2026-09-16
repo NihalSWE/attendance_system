@@ -37,6 +37,8 @@ class Company(TimeStamped, ActorTracked):
     language = models.CharField(max_length=16, blank=True, default="en-us")
     country_code = models.CharField(max_length=2, blank=True, default="BD")  # ISO 3166-1 alpha-2
 
+    # Who to speak to at the company (shown on the company profile page).
+    contact_person = models.CharField(max_length=120, blank=True, db_default="")
     email = models.EmailField(blank=True)
     phone = models.CharField(max_length=32, blank=True)
     address = models.TextField(blank=True)

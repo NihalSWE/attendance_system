@@ -201,6 +201,11 @@ STATIC_URL = 'static/'
 # Where `collectstatic` gathers files for a deployed server. Git-ignored.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Uploaded files (today: a company's logo). Served by the web server in
+# production; by Django itself only while DEBUG is on (config/urls.py).
+MEDIA_URL = 'media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
 # Cache-busting: every static URL changes when its file changes, so a browser
 # never keeps an old CSS/JS file after an update (no more Ctrl+F5). Hashed
 # file names when deployed, `?v=<hash>` in development and tests — see

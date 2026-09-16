@@ -1,0 +1,72 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Company profile · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Company profile
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Company profile
+            </h1>
+            <p class="page__sub">
+                Who this company is, and the logo the panel shows.
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Details
+                </h2>
+                <span class="brand-preview">
+                    {% if company.logo %}
+                        <img class="brand-preview__logo" src="{{ company.logo.url }}" alt="{{ company.name }} logo">
+                    {% else %}
+                        <img class="brand-preview__logo" src="{% static 'base_template/img/logo.png' %}" alt="Default logo">
+                    {% endif %}
+                </span>
+            </div>
+            <form method="post" enctype="multipart/form-data" novalidate>
+                {% csrf_token %}
+                <div class="card__body stack">
+                    {% if form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {% for error in form.non_field_errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=form.name %}
+                        {% include "leaves/includes/field.html" with field=form.legal_name %}
+                        {% include "leaves/includes/field.html" with field=form.contact_person %}
+                        {% include "leaves/includes/field.html" with field=form.email %}
+                        {% include "leaves/includes/field.html" with field=form.phone %}
+                        {% include "leaves/includes/field.html" with field=form.address %}
+                    </div>
+                    {% include "leaves/includes/field.html" with field=form.logo %}
+                    <p class="field__help">
+                        No logo uploaded? The panel shows the default one.
+                    </p>
+                </div>
+                <div class="card__foot row">
+                    <button class="btn btn--primary" type="submit">
+                        Save profile
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}
