@@ -508,6 +508,32 @@ Responsive — full labelled navigation in a drawer on tablets and phones.
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+/* ---------------------------------------------------------------------------
+   Page footer. `.main` is a full-height flex column, so `margin-top: auto`
+   holds the footer against the bottom of the window on a short page instead
+   of letting it ride up under the content. (platform.css carried these rules
+   before, and only the platform screens load that file.)
+   ------------------------------------------------------------------------ */
+
+.site-footer {
+    margin-top: auto;
+    padding: var(--s4) var(--s5);
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--s3);
+}
+.site-footer a {
+    color: inherit;
+    text-decoration: underline;
+}
+.site-footer a:hover {
+    color: var(--ink);
+}
 .site-footer__credit {
     margin-left: auto;
 }
