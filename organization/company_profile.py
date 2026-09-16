@@ -49,6 +49,8 @@ class CompanyProfileForm(StyledFormMixin, forms.ModelForm):
         widgets = {
             "address": forms.TextInput(),
             "phone": BangladeshPhoneInput(),
+            # Rendered by hand in the template (preview, file button, and
+            # the "remove" box in our own checkbox style).
             "logo": forms.ClearableFileInput(attrs={"accept": ",".join(LOGO_SUFFIXES)}),
         }
 

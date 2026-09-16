@@ -187,6 +187,11 @@ class StyledFormMixin:
                 widget.attrs["class"] = "check__input"
                 continue
             widget.attrs["class"] = "input"
+            # A file input draws its own button: it keeps the field box, plus a
+            # class the stylesheet uses to style that button like our buttons.
+            if isinstance(widget, forms.FileInput):
+                widget.attrs["class"] = "input input--file"
+                continue
             # Control choice follows the DATA, not the widget:
             #   database-backed (ModelChoice / ModelMultipleChoice) -> Select2,
             #     because those lists are dynamic and may need search/paging;

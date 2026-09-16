@@ -25,29 +25,23 @@
     </div>
 
     <div class="form-page">
-        <div class="card">
-            <div class="card__head">
-                <h2>
-                    Details
-                </h2>
-                <span class="brand-preview">
-                    {% if company.logo %}
-                        <img class="brand-preview__logo" src="{{ company.logo.url }}" alt="{{ company.name }} logo">
-                    {% else %}
-                        <img class="brand-preview__logo" src="{% static 'base_template/img/logo.png' %}" alt="Default logo">
-                    {% endif %}
-                </span>
-            </div>
-            <form method="post" enctype="multipart/form-data" novalidate>
-                {% csrf_token %}
-                <div class="card__body stack">
-                    {% if form.non_field_errors %}
-                        <div class="alert alert--danger">
-                            {% for error in form.non_field_errors %}
-                                {{ error }}
-                            {% endfor %}
-                        </div>
-                    {% endif %}
+        <form method="post" enctype="multipart/form-data" novalidate class="stack">
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="alert alert--danger">
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        Details
+                    </h2>
+                </div>
+                <div class="card__body">
                     <div class="grid grid--2">
                         {% include "leaves/includes/field.html" with field=form.name %}
                         {% include "leaves/includes/field.html" with field=form.legal_name %}
@@ -56,17 +50,69 @@
                         {% include "leaves/includes/field.html" with field=form.phone %}
                         {% include "leaves/includes/field.html" with field=form.address %}
                     </div>
-                    {% include "leaves/includes/field.html" with field=form.logo %}
-                    <p class="field__help">
-                        No logo uploaded? The panel shows the default one.
-                    </p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        Logo
+                    </h2>
+                    {% if company.logo %}
+                        <span class="badge badge--success">
+                            Uploaded
+                        </span>
+                    {% else %}
+                        <span class="badge badge--neutral">
+                            Using the default
+                        </span>
+                    {% endif %}
+                </div>
+                <div class="card__body">
+                    <div class="field">
+                        <div class="logo-field">
+                            <span class="logo-field__preview">
+                                {% if company.logo %}
+                                    <img src="{{ company.logo.url }}" alt="{{ company.name }} logo">
+                                {% else %}
+                                    <img src="{% static 'base_template/img/logo.png' %}" alt="Default logo">
+                                {% endif %}
+                            </span>
+                            <div class="logo-field__controls">
+                                <label class="field__label" for="{{ form.logo.id_for_label }}">
+                                    {% if company.logo %}Replace the logo{% else %}Upload a logo{% endif %}
+                                </label>
+                                <input class="input input--file" type="file"
+                                       name="{{ form.logo.html_name }}" id="{{ form.logo.id_for_label }}"
+                                       accept=".png,.jpg,.jpeg,.webp,.svg">
+                                {% if company.logo %}
+                                    <label class="check" for="logo-clear-box">
+                                        <input class="check__input" type="checkbox" id="logo-clear-box"
+                                               name="{{ form.logo.html_name }}-clear">
+                                        <span>
+                                            Remove the logo and use the default again
+                                        </span>
+                                    </label>
+                                {% endif %}
+                                <span class="field__help">
+                                    PNG, JPG, WEBP or SVG, up to 2 MB. Any shape works — it is
+                                    scaled to fit the sidebar, never stretched.
+                                </span>
+                                {% for error in form.logo.errors %}
+                                    <span class="field__error">
+                                        {{ error }}
+                                    </span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="card__foot row">
                     <button class="btn btn--primary" type="submit">
                         Save profile
                     </button>
                 </div>
-            </form>
-        </div>
+            </div>
+        </form>
     </div>
 {% endblock %}

@@ -508,13 +508,6 @@ Responsive — full labelled navigation in a drawer on tablets and phones.
     text-overflow: ellipsis;
     white-space: nowrap;
 }
-.brand-preview__logo {
-    width: auto;
-    height: auto;
-    max-width: 160px;
-    max-height: 40px;
-    object-fit: contain;
-}
 .site-footer__credit {
     margin-left: auto;
 }
