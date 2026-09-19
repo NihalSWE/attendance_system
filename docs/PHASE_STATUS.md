@@ -3575,3 +3575,38 @@ Checkboxes are always on Device users now (not only when a copy target exists).
 The old "Create employees for the unmapped users" (draft codes `DEV-<n>`) is
 replaced on the page by Add as employees (Employee ID = device number).
 Tests: `ScenarioTests` in `devices/tests_mapping.py`.
+
+### Verified on the office 2A — 2026-09-19 (Ajay at the device)
+
+Everyone except Ajay deleted on the terminal, then **Load employees onto this
+device**: Moin, Nihal and Sajal came back with name, card, role, door
+permission, fingerprint and face — **faces and fingers recognised for everyone,
+Nihal's card works and he opens the admin menu (Super Admin restored)**.
+Rayhan went back with ID and name only (nothing captured yet). The
+device → software → device loop is proven on the 2A for all of it.
+
+Still open: capture on one 2A and write to a *second* 2A (no second unit yet);
+the 3A (ATT2, writes refused, unmeasured); volume; the raw-upload encryption
+decision; merging `feature/device-mapping` to main (awaiting Ajay).
+
+### Plan — next session (2026-09-20), agreed with Ajay
+
+1. **Volume test on the 2A, outside office hours:** put **at least 50 test
+   users** on the device from the software, time it, then **remove them all from
+   the software** and confirm the device's user count is back to where it was.
+   Only test numbers (a reserved range, e.g. 90001–90050), deleted by Pin only.
+2. Needed for that test, to build first:
+   - **Bulk "Remove from device"** in the Device users selection bar (today
+     Remove is one row at a time), behind the confirm modal, delete by Pin only.
+   - **A progress card** on the device's Users page: done / refused / waiting,
+     a bar and time left, refreshing itself, kept when you leave the page; a
+     "Sending…" badge on the device in the Devices list; refused ones listed per
+     person with Retry.
+3. **Speed, measured during that test:** raise commands per check-in from 5
+   (cautious, not measured) to 20, then 50 (the 2A reports MaxPackageSize ≈ 2 MB,
+   a template command is ≈ 1.5 KB); and shorten the device's check-in interval
+   (Delay 10 s → 2–3 s) while a job runs, restored to 10 s when it finishes.
+   Watch that scans are still recognised promptly while a batch is written.
+   Target: 500 people ≈ 7 min at 50/check-in, ≈ 2 min with the shorter interval.
+4. Then: merge to main (after Ajay's go, full suite first), CSV/Excel bulk
+   employee import, removal from devices when employment ends.
