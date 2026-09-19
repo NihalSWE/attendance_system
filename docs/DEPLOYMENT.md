@@ -1,5 +1,19 @@
 # Deployment (workforce.iglweb.com)
 
+> **DO NOT DEPLOY main after `cc0dd12` to the live server yet (2026-09-19).**
+> The company-level departments change (Nihal, `feature/company-departments`)
+> has a migration that does not keep existing data: existing departments get
+> `company=1, branch=1` and the old links fail, so `migrate` either stops with
+> an IntegrityError or needs every table emptied. The live server holds the
+> client's data (their SenseFace 3A reports there). Deploy only after a
+> data-keeping migration (copy each company's departments/designations to the
+> new tables, re-point employees, shifts, device links and permissions, then drop
+> the old tables) replaces or follows it. Developer PCs were emptied on purpose.
+>
+> Also new since the last deploy: `BIOMETRIC_TEMPLATE_KEY` in `.env` (see
+> `.env.example`; a fresh key per server) and `pip install -r requirements.txt`
+> (`cryptography`).
+
 Set up 2026-09-15 on the Ubuntu 24.04 server at 103.86.193.26, alongside a
 stopped chat application that keeps its own files.
 
