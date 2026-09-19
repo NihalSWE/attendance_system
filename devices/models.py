@@ -562,6 +562,53 @@ class DeviceUserTemplate(TenantOwned):
         return f"{self.device_id}:{self.device_user_id} {self.bio_type}"
 
 
+class DeviceOutboxCommand(TenantOwned):
+    """One write waiting for, sent to or answered by a device.
+
+    Writing people to a device (``commands.push_to_device``) can mean hundreds
+    of commands for one terminal, more than the small refresh queue in
+    DeviceSyncState is meant to hold. They wait here and are handed over a few
+    per check-in, in order. ``command_id`` is the number the device echoes in
+    its answer; it comes from the same counter as the refresh queue, so the two
+    never collide. A template body is biometric data: it is kept encrypted and
+    cleared once the device has taken it.
+    """
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Waiting for the device"
+        SENT = "sent", "Sent"
+        DONE = "done", "Done"
+        REFUSED = "refused", "Refused by the device"
+        DROPPED = "dropped", "Not sent"
+
+    device = models.ForeignKey(
+        BiometricDevice, on_delete=models.CASCADE, related_name="outbox"
+    )
+    command_id = models.PositiveIntegerField()
+    key = models.CharField(max_length=120)
+    device_user_id = models.CharField(max_length=64, blank=True)
+    # What the screen shows; a template's data is replaced by "Tmp=…".
+    description = models.TextField()
+    body = models.TextField(blank=True)
+    body_encrypted = models.BinaryField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
+    return_code = models.CharField(max_length=64, blank=True)
+    requested_by = models.CharField(max_length=254, blank=True)
+    queued_at = models.DateTimeField()
+    sent_at = models.DateTimeField(null=True, blank=True)
+    answered_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "devices_device_outbox_command"
+        constraints = [
+            models.UniqueConstraint(fields=["device", "command_id"], name="uniq_outbox_device_command"),
+        ]
+        indexes = [models.Index(fields=["device", "status", "command_id"])]
+
+    def __str__(self):
+        return f"{self.device_id}#{self.command_id} {self.key} ({self.status})"
+
+
 class DeviceSyncState(TenantOwned):
     """Current, mutable operational state for one device (not historical evidence).
 

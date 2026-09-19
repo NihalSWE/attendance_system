@@ -1,4 +1,10 @@
 {% extends "devices/base.html" %}
+{% load static %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'devices/js/user_selection.js' %}">
+    </script>
+{% endblock %}
 {% block title %}
     Device users · {{ device.name }}
 {% endblock %}
@@ -65,27 +71,42 @@
         </div>
     {% endif %}
     {% if unmapped_count %}
-        <div class="alert alert--warning">
-            <p>
-                {{ unmapped_count }} user{{ unmapped_count|pluralize }} on this device
-                {{ unmapped_count|pluralize:"is,are" }} not mapped to an employee. Their scans are
-                stored, but they resolve to nobody and cannot count towards attendance until mapped.
-            </p>
-            <form method="post" action="{% url 'devices:device_users_sync' device.public_id %}"
-                  onsubmit="return confirm('Create {{ unmapped_count }} draft employee record(s) from this device? They will be recognition-only until you authorise them.')">
-                {% csrf_token %}
-                <button class="btn btn--ghost" type="submit">
-                    Create employees for the unmapped users
-                </button>
-            </form>
-            <p class="t-faint">
-                This creates a draft employee per unmapped device user and maps it, so their punches
-                resolve straight away. Drafts are <strong>recognition only</strong> — their punches
-                are kept and marked, and start counting once you authorise the enrollment. A user
-                with no name on the device gets a clearly-labelled placeholder for HR to complete,
-                never an invented name.
-            </p>
-        </div>
+        <section class="notice notice--warning" aria-labelledby="unmapped-title">
+            <div class="notice__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M19 8v6M22 11h-6"/>
+                </svg>
+            </div>
+            <div class="notice__body">
+                <h2 class="notice__title" id="unmapped-title">
+                    {{ unmapped_count }} user{{ unmapped_count|pluralize }} not linked to an employee yet
+                </h2>
+                <p class="notice__text">
+                    Their scans are saved, but they don't count towards attendance until each user is linked to an employee.
+                </p>
+                <div class="notice__actions">
+                    <form method="post" action="{% url 'devices:device_map_automatically' device.public_id %}">
+                        {% csrf_token %}
+                        <button class="btn btn--primary" type="submit">
+                            Map automatically by Employee ID
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'devices:device_users_sync' device.public_id %}"
+                          onsubmit="return confirm('Create {{ unmapped_count }} draft employee record(s) from this device? They will be recognition-only until you authorise them.')">
+                        {% csrf_token %}
+                        <button class="btn btn--ghost" type="submit">
+                            Create employees for them
+                        </button>
+                    </form>
+                </div>
+                <p class="notice__hint">
+                    <strong>Map automatically</strong> links each user whose number matches an Employee ID; nothing is written to the device.
+                    <strong>Create employees</strong> makes a draft employee for each remaining user; their scans start counting once you authorise them.
+                </p>
+            </div>
+        </section>
     {% endif %}
     <div class="card">
         <div class="card__head">
@@ -129,6 +150,14 @@
                 <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
                     <thead>
                         <tr>
+                            <th class="pick-cell">
+                                {% if transfer_targets %}
+                                    <label class="pick" title="Select every user on this page">
+                                        <input type="checkbox" data-pick-all aria-label="Select every user on this page">
+                                        <span class="pick__box"></span>
+                                    </label>
+                                {% endif %}
+                            </th>
                             <th>
                                 User ID
                             </th>
@@ -170,6 +199,15 @@
                     <tbody>
                         {% for row in page.object_list %}
                             <tr>
+                                <td class="pick-cell">
+                                    {% if transfer_targets and not row.removed_from_device and not row.only_in_scans %}
+                                        <label class="pick" title="Select {{ row.name|default:row.pin }}">
+                                            <input type="checkbox" name="pin" value="{{ row.pin }}" form="transfer-form" data-pick
+                                                   aria-label="Select user {{ row.pin }}">
+                                            <span class="pick__box"></span>
+                                        </label>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     <span class="mono">
                                         {{ row.pin }}
@@ -178,6 +216,11 @@
                                 <td>
                                     {% if row.name %}
                                         {{ row.name }}
+                                        {% if row.removed_from_device %}
+                                            <span class="badge badge--neutral" title="Not in the device's latest user list: deleted on the device. Kept here because their scans belong to this number.">
+                                                Removed from device
+                                            </span>
+                                        {% endif %}
                                     {% elif row.only_in_scans %}
                                         <span class="t-faint" title="This number has scanned, but the device has not sent its user record yet. Refresh user list fetches it.">
                                             (seen in scans; name not received yet)
@@ -298,6 +341,38 @@
                 </table>
             </div>
             {% include "base_template/includes/table_pagination.html" %}
+            {% if transfer_targets %}
+                <form class="selection-bar" id="transfer-form" method="post"
+                      action="{% url 'devices:device_users_transfer' device.public_id %}" data-selection-bar hidden>
+                    {% csrf_token %}
+                    <input type="hidden" name="all" value="" data-pick-everyone-field>
+                    <div class="selection-bar__count">
+                        <strong data-pick-count>0</strong> selected
+                        <button class="btn btn--quiet btn--sm" type="button" data-pick-everyone
+                                title="Every user on this device, on every page">
+                            Select all {{ server_table.total }} on this device
+                        </button>
+                        <button class="btn btn--quiet btn--sm" type="button" data-pick-clear>
+                            Clear
+                        </button>
+                    </div>
+                    <div class="selection-bar__action">
+                        <label class="sr-only" for="transfer-target">
+                            Copy to
+                        </label>
+                        <select class="select js-select2" id="transfer-target" name="target" required>
+                            {% for target in transfer_targets %}
+                                <option value="{{ target.pk }}">
+                                    {{ target.name }} · {{ target.branch.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn--primary" type="submit">
+                            Copy to device
+                        </button>
+                    </div>
+                </form>
+            {% endif %}
         {% endif %}
         {% if not page.object_list %}
             <div class="empty server-table-empty">
@@ -407,7 +482,7 @@
                 </h2>
                 {% if pending_commands %}
                     <span class="badge badge--info">
-                        {{ pending_commands|length }} waiting for the device
+                        {{ waiting_count }} waiting for the device
                     </span>
                 {% endif %}
             </div>

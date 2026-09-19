@@ -29,6 +29,9 @@ BRANCH_PAGES = {
     "organization:employee_edit": "employees.edit",
     "organization:employee_branch_departments": "employees.edit",
     "organization:employee_department_designations": "employees.edit",
+    # Map / Bulk map on the Employees list: the service checks the branch.
+    "devices:employee_map": "employees.edit",
+    "devices:employee_bulk_map": "employees.edit",
     # A12 part 5: leave and overtime, each limited to your branches. Someone
     # who may record leave also sees the list (that is where Cancel is); the
     # overtime day opens to viewers, and only deciders get its form. Leave

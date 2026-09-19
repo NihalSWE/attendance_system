@@ -526,32 +526,52 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
     return _queue_group(device=device, commands=commands, requested_by=requested_by)
 
 
+#: Writes one device may have waiting in its outbox: a whole company's people
+#: (user, door, finger, face each) with room to spare.
+OUTBOX_LIMIT = 5000
+
+
 def _queue_group(*, device, commands, requested_by=None):
-    """Queue several ``(key, body)`` commands in order, all or none."""
+    """Queue several ``(key, body)`` writes in the outbox, in order, all or none.
+
+    A write still waiting with the same key is replaced (marked not sent), so
+    mapping someone twice does not send them twice.
+    """
+    from devices.models import DeviceOutboxCommand
+    from devices.services import templates
+
+    now = timezone.now()
     with transaction.atomic():
         state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        outbox = DeviceOutboxCommand.all_objects.filter(
+            device=device, status=DeviceOutboxCommand.Status.QUEUED
+        )
+        keys = [key for key, _ in commands]
+        outbox.filter(key__in=keys).update(
+            status=DeviceOutboxCommand.Status.DROPPED, return_code="replaced", answered_at=now,
+            body="", body_encrypted=None,
+        )
+        if outbox.count() + len(commands) > OUTBOX_LIMIT:
+            return [], (
+                f"This device already has {OUTBOX_LIMIT} writes waiting. Let it catch up first."
+            )
         data = dict(state.state_data or {})
-        keys = {key for key, _ in commands}
-        pending = [e for e in (data.get("pending_commands") or []) if e.get("key") not in keys]
-        if len(pending) + len(commands) > MAX_PENDING:
-            return [], "Too many commands are already queued for this device. Try again in a minute."
         next_id = int(data.get("last_command_id") or 0)
         entries = []
         for key, body in commands:
             next_id += 1
-            entry = {
-                "id": next_id, "key": key, "body": _describe(body),
-                "queued_at": timezone.now().isoformat(),
-                "requested_by": getattr(requested_by, "email", "") or "",
-            }
-            if entry["body"] != body:
-                # A template is biometric data: it waits for the device
-                # encrypted, like the saved templates themselves.
-                from devices.services import templates
-
-                entry["body_encrypted"] = templates.encrypt(body).decode("ascii")
-            entries.append(entry)
-        data["pending_commands"] = pending + entries
+            description = _describe(body)
+            # A template is biometric data: it waits encrypted, like the
+            # saved templates themselves.
+            secret = description != body
+            row = DeviceOutboxCommand.all_objects.create(
+                company_id=device.company_id, device=device, command_id=next_id, key=key,
+                device_user_id=key.split(":")[1] if ":" in key else "",
+                description=description, body="" if secret else body,
+                body_encrypted=templates.encrypt(body) if secret else None,
+                requested_by=getattr(requested_by, "email", "") or "", queued_at=now,
+            )
+            entries.append({"id": row.command_id, "key": key, "body": description})
         data["last_command_id"] = next_id
         state.state_data = data
         state.version = (state.version or 0) + 1
@@ -752,11 +772,25 @@ def take_pending_commands(device):
     At most COMMANDS_PER_POLL go per check-in, in the order they were queued,
     except a server-address change, whose port and host always go together.
     """
+    lines, pending = _take_refresh_queue(device)
+    # Writes waiting in the outbox fill what is left of this check-in; an
+    # address change goes alone.
+    if not any(str(e.get("key", "")).startswith(SERVER_ADDRESS_COMMAND_KEY) for e in pending):
+        more_lines, more = _take_outbox(device, COMMANDS_PER_POLL - len(pending))
+        lines += more_lines
+        pending += more
+    if not lines:
+        return "", []
+    return "\n".join(lines) + "\n", pending
+
+
+def _take_refresh_queue(device):
+    """The DeviceSyncState queue part of a check-in: ``(lines, entries)``."""
     state = _sync_state(device)
     data = dict(state.state_data or {})
     queued = list(data.get("pending_commands") or [])
     if not queued:
-        return "", []
+        return [], []
 
     if any(str(e.get("key", "")).startswith(SERVER_ADDRESS_COMMAND_KEY) for e in queued):
         pending, rest = queued, []
@@ -806,9 +840,43 @@ def take_pending_commands(device):
             device=device, command_ids={e["id"] for e in pending}
         )
 
-    if not lines:
-        return "", []
-    return "\n".join(lines) + "\n", pending
+    return lines, pending
+
+
+def _take_outbox(device, room):
+    """Hand over up to ``room`` outbox writes, oldest first: ``(lines, entries)``.
+
+    The body leaves the database as it is sent. A template that cannot be
+    decrypted (key missing or changed) is marked not sent and skipped, never
+    allowed to stop the device getting the rest.
+    """
+    from devices.models import DeviceOutboxCommand
+    from devices.services import templates
+
+    if room <= 0:
+        return [], []
+    now = timezone.now()
+    lines, entries = [], []
+    with transaction.atomic():
+        rows = list(
+            DeviceOutboxCommand.all_objects.select_for_update()
+            .filter(device=device, status=DeviceOutboxCommand.Status.QUEUED)
+            .order_by("command_id")[:room]
+        )
+        for row in rows:
+            try:
+                body = templates.decrypt(row.body_encrypted) if row.body_encrypted else row.body
+            except templates.TemplateKeyMissing:
+                row.status, row.return_code = DeviceOutboxCommand.Status.DROPPED, "template key missing"
+                row.answered_at = now
+            else:
+                lines.append(f"C:{row.command_id}:{body}")
+                entries.append({"id": row.command_id, "key": row.key, "body": row.description})
+                row.status, row.sent_at = DeviceOutboxCommand.Status.SENT, now
+            row.body, row.body_encrypted = "", None
+            row.save(update_fields=["status", "sent_at", "answered_at", "return_code",
+                                    "body", "body_encrypted", "updated_at"])
+    return lines, entries
 
 
 def _full_body(entry):
@@ -841,16 +909,31 @@ def parse_results(raw_body):
 
 def note_results(device, raw_body):
     """Remember each command's answer next to the command, for the screen."""
+    from devices.models import DeviceOutboxCommand
+
     results = parse_results(raw_body)
     if not results:
         return []
     now = timezone.now().isoformat()
     with transaction.atomic():
+        outbox = {
+            row.command_id: row for row in DeviceOutboxCommand.all_objects.select_for_update()
+            .filter(device=device, command_id__in=[r[0] for r in results])
+        }
+        for command_id, code, _ in results:
+            row = outbox.get(command_id)
+            if row is not None:
+                row.status = (DeviceOutboxCommand.Status.DONE if str(code).isdigit()
+                              else DeviceOutboxCommand.Status.REFUSED)
+                row.return_code, row.answered_at = code, timezone.now()
+                row.save(update_fields=["status", "return_code", "answered_at", "updated_at"])
         state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
         data = dict(state.state_data or {})
         sent = {e.get("id"): e for e in data.get("in_flight_commands") or []}
         remembered = list(data.get("command_results") or [])
         for command_id, code, verb in results:
+            if command_id in outbox:
+                continue
             entry = sent.get(command_id, {})
             remembered.append({
                 "id": command_id, "key": entry.get("key", ""),
@@ -871,18 +954,47 @@ def _describe(body):
 
 
 def recent_results(device, limit=10):
-    """The latest answers, newest first, for the Device users page."""
+    """The latest answers from both queues, newest first, for the screen."""
+    from devices.models import DeviceOutboxCommand
+
     state = DeviceSyncState.all_objects.filter(device=device).first()
-    if not state:
-        return []
-    results = list(reversed((state.state_data or {}).get("command_results") or []))[:limit]
+    results = list((state.state_data or {}).get("command_results") or []) if state else []
+    finished = (
+        DeviceOutboxCommand.all_objects.filter(device=device)
+        .exclude(status__in=[DeviceOutboxCommand.Status.QUEUED, DeviceOutboxCommand.Status.SENT])
+        .order_by("-command_id")[:limit]
+    )
+    results += [
+        {"id": row.command_id, "key": row.key, "command": row.description,
+         "return": row.return_code, "at": (row.answered_at or row.queued_at).isoformat()}
+        for row in finished
+    ]
+    results.sort(key=lambda r: r["id"], reverse=True)
     # 0 or a row count is success; a negative code or "not sent" is not.
-    return [{**r, "ok": str(r.get("return", "")).isdigit()} for r in results]
+    return [{**r, "ok": str(r.get("return", "")).isdigit()} for r in results[:limit]]
 
 
-def pending_summary(device):
+def pending_summary(device, limit=20):
     """Commands still waiting for the device's next poll, for the UI."""
+    from devices.models import DeviceOutboxCommand
+
     state = DeviceSyncState.all_objects.filter(device=device).first()
-    if not state:
-        return []
-    return list((state.state_data or {}).get("pending_commands") or [])
+    pending = list((state.state_data or {}).get("pending_commands") or []) if state else []
+    pending += [
+        {"id": row.command_id, "key": row.key, "body": row.description}
+        for row in DeviceOutboxCommand.all_objects.filter(
+            device=device, status=DeviceOutboxCommand.Status.QUEUED
+        ).order_by("command_id")[:limit]
+    ]
+    return pending[:limit]
+
+
+def waiting_count(device):
+    """How many commands and writes are still waiting for this device."""
+    from devices.models import DeviceOutboxCommand
+
+    state = DeviceSyncState.all_objects.filter(device=device).first()
+    queued = len((state.state_data or {}).get("pending_commands") or []) if state else 0
+    return queued + DeviceOutboxCommand.all_objects.filter(
+        device=device, status=DeviceOutboxCommand.Status.QUEUED
+    ).count()

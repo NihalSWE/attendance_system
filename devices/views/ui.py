@@ -62,7 +62,9 @@ from devices.services.commands import (
     queue_user_delete,
     queue_user_push,
     recent_results,
+    waiting_count,
 )
+from devices.services import mapping as mapping_service
 from devices.services.device_roster import build_roster
 from devices.services.user_sync import SyncNotPossible, sync_device_users
 
@@ -969,7 +971,7 @@ def device_users(request, public_id):
     page = _paginate_rows(
         request, roster,
         search=("pin", "name", "privilege_label", "card_number", "employee_name"),
-        order=("pin", "name", "privilege_label", "fingerprint_count", "face_count",
+        order=(None, "pin", "name", "privilege_label", "fingerprint_count", "face_count",
                "saved_total", "card_number", "has_password", "has_photo",
                "employee_name", None, "counts_for_attendance"),
     )
@@ -980,7 +982,7 @@ def device_users(request, public_id):
         "page": page,
         "search": search,
         "mapping": mapping,
-        "unmapped_count": sum(1 for r in full_roster if not r["is_mapped"]),
+        "unmapped_count": sum(1 for r in full_roster if not r["is_mapped"] and not r["removed_from_device"]),
         "can_refresh": protocol.supports(device, "query_users"),
         # No user writes to a 2.x device until its write form is measured.
         "user_writes": user_writes,
@@ -990,6 +992,9 @@ def device_users(request, public_id):
         "test_user_on_device": any(r["pin"] == TEST_USER_ID for r in full_roster),
         "face_writes_measured": "9" in MEASURED_TEMPLATE_TYPES,
         "recent_results": recent_results(device),
+        # Copy to another device: the company's other devices of this model.
+        "transfer_targets": mapping_service.transfer_targets(device) if user_writes else [],
+        "waiting_count": waiting_count(device),
         "pending_commands": pending_summary(device),
         "last_sync": (
             DeviceMessage.objects.filter(

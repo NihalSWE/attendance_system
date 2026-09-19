@@ -9,7 +9,7 @@ config/urls.py for that reason. The administrator screens live under
 
 from django.urls import path, re_path
 
-from devices.views import ingestion, ui
+from devices.views import ingestion, mapping, ui
 
 app_name = "devices"
 
@@ -65,6 +65,18 @@ ui_urlpatterns = [
         ui.device_user_delete,
         name="device_user_delete",
     ),
+    path(
+        "devices/<uuid:public_id>/users/map-automatically/",
+        mapping.device_map_automatically,
+        name="device_map_automatically",
+    ),
+    path(
+        "devices/<uuid:public_id>/users/transfer/",
+        mapping.device_users_transfer,
+        name="device_users_transfer",
+    ),
+    path("devices/map/employee/", mapping.employee_map, name="employee_map"),
+    path("devices/map/branch/", mapping.employee_bulk_map, name="employee_bulk_map"),
     path(
         "devices/<uuid:public_id>/users/templates/save/",
         ui.device_templates_save,

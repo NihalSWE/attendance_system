@@ -161,25 +161,25 @@ class DeviceUsersTableTests(DeviceTablesTestCase):
         data = self.draw("devices:device_users", self.args)
         self.assertEqual((data["recordsTotal"], data["recordsFiltered"]), (self.ROSTER, self.ROSTER))
         self.assertEqual(len(data["data"]), 10)
-        self.assertEqual(len(data["data"][0]) - 2, 12)
+        self.assertEqual(len(data["data"][0]) - 2, 13)
 
     def test_search_covers_the_rows_not_on_screen(self):
         data = self.draw("devices:device_users", self.args, **{"search[value]": "Worker 12"})
         self.assertEqual(data["recordsFiltered"], 1)
-        self.assertIn("Worker 12", data["data"][0]["1"])
+        self.assertIn("Worker 12", data["data"][0]["2"])
 
     def test_user_ids_sort_as_numbers(self):
         rows = self.draw("devices:device_users", self.args,
-                         **{"order[0][column]": 0, "order[0][dir]": "desc"})["data"]
-        self.assertIn("929", rows[0]["0"])
-        self.assertIn("928", rows[1]["0"])
+                         **{"order[0][column]": 1, "order[0][dir]": "desc"})["data"]
+        self.assertIn("929", rows[0]["1"])
+        self.assertIn("928", rows[1]["1"])
         rows = self.draw("devices:device_users", self.args,
-                         **{"order[0][column]": 0, "order[0][dir]": "asc"})["data"]
-        self.assertIn(">1<", rows[0]["0"].replace(" ", "").replace("\n", ""))
-        self.assertIn(">2<", rows[1]["0"].replace(" ", "").replace("\n", ""))
+                         **{"order[0][column]": 1, "order[0][dir]": "asc"})["data"]
+        self.assertIn(">1<", rows[0]["1"].replace(" ", "").replace("\n", ""))
+        self.assertIn(">2<", rows[1]["1"].replace(" ", "").replace("\n", ""))
 
     def test_every_orderable_column_sorts_and_paging_past_the_end_is_empty(self):
-        for column in range(12):
+        for column in range(13):
             with self.subTest(column=column):
                 self.draw("devices:device_users", self.args,
                           **{"order[0][column]": column, "order[0][dir]": "asc"})

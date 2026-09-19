@@ -3517,3 +3517,46 @@ sent (a second dev server without the key had returned 500 to every poll).
 Next: a second device of the same model for the real device-to-device test
 (so far each template was written back to the device that captured it); the 3A the same way (ATT2 forms) once a 3A is
 reachable; then bulk queueing beyond `MAX_PENDING` for whole fleets.
+
+## Device data flow, part 2: mapping, bulk map, copy between devices — 2026-09-19 (Claude, Ajay's session)
+
+Built on main after the company-departments merge (branch `feature/device-mapping`).
+The Employee ID (the employee's current code) is the device user number.
+
+- **Employees list:** a **Devices** column (Mapped · N / Not mapped, and Finger ·
+  Face when the server holds them), a **Map** button per row and **Bulk map to
+  devices** on the page. Map dialog: the employee's branch shown read-only, a
+  device of that branch (Select2), "Counts from" date, both switches ticked.
+  Bulk map: a branch (read-only when the viewer has one) and all its devices or
+  one. Anyone who may edit employees in the branch (`employees.edit`) may map;
+  both views are in `BRANCH_PAGES`.
+- **Mapping** (`devices/services/mapping.py` `map_employee`, `map_one`,
+  `map_branch`): creates the DeviceEnrollment under the Employee ID (digits only,
+  ≤ 20); refuses another branch's device, a second mapping, a number another
+  person holds there. A person not on the device yet — or on it without a
+  fingerprint/face another same-model device captured — is **sent to it** via
+  `push_to_device` with name, card, role (from any company device that reports
+  them), door permission, fingerprint and face. A start day before today
+  re-checks the company's excluded punches from that day (administrators).
+- **Device users:** **Map automatically by Employee ID** (unmapped users whose
+  number is an employee's current code; nothing written to the device).
+  **Removed from device**: a user absent from the device's latest complete user
+  list (the upload answering "Refresh user list" carries `cmdid`) is kept on
+  the list, marked, sorted last and not counted as unmapped.
+- **Copy users to another device** (Ajay, 2026-09-19): checkboxes with a
+  select-all on Device users; ticking shows a selection bar (count, "Select all
+  N on this device", Clear, the target device, Copy to device). Targets are the
+  company's other devices **of the same model** only. `transfer_users` copies
+  name, card, role, door permission, fingerprint and face from the source's
+  saved templates; a user mapped to an employee on the source is mapped on the
+  target too when it is in that employee's branch. Ticks survive paging.
+- **Outbox** (`DeviceOutboxCommand`, `devices.0007`): device writes now wait in
+  their own table (up to 5,000 per device) instead of the 10-slot refresh queue,
+  handed over 5 per check-in after any refresh commands; answers mark each row
+  done/refused; a template body waits encrypted and is cleared once sent.
+- Shared UI: a native `<dialog>` modal and the selection bar/checkbox in
+  `components.css`; the date picker attaches to a dialog it sits in and follows
+  a value set by script.
+- Tests: `devices/tests_mapping.py` (23); table/template tests updated for the
+  new columns and the outbox. Browser-checked (rendered pages) at 1280 and 375.
+- No `.env` change. Migration `devices.0007`.

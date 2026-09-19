@@ -984,3 +984,279 @@ select.input:disabled {
     flex-direction: column;
     gap: var(--s2);
 }
+
+/* ---------- Modal dialog (native <dialog>, opened with showModal) ----------
+   Top layer, so it sits above the sidebar and topbar. Pop-ups inside it
+   (Select2 with dropdownParent, the date picker) attach to the dialog. */
+.modal {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    max-width: min(520px, calc(100vw - 32px));
+    width: 100%;
+    overflow: visible;
+}
+.modal::backdrop {
+    background: rgba(17, 17, 19, .32);
+    animation: modal-fade .18s ease-out;
+}
+.modal[open] .modal__card {
+    animation: modal-rise .2s cubic-bezier(.2, .8, .2, 1);
+}
+.modal__card {
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 48px);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-ink);
+    color: var(--text);
+}
+.modal__head,
+.modal__foot {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: 16px 20px;
+}
+.modal__head {
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+}
+.modal__head h2 {
+    margin: 0;
+    font-size: 1rem;
+}
+.modal__foot {
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    background: var(--surface-sunken);
+    border-radius: 0 0 var(--r-lg) var(--r-lg);
+}
+.modal__body {
+    padding: 20px;
+    overflow-y: auto;
+}
+.modal__close {
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1.4rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: var(--r);
+}
+.modal__close:hover {
+    background: var(--accent-soft);
+    color: var(--text);
+}
+@keyframes modal-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes modal-rise {
+    from { opacity: 0; transform: translateY(8px) scale(.98); }
+    to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .modal::backdrop,
+    .modal[open] .modal__card { animation: none; }
+}
+
+/* A read-only value laid out like an input (e.g. the branch in the Map dialog). */
+.input--static {
+    display: flex;
+    align-items: center;
+    background: var(--surface-sunken);
+    color: var(--muted);
+}
+
+/* Several small buttons in one table cell. */
+.row-actions {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 4px;
+    white-space: nowrap;
+}
+
+/* ---------- Row selection: custom checkbox + floating selection bar ---------- */
+.pick-cell {
+    width: 40px;
+    padding-right: 0 !important;
+}
+.pick {
+    position: relative;
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+.pick input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+.pick__box {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid var(--field);
+    border-radius: var(--r-sm);
+    background: var(--surface);
+    transition: background .15s ease, border-color .15s ease, transform .1s ease;
+}
+.pick:hover .pick__box { border-color: var(--muted); }
+.pick input:focus-visible + .pick__box { box-shadow: 0 0 0 3px var(--ring); }
+.pick input:checked + .pick__box,
+.pick input:indeterminate + .pick__box {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+.pick input:checked + .pick__box {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E");
+    background-size: 14px;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+.pick input:indeterminate + .pick__box {
+    background-image: linear-gradient(white, white);
+    background-size: 9px 2px;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+.pick input:active + .pick__box { transform: scale(.9); }
+tr.is-picked > td { background: var(--accent-soft) !important; }
+
+.selection-bar {
+    position: sticky;
+    bottom: 16px;
+    z-index: 20;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 12px 16px 16px;
+    padding: 10px 12px 10px 18px;
+    background: var(--accent);
+    color: var(--on-accent);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-ink);
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity .2s ease, transform .22s cubic-bezier(.2, .8, .2, 1);
+}
+.selection-bar--open { opacity: 1; transform: none; }
+.selection-bar__count {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.selection-bar__count .btn { color: var(--on-accent); }
+.selection-bar__count .btn:hover { background: rgba(255, 255, 255, .12); }
+.selection-bar__action {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: min(360px, 100%);
+}
+.selection-bar__action .select2-container { min-width: 200px; flex: 1; }
+.selection-bar .btn--primary {
+    background: var(--on-accent);
+    color: var(--accent);
+    border-color: var(--on-accent);
+}
+@media (prefers-reduced-motion: reduce) {
+    .selection-bar, .pick__box { transition: none; }
+}
+@media (max-width: 640px) {
+    .selection-bar {
+        margin: 12px 8px;
+        padding: 10px 12px;
+    }
+    .selection-bar__count { flex-wrap: wrap; }
+    .selection-bar__action {
+        width: 100%;
+        min-width: 0;
+    }
+    .selection-bar__action .select2-container {
+        min-width: 0;
+        width: auto !important;
+    }
+}
+
+/* ---------- Notice: a message that needs a decision ----------
+   Icon, heading, one line of explanation, the actions together underneath and
+   any fine print last. Unlike .alert (a one-line flash message) it stacks. */
+.notice {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 14px;
+    padding: 18px 20px;
+    margin-bottom: var(--s4, 16px);
+    border-radius: var(--r-lg);
+    border: 1px solid transparent;
+    animation: notice-in .25s ease-out;
+}
+.notice--warning {
+    background: var(--warning-soft);
+    border-color: rgba(154, 106, 18, .18);
+}
+.notice__icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(154, 106, 18, .14);
+    color: var(--warning-ink);
+}
+.notice__icon svg {
+    width: 18px;
+    height: 18px;
+}
+.notice__body {
+    min-width: 0;
+}
+.notice__title {
+    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+.notice__text {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.5;
+    max-width: 68ch;
+}
+.notice__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+.notice__actions form { margin: 0; }
+.notice__hint {
+    margin: 12px 0 0;
+    color: var(--faint);
+    font-size: 12px;
+    line-height: 1.5;
+    max-width: 72ch;
+}
+@keyframes notice-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .notice { animation: none; }
+}
+@media (max-width: 640px) {
+    .notice { grid-template-columns: 1fr; padding: 16px; }
+    .notice__actions .btn { width: 100%; justify-content: center; }
+    .notice__actions form { width: 100%; }
+}

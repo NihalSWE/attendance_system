@@ -8,6 +8,8 @@
     {{ block.super }}
     <script defer src="{% static 'attendance/js/now_badge.js' %}">
     </script>
+    <script defer src="{% static 'base_template/js/device_mapping.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="page__head">
@@ -34,6 +36,11 @@
             <button class="btn btn--ghost" type="button" disabled title="Export is not available yet">
                 Export (unavailable)
             </button>
+            {% if map_branches %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="bulk-map-dialog">
+                    Bulk map to devices
+                </button>
+            {% endif %}
             {% if can_create %}
                 <a class="btn btn--primary" href="{% url 'organization:employee_create' %}">
                     Create employee
@@ -132,6 +139,9 @@
                                 Base rate
                             </th>
                             <th class="no-sort">
+                                Devices
+                            </th>
+                            <th class="no-sort">
                                 Action
                             </th>
                         </tr>
@@ -210,11 +220,38 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if r.can_edit %}
-                                        <a class="btn btn--quiet btn--sm" href="{% url 'organization:employee_edit' r.e.pk %}">
-                                            Edit
-                                        </a>
+                                    {% if r.device.devices %}
+                                        <span class="badge badge--success" title="Mapped on {{ r.device.devices }} device{{ r.device.devices|pluralize }}">
+                                            Mapped · {{ r.device.devices }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--warning">
+                                            Not mapped
+                                        </span>
                                     {% endif %}
+                                    {% if r.device.fingerprint or r.device.face %}
+                                        <div class="t-faint" title="Saved on the server, ready to copy to the company's other devices">
+                                            {% if r.device.fingerprint %}Finger{% endif %}{% if r.device.fingerprint and r.device.face %} · {% endif %}{% if r.device.face %}Face{% endif %}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="row-actions">
+                                        {% if r.can_edit %}
+                                            <a class="btn btn--quiet btn--sm" href="{% url 'organization:employee_edit' r.e.pk %}">
+                                                Edit
+                                            </a>
+                                        {% endif %}
+                                        {% if r.can_map %}
+                                            <button class="btn btn--quiet btn--sm" type="button"
+                                                    data-map-employee="{{ r.e.pk }}"
+                                                    data-map-name="{{ r.e.full_name }}"
+                                                    data-map-code="{{ r.a.employee_code }}"
+                                                    data-map-branch="{{ r.a.branch_id }}">
+                                                Map
+                                            </button>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -245,4 +282,145 @@
             </div>
         {% endif %}
     </div>
+    {% if map_branches %}
+        {{ map_branches|json_script:"map-branches" }}
+        <dialog class="modal" id="map-dialog" aria-labelledby="map-dialog-title">
+            <form class="modal__card" method="post" action="{% url 'devices:employee_map' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <input type="hidden" name="employee" data-map-field="employee">
+                <div class="modal__head">
+                    <h2 id="map-dialog-title">
+                        Map to a device
+                    </h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">
+                        ×
+                    </button>
+                </div>
+                <div class="modal__body stack">
+                    <p class="t-muted">
+                        <strong data-map-field="name"></strong>
+                        — Employee ID <span class="mono" data-map-field="code"></span>.
+                        The device knows them by this number. If they are not on the device yet, they are
+                        sent to it with any fingerprint and face another device of this model captured.
+                    </p>
+                    <div class="field">
+                        <span class="field__label">
+                            Branch
+                        </span>
+                        <div class="input input--static" data-map-field="branch-name"></div>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="map-device">
+                            Device
+                        </label>
+                        <select class="select js-select2" id="map-device" name="device" required data-map-field="device"></select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="map-start">
+                            Counts from
+                        </label>
+                        <input class="input" type="date" id="map-start" name="start_day" data-datepicker data-map-field="start">
+                        <div class="field__help">
+                            Scans from this day count. An earlier day re-checks the scans already received.
+                        </div>
+                    </div>
+                    <label class="check" for="map-enabled">
+                        <input class="check__input" type="checkbox" id="map-enabled" name="attendance_enabled" checked>
+                        <span>
+                            Attendance enabled
+                        </span>
+                    </label>
+                    <label class="check" for="map-assigned">
+                        <input class="check__input" type="checkbox" id="map-assigned" name="assigned" checked>
+                        <span>
+                            Authorised for assigned-devices mode
+                        </span>
+                    </label>
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>
+                        Cancel
+                    </button>
+                    <button class="btn btn--primary" type="submit">
+                        Map
+                    </button>
+                </div>
+            </form>
+        </dialog>
+        <dialog class="modal" id="bulk-map-dialog" aria-labelledby="bulk-map-title">
+            <form class="modal__card" method="post" action="{% url 'devices:employee_bulk_map' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="modal__head">
+                    <h2 id="bulk-map-title">
+                        Bulk map a branch
+                    </h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">
+                        ×
+                    </button>
+                </div>
+                <div class="modal__body stack">
+                    <p class="t-muted">
+                        Every active employee of the branch is mapped under their Employee ID, and anyone
+                        not on the device yet is sent to it. People already mapped are left as they are.
+                    </p>
+                    <div class="field">
+                        <label class="field__label" for="bulk-branch">
+                            Branch
+                        </label>
+                        {% if map_branches|length == 1 %}
+                            <input type="hidden" name="branch" value="{{ map_branches.0.id }}" data-bulk-field="branch">
+                            <div class="input input--static">
+                                {{ map_branches.0.name }}
+                            </div>
+                        {% else %}
+                            <select class="select js-select2" id="bulk-branch" name="branch" required data-bulk-field="branch">
+                                {% for branch in map_branches %}
+                                    <option value="{{ branch.id }}">
+                                        {{ branch.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        {% endif %}
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="bulk-device">
+                            Devices
+                        </label>
+                        <select class="select js-select2" id="bulk-device" name="device" data-bulk-field="device"></select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="bulk-start">
+                            Counts from
+                        </label>
+                        <input class="input" type="date" id="bulk-start" name="start_day" data-datepicker>
+                        <div class="field__help">
+                            Blank means now. An earlier day re-checks the scans already received.
+                        </div>
+                    </div>
+                    <label class="check" for="bulk-enabled">
+                        <input class="check__input" type="checkbox" id="bulk-enabled" name="attendance_enabled" checked>
+                        <span>
+                            Attendance enabled
+                        </span>
+                    </label>
+                    <label class="check" for="bulk-assigned">
+                        <input class="check__input" type="checkbox" id="bulk-assigned" name="assigned" checked>
+                        <span>
+                            Authorised for assigned-devices mode
+                        </span>
+                    </label>
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>
+                        Cancel
+                    </button>
+                    <button class="btn btn--primary" type="submit">
+                        Map the branch
+                    </button>
+                </div>
+            </form>
+        </dialog>
+    {% endif %}
 {% endblock %}
