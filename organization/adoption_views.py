@@ -17,20 +17,23 @@ from django.views.decorators.http import require_http_methods
 from common.choices import ActiveStatus
 from common.tenant import use_company
 from organization.adoption_forms import (
-    AddDesignationForm,
     AdoptionStatusForm,
     CopyAdoptionsForm,
     DepartmentAdoptionForm,
+    DesignationForm,
 )
 from organization.adoption_services import (
-    add_designation,
     adopt_department,
     copy_adoptions_between_branches,
+    create_designation,
     get_adoption_for_edit,
+    get_designation_for_edit,
     set_adoption_status,
     set_designation_status,
     update_adoption,
+    update_designation,
     visible_adoptions,
+    visible_designations,
 )
 from organization.services import (
     require_company_membership,
@@ -193,8 +196,6 @@ def adoption_edit(request, pk):
                 "removed until they are moved."
             ),
             "adoption": adoption,
-            "designations": adoption.designations.order_by("name"),
-            "designation_form": AddDesignationForm(),
         })
 
 
@@ -300,27 +301,108 @@ def adoption_copy(request):
         })
 
 
+def _designation_form_querysets(membership, company_id):
+    with use_company(company_id):
+        departments = (
+            visible_adoptions(membership)
+            .filter(status=ActiveStatus.ACTIVE)
+            .order_by("branch__name", "name")
+        )
+        designations = visible_designations(membership).order_by("name")
+    return departments, designations
+
+
 @login_required
-@require_http_methods(["POST"])
-def designation_add(request, pk):
-    """Add one designation to a department, from the department's edit page."""
+@require_http_methods(["GET"])
+def designation_list(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    form = AddDesignationForm(request.POST)
-    if form.is_valid():
-        try:
-            add_designation(
-                actor=request.user, company_id=company_id, adoption_id=pk,
-                code=form.cleaned_data["code"], name=form.cleaned_data["name"],
-            )
-        except ValidationError as exc:
-            messages.error(request, " ".join(exc.messages))
-        else:
-            messages.success(request, f"{form.cleaned_data['name']} added.")
+    membership = require_company_membership(request.user, company_id)
+    with use_company(company_id):
+        queryset = visible_designations(membership).annotate(
+            employee_count=Count("assignments", distinct=True),
+        )
+        status = request.GET.get("status", "").strip()
+        if status in dict(ActiveStatus.choices):
+            queryset = queryset.filter(status=status)
+        page = paginate(
+            request,
+            queryset.order_by("department__branch__name", "department__name", "name"),
+            search=("name", "code", "department__name", "department__branch__name", "status"),
+            order=("name", "code", "department__name", "department__branch__name",
+                   "status", "employee_count", None),
+        )
+        return render(request, "organization/designation_list.html", {
+            "page": page,
+            "status": status,
+            "statuses": ActiveStatus.choices,
+            "can_manage": membership.role in ("owner", "company_admin"),
+        })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def designation_create(request):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership = require_structure_manager(request.user, company_id)
+    departments, designations = _designation_form_querysets(membership, company_id)
+    if request.method == "POST":
+        form = DesignationForm(request.POST, departments=departments, designations=designations)
+        if form.is_valid():
+            try:
+                designation = create_designation(
+                    actor=request.user, company_id=company_id, values=form.cleaned_data
+                )
+            except ValidationError as exc:
+                _apply_errors(form, exc)
+            else:
+                messages.success(request, f"{designation.name} added.")
+                return redirect("organization:designation_list")
     else:
-        messages.error(request, "Enter a code and a title.")
-    return redirect("organization:adoption_edit", pk=pk)
+        form = DesignationForm(
+            departments=departments, designations=designations,
+            initial={"status": ActiveStatus.ACTIVE},
+        )
+    return render(request, "organization/designation_form.html", {
+        "form": form, "title": "Add a designation", "submit_label": "Add designation",
+    })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def designation_edit(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership, designation = get_designation_for_edit(
+        actor=request.user, company_id=company_id, designation_id=pk
+    )
+    departments, designations = _designation_form_querysets(membership, company_id)
+    if request.method == "POST":
+        form = DesignationForm(
+            request.POST, instance=designation, departments=departments, designations=designations
+        )
+        if form.is_valid():
+            try:
+                update_designation(
+                    actor=request.user, company_id=company_id,
+                    designation_id=designation.pk, values=form.cleaned_data,
+                )
+            except ValidationError as exc:
+                _apply_errors(form, exc)
+            else:
+                messages.success(request, "Designation updated.")
+                return redirect("organization:designation_list")
+    else:
+        form = DesignationForm(
+            instance=designation, departments=departments, designations=designations
+        )
+    return render(request, "organization/designation_form.html", {
+        "form": form, "title": f"Edit {designation.name}", "submit_label": "Save designation",
+    })
 
 
 @login_required
@@ -330,7 +412,6 @@ def designation_status(request, pk):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    department_pk = request.POST.get("department", "")
     try:
         set_designation_status(
             actor=request.user, company_id=company_id, designation_id=pk,
@@ -340,6 +421,4 @@ def designation_status(request, pk):
         messages.error(request, " ".join(exc.messages))
     else:
         messages.success(request, "Designation updated.")
-    if department_pk.isdigit():
-        return redirect("organization:adoption_edit", pk=int(department_pk))
-    return redirect("organization:adoption_list")
+    return redirect("organization:designation_list")

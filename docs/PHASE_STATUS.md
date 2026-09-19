@@ -3415,6 +3415,8 @@ The dev DB was **not** migrated (the running server stays on main); tests build
 a fresh DB. Applying on an existing DB drops the old catalogue/adoption data —
 deliberate.
 
+**Designations have their own screen (2026-09-19):** a separate Organisation → Designations page (list / create / edit / status, `organization:designation_list` etc.) instead of managing them inline on the department; a **Designations** entry was added to the company sidebar next to Departments. Each designation still belongs to one department (chosen on the form) and may name a parent in the same department.
+
 **Not done (decide later):** using `head` (or `parent`) for delegated access —
 the access *rules* were left working as-is, only their model targets swapped.
 

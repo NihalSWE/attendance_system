@@ -11,7 +11,7 @@ from django.core.exceptions import NON_FIELD_ERRORS
 from common.choices import ActiveStatus
 from common.forms import StyledFormMixin
 from employees.models import Employee
-from organization.models import Branch, Department
+from organization.models import Branch, Department, Designation
 
 
 class DepartmentAdoptionForm(StyledFormMixin, forms.ModelForm):
@@ -82,11 +82,39 @@ class DepartmentAdoptionForm(StyledFormMixin, forms.ModelForm):
         )
 
 
-class AddDesignationForm(StyledFormMixin, forms.Form):
-    """Add one designation (job title) to a department."""
+class DesignationForm(StyledFormMixin, forms.ModelForm):
+    """Create or edit one designation (job title) inside a department."""
 
-    code = forms.CharField(max_length=32, label="Code")
-    name = forms.CharField(max_length=255, label="Title")
+    department = forms.ModelChoiceField(
+        queryset=Department.all_objects.none(), label="Department"
+    )
+    parent = forms.ModelChoiceField(
+        queryset=Designation.all_objects.none(), required=False, label="Reports to",
+        help_text="Optional. A senior title in the same department.",
+    )
+
+    class Meta:
+        model = Designation
+        fields = ("department", "code", "name", "parent", "status")
+        help_texts = {"code": "A short code, unique within the department."}
+
+    def __init__(self, *args, departments=None, designations=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if departments is not None:
+            self.fields["department"].queryset = departments
+        if designations is not None:
+            self.fields["parent"].queryset = designations
+        self.fields["department"].empty_label = "Select a department"
+        self.fields["parent"].empty_label = "No parent"
+        if self.instance.pk:
+            # The department is fixed once created: moving a title would reshape
+            # who holds it. Add a new one under another department instead.
+            self.fields["department"].disabled = True
+            self.fields["department"].help_text = "Fixed once created."
+            # A title cannot be its own parent.
+            self.fields["parent"].queryset = self.fields["parent"].queryset.exclude(
+                pk=self.instance.pk
+            )
 
 
 class AdoptionStatusForm(StyledFormMixin, forms.Form):
