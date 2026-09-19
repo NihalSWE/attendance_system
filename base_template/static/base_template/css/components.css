@@ -1297,3 +1297,42 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
 .empty__action {
     margin-top: 16px;
 }
+
+/* Which devices an employee is on (Employees list), and who a device user is. */
+.device-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+.device-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px 2px 6px;
+    border-radius: var(--r-pill);
+    background: var(--success-soft);
+    color: var(--success-ink);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.device-chip svg {
+    width: 12px;
+    height: 12px;
+}
+.device-chip--none {
+    padding: 2px 8px;
+    background: var(--warning-soft);
+    color: var(--warning-ink);
+}
+.device-bio {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 12px;
+}
+.linked-employee {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}

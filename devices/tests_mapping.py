@@ -254,9 +254,9 @@ class ScreenTests(MappingCase):
             mapping.map_employee(actor=self.admin, device=self.device, employee=self.ajay)
         self.client.force_login(self.admin)
         page = self.client.get(reverse("employee_list")).content.decode()
-        self.assertIn("Mapped · 1", page)
-        self.assertIn("Finger · Face", page)
-        self.assertIn("Not mapped", page)
+        self.assertIn('title="Linked on Main Entrance as user 445962"', page)
+        self.assertIn("Finger · Face saved", page)
+        self.assertIn("Not on any device", page)
         self.assertIn("Bulk map to devices", page)
         self.assertIn('data-map-employee="%d"' % self.moin.pk, page)
 

@@ -147,10 +147,10 @@
                         All users
                     </option>
                     <option value="mapped" {% if mapping == 'mapped' %}selected{% endif %}>
-                        Mapped to an employee
+                        Linked to an employee
                     </option>
                     <option value="unmapped" {% if mapping == 'unmapped' %}selected{% endif %}>
-                        Not mapped
+                        Not linked
                     </option>
                 </select>
             </div>
@@ -295,10 +295,17 @@
                                 </td>
                                 <td>
                                     {% if row.employee %}
-                                        {{ row.employee.full_name }}
+                                        <div class="linked-employee">
+                                            <span class="badge badge--success">
+                                                Linked
+                                            </span>
+                                            <a href="{% url 'organization:employee_detail' row.employee.pk %}">
+                                                {{ row.employee.full_name }}
+                                            </a>
+                                        </div>
                                     {% else %}
                                         <span class="badge badge--warning">
-                                            Not mapped
+                                            Not linked
                                         </span>
                                     {% endif %}
                                 </td>

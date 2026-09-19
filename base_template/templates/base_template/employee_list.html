@@ -239,18 +239,23 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if r.device.devices %}
-                                        <span class="badge badge--success" title="Mapped on {{ r.device.devices }} device{{ r.device.devices|pluralize }}">
-                                            Mapped · {{ r.device.devices }}
-                                        </span>
-                                    {% else %}
-                                        <span class="badge badge--warning">
-                                            Not mapped
-                                        </span>
-                                    {% endif %}
+                                    <div class="device-chips">
+                                        {% for d in r.device.names %}
+                                            <span class="device-chip" title="Linked on {{ d.name }} as user {{ d.pin }}">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M5 12.5l4.5 4.5L19 7.5"/>
+                                                </svg>
+                                                {{ d.name }}
+                                            </span>
+                                        {% empty %}
+                                            <span class="device-chip device-chip--none">
+                                                Not on any device
+                                            </span>
+                                        {% endfor %}
+                                    </div>
                                     {% if r.device.fingerprint or r.device.face %}
-                                        <div class="t-faint" title="Saved on the server, ready to copy to the company's other devices">
-                                            {% if r.device.fingerprint %}Finger{% endif %}{% if r.device.fingerprint and r.device.face %} · {% endif %}{% if r.device.face %}Face{% endif %}
+                                        <div class="device-bio" title="Saved on the server, ready to copy to the company's other devices">
+                                            {% if r.device.fingerprint %}Finger{% endif %}{% if r.device.fingerprint and r.device.face %} · {% endif %}{% if r.device.face %}Face{% endif %} saved
                                         </div>
                                     {% endif %}
                                 </td>

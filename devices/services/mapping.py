@@ -662,16 +662,23 @@ def _transfer(actor, source, target, pins):
 
 
 def device_badges(company_id, employee_ids):
-    """``{employee_id: {"devices": n, "fingerprint": bool, "face": bool}}`` for lists."""
+    """``{employee_id: {"devices": n, "names": [...], "fingerprint": bool, "face": bool}}``.
+
+    ``names`` are the devices the employee is linked on, with their device number.
+    """
     now = timezone.now()
-    badges = {pk: {"devices": 0, "fingerprint": False, "face": False} for pk in employee_ids}
+    badges = {pk: {"devices": 0, "names": [], "fingerprint": False, "face": False}
+              for pk in employee_ids}
     pins = {}
     for enrollment in (
         DeviceEnrollment.all_objects.filter(company_id=company_id, employee_id__in=employee_ids)
         .exclude(enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED)
         .filter(effective_from__lte=now).exclude(effective_to__lte=now)
+        .select_related("device").order_by("device__name")
     ):
         badges[enrollment.employee_id]["devices"] += 1
+        badges[enrollment.employee_id]["names"].append(
+            {"name": enrollment.device.name, "pin": enrollment.device_user_id})
         pins.setdefault(enrollment.device_user_id, set()).add(enrollment.employee_id)
     for pin, bio_type in DeviceUserTemplate.all_objects.filter(
         company_id=company_id, device_user_id__in=list(pins)
