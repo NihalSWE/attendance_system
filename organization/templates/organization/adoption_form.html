@@ -53,7 +53,7 @@
 
                     <div class="grid grid--2">
                         {% for field in form %}
-                            {% if field.name != 'designations' and field.name != 'description' %}
+                            {% if field.name != 'description' %}
                                 <div class="field {% if field.errors %}field-invalid{% endif %}">
                                     <label class="field__label" for="{{ field.id_for_label }}">
                                         {{ field.label }}
@@ -91,21 +91,6 @@
                         {% endfor %}
                     </div>
 
-                    <div class="field {% if form.designations.errors %}field-invalid{% endif %}">
-                        <label class="field__label" for="{{ form.designations.id_for_label }}">
-                            {{ form.designations.label }}
-                        </label>
-                        {{ form.designations }}
-                        <div class="field__help">
-                            {{ form.designations.help_text }}
-                        </div>
-                        {% for error in form.designations.errors %}
-                            <p class="field__error">
-                                {{ error }}
-                            </p>
-                        {% endfor %}
-                    </div>
-
                     <div class="form-actions">
                         <button class="btn btn--primary" type="submit">
                             {{ submit_label }}
@@ -122,11 +107,11 @@
             <div class="card">
                 <div class="card__head">
                     <h2>
-                        Current designations
+                        Designations
                     </h2>
                 </div>
-                <div class="card__body">
-                    {% if adoption.designations.all %}
+                <div class="card__body stack">
+                    {% if designations %}
                         <div class="table-wrap">
                             <table class="table">
                                 <thead>
@@ -135,21 +120,30 @@
                                             Designation
                                         </th>
                                         <th>
+                                            Code
+                                        </th>
+                                        <th>
                                             Status
                                         </th>
                                         <th class="numeric">
                                             Employees
                                         </th>
+                                        <th class="numeric">
+                                            Action
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for link in adoption.designations.all %}
+                                    {% for title in designations %}
                                         <tr>
                                             <td>
-                                                {{ link.designation.name }}
+                                                {{ title.name }}
                                             </td>
                                             <td>
-                                                {% if link.status == 'active' %}
+                                                {{ title.code }}
+                                            </td>
+                                            <td>
+                                                {% if title.status == 'active' %}
                                                     <span class="badge badge--success">
                                                         Active
                                                     </span>
@@ -160,7 +154,24 @@
                                                 {% endif %}
                                             </td>
                                             <td class="numeric">
-                                                {{ link.assignments.count }}
+                                                {{ title.assignments.count }}
+                                            </td>
+                                            <td class="numeric">
+                                                <form method="post" action="{% url 'organization:designation_status' title.pk %}">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="department" value="{{ adoption.pk }}">
+                                                    {% if title.status == 'active' %}
+                                                        <input type="hidden" name="status" value="inactive">
+                                                        <button class="btn btn--ghost btn--sm" type="submit">
+                                                            Deactivate
+                                                        </button>
+                                                    {% else %}
+                                                        <input type="hidden" name="status" value="active">
+                                                        <button class="btn btn--ghost btn--sm" type="submit">
+                                                            Activate
+                                                        </button>
+                                                    {% endif %}
+                                                </form>
                                             </td>
                                         </tr>
                                     {% endfor %}
@@ -173,10 +184,33 @@
                                 No designations yet
                             </div>
                             <div class="empty__text">
-                                Tick the designations this department uses above.
+                                Add the job titles this department uses below.
                             </div>
                         </div>
                     {% endif %}
+
+                    <form method="post" action="{% url 'organization:designation_add' adoption.pk %}" class="stack">
+                        {% csrf_token %}
+                        <div class="grid grid--2">
+                            <div class="field">
+                                <label class="field__label" for="{{ designation_form.code.id_for_label }}">
+                                    {{ designation_form.code.label }}
+                                </label>
+                                {{ designation_form.code }}
+                            </div>
+                            <div class="field">
+                                <label class="field__label" for="{{ designation_form.name.id_for_label }}">
+                                    {{ designation_form.name.label }}
+                                </label>
+                                {{ designation_form.name }}
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button class="btn btn--ghost" type="submit">
+                                Add designation
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
         {% endif %}

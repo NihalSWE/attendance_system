@@ -750,8 +750,8 @@ def payslip_records():
     """Payslips with everything the page reads. Call inside the company's context."""
     return PayrollRecord.objects.select_related(
         "employee", "payroll_run__payroll_period",
-        "employee_assignment_at_period_end__department__department",
-        "employee_assignment_at_period_end__designation__designation",
+        "employee_assignment_at_period_end__department",
+        "employee_assignment_at_period_end__designation",
         "employee_assignment_at_period_end__branch",
     )
 

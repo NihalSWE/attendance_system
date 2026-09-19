@@ -81,7 +81,7 @@ def my_account(request):
         if employee is not None:
             placement = (
                 EmployeeAssignment.objects.select_related(
-                    "branch", "department__department", "designation__designation"
+                    "branch", "department", "designation"
                 )
                 .filter(employee=employee, effective_to__isnull=True)
                 .exclude(status__in=["cancelled", "draft"])

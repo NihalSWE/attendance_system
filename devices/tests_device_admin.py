@@ -25,7 +25,7 @@ from devices.services.commands import (
 from devices.services.user_sync import SyncNotPossible, sync_device_users
 from employees.models import Employee
 from organization.catalogue import adopt_department, adopt_designation
-from organization.models import Branch, CompanyDepartment, CompanyDesignation
+from organization.models import Branch, Department, Designation
 from tenants.models import Company
 
 
@@ -242,8 +242,8 @@ class DeviceUserSyncTests(TestCase):
         with use_company(self.company):
             # Only this company's adoption rows are removed. The root
             # catalogue is shared and is not a tenant's to delete.
-            CompanyDesignation.objects.all().delete()
-            CompanyDepartment.objects.all().delete()
+            Designation.objects.all().delete()
+            Department.objects.all().delete()
             with self.assertRaises(SyncNotPossible):
                 sync_device_users(device=self.device)
 

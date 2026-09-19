@@ -11,8 +11,6 @@ from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from employees.services import create_employee, revise_compensation, transfer_employee
 from organization.models import (
     Branch,
-    CompanyDepartment,
-    CompanyDesignation,
     Department,
     Designation,
 )
@@ -26,30 +24,20 @@ def dt(y, m, d):
 
 class EmployeeServiceTests(TestCase):
     def setUp(self):
-        # Root-owned catalogue.
-        software_entry = Department.objects.create(code="SW", name="Software")
-        sales_entry = Department.objects.create(code="SL", name="Sales")
-        dev_entry = Designation.objects.create(
-            code="DEV", name="Developer"
-        )
-        rep_entry = Designation.objects.create(
-            code="REP", name="Sales Rep"
-        )
-
         self.company = onboard_company(code="ACME", slug="acme", name="Acme Ltd")
         with use_company(self.company):
             self.branch = Branch.objects.get()
-            self.software = CompanyDepartment.objects.create(
-                branch=self.branch, department=software_entry
+            self.software = Department.objects.create(
+                branch=self.branch, code="SW", name="Software"
             )
-            self.sales = CompanyDepartment.objects.create(
-                branch=self.branch, department=sales_entry
+            self.sales = Department.objects.create(
+                branch=self.branch, code="SL", name="Sales"
             )
-            self.dev = CompanyDesignation.objects.create(
-                company_department=self.software, designation=dev_entry
+            self.dev = Designation.objects.create(
+                department=self.software, code="DEV", name="Developer"
             )
-            self.rep = CompanyDesignation.objects.create(
-                company_department=self.sales, designation=rep_entry
+            self.rep = Designation.objects.create(
+                department=self.sales, code="REP", name="Sales Rep"
             )
             self.shift = Shift.objects.create(
                 code="DAY", name="Day", start_time=time(9), end_time=time(18),

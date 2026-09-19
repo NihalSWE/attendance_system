@@ -378,7 +378,7 @@ def review_queue(company_id, branches=ALL_BRANCHES):
     with use_company(company_id):
         rows = list(access.scope(
             AttendanceRecord.objects.select_related(
-                "employee", "shift", "employee_assignment__department__department",
+                "employee", "shift", "employee_assignment__department",
             )
             .filter(review_status=ReviewStatus.NEEDS_REVIEW, is_open=False)
             .order_by("work_date", "employee__first_name", "pk"),

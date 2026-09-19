@@ -189,16 +189,7 @@ class TableTests(OvertimeBase):
         self.assertContains(html, "Showing 1–2 of 2")
         self.assertContains(html, "Showing 1–1 of 1")
 
-    def test_company_and_platform_department_lists_are_server_side(self):
+    def test_company_department_list_is_server_side(self):
         data = self.draw("department_list", **{"order[0][column]": 4, "order[0][dir]": "desc"})
         self.assertEqual((data["recordsTotal"], len(data["data"][0]) - 2), (1, 5))
         self.assertIn("Software", data["data"][0]["1"])
-        self.client.force_login(User.objects.create_superuser(email="root@tables.test", password="pw-12345678"))
-        for name, columns in (("catalogue:department_list", 6), ("catalogue:designation_list", 5)):
-            with self.subTest(screen=name):
-                data = self.draw(name)
-                self.assertGreater(data["recordsTotal"], 0)
-                self.assertEqual(len(data["data"][0]) - 2, columns)
-                for column in range(columns):
-                    self.draw(name, **{"order[0][column]": column, "order[0][dir]": "desc"})
-                self.assertEqual(self.draw(name, **{"search[value]": "NeverMatchesAnything"})["data"], [])

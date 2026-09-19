@@ -19,7 +19,7 @@ from django import forms
 from common.choices import ActiveStatus
 from common.forms import StyledFormMixin
 from employees.models import Employee, EmployeeCompensation
-from organization.models import Branch, CompanyDepartment, CompanyDesignation
+from organization.models import Branch, Department, Designation
 
 
 class EmployeeCreateForm(StyledFormMixin, forms.Form):
@@ -43,12 +43,12 @@ class EmployeeCreateForm(StyledFormMixin, forms.Form):
         queryset=Branch.all_objects.none(), label="Branch"
     )
     department = forms.ModelChoiceField(
-        queryset=CompanyDepartment.all_objects.none(),
+        queryset=Department.all_objects.none(),
         label="Department",
         help_text="Only departments added to this branch are listed.",
     )
     designation = forms.ModelChoiceField(
-        queryset=CompanyDesignation.all_objects.none(),
+        queryset=Designation.all_objects.none(),
         label="Designation",
         help_text="Only designations assigned to the chosen department are listed.",
     )
@@ -91,7 +91,7 @@ class EmployeeCreateForm(StyledFormMixin, forms.Form):
         branch = self._chosen("branch", Branch)
         self.fields["department"].queryset = self._departments_for(branch)
 
-        department = self._chosen("department", CompanyDepartment)
+        department = self._chosen("department", Department)
         self.fields["designation"].queryset = self._designations_for(department)
 
     def _chosen(self, field, model):
@@ -103,25 +103,23 @@ class EmployeeCreateForm(StyledFormMixin, forms.Form):
     @staticmethod
     def _departments_for(branch):
         if branch is None:
-            return CompanyDepartment.objects.none()
+            return Department.objects.none()
         return (
-            CompanyDepartment.objects.filter(
+            Department.objects.filter(
                 branch=branch, status=ActiveStatus.ACTIVE
             )
-            .select_related("department")
-            .order_by("department__name")
+            .order_by("name")
         )
 
     @staticmethod
     def _designations_for(department):
         if department is None:
-            return CompanyDesignation.objects.none()
+            return Designation.objects.none()
         return (
-            CompanyDesignation.objects.filter(
-                company_department=department, status=ActiveStatus.ACTIVE
+            Designation.objects.filter(
+                department=department, status=ActiveStatus.ACTIVE
             )
-            .select_related("designation")
-            .order_by("designation__name")
+            .order_by("name")
         )
 
     def clean_effective_from(self):
@@ -148,7 +146,7 @@ class EmployeeCreateForm(StyledFormMixin, forms.Form):
             self.add_error(
                 "department", "That department is not added to this branch."
             )
-        if department and designation and designation.company_department_id != department.pk:
+        if department and designation and designation.department_id != department.pk:
             self.add_error(
                 "designation", "That designation is not assigned to this department."
             )

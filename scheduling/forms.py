@@ -7,7 +7,7 @@ from django import forms
 
 from common.choices import ActiveStatus
 from common.forms import StyledFormMixin
-from organization.models import Branch, CompanyDepartment
+from organization.models import Branch, Department
 from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
 from scheduling.services import scheduled_minutes_between, spans_next_day
 
@@ -193,7 +193,7 @@ class DepartmentShiftForm(StyledFormMixin, forms.Form):
     """Give one department its shift from a date."""
 
     department = forms.ModelChoiceField(
-        queryset=CompanyDepartment.all_objects.none(), label="Department"
+        queryset=Department.all_objects.none(), label="Department"
     )
     shift = forms.ModelChoiceField(queryset=Shift.all_objects.none(), label="Shift")
     effective_from = forms.DateField(
@@ -211,7 +211,7 @@ class DepartmentShiftForm(StyledFormMixin, forms.Form):
         self.fields["department"].empty_label = "Select a department"
         self.fields["shift"].empty_label = "Select a shift"
         self.fields["department"].label_from_instance = (
-            lambda adoption: f"{adoption.department.name} ({adoption.branch.name})"
+            lambda dept: f"{dept.name} ({dept.branch.name})"
         )
 
 

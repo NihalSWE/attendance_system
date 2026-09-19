@@ -21,8 +21,6 @@ from common.tenant import use_company
 from employees.services import create_employee
 from organization.models import (
     Branch,
-    CompanyDepartment,
-    CompanyDesignation,
     Department,
     Designation,
 )
@@ -44,26 +42,17 @@ class PermissionResolutionTests(TestCase):
             feature=self.leave_feature, code="leave.approve",
             name="Approve leave", action="approve",
         )
-        # Root-owned catalogue, shared by every company on the platform.
-        self.software = Department.objects.create(code="SW", name="Software")
-        self.manager_entry = Designation.objects.create(
-            code="MGR", name="Manager"
-        )
-        self.dev_entry = Designation.objects.create(
-            code="DEV", name="Developer"
-        )
-
         self.company = onboard_company(code="ACME", slug="acme", name="Acme Ltd")
         with use_company(self.company):
             self.branch = Branch.objects.get()
-            self.department = CompanyDepartment.objects.create(
-                branch=self.branch, department=self.software
+            self.department = Department.objects.create(
+                branch=self.branch, code="SW", name="Software"
             )
-            self.manager_title = CompanyDesignation.objects.create(
-                company_department=self.department, designation=self.manager_entry
+            self.manager_title = Designation.objects.create(
+                department=self.department, code="MGR", name="Manager"
             )
-            self.dev_title = CompanyDesignation.objects.create(
-                company_department=self.department, designation=self.dev_entry
+            self.dev_title = Designation.objects.create(
+                department=self.department, code="DEV", name="Developer"
             )
             CompanyFeature.objects.create(
                 company=self.company, feature=self.leave_feature, effect="enable"
@@ -142,12 +131,12 @@ class PermissionResolutionTests(TestCase):
         other = onboard_company(code="B", slug="b", name="Company B")
         with use_company(other):
             branch = Branch.objects.get()
-            # The very same catalogue rows Acme adopted, adopted again here.
-            dept = CompanyDepartment.objects.create(
-                branch=branch, department=self.software
+            # Company B has its own department and designation.
+            dept = Department.objects.create(
+                branch=branch, code="SW", name="Software"
             )
-            title = CompanyDesignation.objects.create(
-                company_department=dept, designation=self.manager_entry
+            title = Designation.objects.create(
+                department=dept, code="MGR", name="Manager"
             )
         employee = create_employee(
             company=other, first_name="Zed", employee_code="Z1", branch=branch,
@@ -251,11 +240,11 @@ class PermissionResolutionTests(TestCase):
         other = onboard_company(code="C", slug="c", name="Company C")
         with use_company(other):
             branch = Branch.objects.get()
-            dept = CompanyDepartment.objects.create(
-                branch=branch, department=self.software
+            dept = Department.objects.create(
+                branch=branch, code="SW", name="Software"
             )
-            title = CompanyDesignation.objects.create(
-                company_department=dept, designation=self.manager_entry
+            title = Designation.objects.create(
+                department=dept, code="MGR", name="Manager"
             )
             CompanyFeature.objects.create(
                 company=other, feature=self.leave_feature, effect="enable"
@@ -265,7 +254,7 @@ class PermissionResolutionTests(TestCase):
             department=dept, designation=title, effective_from=dt(2024, 1, 1),
             pay_basis="monthly", base_rate=Decimal("100"),
         )["employee"]
-        # Same catalogue department, different adoption row: nothing carries over.
+        # Another company's own department: nothing carries over.
         self.assertFalse(has_permission(outsider, "leave.approve", NOW))
 
     # --- effective permission set -------------------------------------------------

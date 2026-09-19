@@ -19,7 +19,7 @@ from django.urls import reverse
 from accounts.models import CompanyMembership
 from common.tenant import use_company
 from organization.catalogue import adopt_department, adopt_designation
-from organization.models import Branch, CompanyDepartment
+from organization.models import Branch, Department
 from scheduling.models import CompanyAttendanceSettings, Shift
 from tenants.models import Company
 
@@ -137,12 +137,7 @@ class CompanyShellViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Company A")
 
-    def test_department_list_shows_catalogue_name_through_the_adoption_row(self):
-        """CompanyDepartment has no name column of its own.
-
-        It proxies the catalogue, so this asserts the real name reaches the
-        page — a broken read-through would render an empty cell, not an error.
-        """
+    def test_department_list_shows_the_department_name(self):
         response = self.client.get(reverse("department_list"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Software")
@@ -153,7 +148,7 @@ class CompanyShellViewTests(TestCase):
         # The reverse accessor is tenant-scoped, so it needs a company context
         # here exactly as a view gets one from TenantMiddleware.
         with use_company(self.company):
-            adoption = CompanyDepartment.objects.get(pk=self.department.pk)
+            adoption = Department.objects.get(pk=self.department.pk)
             self.assertEqual(adoption.designations.count(), 1)
         self.assertContains(response, "Software")
 

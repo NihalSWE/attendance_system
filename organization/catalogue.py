@@ -1,59 +1,26 @@
-"""Helpers for creating a catalogue entry and adopting it into a company.
+"""Helpers for creating a company's departments and designations.
 
-Departments and designations are root-owned catalogues: root curates the names,
-and a company adopts the ones it uses into its own branches. That is two writes
-where it used to be one, and the second write is easy to forget — which is how a
-company-specific fact ends up hanging off a row every tenant shares.
+Departments and designations are company-owned again (see PHASE_STATUS.md): a
+department lives in a branch, a designation lives in a department. These wrap the
+plain creates for callers that legitimately create structure directly — the demo
+seeder and tests. Real UI flows go through ``organization.services`` with
+authorization, audit and a form.
 
-These wrap the pair. In production the two halves belong to different people
-(root curates, a company administrator adopts), so this module is for callers
-that legitimately play both parts: the demo seeder and tests.
-
-Real UI flows must not use these — they need authorization, audit and a form,
-and they will live in ``organization.services``.
+The names ``adopt_department`` / ``adopt_designation`` are kept for their many
+callers; there is no longer a separate root catalogue to "adopt" from — each
+call simply creates the company's own row. Requires an active tenant context.
 """
 
-from organization.models import (
-    CompanyDepartment,
-    CompanyDesignation,
-    Department,
-    Designation,
-)
-
-
-def ensure_department(code, name, **defaults):
-    """Return the platform department for ``name``, creating it if new."""
-    department, _ = Department.objects.get_or_create(
-        name=name, defaults={"code": code, **defaults}
-    )
-    return department
-
-
-def ensure_designation(code, name, **defaults):
-    """Return the platform designation for ``name``, creating it if new.
-
-    Takes no department: root keeps designations as a flat list, and which
-    departments use one is each company's decision.
-    """
-    designation, _ = Designation.objects.get_or_create(
-        name=name, defaults={"code": code, **defaults}
-    )
-    return designation
+from organization.models import Department, Designation
 
 
 def adopt_department(branch, code, name, **kwargs):
-    """Adopt a catalogue department into ``branch``, creating the entry if new.
-
-    Requires an active tenant context, since the adoption row is tenant-owned.
-    """
-    return CompanyDepartment.objects.create(
-        branch=branch, department=ensure_department(code, name), **kwargs
-    )
+    """Create a department in ``branch`` (company comes from the tenant context)."""
+    return Department.objects.create(branch=branch, code=code, name=name, **kwargs)
 
 
-def adopt_designation(company_department, code, name, **kwargs):
-    """Assign a platform designation to one of the company's own departments."""
-    designation = ensure_designation(code, name)
-    return CompanyDesignation.objects.create(
-        company_department=company_department, designation=designation, **kwargs
+def adopt_designation(department, code, name, **kwargs):
+    """Create a designation inside ``department``."""
+    return Designation.objects.create(
+        department=department, code=code, name=name, **kwargs
     )

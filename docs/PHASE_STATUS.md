@@ -3375,3 +3375,56 @@ say how to limit each to the viewer's branches with `branches_for` /
 **Still needs data, not code:** first salaries for Nihal, Dia and Ajay (D
 Company, skipped by the September draft) — pay basis and rate from Nihal.
 
+## 2026-09-19 — Departments and designations back to company level (Nihal)
+
+Branch `feature/company-departments`, from main `54aa0a0`. Reverses the
+2026-09-09 "root-owned catalogue + adoption" decision (see "Root-owned
+department/designation catalogue"): **departments and designations are
+company-owned again.** Data loss for the old catalogue/adoption rows was
+accepted by the owner.
+
+**Models (organization/models.py):**
+- `Department` is `TenantOwned` again: branch, code, name, **head**,
+  description, status, opened_on, closed_on. Unique `(branch, code)` and
+  `(branch, name)`.
+- `Designation` is `TenantOwned` again: department, **parent** (kept; how it
+  drives access is decided later), hierarchy_level, code, name, status. Unique
+  `(department, code)`, and the same-department / no-cycle `clean()`.
+- `CompanyDepartment` and `CompanyDesignation` are **removed**.
+
+**FK repoints (field names kept, logic untouched):** EmployeeAssignment,
+scheduling.DepartmentShift, access_control.DepartmentPermission /
+DesignationPermission and both `allowed_departments` M2Ms
+(accounts.CompanyMembership, access_control.EmployeePermissionOverride),
+devices.DeviceDepartment — all now point at Department / Designation. The
+`DepartmentPermission.company_department` field name is deliberately kept so
+the access framework code reads unchanged.
+
+**UI:** the root catalogue screens (`organization.catalogue_*`, `platform/`
+templates, and the `platform/` catalogue URL include) are removed. The company
+"adoption" screens are repurposed into company department CRUD
+(`organization.adoption_*`, URL names kept): create/edit a department with
+code + name + head + status, and manage its designations on the edit page
+(`designation_add`, `designation_status`). The `adopt_department` /
+`adopt_designation` helpers keep their signatures but now create the company's
+own rows.
+
+**Migrations (destructive; data loss accepted):** organization 0005/0006,
+plus AlterField in employees, scheduling, access_control, accounts, devices.
+The dev DB was **not** migrated (the running server stays on main); tests build
+a fresh DB. Applying on an existing DB drops the old catalogue/adoption data —
+deliberate.
+
+**Not done (decide later):** using `head` (or `parent`) for delegated access —
+the access *rules* were left working as-is, only their model targets swapped.
+
+**Nav (Ajay's — needs his edit):** the platform sidebar links to the removed
+catalogue screens were removed to unbreak the platform pages; the company
+sidebar "Departments" item still resolves (organization:adoption_list).
+
+**Tests:** full suite 1124, OK. Obsolete catalogue/adoption/migration tests
+removed (`organization/tests_catalogue.py`, `tests_adoption.py`,
+`tests_migrations.py`); `organization/tests.py` rewritten for the company-owned
+model. Fresh CRUD-screen tests for the repurposed department pages are a
+follow-up worth adding.
+
