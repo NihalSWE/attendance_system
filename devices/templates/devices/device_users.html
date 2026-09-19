@@ -57,7 +57,9 @@
             </form>
             {% if branch_employee_count %}
                 <form method="post" action="{% url 'devices:device_load' device.public_id %}"
-                      onsubmit="return confirm('Send all {{ branch_employee_count }} employee(s) of {{ device.branch.name|escapejs }} to {{ device.name|escapejs }}, with their card, fingerprint and face where saved?')">
+                      data-confirm-title="Load employees onto {{ device.name }}?"
+                      data-confirm="All {{ branch_employee_count }} active employee{{ branch_employee_count|pluralize }} of {{ device.branch.name }} will be sent to this device with their Employee ID and name, plus their card, fingerprint and face wherever the company has them. People already on it are updated, not duplicated."
+                      data-confirm-button="Load {{ branch_employee_count }} employee{{ branch_employee_count|pluralize }}">
                     {% csrf_token %}
                     <button class="btn btn--ghost" type="submit"
                             title="Sends every employee of {{ device.branch.name }} to this device, with the fingerprint and face the company keeps for them">
@@ -322,7 +324,9 @@
                                         </form>
                                         <form method="post"
                                               action="{% url 'devices:device_user_delete' device.public_id %}"
-                                              onsubmit="return confirm('Remove device user {{ row.pin }} from {{ device.name|escapejs }}?\n\nThis destroys their face and fingerprint on this terminal. Those cannot be restored from the software — the person must be enrolled again in person. Punch history is kept.')">
+                                              data-confirm-title="Remove user {{ row.pin }} from {{ device.name }}?"
+                                              data-confirm="Their face and fingerprint are deleted from this terminal. The copy saved in the software stays, so they can be sent back later. Their punch history is kept."
+                                              data-confirm-button="Remove from device" data-confirm-tone="danger">
                                             {% csrf_token %}
                                             <input type="hidden" name="device_user_id" value="{{ row.pin }}">
                                             <button class="btn btn--quiet btn--sm" type="submit"
@@ -509,7 +513,9 @@
                 {% endif %}
                 {% if test_user_on_device %}
                     <form method="post" action="{% url 'devices:device_user_delete' device.public_id %}"
-                          onsubmit="return confirm('Remove test user {{ test_user_id }} from {{ device.name|escapejs }}? Only user {{ test_user_id }} is removed.')">
+                          data-confirm-title="Remove test user {{ test_user_id }}?"
+                          data-confirm="Only user {{ test_user_id }} is removed from {{ device.name }}."
+                          data-confirm-button="Remove" data-confirm-tone="danger">
                         {% csrf_token %}
                         <input type="hidden" name="device_user_id" value="{{ test_user_id }}">
                         <button class="btn btn--ghost" type="submit">
