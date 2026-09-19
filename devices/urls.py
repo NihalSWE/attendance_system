@@ -66,6 +66,16 @@ ui_urlpatterns = [
         name="device_user_delete",
     ),
     path(
+        "devices/<uuid:public_id>/users/templates/save/",
+        ui.device_templates_save,
+        name="device_templates_save",
+    ),
+    path(
+        "devices/<uuid:public_id>/users/templates/trial/",
+        ui.device_template_trial,
+        name="device_template_trial",
+    ),
+    path(
         "devices/<uuid:public_id>/command/",
         ui.device_command,
         name="device_command",

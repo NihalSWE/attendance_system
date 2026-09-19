@@ -166,12 +166,16 @@ SERVER_ADDRESS_COMMAND_KEY = "set_server_address"
 #   Pin      the user id, and the upsert key      (lowercase 'pin' is ignored)
 #   Name     display name                         (lowercase 'name' is ignored)
 #   CardNo   card number                          ('Card' is ignored)
-#   Pri      privilege: 0 normal, 14 super admin
-#   Grp      access group
+#   Privilege  0 normal, 2 enroller, 6 admin, 14 super admin. Measured
+#            2026-09-19 (office 2A, test user 99999): 'Pri=14' answered
+#            Return=0 and changed nothing; 'Privilege=14' read back as
+#            privilege=14 and opened the admin menu.
+#   Grp      access group (not measured; the device keeps group=1)
 #
 # Verified: re-sending an existing Pin updates that row rather than adding a
-# second one (row count stayed constant while the values changed).
-USER_WRITE_FIELDS = ("Pin", "Name", "CardNo", "Pri", "Grp")
+# second one (row count stayed constant while the values changed), and keeps
+# its fingerprint and door permission (2026-09-19).
+USER_WRITE_FIELDS = ("Pin", "Name", "CardNo", "Privilege", "Grp")
 
 # DANGER, measured on real hardware: "DATA DELETE user uid=<n>" returns
 # Return=0 and DELETES EVERY USER ON THE DEVICE, including their enrolled
@@ -194,16 +198,68 @@ def build_user_update(*, device_user_id, name="", card_number="", privilege=0, g
         "Pin": str(device_user_id),
         "Name": (name or "")[:24],
         "CardNo": str(card_number or ""),
-        "Pri": str(int(privilege)),
+        "Privilege": str(int(privilege)),
         "Grp": str(int(group)),
     }
     body = "\t".join(f"{field}={values[field]}" for field in USER_WRITE_FIELDS)
     return f"DATA UPDATE user {body}"
 
 
+# An access-control device (DeviceType=acc, the SenseFace 2A) also needs a
+# door permission, or it recognises the person and refuses them: "Invalid time
+# period", rtlog event 23. Measured 2026-09-19 on the office 2A with test user
+# 99999: this answered Return=0, the userauthorize row count went 3 -> 4 and
+# the person was let through. Time zone 1 and door 1 are the device defaults
+# the users enrolled at the terminal have. The device counts this table when
+# asked but does not upload its rows.
+def build_access_grant(*, device_user_id):
+    """Build the DATA UPDATE body that lets one user through door 1, time zone 1."""
+    return (
+        f"DATA UPDATE userauthorize Pin={device_user_id}"
+        "\tAuthorizeTimezoneId=1\tAuthorizeDoorId=1"
+    )
+
+
+def needs_access_grant(device):
+    """True for an access-control device, which refuses users without one."""
+    settings = device.settings or {}
+    announced = settings.get("announced") or {}
+    return (announced.get("device_type") or settings.get("device_type") or "").lower() == "acc"
+
+
 def build_user_delete(*, device_user_id):
     """Build the DATA DELETE body that removes exactly one device user."""
     return f"DATA DELETE user Pin={device_user_id}"
+
+
+# Writing a fingerprint or face template (PushSDK 3.x ``biodata`` table). The
+# field names follow the write spelling measured for ``user`` above (capital
+# first letter), in the order the device uploads them.
+#
+# Measured 2026-09-19 on the office 2A (PushSDK 3.x): Nihal's fingerprint
+# (Type 1, MajorVer 13), captured by this device, written to test user 99999
+# answered Return=0 and the device then identified Nihal's finger as 99999.
+# Ajay's face (Type 9, MajorVer 40, MinorVer 1), finger and card, written back
+# after he removed himself on the terminal, were each recognised as him. An
+# unmeasured type still goes only to TEST_USER_ID. User writes to a 2.x device
+# (the 3A) are refused whatever the type, until measured on a 3A.
+TEMPLATE_WRITE_FIELDS = (
+    ("Pin", None), ("No", "no"), ("Index", "index"), ("Valid", "valid"),
+    ("Duress", "duress"), ("Type", "type"), ("MajorVer", "major_version"),
+    ("MinorVer", "minor_version"), ("Format", "format"), ("Tmp", "template"),
+)
+MEASURED_TEMPLATE_TYPES = {"1", "9"}
+#: Where an unmeasured template type may still be written, to measure it.
+TEST_USER_ID = "99999"
+
+
+def build_template_update(*, device_user_id, template):
+    """Build the DATA UPDATE body that writes one template for one device user."""
+    values = {"Pin": str(device_user_id)}
+    for field, key in TEMPLATE_WRITE_FIELDS[1:]:
+        values[field] = str(template.get(key) or "")
+    body = "\t".join(f"{field}={values[field]}" for field, _ in TEMPLATE_WRITE_FIELDS)
+    return f"DATA UPDATE biodata {body}"
 
 # A device that has been offline for a long time should not receive a pile of
 # stale refresh requests the moment it reconnects.
@@ -404,6 +460,105 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
     )
 
 
+ROLE_PRIVILEGES = (0, 2, 6, 14)
+
+
+def push_to_device(device, device_user_id, name="", card="", role=0,
+                   finger_template=None, face_template=None, requested_by=None):
+    """Write one person to a device: user record, card, fingerprint and face.
+
+    The seam agreed with Nihal (2026-09-19): plain values only, never an
+    employee, so the later employee-to-device-user mapping calls this with what
+    it resolved. A template is the dict ``templates.as_payload`` returns (the
+    device's own fields plus ``template`` and ``device_model_id``), or None.
+
+    On an access-control device the door permission goes with the user
+    record (``build_access_grant``); without it the device refuses them.
+    Everything is queued together or not at all, user record first, so the
+    device never gets a template for a user it does not have. Returns
+    ``(entries, error)``.
+    """
+    clean_id, error = _validated_user_id(device_user_id)
+    if error:
+        return [], error
+    error = _unverified_user_writes(device)
+    if error:
+        return [], error
+    try:
+        role = int(role)
+    except (TypeError, ValueError):
+        role = -1
+    if role not in ROLE_PRIVILEGES:
+        return [], "Unknown privilege level."
+    card = str(card or "").strip()
+    if card and not card.isdigit():
+        return [], "The card number must be digits only."
+
+    templates = [t for t in (finger_template, face_template) if t]
+    unmeasured = [t for t in templates if str(t.get("type")) not in MEASURED_TEMPLATE_TYPES]
+    if unmeasured and clean_id != TEST_USER_ID:
+        return [], (
+            "Writing this kind of template is not measured on this device model yet. "
+            f"Until it is, it is written only to test user {TEST_USER_ID}."
+        )
+    for template in templates:
+        if template.get("device_model_id") != device.device_model_id:
+            return [], (
+                "That template was captured on another device model; fingerprints "
+                "and faces only transfer between devices of the same model."
+            )
+        if not str(template.get("template") or "").strip():
+            return [], "A template is empty."
+
+    commands = [(
+        f"push_user:{clean_id}",
+        build_user_update(device_user_id=clean_id, name=name, card_number=card,
+                          privilege=role),
+    )]
+    if needs_access_grant(device):
+        commands.append((f"push_access:{clean_id}", build_access_grant(device_user_id=clean_id)))
+    for template in templates:
+        commands.append((
+            f"push_template:{clean_id}:{template.get('type')}:{template.get('no')}:"
+            f"{template.get('index')}",
+            build_template_update(device_user_id=clean_id, template=template),
+        ))
+    return _queue_group(device=device, commands=commands, requested_by=requested_by)
+
+
+def _queue_group(*, device, commands, requested_by=None):
+    """Queue several ``(key, body)`` commands in order, all or none."""
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        data = dict(state.state_data or {})
+        keys = {key for key, _ in commands}
+        pending = [e for e in (data.get("pending_commands") or []) if e.get("key") not in keys]
+        if len(pending) + len(commands) > MAX_PENDING:
+            return [], "Too many commands are already queued for this device. Try again in a minute."
+        next_id = int(data.get("last_command_id") or 0)
+        entries = []
+        for key, body in commands:
+            next_id += 1
+            entry = {
+                "id": next_id, "key": key, "body": _describe(body),
+                "queued_at": timezone.now().isoformat(),
+                "requested_by": getattr(requested_by, "email", "") or "",
+            }
+            if entry["body"] != body:
+                # A template is biometric data: it waits for the device
+                # encrypted, like the saved templates themselves.
+                from devices.services import templates
+
+                entry["body_encrypted"] = templates.encrypt(body).decode("ascii")
+            entries.append(entry)
+        data["pending_commands"] = pending + entries
+        data["last_command_id"] = next_id
+        state.state_data = data
+        state.version = (state.version or 0) + 1
+        state.save(update_fields=["state_data", "version", "updated_at"])
+    return entries, ""
+
+
 #: A 2.x device silent this long (it polls every few seconds) is asked for
 #: what it scanned meanwhile ...
 CATCH_UP_AFTER_MINUTES = 2
@@ -580,23 +735,61 @@ def drop_pending_command(device, command_id):
 
 
 
+#: Commands handed over per check-in. A template write is 1-2 KB and the device
+#: stores it before answering, so a reconnecting device gets a few at a time
+#: rather than everything at once; the rest follow on its next check-ins.
+COMMANDS_PER_POLL = 5
+#: How many handed-over commands and answers are remembered for the screen.
+REMEMBERED_COMMANDS = 50
+
+
 def take_pending_commands(device):
-    """Pop every queued command and format it for the getrequest reply.
+    """Pop the next queued commands and format them for the getrequest reply.
 
     ZKTeco expects one command per line as ``C:<id>:<body>``. Commands are
     removed as they are handed over: the device acknowledges by acting, and a
     command left queued would be re-issued on every poll, 4 times a minute.
+    At most COMMANDS_PER_POLL go per check-in, in the order they were queued,
+    except a server-address change, whose port and host always go together.
     """
     state = _sync_state(device)
     data = dict(state.state_data or {})
-    pending = list(data.get("pending_commands") or [])
-    if not pending:
+    queued = list(data.get("pending_commands") or [])
+    if not queued:
         return "", []
 
-    lines = [f"C:{entry['id']}:{entry['body']}" for entry in pending]
-    data["pending_commands"] = []
-    # Kept so a returned result can be described in the UI after the fact.
-    data["in_flight_commands"] = pending
+    if any(str(e.get("key", "")).startswith(SERVER_ADDRESS_COMMAND_KEY) for e in queued):
+        pending, rest = queued, []
+    else:
+        pending, rest = queued[:COMMANDS_PER_POLL], queued[COMMANDS_PER_POLL:]
+
+    # A template that cannot be decrypted (key missing or changed) is dropped
+    # and noted, never allowed to stop the device getting its other commands:
+    # this reply is the device's only channel back.
+    from devices.services.templates import TemplateKeyMissing
+
+    lines, sent = [], []
+    for entry in pending:
+        try:
+            lines.append(f"C:{entry['id']}:{_full_body(entry)}")
+            sent.append(entry)
+        except TemplateKeyMissing:
+            data["command_results"] = (list(data.get("command_results") or []) + [{
+                "id": entry["id"], "key": entry.get("key", ""), "command": entry.get("body", ""),
+                "return": "not sent: template key missing", "at": timezone.now().isoformat(),
+            }])[-REMEMBERED_COMMANDS:]
+    pending = sent
+    data["pending_commands"] = rest
+    # Kept so a returned result can be described in the UI after the fact;
+    # without the encrypted template, which has now left.
+    handed_at = timezone.now().isoformat()
+    data["in_flight_commands"] = (
+        list(data.get("in_flight_commands") or [])
+        + [
+            {**{k: v for k, v in entry.items() if k != "body_encrypted"}, "handed_at": handed_at}
+            for entry in pending
+        ]
+    )[-REMEMBERED_COMMANDS:]
     state.state_data = data
     state.version = (state.version or 0) + 1
     state.save(update_fields=["state_data", "version", "updated_at"])
@@ -613,7 +806,78 @@ def take_pending_commands(device):
             device=device, command_ids={e["id"] for e in pending}
         )
 
+    if not lines:
+        return "", []
     return "\n".join(lines) + "\n", pending
+
+
+def _full_body(entry):
+    if entry.get("body_encrypted"):
+        from devices.services import templates
+
+        return templates.decrypt(entry["body_encrypted"].encode("ascii"))
+    return entry["body"]
+
+
+def parse_results(raw_body):
+    """``[(command_id, return_code, cmd)]`` from a devicecmd body.
+
+    The device answers ``ID=<n>&Return=<code>&CMD=<verb>``, several per body
+    when it ran several commands, one per line.
+    """
+    results = []
+    for line in (raw_body or "").splitlines():
+        fields = {}
+        for chunk in line.split("&"):
+            key, _, value = chunk.strip().partition("=")
+            if key:
+                fields[key.strip()] = value.strip()
+        try:
+            results.append((int(fields.get("ID", "")), fields.get("Return", ""), fields.get("CMD", "")))
+        except ValueError:
+            continue
+    return results
+
+
+def note_results(device, raw_body):
+    """Remember each command's answer next to the command, for the screen."""
+    results = parse_results(raw_body)
+    if not results:
+        return []
+    now = timezone.now().isoformat()
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        data = dict(state.state_data or {})
+        sent = {e.get("id"): e for e in data.get("in_flight_commands") or []}
+        remembered = list(data.get("command_results") or [])
+        for command_id, code, verb in results:
+            entry = sent.get(command_id, {})
+            remembered.append({
+                "id": command_id, "key": entry.get("key", ""),
+                # Template bodies are biometric data: keep only the command's head.
+                "command": _describe(entry.get("body", "")) or verb,
+                "return": code, "at": now,
+            })
+        data["command_results"] = remembered[-REMEMBERED_COMMANDS:]
+        state.state_data = data
+        state.save(update_fields=["state_data", "updated_at"])
+    return results
+
+
+def _describe(body):
+    if "\tTmp=" in body:
+        return body.split("\tTmp=", 1)[0] + "\tTmp=…"
+    return body
+
+
+def recent_results(device, limit=10):
+    """The latest answers, newest first, for the Device users page."""
+    state = DeviceSyncState.all_objects.filter(device=device).first()
+    if not state:
+        return []
+    results = list(reversed((state.state_data or {}).get("command_results") or []))[:limit]
+    # 0 or a row count is success; a negative code or "not sent" is not.
+    return [{**r, "ok": str(r.get("return", "")).isdigit()} for r in results]
 
 
 def pending_summary(device):

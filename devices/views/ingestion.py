@@ -20,8 +20,13 @@ from django.views.decorators.http import require_http_methods
 from devices.adapters import UnknownAdapterError, get_adapter
 from devices.adapters.base import ParsedMessage
 from devices.models import BiometricDevice, DeviceMessage, DeviceServerAddressChange
-from devices.services import protocol, server_address
-from devices.services.commands import catch_up_after_gap, note_poll, take_pending_commands
+from devices.services import protocol, server_address, templates
+from devices.services.commands import (
+    catch_up_after_gap,
+    note_poll,
+    note_results,
+    take_pending_commands,
+)
 from devices.services.ingestion import (
     DeviceAuthenticationError,
     authenticate_device,
@@ -121,6 +126,8 @@ def cdata(request):
         encoding=encoding,
     )
 
+    _save_templates(device, raw_body)
+
     accepted = result.extraction.accepted_count if result.extraction else 0
     if result.is_replay:
         # Already held: acknowledge with the original record count so the
@@ -128,6 +135,20 @@ def cdata(request):
         accepted = result.message.record_count or 0
 
     return _text(adapter.acknowledgement(parsed=parsed, accepted_count=accepted))
+
+
+def _save_templates(device, raw_body):
+    """Keep, encrypted, the fingerprint/face templates an upload carries.
+
+    The upload itself is already stored and acknowledged; a missing key only
+    means the templates are not kept (logged, and shown on Device users).
+    """
+    if "biodata " not in raw_body and "BIODATA " not in raw_body:
+        return
+    try:
+        templates.save_from_payload(device, raw_body)
+    except templates.TemplateKeyMissing as exc:
+        logger.error("Device %s: templates not saved: %s", device.pk, exc)
 
 
 @csrf_exempt
@@ -347,6 +368,7 @@ def devicecmd(request):
         encoding=encoding,
     )
     _note_address_command_result(device, raw_body)
+    note_results(device, raw_body)
     return _text("OK")
 
 

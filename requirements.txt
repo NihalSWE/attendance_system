@@ -1,6 +1,9 @@
 asgiref==3.12.1
 django-environ==0.14.0
 Django==6.1.1
+cryptography==46.0.3
+cffi==2.1.1
+pycparser==3.0
 psycopg-binary==3.3.5
 psycopg==3.3.5
 sqlparse==0.6.0

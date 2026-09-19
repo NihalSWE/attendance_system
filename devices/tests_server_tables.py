@@ -161,7 +161,7 @@ class DeviceUsersTableTests(DeviceTablesTestCase):
         data = self.draw("devices:device_users", self.args)
         self.assertEqual((data["recordsTotal"], data["recordsFiltered"]), (self.ROSTER, self.ROSTER))
         self.assertEqual(len(data["data"]), 10)
-        self.assertEqual(len(data["data"][0]) - 2, 11)
+        self.assertEqual(len(data["data"][0]) - 2, 12)
 
     def test_search_covers_the_rows_not_on_screen(self):
         data = self.draw("devices:device_users", self.args, **{"search[value]": "Worker 12"})
@@ -179,7 +179,7 @@ class DeviceUsersTableTests(DeviceTablesTestCase):
         self.assertIn(">2<", rows[1]["0"].replace(" ", "").replace("\n", ""))
 
     def test_every_orderable_column_sorts_and_paging_past_the_end_is_empty(self):
-        for column in range(11):
+        for column in range(12):
             with self.subTest(column=column):
                 self.draw("devices:device_users", self.args,
                           **{"order[0][column]": column, "order[0][dir]": "asc"})

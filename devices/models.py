@@ -510,6 +510,58 @@ class DeviceEnrollmentTemplate(TenantOwned):
             raise ValidationError(errors)
 
 
+class DeviceUserTemplate(TenantOwned):
+    """A fingerprint or face template one device captured, kept encrypted.
+
+    "Enrol once, copy to the rest": a company's devices are one model, so a
+    template captured on one can be written to the others. Keyed on the device
+    and its user number only; which employee that number is stays with
+    DeviceEnrollment, so linking templates to employees is a later step
+    (BiometricTemplate). The device, not the server, is the source: if these
+    rows are lost they are pulled again. See devices/services/templates.py.
+    """
+
+    class BioType(models.TextChoices):
+        FINGERPRINT = "fingerprint", "Fingerprint"
+        FACE = "face", "Face"
+        OTHER = "other", "Other"
+
+    device = models.ForeignKey(
+        BiometricDevice, on_delete=models.CASCADE, related_name="user_templates"
+    )
+    # The model the template was captured on: templates only transfer within one.
+    device_model = models.ForeignKey(DeviceModel, on_delete=models.PROTECT, related_name="+")
+    device_user_id = models.CharField(max_length=64)
+    bio_type = models.CharField(max_length=16, choices=BioType.choices)
+    # The device's own fields, as it reported them (Type, No, Index, ...).
+    vendor_type = models.CharField(max_length=8)
+    number = models.CharField(max_length=8, blank=True)
+    index = models.CharField(max_length=8, blank=True)
+    valid = models.CharField(max_length=4, blank=True)
+    duress = models.CharField(max_length=4, blank=True)
+    major_version = models.CharField(max_length=16, blank=True)
+    minor_version = models.CharField(max_length=16, blank=True)
+    template_format = models.CharField(max_length=16, blank=True)
+    template_encrypted = models.BinaryField()
+    # Compares two templates without decrypting them.
+    template_sha256 = models.CharField(max_length=64)
+    template_length = models.PositiveIntegerField()
+    captured_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "devices_device_user_template"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "device_user_id", "vendor_type", "number", "index"],
+                name="uniq_device_user_template",
+            ),
+        ]
+        indexes = [models.Index(fields=["company", "device", "device_user_id"])]
+
+    def __str__(self):
+        return f"{self.device_id}:{self.device_user_id} {self.bio_type}"
+
+
 class DeviceSyncState(TenantOwned):
     """Current, mutable operational state for one device (not historical evidence).
 
