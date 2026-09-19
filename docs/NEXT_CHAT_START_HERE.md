@@ -1,3 +1,5 @@
+> **OUT OF DATE (as of 2026-09-19).** This is the original day-one P0 kickoff. For current status, git state and next work, read `docs/HANDOFF_2026-09-19.md` first, then `docs/PHASE_STATUS.md`. Keep this file only for the original architecture intent.
+
 # Next chat — start the attendance implementation here
 
 ## Current handoff — 2026-09-14 (read this first)
