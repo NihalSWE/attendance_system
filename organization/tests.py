@@ -1,37 +1,27 @@
-"""Organization structure: root list ownership, company relations, tenant safety."""
+"""Organization structure: company-owned departments and designations, tenant safety."""
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from common.tenant import use_company
-from organization.models import (
-    Branch,
-    CompanyDepartment,
-    CompanyDesignation,
-    Department,
-    Designation,
-)
+from organization.models import Branch, Department, Designation
 from tenants.models import Company
 
 
 class OrganizationTests(TestCase):
     def setUp(self):
-        # Root-owned catalogue: created once, shared by every company.
-        self.software = Department.objects.create(code="SW", name="Software")
-        self.hr = Department.objects.create(code="HR", name="Human Resources")
-        # Designations are a flat root list: they belong to no department.
-        self.developer = Designation.objects.create(code="DEV", name="Developer")
-        self.manager = Designation.objects.create(code="MGR", name="Manager")
-
         self.company_a = Company.objects.create(code="A", slug="a", name="Company A")
         self.company_b = Company.objects.create(code="B", slug="b", name="Company B")
         with use_company(self.company_a):
             self.branch_a = Branch.objects.create(
                 code="HQ", name="Head Office", is_default=True
             )
-            self.dept_a = CompanyDepartment.objects.create(
-                branch=self.branch_a, department=self.software
+            self.dept_a = Department.objects.create(
+                branch=self.branch_a, code="SW", name="Software"
+            )
+            self.dev_a = Designation.objects.create(
+                department=self.dept_a, code="DEV", name="Developer"
             )
         with use_company(self.company_b):
             self.branch_b = Branch.objects.create(
@@ -47,7 +37,6 @@ class OrganizationTests(TestCase):
             self.assertEqual(list(Branch.objects.all()), [self.branch_b])
 
     def test_same_branch_code_allowed_in_different_companies(self):
-        # Both companies use code "HQ"; uniqueness is per company, not global.
         self.assertEqual(Branch.all_objects.filter(code="HQ").count(), 2)
 
     def test_duplicate_branch_code_in_same_company_rejected(self):
@@ -60,122 +49,83 @@ class OrganizationTests(TestCase):
         with use_company(self.company_a):
             with self.assertRaises(IntegrityError):
                 with transaction.atomic():
-                    Branch.objects.create(
-                        code="B2", name="Second HQ", is_default=True
-                    )
+                    Branch.objects.create(code="B2", name="Second HQ", is_default=True)
 
-    # --- the catalogue is global ----------------------------------------
+    # --- departments are company-owned ----------------------------------
 
-    def test_root_rows_are_not_tenant_scoped(self):
-        """Root owns these lists: they read the same from inside any tenant."""
+    def test_departments_are_scoped_to_their_company(self):
         with use_company(self.company_a):
-            self.assertEqual(Department.objects.count(), 2)
+            self.assertEqual(list(Department.objects.all()), [self.dept_a])
         with use_company(self.company_b):
-            self.assertEqual(Department.objects.count(), 2)
-        # And with no tenant context at all, which a TenantOwned model refuses.
-        self.assertEqual(Department.objects.count(), 2)
+            self.assertEqual(list(Department.objects.all()), [])
 
-    def test_two_companies_share_one_root_department(self):
+    def test_same_department_code_allowed_in_different_companies(self):
         with use_company(self.company_b):
-            adopted = CompanyDepartment.objects.create(
-                branch=self.branch_b, department=self.software
-            )
-        self.assertEqual(adopted.department_id, self.dept_a.department_id)
-        self.assertEqual(Department.objects.filter(name="Software").count(), 1)
+            Department.objects.create(branch=self.branch_b, code="SW", name="Software")
+        self.assertEqual(Department.all_objects.filter(code="SW").count(), 2)
 
-    def test_duplicate_root_department_name_rejected(self):
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Department.objects.create(code="SW2", name="Software")
-
-    def test_designation_name_is_unique_platform_wide(self):
-        """One flat list, so a second "Developer" is a duplicate, not a variant."""
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Designation.objects.create(code="DEV2", name="Developer")
-
-    def test_designation_code_is_unique_platform_wide(self):
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                Designation.objects.create(code="DEV", name="Another Developer")
-
-    def test_a_designation_belongs_to_no_department(self):
-        field_names = {f.name for f in Designation._meta.get_fields()}
-        self.assertNotIn("department", field_names)
-
-    # --- adoption rows are company-specific -----------------------------
-
-    def test_company_department_rows_are_scoped_to_their_company(self):
-        with use_company(self.company_b):
-            other = CompanyDepartment.objects.create(
-                branch=self.branch_b, department=self.software
-            )
-            self.assertEqual(list(CompanyDepartment.objects.all()), [other])
-        with use_company(self.company_a):
-            self.assertEqual(list(CompanyDepartment.objects.all()), [self.dept_a])
-
-    def test_branch_cannot_add_the_same_department_twice(self):
+    def test_duplicate_department_code_in_one_branch_rejected(self):
         with use_company(self.company_a):
             with self.assertRaises(IntegrityError):
                 with transaction.atomic():
-                    CompanyDepartment.objects.create(
-                        branch=self.branch_a, department=self.software
+                    Department.objects.create(branch=self.branch_a, code="SW", name="Other")
+
+    def test_duplicate_department_name_in_one_branch_rejected(self):
+        with use_company(self.company_a):
+            with self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    Department.objects.create(branch=self.branch_a, code="SW2", name="Software")
+
+    # --- designations belong to a department ----------------------------
+
+    def test_designations_are_scoped_to_their_company(self):
+        with use_company(self.company_a):
+            self.assertEqual(list(Designation.objects.all()), [self.dev_a])
+        with use_company(self.company_b):
+            self.assertEqual(list(Designation.objects.all()), [])
+
+    def test_duplicate_designation_code_in_one_department_rejected(self):
+        with use_company(self.company_a):
+            with self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    Designation.objects.create(
+                        department=self.dept_a, code="DEV", name="Another"
                     )
 
-    def test_company_department_cannot_reference_another_companys_branch(self):
+    def test_same_designation_code_allowed_in_different_departments(self):
         with use_company(self.company_a):
-            adoption = CompanyDepartment(
-                branch=self.branch_b, department=self.hr
+            hr = Department.objects.create(branch=self.branch_a, code="HR", name="Human Resources")
+            Designation.objects.create(department=hr, code="DEV", name="Developer")
+            self.assertEqual(Designation.objects.filter(code="DEV").count(), 2)
+
+    def test_a_designation_belongs_to_a_department(self):
+        field_names = {f.name for f in Designation._meta.get_fields()}
+        self.assertIn("department", field_names)
+        self.assertIn("parent", field_names)
+
+    def test_parent_must_be_in_the_same_department(self):
+        with use_company(self.company_a):
+            hr = Department.objects.create(branch=self.branch_a, code="HR", name="Human Resources")
+            hr_mgr = Designation.objects.create(department=hr, code="HRM", name="HR Manager")
+            child = Designation(
+                department=self.dept_a, code="SDV", name="Senior Developer", parent=hr_mgr
             )
-            adoption.company = self.company_a
+            child.company = self.company_a
             with self.assertRaises(ValidationError):
-                adoption.full_clean()
+                child.full_clean()
 
-    def test_any_designation_may_be_assigned_to_any_of_the_companys_departments(self):
-        """The relation is the company's to decide, not root's."""
+    def test_a_designation_cannot_be_its_own_parent(self):
         with use_company(self.company_a):
-            hr_dept = CompanyDepartment.objects.create(
-                branch=self.branch_a, department=self.hr
-            )
-            for company_department in (self.dept_a, hr_dept):
-                link = CompanyDesignation(
-                    company_department=company_department, designation=self.manager
-                )
-                link.company = self.company_a
-                link.full_clean()
-                link.save()
-            # The same root Manager now sits under both Software and HR.
-            self.assertEqual(
-                CompanyDesignation.objects.filter(designation=self.manager).count(), 2
-            )
+            self.dev_a.parent = self.dev_a
+            with self.assertRaises(ValidationError):
+                self.dev_a.full_clean()
 
-    def test_two_companies_may_place_one_designation_differently(self):
+    def test_hierarchy_level_follows_the_parent_chain(self):
         with use_company(self.company_a):
-            link_a = CompanyDesignation(
-                company_department=self.dept_a, designation=self.manager
+            senior = Designation.objects.create(
+                department=self.dept_a, code="SDV", name="Senior Developer",
+                parent=self.dev_a,
             )
-            link_a.company = self.company_a
-            link_a.full_clean()
-            link_a.save()
-        with use_company(self.company_b):
-            hr_dept_b = CompanyDepartment.objects.create(
-                branch=self.branch_b, department=self.hr
-            )
-            link_b = CompanyDesignation(
-                company_department=hr_dept_b, designation=self.manager
-            )
-            link_b.company = self.company_b
-            link_b.full_clean()
-            link_b.save()
-        # Company A files Manager under Software, Company B under HR.
-        self.assertEqual(link_a.company_department.department_id, self.software.pk)
-        self.assertEqual(link_b.company_department.department_id, self.hr.pk)
+            self.assertEqual(self.dev_a.hierarchy_level, 0)
+            self.assertEqual(senior.hierarchy_level, 1)
 
-    def test_company_department_reads_its_name_and_code_from_root(self):
-        """No local copy of the name exists, so it cannot drift from root's."""
-        self.assertEqual(self.dept_a.name, "Software")
-        self.assertEqual(self.dept_a.code, "SW")
-        self.software.name = "Software Engineering"
-        self.software.save()
-        self.dept_a.refresh_from_db()
-        self.assertEqual(self.dept_a.name, "Software Engineering")

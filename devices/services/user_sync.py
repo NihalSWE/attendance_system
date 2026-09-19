@@ -47,11 +47,11 @@ def _placement(device):
     are the company's own rows, not the root lists — a device can only ever be
     filed against its own company's structure.
     """
-    from organization.models import CompanyDepartment, CompanyDesignation
+    from organization.models import Department, Designation
 
     branch = device.branch
     department = (
-        CompanyDepartment.objects.filter(branch=branch).order_by("pk").first()
+        Department.objects.filter(branch=branch).order_by("pk").first()
     )
     if department is None:
         raise SyncNotPossible(
@@ -60,7 +60,7 @@ def _placement(device):
             "somewhere real."
         )
     designation = (
-        CompanyDesignation.objects.filter(company_department=department)
+        Designation.objects.filter(department=department)
         .order_by("pk")
         .first()
     )

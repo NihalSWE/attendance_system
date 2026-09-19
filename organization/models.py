@@ -1,14 +1,12 @@
-"""Company structure, in two layers.
+"""Company structure.
 
-**Root-owned catalogues** — ``Department`` and ``Designation`` are platform-wide
-lists maintained by the root operator. No company may write to them.
+Every company owns its own ``Branch``, ``Department`` and ``Designation`` rows
+(all tenant-owned). A department lives in a branch and may name a ``head``;
+a designation lives in a department and may have a ``parent`` for delegation.
+Employees, shifts, permissions and scopes point straight at these rows.
 
-**Company adoption rows** — ``Branch``, ``CompanyDepartment`` and
-``CompanyDesignation`` are tenant-owned. A company picks catalogue entries and
-places them in its own branches; every company-specific fact (employees, shifts,
-permissions, scopes) hangs off the adoption row, never off the catalogue row.
-
-See MODEL_FIELD_DICTIONARY.md §6-8 and §84-85.
+Reverted from the short-lived root-owned catalogue + adoption model (see
+PHASE_STATUS.md): departments and designations are company-level again.
 """
 
 from django.core.exceptions import ValidationError
@@ -72,80 +70,14 @@ class Branch(TenantOwned, ActorTracked):
 
 
 
-class Department(TimeStamped, ActorTracked):
-    """Platform-wide catalogue of department names, owned by the root operator.
-
-    Deliberately **not** TenantOwned. One "Human Resources" exists for the whole
-    platform; companies adopt it through :class:`CompanyDepartment` rather than
-    inventing their own spelling of it. That keeps cross-company reporting
-    comparable and stops ten tenants creating ten near-identical rows.
-
-    Nothing company-specific lives here — no branch, no head, no open/close
-    dates. Those belong to the adoption row. See MODEL_FIELD_DICTIONARY.md §7.
-    """
-
-    code = models.CharField(max_length=32, unique=True)
-    name = models.CharField(max_length=255, unique=True)
-    description = models.TextField(blank=True)
-    status = models.CharField(
-        max_length=16, choices=ActiveStatus.choices, default=ActiveStatus.ACTIVE
-    )
-
-    class Meta:
-        db_table = "organization_department"
-        ordering = ("name",)
-
-    def __str__(self):
-        return self.name
-
-
-class Designation(TimeStamped, ActorTracked):
-    """Platform-wide list of designations, owned by the root operator.
-
-    Deliberately **independent of departments**. Root curates one flat list of
-    names; which designations sit under which department is a company's own
-    decision, recorded on :class:`CompanyDesignation`. So a single "Manager"
-    exists for the whole platform, and one company may place it under Sales
-    while another places it under Production.
-
-    There is no parent/child hierarchy either: access ceilings are set on the
-    department (see ``access_control.DepartmentPermission``), not by walking a
-    chain of designations.
-    """
-
-    code = models.CharField(max_length=32, unique=True)
-    name = models.CharField(max_length=255, unique=True)
-    description = models.TextField(blank=True)
-    status = models.CharField(
-        max_length=16, choices=ActiveStatus.choices, default=ActiveStatus.ACTIVE
-    )
-
-    class Meta:
-        db_table = "organization_designation"
-        ordering = ("name",)
-
-    def __str__(self):
-        return self.name
-
-
-class CompanyDepartment(TenantOwned, ActorTracked):
-    """One company's use of a catalogue department, inside one of its branches.
-
-    This is the row everything company-specific points at — employees, shifts,
-    permission scopes. The catalogue row is shared; this row is not, so a shift
-    pattern set by one company can never leak into another.
-
-    The name and code are read through to the catalogue on purpose. Storing a
-    local copy would let it drift, which is exactly the duplication the
-    catalogue exists to prevent.
-    """
+class Department(TenantOwned, ActorTracked):
+    """A functional unit inside a branch (HR, Software, Sales...), company-owned."""
 
     branch = models.ForeignKey(
-        Branch, on_delete=models.PROTECT, related_name="company_departments"
+        Branch, on_delete=models.PROTECT, related_name="departments"
     )
-    department = models.ForeignKey(
-        Department, on_delete=models.PROTECT, related_name="company_links"
-    )
+    code = models.CharField(max_length=32)
+    name = models.CharField(max_length=255)
     # The employee who administers permissions for everyone in this department.
     # Nullable: a department may exist before its head is appointed.
     head = models.ForeignKey(
@@ -163,77 +95,89 @@ class CompanyDepartment(TenantOwned, ActorTracked):
     closed_on = models.DateField(null=True, blank=True)
 
     class Meta:
-        db_table = "organization_company_department"
-        ordering = ("branch__name", "department__name")
+        db_table = "organization_department"
+        ordering = ("branch__name", "name")
         constraints = [
-            # A branch adopts each catalogue department at most once.
             models.UniqueConstraint(
-                fields=["branch", "department"],
-                name="uniq_companydepartment_per_branch",
+                fields=["branch", "code"], name="uniq_department_code_per_branch"
+            ),
+            models.UniqueConstraint(
+                fields=["branch", "name"], name="uniq_department_name_per_branch"
             ),
         ]
-        indexes = [
-            models.Index(fields=["company", "branch"]),
-        ]
+        indexes = [models.Index(fields=["company", "branch"])]
 
     def __str__(self):
-        return f"{self.department.name} ({self.branch.name})"
-
-    @property
-    def code(self):
-        return self.department.code
-
-    @property
-    def name(self):
-        return self.department.name
+        return self.name
 
 
-class CompanyDesignation(TenantOwned, ActorTracked):
-    """The company-wise department-designation relation.
+class Designation(TenantOwned, ActorTracked):
+    """A job title inside a department, with an optional parent for delegation.
 
-    Root keeps departments and designations as two independent lists. This row
-    is where one company says "in *our* Sales department, Manager is a
-    designation people hold". Another company is free to place the same
-    Manager under Production, and neither choice constrains the other.
-
-    Because the relation lives here rather than on the root designation, any
-    active designation may be assigned to any of the company's departments.
+    The parent hierarchy stays acyclic and inside one department. How it drives
+    delegated access is decided later; the field is kept meanwhile.
     """
 
-    company_department = models.ForeignKey(
-        CompanyDepartment, on_delete=models.PROTECT, related_name="designations"
+    department = models.ForeignKey(
+        Department, on_delete=models.PROTECT, related_name="designations"
     )
-    designation = models.ForeignKey(
-        Designation, on_delete=models.PROTECT, related_name="company_links"
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="children",
     )
+    code = models.CharField(max_length=32)
+    name = models.CharField(max_length=255)
+    # Derived from the parent chain; maintained in save().
+    hierarchy_level = models.PositiveIntegerField(default=0)
+    description = models.TextField(blank=True)
     status = models.CharField(
         max_length=16, choices=ActiveStatus.choices, default=ActiveStatus.ACTIVE
     )
 
     class Meta:
-        db_table = "organization_company_designation"
-        ordering = ("company_department__department__name", "designation__name")
+        db_table = "organization_designation"
+        ordering = ("department__name", "name")
         constraints = [
             models.UniqueConstraint(
-                fields=["company_department", "designation"],
-                name="uniq_companydesignation_per_department",
+                fields=["department", "code"],
+                name="uniq_designation_code_per_department",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(parent=models.F("id")),
+                name="designation_parent_not_self",
             ),
         ]
-        indexes = [
-            models.Index(fields=["company", "company_department"]),
-        ]
+        indexes = [models.Index(fields=["company", "department"])]
 
     def __str__(self):
-        return self.designation.name
+        return self.name
 
-    @property
-    def branch(self):
-        return self.company_department.branch
+    def clean(self):
+        super().clean()
+        if not self.parent_id:
+            return
+        if self.pk and self.parent_id == self.pk:
+            raise ValidationError({"parent": "A designation cannot be its own parent."})
+        parent = self.parent
+        if parent.department_id != self.department_id:
+            raise ValidationError(
+                {"parent": "Parent designation must be in the same department."}
+            )
+        seen = set()
+        node = parent
+        while node is not None:
+            if self.pk and node.pk == self.pk:
+                raise ValidationError(
+                    {"parent": "This parent would create a hierarchy cycle."}
+                )
+            if node.pk in seen:
+                break
+            seen.add(node.pk)
+            node = node.parent
 
-    @property
-    def code(self):
-        return self.designation.code
-
-    @property
-    def name(self):
-        return self.designation.name
+    def save(self, *args, **kwargs):
+        self.hierarchy_level = (self.parent.hierarchy_level + 1) if self.parent_id else 0
+        super().save(*args, **kwargs)

@@ -17,15 +17,18 @@ from django.views.decorators.http import require_http_methods
 from common.choices import ActiveStatus
 from common.tenant import use_company
 from organization.adoption_forms import (
+    AddDesignationForm,
     AdoptionStatusForm,
     CopyAdoptionsForm,
     DepartmentAdoptionForm,
 )
 from organization.adoption_services import (
+    add_designation,
     adopt_department,
     copy_adoptions_between_branches,
     get_adoption_for_edit,
     set_adoption_status,
+    set_designation_status,
     update_adoption,
     visible_adoptions,
 )
@@ -64,8 +67,8 @@ def adoption_list(request):
         query = request.GET.get("q", "").strip()[:200]
         if query:
             queryset = queryset.filter(
-                Q(department__name__icontains=query)
-                | Q(department__code__icontains=query)
+                Q(name__icontains=query)
+                | Q(code__icontains=query)
                 | Q(branch__name__icontains=query)
             )
 
@@ -74,9 +77,9 @@ def adoption_list(request):
             queryset = queryset.filter(status=status)
 
         filtered_total = queryset.count()
-        page = paginate(request, queryset.order_by("branch__name", "department__name"),
-            search=("branch__name", "department__name", "department__code", "head__first_name", "head__last_name", "status"),
-            order=("branch__name", "department__name", "title_count", ("head__first_name", "head__last_name"), "status", "employee_count", None))
+        page = paginate(request, queryset.order_by("branch__name", "name"),
+            search=("branch__name", "name", "code", "head__first_name", "head__last_name", "status"),
+            order=("branch__name", "name", "title_count", ("head__first_name", "head__last_name"), "status", "employee_count", None))
 
         return render(request, "organization/adoption_list.html", {
             "page": page,
@@ -118,18 +121,14 @@ def adoption_create(request):
                 else:
                     messages.success(
                         request,
-                        f"{adoption.department.name} added to "
-                        f"{adoption.branch.name}.",
+                        f"{adoption.name} added to {adoption.branch.name}.",
                     )
                     return redirect("organization:adoption_list")
         else:
             form = DepartmentAdoptionForm(
                 branches=branches,
                 employees=employees,
-                initial={
-                    "status": ActiveStatus.ACTIVE,
-                    "department": request.GET.get("department", ""),
-                },
+                initial={"status": ActiveStatus.ACTIVE},
             )
 
         return render(request, "organization/adoption_form.html", {
@@ -186,14 +185,16 @@ def adoption_edit(request, pk):
 
         return render(request, "organization/adoption_form.html", {
             "form": form,
-            "title": f"Edit {adoption.department.name}",
+            "title": f"Edit {adoption.name}",
             "submit_label": "Save department",
             "explanation": (
-                "Unticking a designation deactivates it here; it is never "
-                "deleted, and one employees currently hold cannot be removed "
-                "until they are moved."
+                "Edit the department here. Add or remove its designations (job "
+                "titles) below; a title employees currently hold cannot be "
+                "removed until they are moved."
             ),
             "adoption": adoption,
+            "designations": adoption.designations.order_by("name"),
+            "designation_form": AddDesignationForm(),
         })
 
 
@@ -228,7 +229,7 @@ def adoption_status(request, pk):
 
     return render(request, "organization/adoption_status_form.html", {
         "form": form,
-        "title": f"Change status of {adoption.department.name}",
+        "title": f"Change status of {adoption.name}",
         "submit_label": "Save status",
         "adoption": adoption,
     })
@@ -297,3 +298,48 @@ def adoption_copy(request):
             "title": "Copy departments to another branch",
             "submit_label": "Copy departments",
         })
+
+
+@login_required
+@require_http_methods(["POST"])
+def designation_add(request, pk):
+    """Add one designation to a department, from the department's edit page."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    form = AddDesignationForm(request.POST)
+    if form.is_valid():
+        try:
+            add_designation(
+                actor=request.user, company_id=company_id, adoption_id=pk,
+                code=form.cleaned_data["code"], name=form.cleaned_data["name"],
+            )
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+        else:
+            messages.success(request, f"{form.cleaned_data['name']} added.")
+    else:
+        messages.error(request, "Enter a code and a title.")
+    return redirect("organization:adoption_edit", pk=pk)
+
+
+@login_required
+@require_http_methods(["POST"])
+def designation_status(request, pk):
+    """Activate or deactivate one designation."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    department_pk = request.POST.get("department", "")
+    try:
+        set_designation_status(
+            actor=request.user, company_id=company_id, designation_id=pk,
+            status=request.POST.get("status", ""),
+        )
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+    else:
+        messages.success(request, "Designation updated.")
+    if department_pk.isdigit():
+        return redirect("organization:adoption_edit", pk=int(department_pk))
+    return redirect("organization:adoption_list")

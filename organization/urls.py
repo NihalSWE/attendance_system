@@ -37,6 +37,16 @@ urlpatterns = [
         adoption_views.adoption_status,
         name="adoption_status",
     ),
+    path(
+        "departments/<int:pk>/designations/add/",
+        adoption_views.designation_add,
+        name="designation_add",
+    ),
+    path(
+        "designations/<int:pk>/status/",
+        adoption_views.designation_status,
+        name="designation_status",
+    ),
 
     # Who has which access, per branch (A12). Branch managers reach these too.
     path("access/", access_views.access_list, name="access"),

@@ -125,13 +125,13 @@
                                     {{ adoption.branch.name }}
                                 </td>
                                 <td>
-                                    {{ adoption.department.name }}
+                                    {{ adoption.name }}
                                 </td>
                                 <td>
                                     {% for link in adoption.designations.all %}
                                         {% if link.status == 'active' %}
                                             <span class="badge badge--info">
-                                                {{ link.designation.name }}
+                                                {{ link.name }}
                                             </span>
                                         {% endif %}
                                     {% empty %}

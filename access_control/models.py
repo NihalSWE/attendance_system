@@ -106,7 +106,7 @@ class DepartmentPermission(TenantOwned, ActorTracked):
         DENIED = "denied", "Denied"
 
     company_department = models.ForeignKey(
-        "organization.CompanyDepartment",
+        "organization.Department",
         on_delete=models.PROTECT,
         related_name="permission_rules",
     )
@@ -158,7 +158,7 @@ class DesignationPermission(TenantOwned, ActorTracked):
         DENIED = "denied", "Denied"
 
     designation = models.ForeignKey(
-        "organization.CompanyDesignation",
+        "organization.Designation",
         on_delete=models.PROTECT,
         related_name="permission_rules",
     )
@@ -210,7 +210,7 @@ class DesignationPermission(TenantOwned, ActorTracked):
             return
         denied = DepartmentPermission.all_objects.filter(
             company_id=self.company_id,
-            company_department_id=self.designation.company_department_id,
+            company_department_id=self.designation.department_id,
             permission_id=self.permission_id,
             access_level=DepartmentPermission.AccessLevel.DENIED,
             effective_to__isnull=True,
@@ -256,7 +256,7 @@ class EmployeePermissionOverride(TenantOwned, ActorTracked):
         "organization.Branch", blank=True, related_name="permission_overrides"
     )
     allowed_departments = models.ManyToManyField(
-        "organization.CompanyDepartment",
+        "organization.Department",
         blank=True,
         related_name="permission_overrides",
     )

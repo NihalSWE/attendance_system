@@ -11,11 +11,8 @@ from base_template import views
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("platform/", include("tenants.urls")),
-    # Root-only department and designation screens. They sit under /platform/
-    # with the other root screens -- nothing in the address says "catalogue",
     # which is our word, not the operator's -- but the views live in
     # organization/ with their models.
-    path("platform/", include("organization.catalogue_urls")),
     path("organization/", include("organization.urls")),
     path("shifts/", include("scheduling.urls")),
     path("leave/", include("leaves.urls")),

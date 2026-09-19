@@ -25,7 +25,7 @@ from devices.models import (
 )
 from devices.services import attendance_rules, server_address
 from employees.models import Employee
-from organization.models import Branch, CompanyDepartment
+from organization.models import Branch, Department
 
 # Curated rather than the full zoneinfo list: these are the timezones this
 # product is deployed in, and a 600-entry dropdown is not a usable control.
@@ -440,7 +440,7 @@ class DeviceDepartmentForm(StyledFormMixin, forms.ModelForm):
     check here, or the database answers the administrator instead of us.
     """
 
-    department = forms.ModelChoiceField(queryset=CompanyDepartment.all_objects.none())
+    department = forms.ModelChoiceField(queryset=Department.all_objects.none())
     effective_from = CompanyDateTimeField(
         label="Effective from", placeholder="Select start date",
         help_text="Date and 24-hour time, in company time.",
@@ -459,9 +459,9 @@ class DeviceDepartmentForm(StyledFormMixin, forms.ModelForm):
         self.device = device
         # A department mapping only makes sense within the device's own branch.
         self.fields["department"].queryset = (
-            CompanyDepartment.objects.filter(branch_id=device.branch_id)
-            .select_related("department")
-            .order_by("department__name")
+            Department.objects.filter(branch_id=device.branch_id)
+            .select_related("branch")
+            .order_by("name")
         )
         if not self.instance.pk:
             self.fields["effective_from"].initial = timezone.now()

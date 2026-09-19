@@ -199,7 +199,7 @@ class DeviceDepartment(TenantOwned, ActorTracked):
         BiometricDevice, on_delete=models.PROTECT, related_name="department_links"
     )
     department = models.ForeignKey(
-        "organization.CompanyDepartment",
+        "organization.Department",
         on_delete=models.PROTECT,
         related_name="device_links",
     )

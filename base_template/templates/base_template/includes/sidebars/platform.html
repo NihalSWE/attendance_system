@@ -12,25 +12,6 @@
             Companies
         </span>
     </a>
-    <div class="sidebar__label">
-        Organisation
-    </div>
-    <a class="sidebar__link {% active request 'department_list' 'department_create' 'department_edit' 'department_status' %}" href="{% url 'catalogue:department_list' %}" aria-label="Departments">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M3 7h18M3 12h18M3 17h18M7 3v18"/>
-        </svg>
-        <span>
-            Departments
-        </span>
-    </a>
-    <a class="sidebar__link {% active request 'designation_list' 'designation_create' 'designation_edit' 'designation_status' %}" href="{% url 'catalogue:designation_list' %}" aria-label="Designations">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-            <path d="M4 7h16v13H4zM9 7V4h6v3M9 13h6"/>
-        </svg>
-        <span>
-            Designations
-        </span>
-    </a>
     <div class="sidebar__foot">
         <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}

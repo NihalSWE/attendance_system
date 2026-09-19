@@ -14,7 +14,7 @@ from django import forms
 from common.forms import StyledFormMixin
 from employees.models import Employee, EmployeeCompensation
 from organization.employee_forms import EmployeeCreateForm
-from organization.models import Branch, CompanyDepartment, CompanyDesignation
+from organization.models import Branch, Department, Designation
 
 
 def _date(placeholder):
@@ -45,11 +45,11 @@ class PlacementForm(StyledFormMixin, forms.Form):
 
     branch = forms.ModelChoiceField(queryset=Branch.all_objects.none(), label="Branch")
     department = forms.ModelChoiceField(
-        queryset=CompanyDepartment.all_objects.none(), label="Department",
+        queryset=Department.all_objects.none(), label="Department",
         help_text="Only departments added to this branch are listed.",
     )
     designation = forms.ModelChoiceField(
-        queryset=CompanyDesignation.all_objects.none(), label="Designation",
+        queryset=Designation.all_objects.none(), label="Designation",
         help_text="Only designations assigned to the chosen department are listed.",
     )
     employee_code = forms.CharField(max_length=64, label="Employee code")
@@ -78,7 +78,7 @@ class PlacementForm(StyledFormMixin, forms.Form):
         self.fields["designation"].empty_label = "Select a designation"
         branch = self._chosen("branch", Branch)
         self.fields["department"].queryset = self._departments_for(branch)
-        department = self._chosen("department", CompanyDepartment)
+        department = self._chosen("department", Department)
         self.fields["designation"].queryset = self._designations_for(department)
 
     def clean(self):
@@ -87,7 +87,7 @@ class PlacementForm(StyledFormMixin, forms.Form):
         designation = cleaned.get("designation")
         if branch and department and department.branch_id != branch.pk:
             self.add_error("department", "That department is not added to this branch.")
-        if department and designation and designation.company_department_id != department.pk:
+        if department and designation and designation.department_id != department.pk:
             self.add_error("designation", "That designation is not assigned to this department.")
         if cleaned.get("placement_from"):
             cleaned["effective_at"] = _start_of(cleaned["placement_from"], self.company)

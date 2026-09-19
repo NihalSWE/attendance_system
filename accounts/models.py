@@ -133,7 +133,7 @@ class CompanyMembership(TenantOwned, ActorTracked):
         "organization.Branch", blank=True, related_name="scoped_memberships"
     )
     allowed_departments = models.ManyToManyField(
-        "organization.CompanyDepartment",
+        "organization.Department",
         blank=True,
         related_name="scoped_memberships",
     )

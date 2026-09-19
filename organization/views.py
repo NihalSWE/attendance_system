@@ -51,7 +51,7 @@ def branch_list(request):
             # Departments hang off the branch through the adoption row now;
             # the old `departments` accessor belonged to the tenant-owned
             # Department that the root catalogue replaced.
-            .annotate(department_count=Count("company_departments", distinct=True))
+            .annotate(department_count=Count("departments", distinct=True))
             .order_by("-is_default", "name")
         )
 

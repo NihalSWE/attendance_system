@@ -298,7 +298,7 @@ def _covered_interval(shift, on, tz):
 def _assignment_on(employee, at):
     """The placement in force at an instant, or None."""
     return (
-        EmployeeAssignment.objects.select_related("branch", "company", "department__department")
+        EmployeeAssignment.objects.select_related("branch", "company", "department")
         .filter(employee=employee, effective_from__lte=at)
         .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=at))
         .exclude(status=EmployeeAssignment.Status.CANCELLED)

@@ -30,7 +30,7 @@ from organization.services import (
 )
 from organization.views import _company_or_redirect
 from scheduling import services
-from organization.models import CompanyDepartment
+from organization.models import Department
 from scheduling.forms import (
     AttendanceSettingsForm,
     ChangeWeeklyOffStartForm,
@@ -118,14 +118,14 @@ def schedule_overview(request):
             and settings.shift_mode == CompanyAttendanceSettings.ShiftMode.DEPARTMENT_SHIFTS
         )
         current = services.current_department_shifts(company_id, today)
-        active_departments = CompanyDepartment.objects.select_related(
-            "branch", "department"
+        active_departments = Department.objects.select_related(
+            "branch"
         ).filter(status=ActiveStatus.ACTIVE)
         departments = paginate(
-            request, active_departments.order_by("branch__name", "department__name"),
+            request, active_departments.order_by("branch__name", "name"),
             name="department_shifts",
-            search=("department__name", "department__code", "branch__name"),
-            order=("department__name", "branch__name", None, None, None),
+            search=("name", "code", "branch__name"),
+            order=("name", "branch__name", None, None, None),
         )
         department_rows = [
             {"department": adoption, "link": current.get(adoption.pk)}
@@ -136,7 +136,7 @@ def schedule_overview(request):
         company_shift = settings.company_shift if settings else None
         uncovered = list(
             active_departments.exclude(pk__in=list(current))
-            .order_by("branch__name", "department__name")
+            .order_by("branch__name", "name")
         ) if by_department and company_shift is None else []
         linked = active_departments.filter(pk__in=list(current)).exists()
     ready = bool(company_shift) if not by_department else not uncovered and (
@@ -282,9 +282,9 @@ def department_shift_set(request):
         branches = visible_branches(membership)
         form = DepartmentShiftForm(
             request.POST or None,
-            departments=CompanyDepartment.objects.select_related("branch", "department")
+            departments=Department.objects.select_related("branch")
             .filter(status=ActiveStatus.ACTIVE, branch__in=branches)
-            .order_by("branch__name", "department__name"),
+            .order_by("branch__name", "name"),
             shifts=Shift.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
             initial={
                 "effective_from": timezone.localdate(),

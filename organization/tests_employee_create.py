@@ -18,8 +18,7 @@ from accounts.models import CompanyMembership
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
 from organization import adoption_services
-from organization.catalogue import ensure_department, ensure_designation
-from organization.models import Branch, CompanyDepartment, CompanyDesignation
+from organization.models import Branch, Designation
 from scheduling.models import CompanyAttendanceSettings, Shift
 from tenants.models import Company
 
@@ -33,11 +32,6 @@ def dt(year, month, day):
 class EmployeeCreateScreenTests(TestCase):
     def setUp(self):
         self.client = Client()
-        self.software = ensure_department("SW", "Software")
-        self.hr = ensure_department("HR", "Human Resources")
-        self.developer = ensure_designation("DEV", "Developer")
-        self.hr_manager = ensure_designation("HRM", "HR Manager")
-
         self.company = Company.objects.create(code="A", slug="a", name="Company A")
         self.owner = User.objects.create_user(
             email="owner@example.test", password="pw-12345678"
@@ -60,22 +54,20 @@ class EmployeeCreateScreenTests(TestCase):
 
         self.adoption = adoption_services.adopt_department(
             actor=self.owner, company_id=self.company.pk,
-            values={"branch": self.branch, "department": self.software,
-                    "status": "active", "designations": [self.developer]},
+            values={"branch": self.branch, "code": "SW", "name": "Software",
+                    "status": "active",
+                    "designations": [{"code": "DEV", "name": "Developer"}]},
         )
         # A department in the *other* branch, to prove the chain is enforced.
         self.other_adoption = adoption_services.adopt_department(
             actor=self.owner, company_id=self.company.pk,
-            values={"branch": self.other_branch, "department": self.hr,
-                    "status": "active", "designations": [self.hr_manager]},
+            values={"branch": self.other_branch, "code": "HR",
+                    "name": "Human Resources", "status": "active",
+                    "designations": [{"code": "HRM", "name": "HR Manager"}]},
         )
         with use_company(self.company):
-            self.title = CompanyDesignation.objects.get(
-                company_department=self.adoption
-            )
-            self.other_title = CompanyDesignation.objects.get(
-                company_department=self.other_adoption
-            )
+            self.title = Designation.objects.get(department=self.adoption)
+            self.other_title = Designation.objects.get(department=self.other_adoption)
         self.client.force_login(self.owner)
 
     def _payload(self, **overrides):

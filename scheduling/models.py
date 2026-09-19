@@ -184,7 +184,7 @@ class DepartmentShift(TenantOwned, ActorTracked):
         ENDED = "ended", "Ended"
 
     department = models.ForeignKey(
-        "organization.CompanyDepartment",
+        "organization.Department",
         on_delete=models.PROTECT,
         related_name="shift_links",
     )

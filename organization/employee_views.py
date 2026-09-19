@@ -19,7 +19,7 @@ from common.choices import ActiveStatus
 from common.tenant import use_company
 from employees.services import create_employee
 from organization.employee_forms import EmployeeCreateForm
-from organization.models import Branch, CompanyDepartment, CompanyDesignation
+from organization.models import Branch, Department, Designation
 from access_control.branch_access import ALL_BRANCHES, branches_for, can
 from organization.access_services import people
 from organization.services import require_company_membership, visible_branches
@@ -114,7 +114,7 @@ def employee_create(request):
             "form": form,
             "title": "Create employee",
             "submit_label": "Create employee",
-            "has_departments": CompanyDepartment.objects.filter(
+            "has_departments": Department.objects.filter(
                 status=ActiveStatus.ACTIVE
             ).exists(),
         })
@@ -135,14 +135,13 @@ def branch_departments(request):
 
     with use_company(company_id):
         rows = (
-            CompanyDepartment.objects.filter(
+            Department.objects.filter(
                 branch_id=int(branch), status=ActiveStatus.ACTIVE
             )
-            .select_related("department")
-            .order_by("department__name")
+            .order_by("name")
         )
         return JsonResponse({
-            "results": [{"id": row.pk, "text": row.department.name} for row in rows]
+            "results": [{"id": row.pk, "text": row.name} for row in rows]
         })
 
 
@@ -160,20 +159,19 @@ def department_designations(request):
         return JsonResponse({"results": []})
 
     with use_company(company_id):
-        branch_of = CompanyDepartment.objects.filter(pk=int(department)).values_list(
+        branch_of = Department.objects.filter(pk=int(department)).values_list(
             "branch_id", flat=True
         ).first()
         if branch_of is None or branch_of not in branch_ids:
             return JsonResponse({"results": []})
         rows = (
-            CompanyDesignation.objects.filter(
-                company_department_id=int(department), status=ActiveStatus.ACTIVE
+            Designation.objects.filter(
+                department_id=int(department), status=ActiveStatus.ACTIVE
             )
-            .select_related("designation")
-            .order_by("designation__name")
+            .order_by("name")
         )
         return JsonResponse({
-            "results": [{"id": row.pk, "text": row.designation.name} for row in rows]
+            "results": [{"id": row.pk, "text": row.name} for row in rows]
         })
 
 

@@ -2,13 +2,7 @@ from django.contrib import admin
 
 from common.admin import TenantOwnedAdmin
 
-from .models import (
-    Branch,
-    CompanyDepartment,
-    CompanyDesignation,
-    Department,
-    Designation,
-)
+from .models import Branch, Department, Designation
 
 
 @admin.register(Branch)
@@ -18,39 +12,15 @@ class BranchAdmin(TenantOwnedAdmin):
     list_filter = ("status", "is_default")
 
 
-# --------------------------------------------------------------- catalogues
-# Root-owned and global: plain ModelAdmin, not TenantOwnedAdmin, because these
-# rows have no company column to scope by.
-
-
 @admin.register(Department)
-class DepartmentAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "status")
-    search_fields = ("name", "code")
+class DepartmentAdmin(TenantOwnedAdmin):
+    list_display = ("name", "code", "branch", "company", "head", "status")
+    search_fields = ("name", "code", "branch__name")
     list_filter = ("status",)
 
 
 @admin.register(Designation)
-class DesignationAdmin(admin.ModelAdmin):
-    # No department column: the root list is flat, and which departments use a
-    # designation is each company's own choice on CompanyDesignation.
-    list_display = ("name", "code", "status")
-    search_fields = ("name", "code")
-    list_filter = ("status",)
-
-
-# ---------------------------------------------------------- company adoption
-
-
-@admin.register(CompanyDepartment)
-class CompanyDepartmentAdmin(TenantOwnedAdmin):
-    list_display = ("department", "branch", "company", "head", "status")
-    search_fields = ("department__name", "department__code")
-    list_filter = ("status",)
-
-
-@admin.register(CompanyDesignation)
-class CompanyDesignationAdmin(TenantOwnedAdmin):
-    list_display = ("designation", "company_department", "company", "status")
-    search_fields = ("designation__name", "designation__code")
+class DesignationAdmin(TenantOwnedAdmin):
+    list_display = ("name", "code", "department", "company", "status")
+    search_fields = ("name", "code", "department__name")
     list_filter = ("status",)

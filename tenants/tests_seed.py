@@ -13,8 +13,6 @@ from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from employees.services import create_employee, terminate_employee
 from organization.models import (
     Branch,
-    CompanyDepartment,
-    CompanyDesignation,
     Department,
     Designation,
 )
@@ -28,18 +26,14 @@ def dt(y, m, d):
 
 class TerminationTests(TestCase):
     def setUp(self):
-        software_entry = Department.objects.create(code="SW", name="Software")
-        dev_entry = Designation.objects.create(
-            code="DEV", name="Developer"
-        )
         self.company = onboard_company(code="ACME", slug="acme", name="Acme Ltd")
         with use_company(self.company):
             self.branch = Branch.objects.get()
-            self.dept = CompanyDepartment.objects.create(
-                branch=self.branch, department=software_entry
+            self.dept = Department.objects.create(
+                branch=self.branch, code="SW", name="Software"
             )
-            self.title = CompanyDesignation.objects.create(
-                company_department=self.dept, designation=dev_entry
+            self.title = Designation.objects.create(
+                department=self.dept, code="DEV", name="Developer"
             )
 
     def _create_employee(self, name, code, start=dt(2023, 1, 1)):

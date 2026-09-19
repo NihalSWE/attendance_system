@@ -20,7 +20,7 @@ from access_control.page_access import may_open
 from accounts.services import ACTIVE_COMPANY_SESSION_KEY, get_active_memberships
 from attendance import live_status
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
-from organization.models import Branch, CompanyDepartment
+from organization.models import Branch, Department
 
 
 def company_admin_required(view):
@@ -79,7 +79,7 @@ def dashboard(request):
         "probation_count": by_status["probation"],
         "resigned_count": by_status["resigned"],
         "branch_count": Branch.objects.count(),
-        "department_count": CompanyDepartment.objects.count(),
+        "department_count": Department.objects.count(),
         "recent": recent,
         "stopped_devices": stopped_devices,
         "still_in": still_in,
@@ -128,8 +128,8 @@ def employee_list(request):
         table_code=Subquery(assignment.values("employee_code")[:1]),
         table_branch=Subquery(assignment.values("branch__name")[:1]),
         table_branch_id=Subquery(assignment.values("branch_id")[:1]),
-        table_department=Subquery(assignment.values("department__department__name")[:1]),
-        table_designation=Subquery(assignment.values("designation__designation__name")[:1]),
+        table_department=Subquery(assignment.values("department__name")[:1]),
+        table_designation=Subquery(assignment.values("designation__name")[:1]),
         table_rate=Subquery(compensation.values("base_rate")[:1]),
     ).order_by("first_name", "last_name")
     if view_branches is not ALL_BRANCHES:
@@ -212,11 +212,11 @@ def department_list(request):
         return _no_company(request)
     departments = paginate(
         request,
-        CompanyDepartment.objects.select_related("branch", "department", "head")
+        Department.objects.select_related("branch", "head")
         .annotate(table_designations=Count("designations", distinct=True))
-        .order_by("branch__name", "department__name"),
-        search=("department__code", "department__name", "branch__name", "status"),
-        order=("department__code", "department__name", "branch__name", "status", "table_designations"),
+        .order_by("branch__name", "name"),
+        search=("code", "name", "branch__name", "status"),
+        order=("code", "name", "branch__name", "status", "table_designations"),
     )
     return render(request, "base_template/department_list.html",
                   {"departments": departments})
