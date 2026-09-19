@@ -3610,3 +3610,33 @@ decision; merging `feature/device-mapping` to main (awaiting Ajay).
    Target: 500 people ≈ 7 min at 50/check-in, ≈ 2 min with the shorter interval.
 4. Then: merge to main (after Ajay's go, full suite first), CSV/Excel bulk
    employee import, removal from devices when employment ends.
+
+### 3A remote test — checklist from what the 2A taught us (2026-09-19)
+
+The 3A is reachable only through `workforce.iglweb.com` and nobody is on site,
+so the device must prove every write itself: **each write is followed by a
+read-back** (`DATA QUERY USERINFO PIN=99999`, proven on this 3A) and compared.
+Test user 99999 only, on the less-used 3A, outside office hours, one command at a
+time. Before anything: pull both 3As' users + fingerprints/faces (read-only,
+proven) — the backup. Needs the new code on the live server first (blocked by
+the company-departments migration: wipe or a data-keeping migration).
+
+| 2A trap (what happened) | Check on the 3A |
+|---|---|
+| **"Done" is not proof.** `Return=0` came back for commands that changed nothing or did the wrong thing | Read back after every write; compare field by field |
+| **Write names ≠ upload names.** Lowercase `pin=` was accepted and made a user with an **empty number** (the three empty rows on the 2A, undeletable by Pin); `Card` was ignored, `CardNo` worked | Write with the spelling the 3A *uploads* (`PIN`, `Name`, `Pri`, `Card`, `Grp`, `TZ`) and read back; any field missing from the read-back means a wrong name |
+| **Role silently ignored.** `Pri=14` → nothing; `Privilege=14` worked | Test the role on its own (0 → 14) and read back; on the 3A `Pri` is the documented name — prove it |
+| **"Invalid time period"** (rtlog event 23): a user written from software had **no door permission** (`userauthorize`), so the device recognised and refused them | The 3A is time-attendance (`DeviceType=att`): expect no door table, **but** its user row carries `TZ=0000000100000000` and `Grp=1` — a wrong or blank TZ/group can refuse the same way. Write TZ and Grp exactly as the 3A uploads them, and look for the refusal code in its scans |
+| **Device type forgotten after the DB rebuild** (the device does not re-register), so the door permission was skipped | Do not rely on registration data; the dialect comes from what the device announced/sent, and the 3A is already known as ATT2 |
+| **A wrong delete key wiped every user** (`uid=` on the 2A) | **No deletes on the client's 3A.** 99999 stays, harmless, with no templates of its own. Delete is measured on an office 3A |
+| **Several options in one command** became one wrong value (`SET OPTION` with tabs) | One field/option per command when in doubt; never the server address on the 3A |
+| **Template types.** 2A: fingerprint Type 1 v13, face Type 9 v40.1; templates only transfer within one model | Read the 3A's own types/versions from the backup; `BIODATA` vs the older `FINGERTMP`/`FACE` — try `BIODATA` first (it uploads that), read back, compare the stored template exactly (hash) |
+| **Verify mode.** The 3A uploads `Verify=-1` (device default) | Send `Verify=-1` or omit it; a wrong verify mode could stop face/finger working |
+| **Query forms differ per dialect** (3.x table form → `-1004` on the 3A; `USERINFO` → `-629` on the 2A) | Only the 2.x forms on the 3A |
+| **Scans made while offline were not re-sent** by the 3A until asked (`DATA QUERY ATTLOG`) | Already handled (catch-up); after the test, confirm no scans were missed |
+| **"Removed from device" needs a complete user list** marked with `cmdid` — the 2A's answers have it | The 3A's `USERINFO` answer may not; check before trusting the Removed badge there |
+| **Invented comm key → 401** after registration | Leave the 3A's comm key as it is |
+| **Two dev servers on one port** split device and browser traffic | Not relevant on the live server; check only one worker set is serving |
+
+Recognition (does the copied face open for the person) and delete stay
+unproven until someone stands at a 3A — recommend a 3A in the office.
