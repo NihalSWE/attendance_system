@@ -420,3 +420,20 @@ class ScenarioTests(MappingCase):
         self.assertIn('name="employee" value="%d" form="send-form"' % self.moin.pk, employees)
         response = self.client.post(reverse("devices:employees_send"), {"all": "1"}, follow=True)
         self.assertContains(response, "Sending")
+
+
+class RefillAfterRemovalTests(MappingCase):
+    def test_removed_users_come_back_with_card_role_and_templates(self):
+        # Everyone but Ajay deleted on the terminal, list refreshed, then all sent back.
+        self.upload(USERS, cmdid="1")
+        self.upload(BIODATA.replace("445962", "445900"), table="biodata", cmdid="2")
+        with use_company(self.company):
+            mapping.map_automatically(actor=self.admin, device=self.device)
+        self.upload("\n".join(l for l in USERS.splitlines() if "pin=445962" in l) + "\n", cmdid="9")
+        with use_company(self.company):
+            result = mapping.send_employees(actor=self.admin, employees=[self.moin])
+        self.assertEqual(len(result.sent), 2)  # both devices of the branch
+        moin = DeviceOutboxCommand.all_objects.get(device=self.device, key="push_user:445900")
+        self.assertIn("CardNo=8868366", moin.body)
+        self.assertIn("push_template:445900:1:6:0", self.outbox(self.device))
+        self.assertIn("push_template:445900:9:0:0", self.outbox(self.device))

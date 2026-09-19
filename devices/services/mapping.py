@@ -159,14 +159,23 @@ def _source_templates(device, pin):
 
 
 def _source_user(device, pin):
-    """What another device of the company reports for ``pin`` (card, role)."""
+    """What the company's devices last reported for ``pin`` (card, role).
+
+    A user still on some device wins; otherwise the last report of one since
+    removed (deleted on the terminal) — their card and role are still theirs,
+    which is what lets a replaced or wiped device be refilled with them.
+    """
+    removed = {}
     others = BiometricDevice.all_objects.filter(company_id=device.company_id).exclude(
         status=BiometricDevice.Status.RETIRED)
     for other in others:
-        row = _on_device(other).get(pin)
-        if row:
-            return row
-    return {}
+        for row in _roster(other):
+            if row["pin"] != pin or row.get("only_in_scans"):
+                continue
+            if not row.get("removed_from_device"):
+                return row
+            removed = removed or row
+    return removed
 
 
 def copy_to_device(*, actor, device, employee, pin, role=None):
