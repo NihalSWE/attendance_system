@@ -221,10 +221,17 @@ def build_access_grant(*, device_user_id):
 
 
 def needs_access_grant(device):
-    """True for an access-control device, which refuses users without one."""
+    """True unless the device is known to be time-attendance only (DeviceType=att).
+
+    An access-control device refuses a user without a door permission. What
+    the device is comes from its registration, which it does not repeat while
+    it stays registered — so a device the server has not heard register (e.g.
+    after the database was rebuilt) is treated as access control: on a device
+    without doors the permission is simply refused, harmlessly.
+    """
     settings = device.settings or {}
     announced = settings.get("announced") or {}
-    return (announced.get("device_type") or settings.get("device_type") or "").lower() == "acc"
+    return (announced.get("device_type") or settings.get("device_type") or "").lower() != "att"
 
 
 def build_user_delete(*, device_user_id):

@@ -215,6 +215,14 @@ class PushTests(TemplateCase):
         entries, error = push_to_device(self.device, "445900", name="Moin", card="8868366")
         self.assertEqual((len(entries), error), (2, ""))
 
+    def test_door_permission_when_the_device_type_is_not_known(self):
+        # After a database rebuild the device does not register again, so its
+        # type is unknown (seen 2026-09-19): it must still get the permission.
+        self.device.settings = {"push_protocol": "auto"}
+        self.device.save()
+        entries, _ = push_to_device(self.device, "445990", name="Rayhan")
+        self.assertEqual([e["key"] for e in entries], ["push_user:445990", "push_access:445990"])
+
     def test_no_door_permission_for_a_time_attendance_device(self):
         self.device.settings = {"announced": {"pushver": "3.1.2", "device_type": "att"}}
         self.device.save()

@@ -64,8 +64,12 @@ document.addEventListener("DOMContentLoaded", function () {
     // --- Map one employee ---
     var mapDialog = document.getElementById("map-dialog");
     function field(name) { return mapDialog.querySelector('[data-map-field="' + name + '"]'); }
-    document.querySelectorAll("[data-map-employee]").forEach(function (btn) {
-        btn.addEventListener("click", function () {
+    // Listened for on the page, not on each button: the server-side table
+    // redraws its rows after loading and on every page, replacing the buttons.
+    document.addEventListener("click", function (e) {
+        var btn = e.target.closest("[data-map-employee]");
+        if (!btn) return;
+        (function () {
             var branch = byId[btn.dataset.mapBranch] || {name: "", devices: []};
             field("employee").value = btn.dataset.mapEmployee;
             field("name").textContent = btn.dataset.mapName;
@@ -76,7 +80,7 @@ document.addEventListener("DOMContentLoaded", function () {
             }));
             setDate(field("start"), today());
             open(mapDialog);
-        });
+        })();
     });
 
     // --- Bulk map a branch ---
