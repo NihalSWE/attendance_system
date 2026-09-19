@@ -3444,23 +3444,22 @@ removed by Pin and must be deleted on the terminal.
 | Fingerprint | `DATA UPDATE biodata Pin=…	No=6	Index=0	Valid=1	Duress=0	Type=1	MajorVer=13	MinorVer=0	Format=0	Tmp=…` | Nihal's saved finger written to 99999 (Nihal deleted from the device first): the device identified him as 99999 |
 | Door permission | `DATA UPDATE userauthorize Pin=…	AuthorizeTimezoneId=1	AuthorizeDoorId=1` | without it: "Invalid time period" (rtlog event 23); after it the userauthorize count went 3 -> 4 and he was let through. The device counts this table when asked but does not upload its rows |
 | Delete one user | `DATA DELETE user Pin=…` (as before) | 99999 gone from the read-back |
-| Face | same `biodata` form, `Type=9`, `MajorVer=40`, `MinorVer=1` — Return=0 | **not proven**: nobody has scanned a face against a copy yet |
+| Face | same `biodata` form, `Type=9`, `No=0`, `MajorVer=40`, `MinorVer=1` | Ajay removed himself on the terminal; his saved face, finger and card were written back to 445962 and each was recognised as him |
 
 Re-sending a user record keeps that user's fingerprint and door permission.
 Ajay's own 445962 had no door permission before any of this (refused at 14:04,
 before the first write) and was given one. Nihal (445966, Super Admin, card)
 and Sajal (445961, card), removed for the test, were restored from the
-software with their fingerprint and door permission; their faces were not
-(face not proven).
+software with fingerprint, face and door permission; Ajay (445962, Super
+Admin) the same after he removed himself.
 
 The code now sends `Privilege`, adds the door permission on an access-control
-device (`needs_access_grant`: DeviceType `acc`), writes fingerprints to any
-user on this model (`MEASURED_TEMPLATE_TYPES = {"1"}`) and keeps faces to test
-user 99999. `take_pending_commands` no longer fails the whole reply when a
+device (`needs_access_grant`: DeviceType `acc`), writes fingerprints and faces to any
+user on this model (`MEASURED_TEMPLATE_TYPES = {"1", "9"}`); an unmeasured type
+still goes only to test user 99999, and the face trial card is hidden. `take_pending_commands` no longer fails the whole reply when a
 template cannot be decrypted: that one command is dropped and shown as not
 sent (a second dev server without the key had returned 500 to every poll).
 
-Next: measure the template write on the 2A (trial on 99999, recognition checked
-separately for finger and face); then a second device of the same model for
-the real device-to-device test; the 3A the same way (ATT2 forms) once a 3A is
+Next: a second device of the same model for the real device-to-device test
+(so far each template was written back to the device that captured it); the 3A the same way (ATT2 forms) once a 3A is
 reachable; then bulk queueing beyond `MAX_PENDING` for whole fleets.

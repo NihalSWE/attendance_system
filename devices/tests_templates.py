@@ -184,13 +184,22 @@ class PushTests(TemplateCase):
         stored = str(DeviceSyncState.all_objects.get(device=self.device).state_data)
         self.assertNotIn(FINGER_TMP, stored)
 
-    def test_face_refused_for_a_real_user_until_measured(self):
-        entries, error = push_to_device(
-            self.device, "445900", finger_template=self.finger, face_template=self.face
-        )
+    def test_unmeasured_template_type_only_to_the_test_user(self):
+        palm = {**self.finger, "type": "8"}
+        entries, error = push_to_device(self.device, "445900", finger_template=palm)
         self.assertEqual(entries, [])
         self.assertIn(TEST_USER_ID, error)
         self.assertEqual(self.pending(), [])
+        entries, error = push_to_device(self.device, TEST_USER_ID, finger_template=palm)
+        self.assertEqual((len(entries), error), (3, ""))
+
+    def test_finger_and_face_go_to_a_real_user(self):
+        entries, error = push_to_device(
+            self.device, "445900", finger_template=self.finger, face_template=self.face
+        )
+        self.assertEqual(error, "")
+        self.assertEqual([e["key"] for e in entries][-2:],
+                         ["push_template:445900:1:6:0", "push_template:445900:9:0:0"])
 
     def test_fingerprint_goes_to_a_real_user(self):
         entries, error = push_to_device(
@@ -334,8 +343,8 @@ class ScreenTests(TemplateCase):
         self.upload()
         page = self.client.get(self.url).content.decode()
         self.assertIn("1 finger · face", page)
-        self.assertIn("Write test user 99999 to the device", page)
-        self.assertIn("445900 · Moin", page)
+        # Faces are measured on this model, so the face trial is not offered.
+        self.assertNotIn("Write test user 99999 to the device", page)
 
     def test_save_button_saves_and_asks_the_device(self):
         with override_settings(BIOMETRIC_TEMPLATE_KEY=""):

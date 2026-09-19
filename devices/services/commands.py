@@ -236,18 +236,19 @@ def build_user_delete(*, device_user_id):
 # field names follow the write spelling measured for ``user`` above (capital
 # first letter), in the order the device uploads them.
 #
-# Measured 2026-09-19 on the office 2A: Nihal's fingerprint (Type 1, MajorVer
-# 13), captured by this device, written to test user 99999 answered Return=0
-# and the device then identified Nihal's finger as 99999. The face form (Type
-# 9) also answered Return=0 but no face has been scanned against it yet, so a
-# face still goes only to TEST_USER_ID. Measured types are per dialect: the
-# 3A (ATT2) has none, and user writes to it are refused anyway.
+# Measured 2026-09-19 on the office 2A (PushSDK 3.x): Nihal's fingerprint
+# (Type 1, MajorVer 13), captured by this device, written to test user 99999
+# answered Return=0 and the device then identified Nihal's finger as 99999.
+# Ajay's face (Type 9, MajorVer 40, MinorVer 1), finger and card, written back
+# after he removed himself on the terminal, were each recognised as him. An
+# unmeasured type still goes only to TEST_USER_ID. User writes to a 2.x device
+# (the 3A) are refused whatever the type, until measured on a 3A.
 TEMPLATE_WRITE_FIELDS = (
     ("Pin", None), ("No", "no"), ("Index", "index"), ("Valid", "valid"),
     ("Duress", "duress"), ("Type", "type"), ("MajorVer", "major_version"),
     ("MinorVer", "minor_version"), ("Format", "format"), ("Tmp", "template"),
 )
-MEASURED_TEMPLATE_TYPES = {"1"}
+MEASURED_TEMPLATE_TYPES = {"1", "9"}
 #: Where an unmeasured template type may still be written, to measure it.
 TEST_USER_ID = "99999"
 
@@ -497,8 +498,8 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
     unmeasured = [t for t in templates if str(t.get("type")) not in MEASURED_TEMPLATE_TYPES]
     if unmeasured and clean_id != TEST_USER_ID:
         return [], (
-            "Writing a face is not measured on this device model yet. Until it is, "
-            f"faces are written only to test user {TEST_USER_ID}; untick Face."
+            "Writing this kind of template is not measured on this device model yet. "
+            f"Until it is, it is written only to test user {TEST_USER_ID}."
         )
     for template in templates:
         if template.get("device_model_id") != device.device_model_id:
