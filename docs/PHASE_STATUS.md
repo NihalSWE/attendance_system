@@ -3560,3 +3560,18 @@ The Employee ID (the employee's current code) is the device user number.
 - Tests: `devices/tests_mapping.py` (23); table/template tests updated for the
   new columns and the outbox. Browser-checked (rendered pages) at 1280 and 375.
 - No `.env` change. Migration `devices.0007`.
+
+### Part 2b — the scenarios (Ajay, 2026-09-19)
+
+| Situation | Where | What happens |
+|---|---|---|
+| People enrolled at the terminal, not in the software | Device users → tick (or "Add them all") → **Add as employees** | Employee per user: name from the device, Employee ID = device number, device's branch, department/designation **"Unassigned"** (made on first use; HR moves them later), linked at once, fingerprint/face kept. No salary yet. Someone whose number is already an Employee ID is linked, not duplicated (`import_users`) |
+| Employees in the software (bulk-made), not on devices | Employees → tick / Select all → **Send to devices** | To every device of their branch: ID and name (+ card, fingerprint, face when saved); enrol the rest at the terminal and the device reports the templates back (`send_employees`) |
+| Both exist, numbers match | Device users → **Link to existing employees** | Linked by Employee ID, nothing written |
+| New or replaced device of the same model | New device's Users → **Load employees onto this device** | Every active employee of its branch, with the saved fingerprint/face from any device of the model (`load_device`) |
+| A second device alongside the first | Device users → tick → **Copy to device** | Same model only (`transfer_users`) |
+
+Checkboxes are always on Device users now (not only when a copy target exists).
+The old "Create employees for the unmapped users" (draft codes `DEV-<n>`) is
+replaced on the page by Add as employees (Employee ID = device number).
+Tests: `ScenarioTests` in `devices/tests_mapping.py`.

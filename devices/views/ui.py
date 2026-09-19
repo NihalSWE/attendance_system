@@ -995,6 +995,8 @@ def device_users(request, public_id):
         # Copy to another device: the company's other devices of this model.
         "transfer_targets": mapping_service.transfer_targets(device) if user_writes else [],
         "waiting_count": waiting_count(device),
+        # A new or replaced device is filled from the company (Load employees).
+        "branch_employee_count": len(mapping_service.branch_employees(device)) if user_writes else 0,
         "pending_commands": pending_summary(device),
         "last_sync": (
             DeviceMessage.objects.filter(

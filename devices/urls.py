@@ -75,6 +75,13 @@ ui_urlpatterns = [
         mapping.device_users_transfer,
         name="device_users_transfer",
     ),
+    path(
+        "devices/<uuid:public_id>/users/import/",
+        mapping.device_users_import,
+        name="device_users_import",
+    ),
+    path("devices/<uuid:public_id>/users/load/", mapping.device_load, name="device_load"),
+    path("devices/map/send/", mapping.employees_send, name="employees_send"),
     path("devices/map/employee/", mapping.employee_map, name="employee_map"),
     path("devices/map/branch/", mapping.employee_bulk_map, name="employee_bulk_map"),
     path(

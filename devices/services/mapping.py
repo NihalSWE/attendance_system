@@ -19,6 +19,8 @@ the device's excluded punches from that day, so scans made before the mapping
 start to count; that needs an administrator, and otherwise is left to one.
 """
 
+import contextlib
+import contextvars
 import datetime
 import zoneinfo
 from dataclasses import dataclass, field
@@ -114,9 +116,33 @@ def _start(device, day):
     return datetime.datetime.combine(day, datetime.time.min, tzinfo=_zone(device.company))
 
 
+#: Within one batch (bulk map, import, send, copy) each device's roster is
+#: built once: building it reads every user upload the device ever sent.
+_ROSTERS = contextvars.ContextVar("device_rosters", default=None)
+
+
+@contextlib.contextmanager
+def _roster_memo():
+    token = _ROSTERS.set({}) if _ROSTERS.get() is None else None
+    try:
+        yield
+    finally:
+        if token is not None:
+            _ROSTERS.reset(token)
+
+
+def _roster(device):
+    memo = _ROSTERS.get()
+    if memo is None:
+        return build_roster(device)
+    if device.pk not in memo:
+        memo[device.pk] = build_roster(device)
+    return memo[device.pk]
+
+
 def _on_device(device):
     """``{pin: roster row}`` for users the device reported and still holds."""
-    return {row["pin"]: row for row in build_roster(device) if not row.get("removed_from_device")}
+    return {row["pin"]: row for row in _roster(device) if not row.get("removed_from_device")}
 
 
 def _source_templates(device, pin):
@@ -284,22 +310,24 @@ def map_branch(*, actor, branch, device=None, start_day=None, attendance_enabled
         if (a := current_assignment(e)) is not None and a.branch_id == branch.pk
     ]
     earliest = None
-    for target in devices:
-        for employee in people:
-            if live_enrollment(target, employee):
-                result.skipped.append((employee, target, "already mapped"))
-                continue
-            try:
-                outcome = map_employee(
-                    actor=actor, device=target, employee=employee, start_day=start_day,
-                    attendance_enabled=attendance_enabled, assigned=assigned, check_access=False,
-                )
-            except MappingError as exc:
-                result.failed.append((employee, target, str(exc)))
-                continue
-            result.mapped.append(outcome)
-            start = outcome.enrollment.effective_from
-            earliest = start if earliest is None else min(earliest, start)
+    with _roster_memo():
+        for target in devices:
+            for employee in people:
+                if live_enrollment(target, employee):
+                    result.skipped.append((employee, target, "already mapped"))
+                    continue
+                try:
+                    outcome = map_employee(
+                        actor=actor, device=target, employee=employee, start_day=start_day,
+                        attendance_enabled=attendance_enabled, assigned=assigned,
+                        check_access=False,
+                    )
+                except MappingError as exc:
+                    result.failed.append((employee, target, str(exc)))
+                    continue
+                result.mapped.append(outcome)
+                start = outcome.enrollment.effective_from
+                earliest = start if earliest is None else min(earliest, start)
     if earliest is not None:
         result.rechecked = recheck_from(actor=actor, device=devices[0], start=earliest)
     return result
@@ -314,7 +342,7 @@ def map_one(*, actor, device, employee, start_day=None, attendance_enabled=True,
     return outcome
 
 
-def map_automatically(*, actor, device):
+def map_automatically(*, actor, device, pins=None):
     """Map every unmapped device user whose number is an employee's Employee ID.
 
     They are already on the device, so nothing is written to it. Returns a
@@ -323,9 +351,11 @@ def map_automatically(*, actor, device):
     from employees.models import Employee, EmployeeAssignment
 
     result = BulkResult()
+    wanted = None if pins is None else {str(p) for p in pins}
     unmapped = [
         row for row in build_roster(device)
         if not row["is_mapped"] and not row.get("removed_from_device")
+        and (wanted is None or row["pin"] in wanted)
     ]
     if not unmapped:
         return result
@@ -351,6 +381,188 @@ def map_automatically(*, actor, device):
                                               upload=False, check_access=False))
         except MappingError as exc:
             result.failed.append((employee, device, str(exc)))
+    return result
+
+
+UNASSIGNED_CODE = "UNASSIGNED"
+UNASSIGNED_NAME = "Unassigned"
+
+
+def unassigned_placement(branch, actor=None):
+    """The branch's "Unassigned" department and designation, made on first use.
+
+    People imported from a device are filed here so they can be employees (and
+    count for attendance) at once; HR moves them to real departments later
+    with Edit employee. A placement needs both, so this is what lets a company
+    start from its devices before it has set up departments.
+    """
+    from organization.models import Department, Designation
+
+    department = Department.all_objects.filter(branch=branch, code=UNASSIGNED_CODE).first()
+    if department is None:
+        department = Department(branch=branch, code=UNASSIGNED_CODE, name=UNASSIGNED_NAME,
+                                description="People imported from a device, waiting for a department.",
+                                created_by=actor)
+        department.company_id = branch.company_id
+        department.save()
+    designation = Designation.all_objects.filter(department=department, code=UNASSIGNED_CODE).first()
+    if designation is None:
+        designation = Designation(department=department, code=UNASSIGNED_CODE, name=UNASSIGNED_NAME,
+                                  created_by=actor)
+        designation.company_id = branch.company_id
+        designation.save()
+    return department, designation
+
+
+def _employee_with_id(company_id, pin):
+    """The employee whose *current* Employee ID is ``pin``, or None."""
+    from employees.models import EmployeeAssignment
+
+    for assignment in (
+        EmployeeAssignment.all_objects.filter(company_id=company_id, employee_code=pin)
+        .exclude(status="cancelled").select_related("employee").order_by("-effective_from")
+    ):
+        if current_assignment(assignment.employee) == assignment:
+            return assignment.employee
+    return None
+
+
+@dataclass
+class ImportResult:
+    created: list = field(default_factory=list)    # employees made from device users
+    mapped: list = field(default_factory=list)     # existing employees linked
+    skipped: list = field(default_factory=list)    # (pin, reason)
+
+
+def import_users(*, actor, device, pins=None):
+    """Turn device users into employees, linked to the device.
+
+    For each user (all of them when ``pins`` is None): already linked → left
+    alone; an employee already has that Employee ID → linked to them; otherwise
+    a new employee is made — name from the device, Employee ID = the device
+    number, placed in the device's branch under "Unassigned" — and linked.
+    Their fingerprints and faces are kept (encrypted) so they can be copied to
+    the company's other devices. No salary is set: Edit employee → Salary.
+    """
+    if not may_map(actor, device.company_id, device.branch_id):
+        raise PermissionDenied("You may not add employees to that branch.")
+    try:
+        templates.save_from_messages(device)
+    except templates.TemplateKeyMissing:
+        pass  # people are still imported; the page says templates are not saved
+    wanted = None if pins is None else {str(p) for p in pins}
+    result = ImportResult()
+    now = timezone.now()
+    with _roster_memo():
+        return _import_rows(actor, device, wanted, result, now)
+
+
+def _import_rows(actor, device, wanted, result, now):
+    from employees.models import Employee, EmployeeAssignment
+
+    for row in list(_roster(device)):
+        pin = row["pin"]
+        if wanted is not None and pin not in wanted:
+            continue
+        if row.get("removed_from_device"):
+            result.skipped.append((pin, "removed from the device"))
+            continue
+        if row["is_mapped"]:
+            result.skipped.append((pin, "already linked"))
+            continue
+        if not pin.isdigit() or len(pin) > 20:
+            result.skipped.append((pin, "the device number is not digits"))
+            continue
+        existing = _employee_with_id(device.company_id, pin)
+        try:
+            with transaction.atomic():
+                if existing is None:
+                    department, designation = unassigned_placement(device.branch, actor)
+                    name = (row["name"] or "").strip()
+                    employee = Employee(
+                        first_name=name or f"Device user {pin}", last_name="",
+                        employment_status=Employee.EmploymentStatus.ACTIVE,
+                        metadata={"imported_from_device": device.serial_number,
+                                  "device_user_id": pin, "needs_hr_review": True},
+                    )
+                    employee.company_id = device.company_id
+                    employee.full_clean()
+                    employee.save()
+                    assignment = EmployeeAssignment(
+                        employee=employee, employee_code=pin, branch=device.branch,
+                        department=department, designation=designation, effective_from=now,
+                        change_reason=f"Imported from {device.name} (device user {pin}).",
+                    )
+                    assignment.company_id = device.company_id
+                    assignment.full_clean()
+                    assignment.save()
+                else:
+                    employee = existing
+                map_employee(actor=actor, device=device, employee=employee, upload=False,
+                             check_access=existing is not None)
+        except (MappingError, ValidationError, IntegrityError, PermissionDenied) as exc:
+            reason = exc.messages[0] if isinstance(exc, ValidationError) else str(exc)
+            result.skipped.append((pin, reason))
+            continue
+        (result.mapped if existing else result.created).append(employee)
+    if result.created or result.mapped:
+        _audit(actor, device, "device.users_imported", device, {
+            "created": [e.pk for e in result.created], "linked": [e.pk for e in result.mapped],
+            "skipped": [pin for pin, _ in result.skipped],
+        })
+    return result
+
+
+@dataclass
+class SendResult:
+    sent: list = field(default_factory=list)       # (employee, device)
+    failed: list = field(default_factory=list)     # (employee, device or None, reason)
+
+
+def send_employees(*, actor, employees, only_device=None):
+    """Put employees on every active device of their branch.
+
+    Not linked there yet → linked and sent (``map_employee``); already linked →
+    their record, card, role, fingerprint and face are sent again, so a device
+    that lost them or never had them gets them. Someone with no fingerprint or
+    face saved goes with ID and name only; they enrol at the terminal and the
+    device reports the templates back by itself.
+    """
+    with _roster_memo():
+        return _send(actor, employees, SendResult(), only_device)
+
+
+def _send(actor, employees, result, only_device=None):
+    for employee in employees:
+        assignment = current_assignment(employee)
+        if assignment is None:
+            result.failed.append((employee, None, "no placement"))
+            continue
+        if not may_map(actor, employee.company_id, assignment.branch_id):
+            result.failed.append((employee, None, "not in a branch you may manage"))
+            continue
+        devices = [d for d in branch_devices(employee.company_id, assignment.branch_id)
+                   if upload_supported(d) and (only_device is None or d.pk == only_device.pk)]
+        if not devices:
+            result.failed.append((employee, None, f"{assignment.branch.name} has no device that takes users"))
+            continue
+        pin = employee_id_for(employee)
+        for device in devices:
+            try:
+                if live_enrollment(device, employee):
+                    uploaded, _, _, note = copy_to_device(actor=actor, device=device,
+                                                          employee=employee, pin=pin)
+                    if not uploaded:
+                        raise MappingError(note)
+                else:
+                    outcome = map_employee(actor=actor, device=device, employee=employee,
+                                           check_access=False)
+                    if not outcome.uploaded and outcome.note:
+                        raise MappingError(outcome.note)
+            except MappingError as exc:
+                result.failed.append((employee, device, str(exc)))
+                continue
+            result.sent.append((employee, device))
     return result
 
 
@@ -400,7 +612,12 @@ def transfer_users(*, actor, source, target, pins):
     except templates.TemplateKeyMissing as exc:
         raise MappingError(str(exc)) from exc
 
-    roster = {row["pin"]: row for row in build_roster(source) if not row.get("removed_from_device")}
+    with _roster_memo():
+        return _transfer(actor, source, target, pins)
+
+
+def _transfer(actor, source, target, pins):
+    roster = _on_device(source)
     result = TransferResult()
     for pin in dict.fromkeys(str(p) for p in pins):
         row = roster.get(pin)
@@ -475,3 +692,28 @@ def branch_devices(company_id, branch_id):
 
 def upload_supported(device):
     return protocol.dialect(device) != protocol.ATT2
+
+
+def branch_employees(device):
+    """Active employees placed in the device's branch (who belong on it)."""
+    from employees.models import Employee
+
+    return [
+        e for e in Employee.all_objects.filter(company_id=device.company_id)
+        .exclude(employment_status__in=["resigned", "terminated"]).order_by("first_name", "last_name")
+        if (a := current_assignment(e)) is not None and a.branch_id == device.branch_id
+    ]
+
+
+def load_device(*, actor, device):
+    """Put every employee of the device's branch on it (a new or replaced device).
+
+    Each goes with Employee ID, name, card, role and door permission, plus the
+    fingerprint and face the company keeps for them from any device of this
+    model; people with none saved go with ID and name, to enrol at the terminal.
+    """
+    if not may_map(actor, device.company_id, device.branch_id):
+        raise PermissionDenied("You may not manage that branch.")
+    if not upload_supported(device):
+        raise MappingError(f"Writing users to {device.name} is not measured on its protocol yet.")
+    return send_employees(actor=actor, employees=branch_employees(device), only_device=device)

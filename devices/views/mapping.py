@@ -160,7 +160,7 @@ def device_users_transfer(request, public_id):
 def device_map_automatically(request, public_id):
     """Device users → Map automatically: device numbers that are Employee IDs."""
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
-    result = mapping.map_automatically(actor=request.user, device=device)
+    result = mapping.map_automatically(actor=request.user, device=device, pins=_picked(request))
     if result.mapped:
         messages.success(request, f"Mapped {len(result.mapped)} device user(s) by Employee ID: "
                          + ", ".join(f"{o.enrollment.device_user_id} → {o.employee.full_name}"
@@ -173,3 +173,98 @@ def device_map_automatically(request, public_id):
     if not (result.mapped or result.skipped or result.failed):
         messages.info(request, "Every user on this device is already mapped.")
     return redirect("devices:device_users", public_id=device.public_id)
+
+
+def _picked(request):
+    """The ticked device user numbers, or None for "every user" (all=1 or none sent)."""
+    if request.POST.get("all") == "1":
+        return None
+    return request.POST.getlist("pin") or None
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_users_import(request, public_id):
+    """Device users → Import as employees: the ticked users, or everyone."""
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    back = redirect("devices:device_users", public_id=device.public_id)
+    try:
+        result = mapping.import_users(actor=request.user, device=device, pins=_picked(request))
+    except PermissionDenied as exc:
+        messages.error(request, str(exc))
+        return back
+    if result.created:
+        messages.success(
+            request,
+            f"Added {len(result.created)} employee(s) from {device.name}, each linked under "
+            "their device number as Employee ID and filed under \"Unassigned\". "
+            "Give them a department and salary from Employees → Edit when you are ready.",
+        )
+    if result.mapped:
+        messages.success(request, f"Linked {len(result.mapped)} existing employee(s) by Employee ID.")
+    skipped = [(pin, reason) for pin, reason in result.skipped if reason != "already linked"]
+    if skipped:
+        messages.info(request, f"{len(skipped)} left as they are: "
+                      + ", ".join(f"{pin} ({reason})" for pin, reason in skipped[:10]))
+    if not (result.created or result.mapped or skipped):
+        messages.info(request, "Everyone on this device is already an employee.")
+    return back
+
+
+@require_POST
+@login_required
+def employees_send(request):
+    """Employees list → Send to devices: the ticked employees, to their branch's devices."""
+    from employees.models import Employee
+
+    if request.POST.get("all") == "1":
+        # Everyone the viewer may put on a device (the service checks each).
+        employees = list(Employee.objects.exclude(employment_status__in=["resigned", "terminated"]))
+    else:
+        ids = [pk for pk in request.POST.getlist("employee") if pk.isdigit()]
+        employees = list(Employee.objects.filter(pk__in=ids))
+    if not employees:
+        messages.error(request, "Tick at least one employee.")
+        return _back(request)
+    result = mapping.send_employees(actor=request.user, employees=employees)
+    people = {employee.pk for employee, _ in result.sent}
+    devices = {device.pk for _, device in result.sent}
+    if result.sent:
+        messages.success(
+            request,
+            f"Sending {len(people)} employee(s) to {len(devices)} device(s). They appear on the "
+            "terminal within a minute or two; anyone without a fingerprint or face saved goes with "
+            "ID and name only — enrol them at the terminal and the device reports it back.",
+        )
+    for employee, device, reason in result.failed[:10]:
+        messages.warning(request, f"{employee.full_name}{' on ' + device.name if device else ''}: {reason}")
+    return _back(request)
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_load(request, public_id):
+    """Device users → Load employees onto this device (a new or replaced device)."""
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    back = redirect("devices:device_users", public_id=device.public_id)
+    try:
+        result = mapping.load_device(actor=request.user, device=device)
+    except (PermissionDenied, mapping.MappingError) as exc:
+        messages.error(request, str(exc))
+        return back
+    if result.sent:
+        with_bio = sum(1 for employee, _ in result.sent
+                       if any(mapping._source_templates(device, mapping.employee_id_for(employee))))
+        messages.success(
+            request,
+            f"Loading {len(result.sent)} employee(s) onto {device.name}: {with_bio} with their saved "
+            "fingerprint/face, the rest with Employee ID and name to enrol at the terminal. "
+            "The device takes a few per check-in; follow it under Commands and answers.",
+        )
+    elif not result.failed:
+        messages.info(request, f"{device.branch.name} has no active employees to load.")
+    for employee, _, reason in result.failed[:10]:
+        messages.warning(request, f"{employee.full_name}: {reason}")
+    return back

@@ -57,7 +57,7 @@ class TableTests(OvertimeBase):
             self.assertTrue(any("LIMIT 10 OFFSET 10" in query["sql"] for query in queries))
         data = self.draw("employee_list", **{"search[value]": "Person 035", "start": 0})
         self.assertEqual((data["recordsTotal"], data["recordsFiltered"], len(data["data"])), (37, 1, 1))
-        self.assertIn("Person 035", data["data"][0]["1"])
+        self.assertIn("Person 035", data["data"][0]["2"])
         self.assertNotIn("Secret employee", str(data))
         data = self.draw("employee_list", **{"length": -1, "start": 1000000, "order[0][column]": 9999})
         self.assertEqual(data["data"], [])
@@ -81,7 +81,7 @@ class TableTests(OvertimeBase):
             penalty.save()
         self.work(datetime.date(2026, 8, 10), (9, 0), (20, 0))
         generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
-        screens = {"employee_list": 10, "organization:branch_list": 7, "organization:adoption_list": 7,
+        screens = {"employee_list": 11, "organization:branch_list": 7, "organization:adoption_list": 7,
             "leaves:leave_list": 8, "leaves:leave_type_list": 6, "scheduling:holiday_list": 5,
             "payroll:payroll_home": 11, "payroll:salary_settings": 5, "payroll:overtime_list": 7}
         for name, columns in screens.items():
@@ -98,7 +98,7 @@ class TableTests(OvertimeBase):
         with use_company(self.company):
             self.employee.first_name = '<img src=x onerror="alert(1)">'
             self.employee.save(update_fields=["first_name"])
-        cell = self.draw("employee_list")["data"][0]["1"]
+        cell = self.draw("employee_list")["data"][0]["2"]
         self.assertIn("&lt;img", cell)
         self.assertNotIn("<img", cell)
 

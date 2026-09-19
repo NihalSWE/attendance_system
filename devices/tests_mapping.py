@@ -352,3 +352,71 @@ class TransferTests(MappingCase):
             reverse("devices:device_users_transfer", args=[self.device.public_id]),
             {"target": self.second.pk, "all": "1"}, follow=True)
         self.assertContains(response, "Copying 3 user(s) to Back Door")
+
+
+class ScenarioTests(MappingCase):
+    """The ways a company gets people and devices together (Ajay, 2026-09-19)."""
+
+    def test_device_first_import_users_as_employees(self):
+        # People enrolled at the terminal; the company has no employees for them.
+        from employees.models import EmployeeAssignment
+
+        self.upload(USERS)
+        self.upload(BIODATA, table="biodata", cmdid="2")
+        with use_company(self.company):
+            result = mapping.import_users(actor=self.admin, device=self.device, pins=["777"])
+            [employee] = result.created
+            assignment = mapping.current_assignment(employee)
+            self.assertEqual((employee.first_name, assignment.employee_code), ("Nobody", "777"))
+            self.assertEqual(assignment.department.name, "Unassigned")
+            self.assertIsNotNone(mapping.live_enrollment(self.device, employee))
+            # Existing employees with that Employee ID are linked, not duplicated.
+            again = mapping.import_users(actor=self.admin, device=self.device)
+            self.assertEqual(sorted(e.first_name for e in again.mapped), ["Ajay", "Moin"])
+            self.assertEqual(again.created, [])
+            self.assertEqual(EmployeeAssignment.all_objects.filter(employee_code="777").count(), 1)
+        self.assertEqual(self.outbox(self.device), [])  # nothing written to the device
+
+    def test_software_first_send_selected_employees(self):
+        # Bulk-made employees, no templates yet: they go with ID and name only.
+        with use_company(self.company):
+            result = mapping.send_employees(actor=self.admin, employees=[self.new, self.far])
+        sent = {(e.first_name, d.name) for e, d in result.sent}
+        self.assertEqual(sent, {("Newcomer", "Main Entrance"), ("Newcomer", "Back Door"),
+                                ("Far", "CTG Gate")})
+        self.assertEqual(self.outbox(self.device), ["push_user:445999", "push_access:445999"])
+
+    def test_replacement_device_is_loaded_with_saved_templates(self):
+        # Templates saved from the old device; a new device of the same model arrives.
+        self.upload(USERS)
+        self.upload(BIODATA, table="biodata", cmdid="2")
+        with use_company(self.company):
+            new_device = self.device_at(self.hq, "NYU0000000009", "Replacement")
+            result = mapping.load_device(actor=self.admin, device=new_device)
+        self.assertEqual({e.first_name for e, _ in result.sent}, {"Ajay", "Moin", "Newcomer"})
+        self.assertEqual([e.first_name for e, _, _ in result.failed], ["Lettered"])
+        keys = self.outbox(new_device)
+        self.assertIn("push_template:445962:1:6:0", keys)
+        self.assertIn("push_template:445962:9:0:0", keys)
+        ajay = DeviceOutboxCommand.all_objects.get(device=new_device, key="push_user:445962")
+        self.assertIn("CardNo=3231436\tPrivilege=14", ajay.body)
+
+    def test_screens(self):
+        self.upload(USERS)
+        self.client.force_login(self.admin)
+        with use_company(self.company):
+            new_device = self.device_at(self.hq, "NYU0000000009", "Replacement")
+        page = self.client.get(reverse("devices:device_users", args=[new_device.public_id])).content.decode()
+        self.assertIn("Load 4 employees onto this device", page)
+        response = self.client.post(reverse("devices:device_load", args=[new_device.public_id]), follow=True)
+        self.assertContains(response, "Loading 3 employee(s) onto Replacement")
+        page = self.client.get(reverse("devices:device_users", args=[self.device.public_id])).content.decode()
+        self.assertIn("Add as employees", page)
+        self.assertIn('name="pin" value="777" form="transfer-form"', page)
+        response = self.client.post(reverse("devices:device_users_import", args=[self.device.public_id]),
+                                    {"pin": ["777"]}, follow=True)
+        self.assertContains(response, "Added 1 employee(s) from Main Entrance")
+        employees = self.client.get(reverse("employee_list")).content.decode()
+        self.assertIn('name="employee" value="%d" form="send-form"' % self.moin.pk, employees)
+        response = self.client.post(reverse("devices:employees_send"), {"all": "1"}, follow=True)
+        self.assertContains(response, "Sending")

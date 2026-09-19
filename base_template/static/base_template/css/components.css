@@ -1260,3 +1260,40 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     .notice__actions .btn { width: 100%; justify-content: center; }
     .notice__actions form { width: 100%; }
 }
+.selection-bar__number {
+    display: inline-grid;
+    place-items: center;
+    min-width: 26px;
+    height: 26px;
+    padding: 0 8px;
+    border-radius: var(--r-pill);
+    background: var(--on-accent);
+    color: var(--accent);
+    font-weight: 700;
+    font-size: 13px;
+}
+.selection-bar .btn--ghost {
+    background: transparent;
+    color: var(--on-accent);
+    border-color: rgba(255, 255, 255, .35);
+}
+.selection-bar .btn--ghost:hover {
+    background: rgba(255, 255, 255, .12);
+    border-color: rgba(255, 255, 255, .6);
+}
+.selection-bar__divider {
+    width: 1px;
+    align-self: stretch;
+    background: rgba(255, 255, 255, .25);
+    margin: 0 4px;
+}
+.selection-bar__action {
+    flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+    .selection-bar__divider { display: none; }
+    .selection-bar__action .btn { flex: 1 1 auto; justify-content: center; }
+}
+.empty__action {
+    margin-top: 16px;
+}

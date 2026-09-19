@@ -151,7 +151,7 @@ def employee_list(request):
     page = paginate(request, qs,
         search=("first_name", "last_name", "work_email", "table_code", "table_branch", "table_department", "table_designation", "employment_status"),
         # Sorting by pay would reveal pay order to someone who may not see pay.
-        order=("table_code", ("first_name", "last_name"), "table_branch", "table_department", "table_designation", None, "employment_status", "table_rate" if company_wide else None, None, None))
+        order=(None, "table_code", ("first_name", "last_name"), "table_branch", "table_department", "table_designation", None, "employment_status", "table_rate" if company_wide else None, None, None))
     paginator, per_page = page.paginator, page.paginator.per_page
 
     # Current assignment per employee, for code/branch/department columns.

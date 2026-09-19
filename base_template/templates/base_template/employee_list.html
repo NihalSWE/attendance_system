@@ -10,6 +10,8 @@
     </script>
     <script defer src="{% static 'base_template/js/device_mapping.js' %}">
     </script>
+    <script defer src="{% static 'base_template/js/selection.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="page__head">
@@ -114,6 +116,14 @@
                 <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
+                            <th class="pick-cell no-sort">
+                                {% if map_branches %}
+                                    <label class="pick" title="Select everyone on this page">
+                                        <input type="checkbox" data-pick-all aria-label="Select everyone on this page">
+                                        <span class="pick__box"></span>
+                                    </label>
+                                {% endif %}
+                            </th>
                             <th>
                                 Code
                             </th>
@@ -149,6 +159,15 @@
                     <tbody>
                         {% for r in rows %}
                             <tr>
+                                <td class="pick-cell">
+                                    {% if r.can_map %}
+                                        <label class="pick" title="Select {{ r.e.full_name }}">
+                                            <input type="checkbox" name="employee" value="{{ r.e.pk }}" form="send-form" data-pick
+                                                   aria-label="Select {{ r.e.full_name }}">
+                                            <span class="pick__box"></span>
+                                        </label>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {{ r.a.employee_code|default:"—" }}
                                 </td>
@@ -259,6 +278,30 @@
                 </table>
             </div>
         {% include "base_template/includes/table_pagination.html" %}
+        {% if map_branches %}
+            <form class="selection-bar" id="send-form" method="post" action="{% url 'devices:employees_send' %}" data-selection-bar hidden>
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="selection-bar__count">
+                    <span class="selection-bar__number" data-pick-count>0</span>
+                    <span>selected</span>
+                    <input type="hidden" name="all" value="" data-pick-everyone-field>
+                    <button class="btn btn--quiet btn--sm" type="button" data-pick-everyone
+                            data-total="{{ paginator.count }}" title="Everyone in this list, on every page">
+                        Select all {{ paginator.count }}
+                    </button>
+                    <button class="btn btn--quiet btn--sm" type="button" data-pick-clear>
+                        Clear
+                    </button>
+                </div>
+                <div class="selection-bar__action">
+                    <button class="btn btn--primary" type="submit"
+                            title="Puts them on every device of their branch: Employee ID and name, plus card, fingerprint and face when the company has them">
+                        Send to devices
+                    </button>
+                </div>
+            </form>
+        {% endif %}
             {# Pagination is required on every table, with a real count — spec §4. #}
 
         {% else %}

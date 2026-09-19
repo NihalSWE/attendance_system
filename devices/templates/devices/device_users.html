@@ -2,7 +2,7 @@
 {% load static %}
 {% block extra_js %}
     {{ block.super }}
-    <script defer src="{% static 'devices/js/user_selection.js' %}">
+    <script defer src="{% static 'base_template/js/selection.js' %}">
     </script>
 {% endblock %}
 {% block title %}
@@ -55,6 +55,16 @@
                     Save fingerprints and faces
                 </button>
             </form>
+            {% if branch_employee_count %}
+                <form method="post" action="{% url 'devices:device_load' device.public_id %}"
+                      onsubmit="return confirm('Send all {{ branch_employee_count }} employee(s) of {{ device.branch.name|escapejs }} to {{ device.name|escapejs }}, with their card, fingerprint and face where saved?')">
+                    {% csrf_token %}
+                    <button class="btn btn--ghost" type="submit"
+                            title="Sends every employee of {{ device.branch.name }} to this device, with the fingerprint and face the company keeps for them">
+                        Load employees onto this device
+                    </button>
+                </form>
+            {% endif %}
             <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
                 View punches
             </a>
@@ -87,23 +97,26 @@
                     Their scans are saved, but they don't count towards attendance until each user is linked to an employee.
                 </p>
                 <div class="notice__actions">
-                    <form method="post" action="{% url 'devices:device_map_automatically' device.public_id %}">
+                    <form method="post" action="{% url 'devices:device_users_import' device.public_id %}">
                         {% csrf_token %}
+                        <input type="hidden" name="all" value="1">
                         <button class="btn btn--primary" type="submit">
-                            Map automatically by Employee ID
+                            Add them all as employees
                         </button>
                     </form>
-                    <form method="post" action="{% url 'devices:device_users_sync' device.public_id %}"
-                          onsubmit="return confirm('Create {{ unmapped_count }} draft employee record(s) from this device? They will be recognition-only until you authorise them.')">
+                    <form method="post" action="{% url 'devices:device_map_automatically' device.public_id %}">
                         {% csrf_token %}
+                        <input type="hidden" name="all" value="1">
                         <button class="btn btn--ghost" type="submit">
-                            Create employees for them
+                            Link to existing employees
                         </button>
                     </form>
                 </div>
                 <p class="notice__hint">
-                    <strong>Map automatically</strong> links each user whose number matches an Employee ID; nothing is written to the device.
-                    <strong>Create employees</strong> makes a draft employee for each remaining user; their scans start counting once you authorise them.
+                    <strong>Add as employees</strong> makes each user an employee — Employee ID = their device number,
+                    filed under "Unassigned" until you give them a department — and keeps their fingerprint and face.
+                    <strong>Link</strong> only connects users whose number is already an employee's Employee ID.
+                    To pick some users, tick them in the list below.
                 </p>
             </div>
         </section>
@@ -151,7 +164,7 @@
                     <thead>
                         <tr>
                             <th class="pick-cell">
-                                {% if transfer_targets %}
+                                {% if server_table.total %}
                                     <label class="pick" title="Select every user on this page">
                                         <input type="checkbox" data-pick-all aria-label="Select every user on this page">
                                         <span class="pick__box"></span>
@@ -200,7 +213,7 @@
                         {% for row in page.object_list %}
                             <tr>
                                 <td class="pick-cell">
-                                    {% if transfer_targets and not row.removed_from_device and not row.only_in_scans %}
+                                    {% if not row.removed_from_device %}
                                         <label class="pick" title="Select {{ row.name|default:row.pin }}">
                                             <input type="checkbox" name="pin" value="{{ row.pin }}" form="transfer-form" data-pick
                                                    aria-label="Select user {{ row.pin }}">
@@ -341,49 +354,75 @@
                 </table>
             </div>
             {% include "base_template/includes/table_pagination.html" %}
-            {% if transfer_targets %}
-                <form class="selection-bar" id="transfer-form" method="post"
-                      action="{% url 'devices:device_users_transfer' device.public_id %}" data-selection-bar hidden>
-                    {% csrf_token %}
-                    <input type="hidden" name="all" value="" data-pick-everyone-field>
-                    <div class="selection-bar__count">
-                        <strong data-pick-count>0</strong> selected
-                        <button class="btn btn--quiet btn--sm" type="button" data-pick-everyone
-                                title="Every user on this device, on every page">
-                            Select all {{ server_table.total }} on this device
-                        </button>
-                        <button class="btn btn--quiet btn--sm" type="button" data-pick-clear>
-                            Clear
-                        </button>
-                    </div>
-                    <div class="selection-bar__action">
+            <form class="selection-bar" id="transfer-form" method="post"
+                  action="{% url 'devices:device_users_import' device.public_id %}" data-selection-bar hidden>
+                {% csrf_token %}
+                <input type="hidden" name="all" value="" data-pick-everyone-field>
+                <div class="selection-bar__count">
+                    <span class="selection-bar__number" data-pick-count>0</span>
+                    <span>selected</span>
+                    <button class="btn btn--quiet btn--sm" type="button" data-pick-everyone
+                            data-total="{{ server_table.total }}" title="Every user on this device, on every page">
+                        Select all {{ server_table.total }}
+                    </button>
+                    <button class="btn btn--quiet btn--sm" type="button" data-pick-clear>
+                        Clear
+                    </button>
+                </div>
+                <div class="selection-bar__action">
+                    <button class="btn btn--primary" type="submit"
+                            formaction="{% url 'devices:device_users_import' device.public_id %}"
+                            title="Employee ID = device number, filed under Unassigned; fingerprints and faces are kept">
+                        Add as employees
+                    </button>
+                    <button class="btn btn--ghost" type="submit"
+                            formaction="{% url 'devices:device_map_automatically' device.public_id %}"
+                            title="Links users whose number is already an employee's Employee ID">
+                        Link to existing employees
+                    </button>
+                    {% if transfer_targets %}
+                        <span class="selection-bar__divider" aria-hidden="true"></span>
                         <label class="sr-only" for="transfer-target">
                             Copy to
                         </label>
-                        <select class="select js-select2" id="transfer-target" name="target" required>
+                        <select class="select js-select2" id="transfer-target" name="target">
                             {% for target in transfer_targets %}
                                 <option value="{{ target.pk }}">
                                     {{ target.name }} · {{ target.branch.name }}
                                 </option>
                             {% endfor %}
                         </select>
-                        <button class="btn btn--primary" type="submit">
+                        <button class="btn btn--ghost" type="submit"
+                                formaction="{% url 'devices:device_users_transfer' device.public_id %}">
                             Copy to device
                         </button>
-                    </div>
-                </form>
-            {% endif %}
+                    {% endif %}
+                </div>
+            </form>
         {% endif %}
         {% if not page.object_list %}
             <div class="empty server-table-empty">
                 <div class="empty__title">
-                    No users reported yet
+                    No users on this device yet
                 </div>
                 <div class="empty__text">
-                    This device has not uploaded its user table. It sends one automatically after
-                    it connects; if the device is online and this stays empty, check the raw
-                    <a href="{% url 'devices:message_list' %}?device={{ device.pk }}">message log</a>.
+                    {% if branch_employee_count %}
+                        A new or replaced device? Load {{ device.branch.name }}'s {{ branch_employee_count }}
+                        employee{{ branch_employee_count|pluralize }} onto it — with their card, fingerprint and face
+                        wherever the company has them.
+                    {% else %}
+                        Enrol people at the terminal, then press Refresh user list. If the device is online and
+                        this stays empty, check the <a href="{% url 'devices:message_list' %}?device={{ device.pk }}">message log</a>.
+                    {% endif %}
                 </div>
+                {% if branch_employee_count %}
+                    <form method="post" action="{% url 'devices:device_load' device.public_id %}" class="empty__action">
+                        {% csrf_token %}
+                        <button class="btn btn--primary" type="submit">
+                            Load {{ branch_employee_count }} employee{{ branch_employee_count|pluralize }} onto this device
+                        </button>
+                    </form>
+                {% endif %}
             </div>
         {% endif %}
     </div>
