@@ -48,15 +48,20 @@ from devices.services import (
     protocol,
     server_address,
     setup_instructions,
+    templates,
 )
 from devices.services.commands import (
     COMMAND_LABELS,
+    TEMPLATE_WRITE_MEASURED,
+    TEST_USER_ID,
     WRITABLE_OPTIONS,
     pending_summary,
+    push_to_device,
     queue_command,
     queue_set_option,
     queue_user_delete,
     queue_user_push,
+    recent_results,
 )
 from devices.services.device_roster import build_roster
 from devices.services.user_sync import SyncNotPossible, sync_device_users
@@ -937,6 +942,12 @@ def device_users(request, public_id):
         BiometricDevice.objects.select_related("branch"), public_id=public_id
     )
     full_roster = build_roster(device)
+    saved = templates.saved_counts(device)
+    for row in full_roster:
+        counts = saved.get(row["pin"], {})
+        row["saved_fingerprints"] = counts.get("fingerprint", 0)
+        row["saved_faces"] = counts.get("face", 0)
+        row["saved_total"] = sum(counts.values())
     roster = full_roster
 
     search = request.GET.get("q", "").strip()
@@ -959,9 +970,10 @@ def device_users(request, public_id):
         request, roster,
         search=("pin", "name", "privilege_label", "card_number", "employee_name"),
         order=("pin", "name", "privilege_label", "fingerprint_count", "face_count",
-               "card_number", "has_password", "has_photo", "employee_name", None,
-               "counts_for_attendance"),
+               "saved_total", "card_number", "has_password", "has_photo",
+               "employee_name", None, "counts_for_attendance"),
     )
+    user_writes = protocol.dialect(device) != protocol.ATT2
 
     return table_render(request, "devices/device_users.html", {
         "device": device,
@@ -971,7 +983,14 @@ def device_users(request, public_id):
         "unmapped_count": sum(1 for r in full_roster if not r["is_mapped"]),
         "can_refresh": protocol.supports(device, "query_users"),
         # No user writes to a 2.x device until its write form is measured.
-        "user_writes": protocol.dialect(device) != protocol.ATT2,
+        "user_writes": user_writes,
+        "template_key_problem": templates.key_problem(),
+        "trial_sources": [r for r in full_roster if r["saved_total"] and r["pin"] != TEST_USER_ID],
+        "test_user_id": TEST_USER_ID,
+        "test_user_on_device": any(r["pin"] == TEST_USER_ID for r in full_roster),
+        "template_writes_measured": TEMPLATE_WRITE_MEASURED,
+        "recent_results": recent_results(device),
+        "pending_commands": pending_summary(device),
         "last_sync": (
             DeviceMessage.objects.filter(
                 device=device,
@@ -1023,6 +1042,90 @@ def device_command(request, public_id):
             f"“{label}” queued. The device collects it on its next check-in "
             "(usually within a minute); it is not sent immediately.",
         )
+    return back
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_templates_save(request, public_id):
+    """Keep, encrypted, the fingerprints and faces this device has sent.
+
+    Saves what already arrived straight away, and asks the device to send its
+    templates again so anything newer follows on its next check-in.
+    """
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    back = redirect("devices:device_users", public_id=device.public_id)
+    try:
+        added, updated, unchanged = templates.save_from_messages(device)
+    except templates.TemplateKeyMissing as exc:
+        messages.error(request, str(exc))
+        return back
+
+    # On a 2.x device the user list brings the templates with it.
+    command_key = "query_biodata" if protocol.supports(device, "query_biodata") else "query_users"
+    queued = queue_command(device=device, command_key=command_key, requested_by=request.user)
+    _audit(request, "device.templates_saved", device, after={
+        "added": added, "updated": updated, "unchanged": unchanged,
+        "asked_device": bool(queued),
+    })
+    messages.success(
+        request,
+        f"Saved {added} new and {updated} changed template(s); {unchanged} were already saved. "
+        + ("The device was asked to send its templates again; anything new is saved "
+           "when it answers (usually within a minute)." if queued else ""),
+    )
+    return back
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_template_trial(request, public_id):
+    """Measure the template write: copy one user's saved templates to the test user.
+
+    Until the write form is measured on a device model, templates go only to
+    TEST_USER_ID, a number nobody uses, so a wrong form cannot touch a real
+    person. The operator then checks on the terminal that the test user is
+    recognised with the copied fingerprint and face.
+    """
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    back = redirect("devices:device_users", public_id=device.public_id)
+    source = request.POST.get("source", "").strip()
+    name = (request.POST.get("name") or f"TEST {TEST_USER_ID}").strip()
+    try:
+        finger, face = templates.templates_for(device, source)
+    except templates.TemplateKeyMissing as exc:
+        messages.error(request, str(exc))
+        return back
+    if request.POST.get("finger") != "on":
+        finger = None
+    if request.POST.get("face") != "on":
+        face = None
+    if not (finger or face):
+        messages.error(request, f"Device user {source or '—'} has no saved fingerprint or face to copy.")
+        return back
+
+    entries, error = push_to_device(
+        device, TEST_USER_ID, name=name, card=request.POST.get("card", ""), role=0,
+        finger_template=finger, face_template=face, requested_by=request.user,
+    )
+    if error:
+        messages.error(request, error)
+        return back
+    # The audit names what was sent, never the template itself.
+    _audit(request, "device.template_trial", device, after={
+        "from_device_user": source, "to_device_user": TEST_USER_ID,
+        "fingerprint": bool(finger), "face": bool(face),
+        "commands": [e["body"] for e in entries],
+    })
+    messages.success(
+        request,
+        f"Queued test user {TEST_USER_ID} with {source}'s "
+        + " and ".join(k for k, v in (("fingerprint", finger), ("face", face)) if v)
+        + ". The device takes it on its next check-in; its answers appear under "
+        "Commands and answers below.",
+    )
     return back
 
 
@@ -1149,8 +1252,8 @@ def device_user_push(request, public_id):
             request,
             f"Queued {enrollment.employee.full_name} as device user "
             f"{enrollment.device_user_id}. The device applies it on its next "
-            "check-in. Their face or fingerprint must still be enrolled at "
-            "the terminal — we never hold biometric templates.",
+            "check-in. This sends the user record only: their face or "
+            "fingerprint is enrolled at the terminal.",
         )
     return redirect("devices:device_users", public_id=device.public_id)
 

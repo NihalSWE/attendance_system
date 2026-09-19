@@ -205,6 +205,30 @@ def build_user_delete(*, device_user_id):
     """Build the DATA DELETE body that removes exactly one device user."""
     return f"DATA DELETE user Pin={device_user_id}"
 
+
+# Writing a fingerprint or face template (PushSDK 3.x ``biodata`` table). The
+# field names follow the write spelling measured for ``user`` above (capital
+# first letter), in the order the device uploads them. NOT MEASURED on hardware
+# yet: until it is (TEMPLATE_WRITE_MEASURED), templates are only written to the
+# trial user TEST_USER_ID, so a wrong form can never touch a real person.
+TEMPLATE_WRITE_FIELDS = (
+    ("Pin", None), ("No", "no"), ("Index", "index"), ("Valid", "valid"),
+    ("Duress", "duress"), ("Type", "type"), ("MajorVer", "major_version"),
+    ("MinorVer", "minor_version"), ("Format", "format"), ("Tmp", "template"),
+)
+TEMPLATE_WRITE_MEASURED = False
+#: The only user number a template is written to until the form is measured.
+TEST_USER_ID = "99999"
+
+
+def build_template_update(*, device_user_id, template):
+    """Build the DATA UPDATE body that writes one template for one device user."""
+    values = {"Pin": str(device_user_id)}
+    for field, key in TEMPLATE_WRITE_FIELDS[1:]:
+        values[field] = str(template.get(key) or "")
+    body = "\t".join(f"{field}={values[field]}" for field, _ in TEMPLATE_WRITE_FIELDS)
+    return f"DATA UPDATE biodata {body}"
+
 # A device that has been offline for a long time should not receive a pile of
 # stale refresh requests the moment it reconnects.
 MAX_PENDING = 10
@@ -404,6 +428,100 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
     )
 
 
+ROLE_PRIVILEGES = (0, 2, 6, 14)
+
+
+def push_to_device(device, device_user_id, name="", card="", role=0,
+                   finger_template=None, face_template=None, requested_by=None):
+    """Write one person to a device: user record, card, fingerprint and face.
+
+    The seam agreed with Nihal (2026-09-19): plain values only, never an
+    employee, so the later employee-to-device-user mapping calls this with what
+    it resolved. A template is the dict ``templates.as_payload`` returns (the
+    device's own fields plus ``template`` and ``device_model_id``), or None.
+
+    Everything is queued together or not at all, user record first, so the
+    device never gets a template for a user it does not have. Returns
+    ``(entries, error)``.
+    """
+    clean_id, error = _validated_user_id(device_user_id)
+    if error:
+        return [], error
+    error = _unverified_user_writes(device)
+    if error:
+        return [], error
+    try:
+        role = int(role)
+    except (TypeError, ValueError):
+        role = -1
+    if role not in ROLE_PRIVILEGES:
+        return [], "Unknown privilege level."
+    card = str(card or "").strip()
+    if card and not card.isdigit():
+        return [], "The card number must be digits only."
+
+    templates = [t for t in (finger_template, face_template) if t]
+    if templates and not TEMPLATE_WRITE_MEASURED and clean_id != TEST_USER_ID:
+        return [], (
+            "Writing fingerprints and faces is not measured on this device model yet. "
+            f"Until it is, templates are written only to test user {TEST_USER_ID}."
+        )
+    for template in templates:
+        if template.get("device_model_id") != device.device_model_id:
+            return [], (
+                "That template was captured on another device model; fingerprints "
+                "and faces only transfer between devices of the same model."
+            )
+        if not str(template.get("template") or "").strip():
+            return [], "A template is empty."
+
+    commands = [(
+        f"push_user:{clean_id}",
+        build_user_update(device_user_id=clean_id, name=name, card_number=card,
+                          privilege=role),
+    )]
+    for template in templates:
+        commands.append((
+            f"push_template:{clean_id}:{template.get('type')}:{template.get('no')}:"
+            f"{template.get('index')}",
+            build_template_update(device_user_id=clean_id, template=template),
+        ))
+    return _queue_group(device=device, commands=commands, requested_by=requested_by)
+
+
+def _queue_group(*, device, commands, requested_by=None):
+    """Queue several ``(key, body)`` commands in order, all or none."""
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        data = dict(state.state_data or {})
+        keys = {key for key, _ in commands}
+        pending = [e for e in (data.get("pending_commands") or []) if e.get("key") not in keys]
+        if len(pending) + len(commands) > MAX_PENDING:
+            return [], "Too many commands are already queued for this device. Try again in a minute."
+        next_id = int(data.get("last_command_id") or 0)
+        entries = []
+        for key, body in commands:
+            next_id += 1
+            entry = {
+                "id": next_id, "key": key, "body": _describe(body),
+                "queued_at": timezone.now().isoformat(),
+                "requested_by": getattr(requested_by, "email", "") or "",
+            }
+            if entry["body"] != body:
+                # A template is biometric data: it waits for the device
+                # encrypted, like the saved templates themselves.
+                from devices.services import templates
+
+                entry["body_encrypted"] = templates.encrypt(body).decode("ascii")
+            entries.append(entry)
+        data["pending_commands"] = pending + entries
+        data["last_command_id"] = next_id
+        state.state_data = data
+        state.version = (state.version or 0) + 1
+        state.save(update_fields=["state_data", "version", "updated_at"])
+    return entries, ""
+
+
 #: A 2.x device silent this long (it polls every few seconds) is asked for
 #: what it scanned meanwhile ...
 CATCH_UP_AFTER_MINUTES = 2
@@ -580,23 +698,46 @@ def drop_pending_command(device, command_id):
 
 
 
+#: Commands handed over per check-in. A template write is 1-2 KB and the device
+#: stores it before answering, so a reconnecting device gets a few at a time
+#: rather than everything at once; the rest follow on its next check-ins.
+COMMANDS_PER_POLL = 5
+#: How many handed-over commands and answers are remembered for the screen.
+REMEMBERED_COMMANDS = 50
+
+
 def take_pending_commands(device):
-    """Pop every queued command and format it for the getrequest reply.
+    """Pop the next queued commands and format them for the getrequest reply.
 
     ZKTeco expects one command per line as ``C:<id>:<body>``. Commands are
     removed as they are handed over: the device acknowledges by acting, and a
     command left queued would be re-issued on every poll, 4 times a minute.
+    At most COMMANDS_PER_POLL go per check-in, in the order they were queued,
+    except a server-address change, whose port and host always go together.
     """
     state = _sync_state(device)
     data = dict(state.state_data or {})
-    pending = list(data.get("pending_commands") or [])
-    if not pending:
+    queued = list(data.get("pending_commands") or [])
+    if not queued:
         return "", []
 
-    lines = [f"C:{entry['id']}:{entry['body']}" for entry in pending]
-    data["pending_commands"] = []
-    # Kept so a returned result can be described in the UI after the fact.
-    data["in_flight_commands"] = pending
+    if any(str(e.get("key", "")).startswith(SERVER_ADDRESS_COMMAND_KEY) for e in queued):
+        pending, rest = queued, []
+    else:
+        pending, rest = queued[:COMMANDS_PER_POLL], queued[COMMANDS_PER_POLL:]
+
+    lines = [f"C:{entry['id']}:{_full_body(entry)}" for entry in pending]
+    data["pending_commands"] = rest
+    # Kept so a returned result can be described in the UI after the fact;
+    # without the encrypted template, which has now left.
+    handed_at = timezone.now().isoformat()
+    data["in_flight_commands"] = (
+        list(data.get("in_flight_commands") or [])
+        + [
+            {**{k: v for k, v in entry.items() if k != "body_encrypted"}, "handed_at": handed_at}
+            for entry in pending
+        ]
+    )[-REMEMBERED_COMMANDS:]
     state.state_data = data
     state.version = (state.version or 0) + 1
     state.save(update_fields=["state_data", "version", "updated_at"])
@@ -614,6 +755,73 @@ def take_pending_commands(device):
         )
 
     return "\n".join(lines) + "\n", pending
+
+
+def _full_body(entry):
+    if entry.get("body_encrypted"):
+        from devices.services import templates
+
+        return templates.decrypt(entry["body_encrypted"].encode("ascii"))
+    return entry["body"]
+
+
+def parse_results(raw_body):
+    """``[(command_id, return_code, cmd)]`` from a devicecmd body.
+
+    The device answers ``ID=<n>&Return=<code>&CMD=<verb>``, several per body
+    when it ran several commands, one per line.
+    """
+    results = []
+    for line in (raw_body or "").splitlines():
+        fields = {}
+        for chunk in line.split("&"):
+            key, _, value = chunk.strip().partition("=")
+            if key:
+                fields[key.strip()] = value.strip()
+        try:
+            results.append((int(fields.get("ID", "")), fields.get("Return", ""), fields.get("CMD", "")))
+        except ValueError:
+            continue
+    return results
+
+
+def note_results(device, raw_body):
+    """Remember each command's answer next to the command, for the screen."""
+    results = parse_results(raw_body)
+    if not results:
+        return []
+    now = timezone.now().isoformat()
+    with transaction.atomic():
+        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        data = dict(state.state_data or {})
+        sent = {e.get("id"): e for e in data.get("in_flight_commands") or []}
+        remembered = list(data.get("command_results") or [])
+        for command_id, code, verb in results:
+            entry = sent.get(command_id, {})
+            remembered.append({
+                "id": command_id, "key": entry.get("key", ""),
+                # Template bodies are biometric data: keep only the command's head.
+                "command": _describe(entry.get("body", "")) or verb,
+                "return": code, "at": now,
+            })
+        data["command_results"] = remembered[-REMEMBERED_COMMANDS:]
+        state.state_data = data
+        state.save(update_fields=["state_data", "updated_at"])
+    return results
+
+
+def _describe(body):
+    if "\tTmp=" in body:
+        return body.split("\tTmp=", 1)[0] + "\tTmp=…"
+    return body
+
+
+def recent_results(device, limit=10):
+    """The latest answers, newest first, for the Device users page."""
+    state = DeviceSyncState.all_objects.filter(device=device).first()
+    if not state:
+        return []
+    return list(reversed((state.state_data or {}).get("command_results") or []))[:limit]
 
 
 def pending_summary(device):

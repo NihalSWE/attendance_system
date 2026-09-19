@@ -55,6 +55,11 @@ ALLOWED_HOSTS = env('ALLOWED_HOSTS')
 
 CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS')
 
+# Encrypts the fingerprint/face templates the server keeps so it can copy them
+# to a company's other devices of the same model (devices/services/templates.py).
+# A Fernet key; blank means templates are refused, never stored in plain text.
+BIOMETRIC_TEMPLATE_KEY = env('BIOMETRIC_TEMPLATE_KEY', default='')
+
 
 # Application definition
 

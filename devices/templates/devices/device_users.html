@@ -42,6 +42,13 @@
                     </button>
                 </form>
             {% endif %}
+            <form method="post" action="{% url 'devices:device_templates_save' device.public_id %}">
+                {% csrf_token %}
+                <button class="btn btn--ghost" type="submit"
+                        title="Keeps, encrypted, the fingerprints and faces this device has sent, so they can be copied to the company's other devices of this model.">
+                    Save fingerprints and faces
+                </button>
+            </form>
             <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
                 View punches
             </a>
@@ -50,6 +57,13 @@
             </a>
         </div>
     </div>
+    {% if template_key_problem %}
+        <div class="alert alert--danger">
+            <p>
+                Fingerprints and faces are not being saved. {{ template_key_problem }}
+            </p>
+        </div>
+    {% endif %}
     {% if unmapped_count %}
         <div class="alert alert--warning">
             <p>
@@ -131,6 +145,9 @@
                                 Face
                             </th>
                             <th>
+                                Saved here
+                            </th>
+                            <th>
                                 Card
                             </th>
                             <th>
@@ -179,6 +196,17 @@
                                 </td>
                                 <td class="numeric">
                                     {{ row.face_count }}
+                                </td>
+                                <td>
+                                    {% if row.saved_total %}
+                                        <span class="badge badge--success" title="Saved encrypted on the server, ready to copy to another device of this model.">
+                                            {% if row.saved_fingerprints %}{{ row.saved_fingerprints }} finger{{ row.saved_fingerprints|pluralize }}{% endif %}{% if row.saved_fingerprints and row.saved_faces %} · {% endif %}{% if row.saved_faces %}face{% endif %}
+                                        </span>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if row.card_number and row.card_number != "0" %}
@@ -289,5 +317,159 @@
             User table last received {{ last_sync }} (UTC).
             This is the device's own report, not a live query — we never poll the device.
         </p>
+    {% endif %}
+    {% if user_writes and not template_writes_measured %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Copy fingerprint and face — trial on test user {{ test_user_id }}
+                </h2>
+            </div>
+            <div class="card__body stack">
+                <p class="t-muted">
+                    Writing fingerprints and faces to a device is not measured on this model yet, so it
+                    only goes to test user <span class="mono">{{ test_user_id }}</span>, a number nobody uses.
+                    Pick a person whose fingerprint and face are saved here; the device gets user
+                    {{ test_user_id }} with a copy of them. Then check on the terminal that
+                    {{ test_user_id }} is recognised with that person's finger and face.
+                </p>
+                {% if trial_sources %}
+                    <form method="post" action="{% url 'devices:device_template_trial' device.public_id %}" class="stack">
+                        {% csrf_token %}
+                        <div class="field">
+                            <label class="field__label" for="trial-source">
+                                Copy from
+                            </label>
+                            <select class="select js-select2" id="trial-source" name="source" required>
+                                {% for row in trial_sources %}
+                                    <option value="{{ row.pin }}">
+                                        {{ row.pin }} · {{ row.name|default:"(no name)" }} — {% if row.saved_fingerprints %}finger{% endif %}{% if row.saved_fingerprints and row.saved_faces %} + {% endif %}{% if row.saved_faces %}face{% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label class="field__label" for="trial-name">
+                                Name for user {{ test_user_id }}
+                            </label>
+                            <input class="input" type="text" id="trial-name" name="name" maxlength="24" value="TEST {{ test_user_id }}">
+                        </div>
+                        <div class="field">
+                            <label class="field__label" for="trial-card">
+                                Card number (optional)
+                            </label>
+                            <input class="input" type="text" id="trial-card" name="card" inputmode="numeric" pattern="[0-9]*">
+                            <div class="field__help">
+                                A card number another user already has may be refused by the device.
+                            </div>
+                        </div>
+                        <label class="check" for="trial-finger">
+                            <input class="check__input" type="checkbox" id="trial-finger" name="finger" checked>
+                            <span>
+                                Fingerprint
+                            </span>
+                        </label>
+                        <label class="check" for="trial-face">
+                            <input class="check__input" type="checkbox" id="trial-face" name="face" checked>
+                            <span>
+                                Face
+                            </span>
+                        </label>
+                        <div>
+                            <button class="btn btn--primary" type="submit">
+                                Write test user {{ test_user_id }} to the device
+                            </button>
+                        </div>
+                    </form>
+                {% else %}
+                    <p class="t-faint">
+                        No fingerprint or face is saved yet. Press <strong>Save fingerprints and faces</strong> above.
+                    </p>
+                {% endif %}
+                {% if test_user_on_device %}
+                    <form method="post" action="{% url 'devices:device_user_delete' device.public_id %}"
+                          onsubmit="return confirm('Remove test user {{ test_user_id }} from {{ device.name|escapejs }}? Only user {{ test_user_id }} is removed.')">
+                        {% csrf_token %}
+                        <input type="hidden" name="device_user_id" value="{{ test_user_id }}">
+                        <button class="btn btn--ghost" type="submit">
+                            Remove test user {{ test_user_id }} from the device
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+    {% if recent_results or pending_commands %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Commands and answers
+                </h2>
+                {% if pending_commands %}
+                    <span class="badge badge--info">
+                        {{ pending_commands|length }} waiting for the device
+                    </span>
+                {% endif %}
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                No.
+                            </th>
+                            <th>
+                                Command
+                            </th>
+                            <th>
+                                Answer
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in pending_commands %}
+                            <tr>
+                                <td class="mono">
+                                    {{ entry.id }}
+                                </td>
+                                <td class="mono">
+                                    {{ entry.body|truncatechars:140 }}
+                                </td>
+                                <td>
+                                    <span class="badge badge--neutral">
+                                        Waiting
+                                    </span>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        {% for entry in recent_results %}
+                            <tr>
+                                <td class="mono">
+                                    {{ entry.id }}
+                                </td>
+                                <td class="mono">
+                                    {{ entry.command|truncatechars:140 }}
+                                </td>
+                                <td>
+                                    {% if entry.return|slice:":1" == "-" %}
+                                        <span class="badge badge--danger">
+                                            Refused ({{ entry.return }})
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--success">
+                                            Done ({{ entry.return }})
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="card__body t-faint">
+                0 means done; for a request, the number of rows the device sent. A negative number is
+                the device's refusal code. Newest first.
+            </p>
+        </div>
     {% endif %}
 {% endblock %}

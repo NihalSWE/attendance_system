@@ -3375,3 +3375,67 @@ say how to limit each to the viewer's branches with `branches_for` /
 **Still needs data, not code:** first salaries for Nihal, Dia and Ajay (D
 Company, skipped by the September draft) — pay basis and rate from Nihal.
 
+
+## Device data flow, part 1: templates kept and a trial write — 2026-09-19 (Claude, Ajay's session)
+
+**Plan agreed with Nihal (2026-09-19): "enrol once, copy to the rest".** A
+company's devices are one model; a person is enrolled on one, the software maps
+the device user to an employee, pulls the fingerprint/face/card and writes them
+to the company's other devices. Two workstreams in parallel: Nihal moves
+departments and designations back to company level (organization/employees);
+Ajay's session builds the device side in the `devices` app only, keyed on
+(device, device user number), never an employee. Bulk employee import and the
+employee-to-device-user mapping wait for Nihal's merge. The seam:
+`commands.push_to_device(device, device_user_id, name, card, role,
+finger_template, face_template)` — plain values.
+
+**Decision to confirm with the owner — a biometric store on the server.** Until
+now templates lived only on the devices. `DeviceUserTemplate`
+(`devices_device_user_template`, migration `devices.0005`) now keeps each
+fingerprint/face a device uploads, **encrypted** with `BIOMETRIC_TEMPLATE_KEY`
+(Fernet, `cryptography`). No key or a wrong key: nothing is saved and the
+Device users page says why (and `manage.py check` warns, `devices.W001`);
+nothing is ever stored in plain text by this code. Retention: rebuildable — the
+device holds the originals, so a lost key or table is recovered by pulling
+again. **Open, for Ajay/the owner:** the raw upload itself (`DeviceMessage.
+raw_payload_text`, append-only evidence) already holds every template the
+device sent, unencrypted, since before this change. Encrypting the copy does
+not remove those; redacting `tmp=` from stored raw messages would break the
+"raw evidence is never rewritten" rule, so it needs an explicit decision.
+
+What was built (branch `feature/device-templates`):
+
+- `devices/services/templates.py`: encrypt/decrypt, `save_from_payload` (every
+  `biodata`/`BIODATA` upload, called by `/iclock/cdata`), `save_from_messages`
+  (from uploads already stored), `templates_for`, `as_payload`, `saved_counts`,
+  `key_problem` and the system check.
+- `devices/services/commands.py`: `build_template_update` (PushSDK 3.x
+  `DATA UPDATE biodata Pin=…\tNo=…\tIndex=…\tValid=…\tDuress=…\tType=…\tMajorVer=…\tMinorVer=…\tFormat=…\tTmp=…`
+  — **not yet measured**), `push_to_device` (all-or-nothing, user record first;
+  refuses a 2.x device, another model's template, bad numbers/roles/cards; while
+  `TEMPLATE_WRITE_MEASURED` is False templates go only to test user
+  `TEST_USER_ID` = 99999), `COMMANDS_PER_POLL` = 5 per check-in (a
+  server-address pair is never split), queued template bodies kept encrypted
+  and redacted (`Tmp=…`) once handed over, `note_results` / `recent_results`
+  (each `ID=&Return=` answer kept beside its command, last 50).
+- Device users page: **Save fingerprints and faces**, a **Saved here** column,
+  a **trial card** (copy one user's saved finger/face to test user 99999;
+  **Remove test user 99999**) and **Commands and answers**.
+- Tests: `devices/tests_templates.py` (28, made-up template strings — real ones
+  never go in the repository); `devices` app 321 OK.
+- `.env.example`: `BIOMETRIC_TEMPLATE_KEY=` (placeholder). `requirements.txt`:
+  `cryptography`, `cffi`, `pycparser`.
+
+**Measured on the office SenseFace 2A (NYU7251601501, ZAM70-NF24HA-Ver3.0.15,
+Push 3.0.4S), company Amazon, 2026-09-19:** `DATA QUERY tablename=biodata,…`
+→ `Return=8`: 4 fingerprints (Type 1, MajorVer 13, ~1.5 KB base64) and 4 faces
+(Type 9, MajorVer 40, MinorVer 1, ~850 chars) for 445966, 445962, 445900,
+445961; 445963 has none. Its user table has three rows with an **empty user
+number** (uid 7, 8, 9) left by the old lowercase-write trap; they cannot be
+removed by Pin and must be deleted on the terminal. Template **write** results:
+to be recorded here after Ajay's trial on the device.
+
+Next: measure the template write on the 2A (trial on 99999, recognition checked
+separately for finger and face); then a second device of the same model for
+the real device-to-device test; the 3A the same way (ATT2 forms) once a 3A is
+reachable; then bulk queueing beyond `MAX_PENDING` for whole fleets.
