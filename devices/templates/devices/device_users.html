@@ -318,20 +318,20 @@
             This is the device's own report, not a live query — we never poll the device.
         </p>
     {% endif %}
-    {% if user_writes and not template_writes_measured %}
+    {% if user_writes and not face_writes_measured %}
         <div class="card">
             <div class="card__head">
                 <h2>
-                    Copy fingerprint and face — trial on test user {{ test_user_id }}
+                    Test the face copy on test user {{ test_user_id }}
                 </h2>
             </div>
             <div class="card__body stack">
                 <p class="t-muted">
-                    Writing fingerprints and faces to a device is not measured on this model yet, so it
-                    only goes to test user <span class="mono">{{ test_user_id }}</span>, a number nobody uses.
-                    Pick a person whose fingerprint and face are saved here; the device gets user
-                    {{ test_user_id }} with a copy of them. Then check on the terminal that
-                    {{ test_user_id }} is recognised with that person's finger and face.
+                    Copying a fingerprint to this device model is proven. Copying a <strong>face</strong>
+                    is not yet, so a face only goes to test user <span class="mono">{{ test_user_id }}</span>,
+                    a number nobody uses. Pick a person whose face is saved here; the device gets user
+                    {{ test_user_id }} with a copy of it, with door access. Then check on the terminal that
+                    that person's face is recognised as {{ test_user_id }}.
                 </p>
                 {% if trial_sources %}
                     <form method="post" action="{% url 'devices:device_template_trial' device.public_id %}" class="stack">
@@ -451,13 +451,13 @@
                                     {{ entry.command|truncatechars:140 }}
                                 </td>
                                 <td>
-                                    {% if entry.return|slice:":1" == "-" %}
-                                        <span class="badge badge--danger">
-                                            Refused ({{ entry.return }})
-                                        </span>
-                                    {% else %}
+                                    {% if entry.ok %}
                                         <span class="badge badge--success">
                                             Done ({{ entry.return }})
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--danger">
+                                            Refused ({{ entry.return }})
                                         </span>
                                     {% endif %}
                                 </td>

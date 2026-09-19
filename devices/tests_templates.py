@@ -161,11 +161,16 @@ class PushTests(TemplateCase):
         self.assertEqual(error, "")
         self.assertEqual(
             [e["key"] for e in entries],
-            ["push_user:99999", "push_template:99999:1:6:0", "push_template:99999:9:0:0"],
+            ["push_user:99999", "push_access:99999", "push_template:99999:1:6:0",
+             "push_template:99999:9:0:0"],
         )
         self.assertEqual(
             entries[0]["body"],
-            "DATA UPDATE user Pin=99999\tName=TEST\tCardNo=12345\tPri=0\tGrp=1",
+            "DATA UPDATE user Pin=99999\tName=TEST\tCardNo=12345\tPrivilege=0\tGrp=1",
+        )
+        self.assertEqual(
+            entries[1]["body"],
+            "DATA UPDATE userauthorize Pin=99999\tAuthorizeTimezoneId=1\tAuthorizeDoorId=1",
         )
 
     def test_queued_template_is_encrypted_until_handed_over(self):
@@ -179,21 +184,37 @@ class PushTests(TemplateCase):
         stored = str(DeviceSyncState.all_objects.get(device=self.device).state_data)
         self.assertNotIn(FINGER_TMP, stored)
 
-    def test_templates_refused_for_a_real_user_until_measured(self):
-        entries, error = push_to_device(self.device, "445900", finger_template=self.finger)
+    def test_face_refused_for_a_real_user_until_measured(self):
+        entries, error = push_to_device(
+            self.device, "445900", finger_template=self.finger, face_template=self.face
+        )
         self.assertEqual(entries, [])
         self.assertIn(TEST_USER_ID, error)
         self.assertEqual(self.pending(), [])
 
+    def test_fingerprint_goes_to_a_real_user(self):
+        entries, error = push_to_device(
+            self.device, "445900", name="Moin", card="8868366", finger_template=self.finger
+        )
+        self.assertEqual(error, "")
+        self.assertEqual([e["key"] for e in entries],
+                         ["push_user:445900", "push_access:445900", "push_template:445900:1:6:0"])
+
     def test_user_record_alone_may_go_to_anyone(self):
         entries, error = push_to_device(self.device, "445900", name="Moin", card="8868366")
-        self.assertEqual((len(entries), error), (1, ""))
+        self.assertEqual((len(entries), error), (2, ""))
+
+    def test_no_door_permission_for_a_time_attendance_device(self):
+        self.device.settings = {"announced": {"pushver": "3.1.2", "device_type": "att"}}
+        self.device.save()
+        entries, _ = push_to_device(self.device, "445900", name="Moin")
+        self.assertEqual([e["key"] for e in entries], ["push_user:445900"])
 
     def test_templates_copy_to_another_device_of_the_same_model(self):
         entries, error = push_to_device(
             self.second, TEST_USER_ID, finger_template=self.finger, face_template=self.face
         )
-        self.assertEqual((len(entries), error), (3, ""))
+        self.assertEqual((len(entries), error), (4, ""))
 
     def test_other_model_refused(self):
         with use_company(self.company):
@@ -220,7 +241,7 @@ class PushTests(TemplateCase):
 
     def test_all_or_nothing_when_the_queue_is_full(self):
         for n in range(commands.MAX_PENDING - 2):
-            push_to_device(self.device, str(n), name="x")
+            commands._queue_raw(device=self.device, key=f"k{n}", body=f"DATA QUERY {n}")
         entries, error = push_to_device(
             self.device, TEST_USER_ID, finger_template=self.finger, face_template=self.face
         )
@@ -232,17 +253,16 @@ class PushTests(TemplateCase):
 class HandOverAndResultTests(TemplateCase):
     def test_a_few_commands_per_check_in(self):
         for n in range(COMMANDS_PER_POLL + 2):
-            push_to_device(self.device, str(n + 1), name="x")
+            commands._queue_raw(device=self.device, key=f"k{n}", body=f"DATA QUERY {n}")
         _, first = take_pending_commands(self.device)
-        self.assertEqual([e["key"] for e in first],
-                         [f"push_user:{n + 1}" for n in range(COMMANDS_PER_POLL)])
+        self.assertEqual([e["key"] for e in first], [f"k{n}" for n in range(COMMANDS_PER_POLL)])
         _, second = take_pending_commands(self.device)
         self.assertEqual(len(second), 2)
         self.assertEqual(take_pending_commands(self.device), ("", []))
 
     def test_server_address_pair_is_never_split(self):
         for n in range(COMMANDS_PER_POLL):
-            push_to_device(self.device, str(n + 1), name="x")
+            commands._queue_raw(device=self.device, key=f"k{n}", body=f"DATA QUERY {n}")
         commands._queue_raw(device=self.device, key="set_server_address:port",
                             body="SET OPTION IclockSvrPort=443")
         commands._queue_raw(device=self.device, key="set_server_address",
@@ -270,10 +290,22 @@ class HandOverAndResultTests(TemplateCase):
         finger, _ = templates.templates_for(self.device, "445900")
         push_to_device(self.device, TEST_USER_ID, finger_template=finger)
         _, issued = take_pending_commands(self.device)
-        note_results(self.device, f"ID={issued[1]['id']}&Return=0&CMD=DATA UPDATE")
+        note_results(self.device, f"ID={issued[2]['id']}&Return=0&CMD=DATA UPDATE")
         stored = str(DeviceSyncState.all_objects.get(device=self.device).state_data)
         self.assertNotIn(FINGER_TMP, stored)
         self.assertIn("Tmp=…", stored)
+
+    def test_missing_key_drops_only_the_template(self):
+        self.upload()
+        finger, _ = templates.templates_for(self.device, "445900")
+        push_to_device(self.device, TEST_USER_ID, name="TEST", finger_template=finger)
+        with override_settings(BIOMETRIC_TEMPLATE_KEY=""):
+            body, issued = take_pending_commands(self.device)
+        self.assertEqual([e["key"] for e in issued], ["push_user:99999", "push_access:99999"])
+        self.assertNotIn("biodata", body)
+        result = commands.recent_results(self.device)[0]
+        self.assertEqual(result["key"], "push_template:99999:1:6:0")
+        self.assertFalse(result["ok"])
 
     def test_parse_results_skips_junk(self):
         self.assertEqual(parse_results("ID=3&Return=-1004&CMD=DATA\nnonsense\n"),
@@ -329,7 +361,8 @@ class ScreenTests(TemplateCase):
         self.assertContains(response, "Queued test user 99999")
         self.assertEqual(
             [e["key"] for e in self.pending()],
-            ["push_user:99999", "push_template:99999:1:6:0", "push_template:99999:9:0:0"],
+            ["push_user:99999", "push_access:99999", "push_template:99999:1:6:0",
+             "push_template:99999:9:0:0"],
         )
 
     def test_trial_without_saved_templates(self):

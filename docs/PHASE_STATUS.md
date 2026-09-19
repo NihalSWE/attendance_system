@@ -3432,8 +3432,33 @@ Push 3.0.4S), company Amazon, 2026-09-19:** `DATA QUERY tablename=biodata,…`
 (Type 9, MajorVer 40, MinorVer 1, ~850 chars) for 445966, 445962, 445900,
 445961; 445963 has none. Its user table has three rows with an **empty user
 number** (uid 7, 8, 9) left by the old lowercase-write trap; they cannot be
-removed by Pin and must be deleted on the terminal. Template **write** results:
-to be recorded here after Ajay's trial on the device.
+removed by Pin and must be deleted on the terminal.
+
+**Write commands measured on the office 2A, 2026-09-19 (Ajay at the device):**
+
+| What | Command that works | Proof |
+|---|---|---|
+| User record | `DATA UPDATE user Pin=…	Name=…	CardNo=…	Privilege=…	Grp=1` | read back in the user table |
+| Role | field **`Privilege`** (0/2/6/14). **`Pri` is ignored** (Return=0, nothing changes) — the old code sent `Pri`, so no role sent before this ever applied | 99999 read back `privilege=14`, opened the admin menu |
+| Card | `CardNo=` in the user record | read back (Nihal 196793, Sajal 2796848) |
+| Fingerprint | `DATA UPDATE biodata Pin=…	No=6	Index=0	Valid=1	Duress=0	Type=1	MajorVer=13	MinorVer=0	Format=0	Tmp=…` | Nihal's saved finger written to 99999 (Nihal deleted from the device first): the device identified him as 99999 |
+| Door permission | `DATA UPDATE userauthorize Pin=…	AuthorizeTimezoneId=1	AuthorizeDoorId=1` | without it: "Invalid time period" (rtlog event 23); after it the userauthorize count went 3 -> 4 and he was let through. The device counts this table when asked but does not upload its rows |
+| Delete one user | `DATA DELETE user Pin=…` (as before) | 99999 gone from the read-back |
+| Face | same `biodata` form, `Type=9`, `MajorVer=40`, `MinorVer=1` — Return=0 | **not proven**: nobody has scanned a face against a copy yet |
+
+Re-sending a user record keeps that user's fingerprint and door permission.
+Ajay's own 445962 had no door permission before any of this (refused at 14:04,
+before the first write) and was given one. Nihal (445966, Super Admin, card)
+and Sajal (445961, card), removed for the test, were restored from the
+software with their fingerprint and door permission; their faces were not
+(face not proven).
+
+The code now sends `Privilege`, adds the door permission on an access-control
+device (`needs_access_grant`: DeviceType `acc`), writes fingerprints to any
+user on this model (`MEASURED_TEMPLATE_TYPES = {"1"}`) and keeps faces to test
+user 99999. `take_pending_commands` no longer fails the whole reply when a
+template cannot be decrypted: that one command is dropped and shown as not
+sent (a second dev server without the key had returned 500 to every poll).
 
 Next: measure the template write on the 2A (trial on 99999, recognition checked
 separately for finger and face); then a second device of the same model for

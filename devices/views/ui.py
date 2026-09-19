@@ -52,7 +52,7 @@ from devices.services import (
 )
 from devices.services.commands import (
     COMMAND_LABELS,
-    TEMPLATE_WRITE_MEASURED,
+    MEASURED_TEMPLATE_TYPES,
     TEST_USER_ID,
     WRITABLE_OPTIONS,
     pending_summary,
@@ -988,7 +988,7 @@ def device_users(request, public_id):
         "trial_sources": [r for r in full_roster if r["saved_total"] and r["pin"] != TEST_USER_ID],
         "test_user_id": TEST_USER_ID,
         "test_user_on_device": any(r["pin"] == TEST_USER_ID for r in full_roster),
-        "template_writes_measured": TEMPLATE_WRITE_MEASURED,
+        "face_writes_measured": "9" in MEASURED_TEMPLATE_TYPES,
         "recent_results": recent_results(device),
         "pending_commands": pending_summary(device),
         "last_sync": (

@@ -166,12 +166,16 @@ SERVER_ADDRESS_COMMAND_KEY = "set_server_address"
 #   Pin      the user id, and the upsert key      (lowercase 'pin' is ignored)
 #   Name     display name                         (lowercase 'name' is ignored)
 #   CardNo   card number                          ('Card' is ignored)
-#   Pri      privilege: 0 normal, 14 super admin
-#   Grp      access group
+#   Privilege  0 normal, 2 enroller, 6 admin, 14 super admin. Measured
+#            2026-09-19 (office 2A, test user 99999): 'Pri=14' answered
+#            Return=0 and changed nothing; 'Privilege=14' read back as
+#            privilege=14 and opened the admin menu.
+#   Grp      access group (not measured; the device keeps group=1)
 #
 # Verified: re-sending an existing Pin updates that row rather than adding a
-# second one (row count stayed constant while the values changed).
-USER_WRITE_FIELDS = ("Pin", "Name", "CardNo", "Pri", "Grp")
+# second one (row count stayed constant while the values changed), and keeps
+# its fingerprint and door permission (2026-09-19).
+USER_WRITE_FIELDS = ("Pin", "Name", "CardNo", "Privilege", "Grp")
 
 # DANGER, measured on real hardware: "DATA DELETE user uid=<n>" returns
 # Return=0 and DELETES EVERY USER ON THE DEVICE, including their enrolled
@@ -194,11 +198,33 @@ def build_user_update(*, device_user_id, name="", card_number="", privilege=0, g
         "Pin": str(device_user_id),
         "Name": (name or "")[:24],
         "CardNo": str(card_number or ""),
-        "Pri": str(int(privilege)),
+        "Privilege": str(int(privilege)),
         "Grp": str(int(group)),
     }
     body = "\t".join(f"{field}={values[field]}" for field in USER_WRITE_FIELDS)
     return f"DATA UPDATE user {body}"
+
+
+# An access-control device (DeviceType=acc, the SenseFace 2A) also needs a
+# door permission, or it recognises the person and refuses them: "Invalid time
+# period", rtlog event 23. Measured 2026-09-19 on the office 2A with test user
+# 99999: this answered Return=0, the userauthorize row count went 3 -> 4 and
+# the person was let through. Time zone 1 and door 1 are the device defaults
+# the users enrolled at the terminal have. The device counts this table when
+# asked but does not upload its rows.
+def build_access_grant(*, device_user_id):
+    """Build the DATA UPDATE body that lets one user through door 1, time zone 1."""
+    return (
+        f"DATA UPDATE userauthorize Pin={device_user_id}"
+        "\tAuthorizeTimezoneId=1\tAuthorizeDoorId=1"
+    )
+
+
+def needs_access_grant(device):
+    """True for an access-control device, which refuses users without one."""
+    settings = device.settings or {}
+    announced = settings.get("announced") or {}
+    return (announced.get("device_type") or settings.get("device_type") or "").lower() == "acc"
 
 
 def build_user_delete(*, device_user_id):
@@ -208,16 +234,21 @@ def build_user_delete(*, device_user_id):
 
 # Writing a fingerprint or face template (PushSDK 3.x ``biodata`` table). The
 # field names follow the write spelling measured for ``user`` above (capital
-# first letter), in the order the device uploads them. NOT MEASURED on hardware
-# yet: until it is (TEMPLATE_WRITE_MEASURED), templates are only written to the
-# trial user TEST_USER_ID, so a wrong form can never touch a real person.
+# first letter), in the order the device uploads them.
+#
+# Measured 2026-09-19 on the office 2A: Nihal's fingerprint (Type 1, MajorVer
+# 13), captured by this device, written to test user 99999 answered Return=0
+# and the device then identified Nihal's finger as 99999. The face form (Type
+# 9) also answered Return=0 but no face has been scanned against it yet, so a
+# face still goes only to TEST_USER_ID. Measured types are per dialect: the
+# 3A (ATT2) has none, and user writes to it are refused anyway.
 TEMPLATE_WRITE_FIELDS = (
     ("Pin", None), ("No", "no"), ("Index", "index"), ("Valid", "valid"),
     ("Duress", "duress"), ("Type", "type"), ("MajorVer", "major_version"),
     ("MinorVer", "minor_version"), ("Format", "format"), ("Tmp", "template"),
 )
-TEMPLATE_WRITE_MEASURED = False
-#: The only user number a template is written to until the form is measured.
+MEASURED_TEMPLATE_TYPES = {"1"}
+#: Where an unmeasured template type may still be written, to measure it.
 TEST_USER_ID = "99999"
 
 
@@ -440,6 +471,8 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
     it resolved. A template is the dict ``templates.as_payload`` returns (the
     device's own fields plus ``template`` and ``device_model_id``), or None.
 
+    On an access-control device the door permission goes with the user
+    record (``build_access_grant``); without it the device refuses them.
     Everything is queued together or not at all, user record first, so the
     device never gets a template for a user it does not have. Returns
     ``(entries, error)``.
@@ -461,10 +494,11 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
         return [], "The card number must be digits only."
 
     templates = [t for t in (finger_template, face_template) if t]
-    if templates and not TEMPLATE_WRITE_MEASURED and clean_id != TEST_USER_ID:
+    unmeasured = [t for t in templates if str(t.get("type")) not in MEASURED_TEMPLATE_TYPES]
+    if unmeasured and clean_id != TEST_USER_ID:
         return [], (
-            "Writing fingerprints and faces is not measured on this device model yet. "
-            f"Until it is, templates are written only to test user {TEST_USER_ID}."
+            "Writing a face is not measured on this device model yet. Until it is, "
+            f"faces are written only to test user {TEST_USER_ID}; untick Face."
         )
     for template in templates:
         if template.get("device_model_id") != device.device_model_id:
@@ -480,6 +514,8 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
         build_user_update(device_user_id=clean_id, name=name, card_number=card,
                           privilege=role),
     )]
+    if needs_access_grant(device):
+        commands.append((f"push_access:{clean_id}", build_access_grant(device_user_id=clean_id)))
     for template in templates:
         commands.append((
             f"push_template:{clean_id}:{template.get('type')}:{template.get('no')}:"
@@ -726,7 +762,22 @@ def take_pending_commands(device):
     else:
         pending, rest = queued[:COMMANDS_PER_POLL], queued[COMMANDS_PER_POLL:]
 
-    lines = [f"C:{entry['id']}:{_full_body(entry)}" for entry in pending]
+    # A template that cannot be decrypted (key missing or changed) is dropped
+    # and noted, never allowed to stop the device getting its other commands:
+    # this reply is the device's only channel back.
+    from devices.services.templates import TemplateKeyMissing
+
+    lines, sent = [], []
+    for entry in pending:
+        try:
+            lines.append(f"C:{entry['id']}:{_full_body(entry)}")
+            sent.append(entry)
+        except TemplateKeyMissing:
+            data["command_results"] = (list(data.get("command_results") or []) + [{
+                "id": entry["id"], "key": entry.get("key", ""), "command": entry.get("body", ""),
+                "return": "not sent: template key missing", "at": timezone.now().isoformat(),
+            }])[-REMEMBERED_COMMANDS:]
+    pending = sent
     data["pending_commands"] = rest
     # Kept so a returned result can be described in the UI after the fact;
     # without the encrypted template, which has now left.
@@ -754,6 +805,8 @@ def take_pending_commands(device):
             device=device, command_ids={e["id"] for e in pending}
         )
 
+    if not lines:
+        return "", []
     return "\n".join(lines) + "\n", pending
 
 
@@ -821,7 +874,9 @@ def recent_results(device, limit=10):
     state = DeviceSyncState.all_objects.filter(device=device).first()
     if not state:
         return []
-    return list(reversed((state.state_data or {}).get("command_results") or []))[:limit]
+    results = list(reversed((state.state_data or {}).get("command_results") or []))[:limit]
+    # 0 or a row count is success; a negative code or "not sent" is not.
+    return [{**r, "ok": str(r.get("return", "")).isdigit()} for r in results]
 
 
 def pending_summary(device):
