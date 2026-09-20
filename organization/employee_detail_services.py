@@ -30,6 +30,11 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from access_control.branch_access import ALL_BRANCHES as ALL_ATTENDANCE
+from access_control.branch_access import Scope
+from attendance.access import scope as attendance_scope
+
+#: What a page offers when attendance is out of reach.
+EMPTY_ATTENDANCE = Scope(set())
 from access_control.branch_access import can
 from accounts.models import CompanyMembership
 from attendance.models import AttendanceRecord
@@ -113,18 +118,19 @@ def page_permissions(actor, company_id, membership, assignment, employee):
 
     if is_company_wide(membership):
         return {"salary": True, "edit": True, "end": True, "logins": True,
-                "attendance": ALL_ATTENDANCE}
+                "attendance": Scope(ALL_ATTENDANCE)}
     branch = assignment.branch_id if assignment else None
 
     def held(code):
         return branch is not None and can(actor, company_id, code, branch)
 
+    department = assignment.department_id if assignment else None
     try:
-        _m, attendance = attendance_access.view_branches(actor, company_id)
+        _m, attendance = attendance_access.view_scope(actor, company_id)
     except PermissionDenied:
-        attendance = set()
-    if not attendance_access.in_branches(branch, attendance):
-        attendance = set()
+        attendance = EMPTY_ATTENDANCE
+    if not attendance_access.in_scope(branch, department, attendance):
+        attendance = EMPTY_ATTENDANCE
     return {
         "salary": held("salary.view"),
         "edit": held("employees.edit"),
@@ -190,9 +196,12 @@ def employee_history(*, actor, company_id, employee_id):
         month_records = AttendanceRecord.objects.filter(
             employee=employee, work_date__gte=month_start, work_date__lte=today,
         )
-        if may["attendance"] is not ALL_ATTENDANCE:
-            # Only days worked in branches whose attendance they may see.
-            month_records = month_records.filter(branch_id__in=may["attendance"])
+        if not may["attendance"].is_all:
+            # Only the days whose attendance they may see.
+            month_records = attendance_scope(
+                month_records, may["attendance"], field="branch",
+                department_field="employee_assignment__department",
+            )
         month_counts = dict(
             month_records
             .values_list("attendance_status")

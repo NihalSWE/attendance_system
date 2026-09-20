@@ -53,7 +53,8 @@ def get_employee_for_edit(*, actor, company_id, employee_id, code=None):
 
     ``code=None``: owner/company admin only, as before A12 (the employee page
     and End employment still use this). With a branch permission code, anyone
-    holding it in the employee's current branch may, too.
+    holding it in the employee's current branch may, too — and the head of the
+    department they are placed in, for the codes a head holds.
     """
     if code is None:
         membership = require_structure_manager(actor, company_id)
@@ -66,8 +67,13 @@ def get_employee_for_edit(*, actor, company_id, employee_id, code=None):
         assignment = _open_row(EmployeeAssignment, employee)
         compensation = _open_row(EmployeeCompensation, employee)
     if code is not None and not is_company_wide(membership):
-        if assignment is None or not can(actor, company_id, code, assignment.branch_id):
-            raise PermissionDenied("This employee is not in a branch you look after.")
+        reachable = assignment is not None and can(
+            actor, company_id, code, assignment.branch_id, assignment.department_id
+        )
+        if not reachable:
+            raise PermissionDenied(
+                "This employee is not in a branch or department you look after."
+            )
     return membership, employee, assignment, compensation
 
 

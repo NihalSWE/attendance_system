@@ -24,6 +24,7 @@ from django.utils import timezone
 
 from access_control.models import AccessPermission, EmployeePermissionOverride
 from accounts.models import CompanyMembership
+from common.choices import ActiveStatus
 from accounts.services import get_active_memberships
 from auditlog.services import record_company_event
 from common.tenant import use_company
@@ -56,6 +57,20 @@ BRANCH_PERMISSIONS = (
 )
 CODES = tuple(code for code, *_ in BRANCH_PERMISSIONS)
 LABELS = {code: label for code, label, *_ in BRANCH_PERMISSIONS}
+
+#: What the head of a department may do, for the people placed in the
+#: department(s) they head and nowhere else (Ajay, 2026-09-20). A department
+#: belongs to one branch, so this never crosses a branch. Pay is deliberately
+#: absent: it needs ``salary.view``, which a head does not get. So is
+#: ``overtime.decide`` — deciding overtime changes pay.
+HEAD_CODES = frozenset({
+    "employees.view",
+    "attendance.view",
+    "attendance.fix",
+    "leave.view",
+    "leave.approve",
+    "overtime.view",
+})
 
 COMPANY_WIDE_ROLES = (Role.OWNER, Role.COMPANY_ADMIN)
 # What the existing HR role already did company-wide before A12 (kept, per Ajay).
@@ -136,25 +151,108 @@ def branches_for_any(user, company_id, *codes, at=None):
     return found
 
 
-def can(user, company_id, code, branch_id=None, at=None):
-    """True if ``user`` may do ``code`` in ``branch_id`` (or in any branch when None)."""
+class Scope:
+    """Where one person may do one thing: branches, departments, or both.
+
+    ``branches`` is ``ALL_BRANCHES`` or a set of branch ids, exactly as
+    ``branches_for`` returns. ``departments`` is the set of department ids they
+    head for this code — the narrower dimension, used only by callers that pass
+    a department field or id. A branch manager has branches and no departments;
+    a department head has departments and (usually) no branches.
+    """
+
+    __slots__ = ("branches", "departments")
+
+    def __init__(self, branches, departments=frozenset()):
+        self.branches = branches
+        self.departments = set(departments)
+
+    @property
+    def is_all(self):
+        return self.branches is ALL_BRANCHES
+
+    def __bool__(self):
+        return self.is_all or bool(self.branches) or bool(self.departments)
+
+    def __repr__(self):  # pragma: no cover - debugging only
+        return f"<Scope branches={self.branches!r} departments={self.departments!r}>"
+
+
+def headed_departments(user, company_id, at=None):
+    """The ids of the active departments ``user`` is the head of.
+
+    The head is whoever sits in ``Department.head`` right now: the field keeps
+    no dated history, so there is nothing to resolve ``at`` against. The
+    argument is accepted for symmetry with the branch helpers, and because a
+    dated head would slot in here without changing any caller.
+    """
+    from organization.models import Department
+
+    if user is None or not getattr(user, "is_authenticated", False) or not user.is_active:
+        return set()
+    with use_company(company_id):
+        employee = Employee.objects.filter(user=user).first()
+        if employee is None:
+            return set()
+        return set(
+            Department.objects.filter(
+                head=employee, status=ActiveStatus.ACTIVE
+            ).values_list("pk", flat=True)
+        )
+
+
+def scope_for(user, company_id, code, at=None):
+    """``Scope`` for ``code``: the branches, plus the departments they head."""
     branches = branches_for(user, company_id, code, at)
-    if branches is ALL_BRANCHES:
+    if branches is ALL_BRANCHES or code not in HEAD_CODES:
+        return Scope(branches)
+    return Scope(branches, headed_departments(user, company_id, at))
+
+
+def can(user, company_id, code, branch_id=None, department_id=None, at=None):
+    """True if ``user`` may do ``code`` there.
+
+    ``branch_id`` alone keeps its original meaning — a department head is not
+    a branch-wide anything, so heading a department inside a branch does not
+    open that whole branch. Pass ``department_id`` as well (the row's own
+    department) to let a head through for that row.
+
+    With neither id this answers "anywhere at all", which now includes the
+    departments they head — that is what opens the page to them.
+    """
+    scope = scope_for(user, company_id, code, at)
+    if scope.is_all:
         return True
-    return bool(branches) if branch_id is None else branch_id in branches
+    if branch_id is None and department_id is None:
+        return bool(scope)
+    if branch_id is not None and branch_id in scope.branches:
+        return True
+    return department_id is not None and department_id in scope.departments
 
 
-def require(user, company_id, code, branch_id=None):
-    if not can(user, company_id, code, branch_id):
+def require(user, company_id, code, branch_id=None, department_id=None):
+    if not can(user, company_id, code, branch_id, department_id):
         raise PermissionDenied("You do not have access to do this for that branch.")
 
 
-def scope_queryset(queryset, user, company_id, code, field="branch"):
-    """Limit a queryset to the branches where ``user`` may do ``code``."""
-    branches = branches_for(user, company_id, code)
-    if branches is ALL_BRANCHES:
+def scope_queryset(queryset, user, company_id, code, field="branch",
+                   department_field=None):
+    """Limit a queryset to where ``user`` may do ``code``.
+
+    Without ``department_field`` this is unchanged: branches only, which is
+    what every existing caller means. With it, rows in a department they head
+    are included as well, so a head sees their own department's rows and
+    nothing else.
+    """
+    scope = scope_for(user, company_id, code)
+    if scope.is_all:
         return queryset
-    return queryset.filter(**{f"{field}__in": branches})
+    if department_field is None:
+        return queryset.filter(**{f"{field}__in": scope.branches})
+    matches = Q(**{f"{field}__in": scope.branches})
+    if scope.departments:
+        matches |= Q(**{f"{department_field}__in": scope.departments})
+    return queryset.filter(matches)
 
 
 def _permission(code):

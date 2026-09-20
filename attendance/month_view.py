@@ -14,6 +14,8 @@ import datetime
 import zoneinfo
 
 from access_control.branch_access import ALL_BRANCHES
+from django.db.models import Q
+
 from attendance.models import AttendanceRecord
 
 # Monday first, as the spec asks and as the rest of the project's calendars do.
@@ -181,8 +183,15 @@ def build_month(*, employee, year, month, company_timezone, today=None, branches
     queryset = AttendanceRecord.objects.filter(
         employee=employee, work_date__gte=first, work_date__lte=last
     ).select_related("shift", "leave_day")
-    if branches is not None and branches is not ALL_BRANCHES:
-        queryset = queryset.filter(branch_id__in=branches)
+    if branches is not None:
+        # A Scope (branches plus headed departments) or plain branches.
+        allowed = getattr(branches, "branches", branches)
+        departments = set(getattr(branches, "departments", ()) or ())
+        if allowed is not ALL_BRANCHES:
+            matches = Q(branch_id__in=allowed)
+            if departments:
+                matches |= Q(employee_assignment__department_id__in=departments)
+            queryset = queryset.filter(matches)
     records = {record.work_date: record for record in queryset}
 
     days = [

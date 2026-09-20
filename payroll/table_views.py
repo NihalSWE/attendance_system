@@ -26,7 +26,7 @@ class OvertimeFilters(StyledFormMixin, forms.Form):
         self.fields["branch"].queryset = branches
 
 
-def overtime_queryset(branches, first, last, rules):
+def overtime_queryset(branches, first, last, rules, departments=()):
     """Express Claim.exists/state_of in SQL so counts and slices stay in SQL.
 
     Finished day-off sessions supply the claim; other days use attendance's
@@ -36,8 +36,12 @@ def overtime_queryset(branches, first, last, rules):
     sessions = AttendanceSession.objects.filter(attendance_record=OuterRef("pk"))
     closed = sessions.filter(ended_at__isnull=False).order_by().values("attendance_record").annotate(minutes=Sum("worked_minutes"))
     decisions = OvertimeDecision.objects.filter(employee_id=OuterRef("employee_id"), work_date=OuterRef("work_date"))
+    reachable = Q(branch__in=branches)
+    if departments:
+        # A department head reaches their own department's days as well.
+        reachable |= Q(employee_assignment__department_id__in=departments)
     queryset = AttendanceRecord.objects.select_related("employee", "shift", "branch").prefetch_related("sessions").filter(
-        work_date__range=(first, last), is_open=False, branch__in=branches,
+        reachable, work_date__range=(first, last), is_open=False,
     ).annotate(
         table_open=Exists(sessions.filter(ended_at__isnull=True, started_at__isnull=False)),
         table_minutes=Case(When(attendance_status__in=overtime.DAYS_OFF, then=Coalesce(Subquery(closed.values("minutes")[:1]), 0)),
@@ -75,10 +79,10 @@ def overtime_table(request, *, company_id, year, month, states):
     refresh(company_id, start=first, end=last)
     rules = rules_for(company_id, first)
     with use_company(company_id):
-        queryset = overtime_queryset(scope.branches, first, last, rules)
+        queryset = overtime_queryset(scope.branches, first, last, rules, scope.departments)
         form = OvertimeFilters(request.GET, employees=Employee.objects.filter(
             pk__in=queryset.values("employee_id")).order_by("first_name", "last_name"),
-            branches=scope.branches.order_by("name"))
+            branches=(scope.choice_branches or scope.branches).order_by("name"))
         if form.is_valid():
             if form.cleaned_data["employee"]:
                 queryset = queryset.filter(employee=form.cleaned_data["employee"])

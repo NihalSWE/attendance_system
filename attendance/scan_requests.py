@@ -20,7 +20,6 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from access_control.branch_access import ALL_BRANCHES
 from attendance import access, correction_services
 from attendance.models import MissedScanRequest
 from attendance.services import _is_locked, locked_ranges
@@ -144,12 +143,23 @@ def reviewable(actor, company_id):
 
     Never their own. Refuses somebody who may fix attendance nowhere.
     """
-    membership, branches = access.fix_branches(actor, company_id)
+    from django.db.models import Q
+
+    from access_control.branch_access import Scope
+    from organization.access_services import people
+
+    membership, where = access.fix_scope(actor, company_id)
     # Built here, read by the caller inside the same company.
     with use_company(company_id):
         queryset = MissedScanRequest.objects.exclude(employee__user_id=actor.pk)
-    if branches is not ALL_BRANCHES:
-        queryset = queryset.filter(branch_id__in=branches)
+        if not where.is_all:
+            # Branches keep matching the branch the request was filed in. A head
+            # reaches it through the people placed in their department now.
+            matches = Q(branch_id__in=where.branches)
+            if where.departments:
+                headed = people(Scope(set(), where.departments))
+                matches |= Q(employee_id__in=list(headed.values_list("pk", flat=True)))
+            queryset = queryset.filter(matches)
     return membership, queryset
 
 
