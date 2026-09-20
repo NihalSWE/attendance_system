@@ -3519,3 +3519,28 @@ sent (a second dev server without the key had returned 500 to every poll).
 Next: a second device of the same model for the real device-to-device test
 (so far each template was written back to the device that captured it); the 3A the same way (ATT2 forms) once a 3A is
 reachable; then bulk queueing beyond `MAX_PENDING` for whole fleets.
+
+## 2026-09-20 — Attendance date and date-range filters (Nihal)
+
+Branch `feature/attendance-date-filters`, from main `5302833` (Ajay's task B).
+No migration, no `.env` change. Full suite 1163 OK.
+
+- **Daily list**: an **On date** single-day filter and a **From / To** range,
+  both using the project widgets (`data-datepicker`, `data-daterange`), kept in
+  the query string and applied *before* the server-side table, so its counts
+  are the real counts of the chosen window. Precedence: a single date wins,
+  then the range, then the month selectors. A range is capped at 366 days
+  (the window is recalculated on read, as Re-check punches is); a backwards
+  range is refused with a message and the month is shown instead. The card
+  heading and the badge show the active window.
+- **Calendar**: a **Jump to date** picker sets the month shown; the month/year
+  selectors and the prev/next arrows still work.
+- The filter is a real Django form (`DailyListFilterForm` in
+  `attendance/forms.py`) so `common/tests_form_controls.py` — the sweep that
+  fails on a browser-default picker — covers these fields too.
+
+7 tests in `attendance/tests_date_filters.py`: a single date, a range, a
+one-sided range as a single day, a backwards range falling back to the month,
+the single date overriding a range, the inputs rendering, and the calendar
+jump landing on the right month.
+
