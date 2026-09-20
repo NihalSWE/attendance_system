@@ -495,21 +495,31 @@
             This is the device's own report, not a live query — we never poll the device.
         </p>
     {% endif %}
-    {% if trial_writes %}
+    {% if trial_writes or can_read_back %}
         <div class="card">
             <div class="card__head">
                 <h2>
-                    Test writing to this device — user {{ test_user_id }} only
+                    {% if trial_writes %}
+                        Test writing to this device — user {{ test_user_id }} only
+                    {% else %}
+                        Ask the device what it holds
+                    {% endif %}
                 </h2>
             </div>
             <div class="card__body stack">
                 <p class="t-muted">
-                    Writing users to this device's protocol is not proven yet, so it is done only for
-                    <span class="mono">{{ test_user_id }}</span>, a number nobody uses. Pick someone whose
-                    fingerprint and face are saved here; the device is sent user {{ test_user_id }} with a
-                    copy of them. Then <strong>ask the device to read {{ test_user_id }} back</strong> and
-                    compare — this firmware can answer "done" and store something else. Removing users is
-                    never trialled: delete on the terminal.
+                    {% if trial_writes %}
+                        Writing users to this device's protocol is not proven yet, so it is done only for
+                        <span class="mono">{{ test_user_id }}</span>, a number nobody uses. Pick someone whose
+                        fingerprint and face are saved here; the device is sent user {{ test_user_id }} with a
+                        copy of them. Then <strong>ask the device to read {{ test_user_id }} back</strong> and
+                        compare — this firmware can answer "done" and store something else.
+                    {% else %}
+                        This device answers for one user at a time: ask it about test user
+                        <span class="mono">{{ test_user_id }}</span> to see exactly what it holds — name,
+                        role, card, and how many fingerprints and faces. That is how a write is checked
+                        here, because the firmware can answer "done" and store something else.
+                    {% endif %}
                 </p>
                 {% if can_read_back %}
                     <div class="trial-readback">
@@ -534,7 +544,7 @@
                         {% endif %}
                     </div>
                 {% endif %}
-                {% if trial_sources %}
+                {% if trial_writes and trial_sources %}
                     <form method="post" action="{% url 'devices:device_template_trial' device.public_id %}" class="stack">
                         {% csrf_token %}
                         <div class="field">
@@ -586,7 +596,7 @@
                             </button>
                         </div>
                     </form>
-                {% else %}
+                {% elif trial_writes %}
                     <p class="t-faint">
                         No fingerprint or face is saved yet. Press <strong>Save fingerprints and faces</strong> above.
                     </p>

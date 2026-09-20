@@ -3822,3 +3822,28 @@ also removes them from every device they are on:
 - `mapping.still_on_devices(employee)` gives the devices someone is still on.
 
 Tests: `LeaverRemovalTests` in devices/tests_mapping.py (5). Full suite 1261 OK.
+
+### 3A: templates enabled for real people; delete trialled — 2026-09-20 (Ajay's call)
+
+Ajay: treat the copied template as working and finish the flow now, rather than
+waiting for Monday's scan.
+
+- `MEASURED_WRITES["att2"] = {"user", "template"}` — a 3A now takes a person's
+  record, name, role, card **and** their fingerprint and face, so employees can
+  be bulk-uploaded to another 3A with everything. Evidence so far: the device
+  stored a copied fingerprint and face for test user 99999 and reported them
+  back. **A live scan against a copied template is still not witnessed**; if
+  copies turn out not to match, people use their card until they re-enrol, and
+  nothing is lost (the originals stay on the old device and on the server).
+- **Delete on 2.x is now trialled on test user 99999 only**, the last unmeasured
+  command: `DATA DELETE USERINFO PIN=99999` (upper case, as the query and write
+  forms measured on this device). A real person is still refused until the
+  trial passes — a wrong delete key wiped a 2A. Both 3As' users, cards, roles
+  and templates are already saved here, so even the worst case is recoverable
+  by re-sending them.
+- The read-back card stays on any 2.x device after the trial form goes: asking
+  the device what it holds is how every write is checked on this protocol.
+
+To finish the 3A: press **Remove test user 99999** on the device's Users page,
+then **Refresh user list** and check the count drops by exactly one (49 → 48).
+Then deletes can be enabled for real people, and leaver removal works there too.

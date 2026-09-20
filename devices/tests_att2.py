@@ -289,14 +289,15 @@ class TrialWritesTests(Att2Case):
         with use_company(self.company):
             return push_to_device(self.device, pin, **kwargs)
 
-    def test_a_real_person_gets_the_record_but_no_template(self):
+    def test_a_real_person_gets_the_record_and_their_template(self):
         entries, error = self.push("445900", name="Moin")
         self.assertEqual((len(entries), error), (1, ""))
         entries, error = self.push("445900", name="Moin",
                                    finger_template={"type": "1", "no": "6", "index": "0",
                                                     "template": "x", "device_model_id": self.device.device_model_id})
-        self.assertEqual(entries, [])
-        self.assertIn("99999", error)
+        self.assertEqual(error, "")
+        self.assertEqual([e["key"] for e in entries],
+                         ["push_user:445900", "push_template:445900:1:6:0"])
 
     def test_the_test_user_goes_in_the_2x_form_with_the_device_s_own_group_and_timezone(self):
         entries, error = self.push("99999", name="TEST 99999", card="12345", role=0)
@@ -328,11 +329,14 @@ class TrialWritesTests(Att2Case):
         self.assertTrue(body.startswith("DATA UPDATE BIODATA Pin=99999\tNo=6\tIndex=0"))
         self.assertIn("\tType=1\tMajorVer=13\tMinorVer=0\tFormat=0\tTmp=", body)
 
-    def test_deleting_is_never_trialled(self):
-        for pin in ("99999", "1"):
-            entry, error = queue_user_delete(device=self.device, device_user_id=pin)
-            self.assertIsNone(entry)
-            self.assertIn("not measured", error)
+    def test_deleting_is_trialled_on_the_test_user_only(self):
+        # The wrong delete key wiped a 2A, so a dialect without a measured
+        # delete gets one only for 99999 — that is how the form is measured.
+        entry, error = queue_user_delete(device=self.device, device_user_id="99999")
+        self.assertEqual((entry["body"], error), ("DATA DELETE USERINFO PIN=99999", ""))
+        entry, error = queue_user_delete(device=self.device, device_user_id="1")
+        self.assertIsNone(entry)
+        self.assertIn("not measured", error)
 
     def test_reading_one_user_back(self):
         from devices.services.commands import queue_user_query
@@ -351,9 +355,10 @@ class TrialWritesTests(Att2Case):
                                              role="company_admin", status="active")
         self.client.force_login(admin)
         page = self.client.get(f"/devices/{self.device.public_id}/users/").content.decode()
-        self.assertIn("Test writing to this device", page)
+        # Writes are proven on this dialect now, so the trial form is gone; the
+        # read-back stays, because it is how any write here is checked.
         self.assertIn("Ask the device about user 99999", page)
-        self.assertNotIn("Push to device", page)
+        self.assertIn("Ask the device what it holds", page)
 
 
 class TrialCardTests(Att2Case):
@@ -410,7 +415,7 @@ class MeasuredUserWritesTests(Att2Case):
             "\tGrp=1\tTZ=0000000100000000",
         )
 
-    def test_a_template_for_a_real_person_still_waits_for_a_scan(self):
+    def test_a_template_now_goes_to_a_real_person(self):
         from cryptography.fernet import Fernet
         from django.test import override_settings
 
@@ -421,8 +426,8 @@ class MeasuredUserWritesTests(Att2Case):
             templates.save_from_messages(self.device)
             finger, _ = templates.templates_for(self.device, "1")
             entries, error = self.push("445900", name="Moin", finger_template=finger)
-        self.assertEqual(entries, [])
-        self.assertIn("99999", error)
+        self.assertEqual(error, "")
+        self.assertTrue(entries[1]["body"].startswith("DATA UPDATE BIODATA Pin=445900"))
 
     def test_deleting_is_still_refused(self):
         entry, error = queue_user_delete(device=self.device, device_user_id="445900")

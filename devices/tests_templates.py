@@ -242,21 +242,21 @@ class PushTests(TemplateCase):
         self.assertEqual(entries, [])
         self.assertIn("same model", error)
 
-    def test_2x_device_takes_only_the_test_user(self):
-        # Nothing is measured on the 2.x protocol yet, so a real person is
-        # refused there and only the test user goes, to measure it.
+    def test_2x_device_takes_a_real_person_without_a_door_permission(self):
+        # The 2.x user record and templates are measured (the client's 3A,
+        # 2026-09-20); a time-attendance device has no doors to grant.
         with use_company(self.company):
             att2 = self._device("NYU0000000003", self.model)
         att2.settings = {"announced": {"pushver": "2.4.1", "device_type": "att"}}
         att2.save()
-        # The record is proven on 2.x; a template is not, so it goes only to
-        # the test user.
         entries, error = push_to_device(att2, "445900", name="Moin")
         self.assertEqual((len(entries), error), (1, ""))
         self.assertTrue(entries[0]["body"].startswith("DATA UPDATE USERINFO PIN=445900"))
         entries, error = push_to_device(att2, "445900", name="Moin", finger_template=self.finger)
-        self.assertEqual(entries, [])
-        self.assertIn(TEST_USER_ID, error)
+        self.assertEqual(error, "")
+        self.assertEqual([e["key"] for e in entries],
+                         ["push_user:445900", "push_template:445900:1:6:0"])
+        self.assertTrue(entries[1]["body"].startswith("DATA UPDATE BIODATA Pin=445900"))
 
     def test_bad_input_refused(self):
         for kwargs in ({"device_user_id": "12a"}, {"device_user_id": ""},

@@ -234,8 +234,16 @@ def needs_access_grant(device):
     return (announced.get("device_type") or settings.get("device_type") or "").lower() != "att"
 
 
-def build_user_delete(*, device_user_id):
-    """Build the DATA DELETE body that removes exactly one device user."""
+def build_user_delete(*, device_user_id, dialect=None):
+    """Build the DATA DELETE body that removes exactly one device user.
+
+    The 2.x table is ``USERINFO`` with an upper-case ``PIN``, matching the
+    query and write forms measured on the 3A. NOT MEASURED for deletes: it is
+    sent for TEST_USER_ID only, and what the device did is checked by counting
+    its users afterwards.
+    """
+    if dialect == "att2":
+        return f"DATA DELETE USERINFO PIN={device_user_id}"
     return f"DATA DELETE user Pin={device_user_id}"
 
 
@@ -271,7 +279,8 @@ TEST_USER_ID = "99999"
 #: not listed: a face copy still goes only to TEST_USER_ID. A delete is
 #: refused outright on this dialect — a wrong delete key once wiped a device,
 #: and this one is at a client with nobody on site.
-MEASURED_WRITES = {"push3": {"user", "access", "template", "delete"}, "att2": {"user"}}
+MEASURED_WRITES = {"push3": {"user", "access", "template", "delete"},
+                   "att2": {"user", "template"}}
 
 
 def measured(device, what):
@@ -504,16 +513,18 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
     clean_id, error = _validated_user_id(device_user_id)
     if error:
         return None, error
-    # Deleting is never trialled, not even on the test user: on the 2A a
-    # delete with the wrong key wiped every user and their faces. A dialect
-    # gets deletes only once the form is measured on a device we can lose.
-    if not measured(device, "delete"):
+    # A wrong delete key wiped every user on a 2A, so a dialect with no
+    # measured delete gets one only for the test user — that is how the form
+    # is measured, and the device's own users are backed up here first.
+    if not measured(device, "delete") and clean_id != TEST_USER_ID:
         return None, (
             "Removing users is not measured on this device's protocol yet. Delete "
             "the user on the terminal itself."
         )
 
-    body = build_user_delete(device_user_id=clean_id)
+    from devices.services import protocol
+
+    body = build_user_delete(device_user_id=clean_id, dialect=protocol.dialect(device))
     # Belt and braces: a uid-keyed delete wipes the whole device (see
     # FORBIDDEN_DELETE_KEYS), so refuse to emit one even if a future edit
     # changes how the body is built.
