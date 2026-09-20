@@ -3695,3 +3695,28 @@ delete key wiped a 2A, and this device is at a client with nobody on site.
 Still open for the 3A: recognition of a copied template (watch for punches
 from 99999, or someone at the terminal), deletes, and a second 3A for a true
 device-to-device copy.
+## 2026-09-20 — Tests for the department and designation screens (Nihal)
+
+Branch `feature/department-screen-tests`, from main. The screens rebuilt on
+2026-09-19 (Departments repurposed, Designations given their own page) shipped
+without tests; Ajay asked for them. 19 tests in
+`organization/tests_department_screens.py`, covering the refusals that carry
+the rules rather than only that a page renders:
+
+- Departments: the list shows the department and its branch; adding one;
+  a branch refusing a second department with the same code; the same code
+  being free in another branch; editing renaming it while the **branch stays
+  fixed**; a department with employees refusing to deactivate; an empty one
+  deactivating; copying to another branch bringing the designations but
+  **not** the head; copying twice skipping what is already there.
+- Designations: the list showing the title, its department and branch; adding
+  one; a department refusing a second title with the same code; the same code
+  being free in another department; editing renaming it while the
+  **department stays fixed**; a parent in another department being refused;
+  a title somebody holds refusing to deactivate; an unused one deactivating
+  from the list.
+- Who may: an Employee login is sent to My account from all four pages, and
+  the services refuse a crafted call as well.
+
+No migration, no `.env` change. Full suite 1213 OK.
+
