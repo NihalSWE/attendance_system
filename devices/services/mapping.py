@@ -826,7 +826,13 @@ def branch_devices(company_id, branch_id):
 
 
 def upload_supported(device):
-    return protocol.dialect(device) != protocol.ATT2
+    """Whether writing a user to this device has been measured on real hardware.
+
+    Was "anything but 2.x" until the 3A's user and template writes were read
+    back off the device itself (2026-09-19/20); now it asks the one place that
+    records what has been measured, so a protocol proven there is usable here.
+    """
+    return commands.measured(device, "user")
 
 
 def branch_employees(device):
