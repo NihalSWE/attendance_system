@@ -106,13 +106,16 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         label="Push protocol",
         choices=(
             ("auto", "As the device announces"),
-            ("3", "PushSDK 3.x"),
+            ("2", "Attendance push 2.x (SenseFace 3A)"),
+            ("3", "PushSDK 3.x (SenseFace 2A)"),
         ),
         initial="auto",
         help_text=(
-            "Leave on “As the device announces”. Choose 3.x only when the "
-            "device's own menu shows Push 3.x but it connects as 2.x; restart "
-            "the device afterwards. If it then stops sending, switch back."
+            "Leave on “As the device announces”. Set it by hand when a device "
+            "was registered before this server knew it — a device that stays "
+            "registered never announces again, and the wrong choice makes it "
+            "refuse commands (the SenseFace 3A answers the 3.x form with -1004). "
+            "Restart the terminal after changing it; if it stops sending, switch back."
         ),
     )
     installed_at = CompanyDateTimeField(

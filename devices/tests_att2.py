@@ -98,6 +98,16 @@ class DialectTests(Att2Case):
         self.assertEqual(protocol.dialect(self.reload()), protocol.PUSH3)
 
     def test_without_a_recorded_handshake_the_2x_operation_log_gives_it_away(self):
+        # A model the catalogue says nothing about: the 2.x operation log is
+        # what identifies it. (A SenseFace 3A does not need this — its model
+        # already means 2.x, see DialectWhenNothingWasAnnouncedTests.)
+        from devices.models import DeviceModel
+
+        with use_company(self.company):
+            self.device.device_model = DeviceModel.objects.get_or_create(
+                vendor=self.device.device_model.vendor, model_code="unknown-model",
+                defaults={"name": "Unknown", "protocol": DeviceModel.Protocol.ADMS_PUSH})[0]
+            self.device.save()
         self.assertEqual(protocol.dialect(self.device), protocol.PUSH3)
         self.post("OPERLOG", OPLOG)
         self.assertEqual(protocol.dialect(self.device), protocol.ATT2)
@@ -214,3 +224,44 @@ class CatchUpTests(Att2Case):
         self.handshake(pushver="3.1.2", device_type="acc")
         self.reload()
         self.assertEqual(self.client.get(f"/iclock/getrequest?SN={SN}").content.decode().strip(), "OK")
+
+
+class DialectWhenNothingWasAnnouncedTests(Att2Case):
+    """A rebuilt database loses what the device announced (Ajay, 2026-09-20).
+
+    The live 3A stayed registered, so it never announced again; the server
+    fell back to the 3.x dialect and "Refresh user list" was refused with
+    Return=-1004. The model catalogue and the administrator's override now
+    answer that.
+    """
+
+    def test_the_3a_model_speaks_2x_by_default(self):
+        with use_company(self.company):
+            self.device.settings = {}       # nothing announced, nothing sent
+            self.device.save()
+            self.assertEqual(protocol.dialect(self.device), protocol.ATT2)
+            entry = queue_command(device=self.device, command_key="query_users")
+        self.assertEqual(entry["body"], "DATA QUERY USERINFO")
+
+    def test_the_administrator_can_force_either_dialect(self):
+        with use_company(self.company):
+            self.device.settings = {"push_protocol": "3",
+                                    "announced": {"pushver": "2.4.1", "device_type": "att"}}
+            self.device.save()
+            self.assertEqual(protocol.dialect(self.device), protocol.PUSH3)
+            self.device.settings = {"push_protocol": "2",
+                                    "announced": {"pushver": "3.1.2", "device_type": "acc"}}
+            self.device.save()
+            self.assertEqual(protocol.dialect(self.device), protocol.ATT2)
+
+    def test_a_2a_with_nothing_announced_stays_on_3x(self):
+        from devices.models import DeviceModel
+
+        with use_company(self.company):
+            self.device.device_model = DeviceModel.objects.get_or_create(
+                vendor=self.device.device_model.vendor, model_code="senseface-2a",
+                defaults={"name": "SenseFace 2A",
+                          "protocol": DeviceModel.Protocol.ADMS_PUSH})[0]
+            self.device.settings = {}
+            self.device.save()
+            self.assertEqual(protocol.dialect(self.device), protocol.PUSH3)

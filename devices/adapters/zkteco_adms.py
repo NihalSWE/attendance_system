@@ -397,7 +397,8 @@ class ZKTecoAdmsAdapter(DeviceAdapter):
         # stays in 2.x for as long as the server answers as a 2.x server. The
         # administrator can tell us to answer it as a 3.x server instead
         # (Edit device → Push protocol). "auto" keeps what the device says.
-        push3 = uses_push3(pushver) or settings.get("push_protocol") == "3"
+        forced = settings.get("push_protocol")
+        push3 = forced != "2" and (uses_push3(pushver) or forced == "3")
         lines = [
             f"GET OPTION FROM: {device.serial_number}",
             f"Stamp={stamp}",
