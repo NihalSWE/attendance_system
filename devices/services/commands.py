@@ -256,17 +256,60 @@ TEMPLATE_WRITE_FIELDS = (
     ("MinorVer", "minor_version"), ("Format", "format"), ("Tmp", "template"),
 )
 MEASURED_TEMPLATE_TYPES = {"1", "9"}
-#: Where an unmeasured template type may still be written, to measure it.
+#: Where an unmeasured write may still be sent, to measure it: a number nobody
+#: uses. Anything written to a real person must be measured first.
 TEST_USER_ID = "99999"
 
+#: What has been proven on hardware, per dialect (see PHASE_STATUS.md).
+#: PUSH3: the office SenseFace 2A, 2026-09-19 — user record, card, role
+#: (Privilege), door permission, fingerprint, face, delete by Pin.
+#: ATT2: nothing yet. Until a write is listed here it goes only to
+#: TEST_USER_ID, and a delete is refused outright — a wrong delete key once
+#: wiped a device.
+MEASURED_WRITES = {"push3": {"user", "access", "template", "delete"}, "att2": set()}
 
-def build_template_update(*, device_user_id, template):
+
+def measured(device, what):
+    from devices.services import protocol
+
+    return what in MEASURED_WRITES.get(protocol.dialect(device), set())
+
+
+# The 2.x user table, in the spelling the 3A itself uploads
+# (``USER PIN=1 Name=NIHAL Pri=14 Passwd= Card=196793 Grp=1 TZ=…``). NOT
+# MEASURED: the 2A taught us a write name can differ from the upload name and
+# be accepted in silence, so every field is read back before this is trusted.
+# ``TZ`` and ``Grp`` are copied from a user the device already holds — a wrong
+# time zone is how a recognised person still gets refused.
+ATT2_USER_FIELDS = ("PIN", "Name", "Pri", "Passwd", "Card", "Grp", "TZ")
+DEFAULT_TZ = "0000000100000000"
+
+
+def build_user_update_att2(*, device_user_id, name="", card_number="", privilege=0,
+                           group="1", timezone_code=DEFAULT_TZ):
+    values = {
+        "PIN": str(device_user_id), "Name": (name or "")[:24], "Pri": str(int(privilege)),
+        "Passwd": "", "Card": str(card_number or ""), "Grp": str(group or "1"),
+        "TZ": str(timezone_code or DEFAULT_TZ),
+    }
+    body = "\t".join(f"{field}={values[field]}" for field in ATT2_USER_FIELDS)
+    return f"DATA UPDATE USERINFO {body}"
+
+
+def build_user_query_att2(*, device_user_id):
+    """Ask a 2.x device to send one user back — how a write is checked."""
+    return f"DATA QUERY USERINFO PIN={device_user_id}"
+
+
+def build_template_update(*, device_user_id, template, dialect=None):
     """Build the DATA UPDATE body that writes one template for one device user."""
     values = {"Pin": str(device_user_id)}
     for field, key in TEMPLATE_WRITE_FIELDS[1:]:
         values[field] = str(template.get(key) or "")
     body = "\t".join(f"{field}={values[field]}" for field, _ in TEMPLATE_WRITE_FIELDS)
-    return f"DATA UPDATE biodata {body}"
+    # The 3A uploads its templates as ``BIODATA Pin=…``, the 2A as ``biodata``.
+    table = "BIODATA" if dialect == "att2" else "biodata"
+    return f"DATA UPDATE {table} {body}"
 
 # A device that has been offline for a long time should not receive a pile of
 # stale refresh requests the moment it reconnects.
@@ -389,22 +432,20 @@ def _validated_user_id(device_user_id):
     return value, ""
 
 
-def _unverified_user_writes(device):
-    """Refuse user writes a device's dialect has not been verified for.
+def _unverified_user_writes(device, device_user_id=None):
+    """Refuse a user write this device's dialect has not been proven for.
 
-    The write forms here were measured on the 3.x SenseFace 2A, where one
-    wrong key deleted every user. Nothing has been written to a 2.x device
-    yet, so none is sent to one until its own form is measured.
+    Proven on the 3.x SenseFace 2A, where one wrong key deleted every user. On
+    a dialect with nothing proven, a write is allowed **only for the test
+    user** — that is how it gets measured — and everyone else is refused.
     """
-    from devices.services import protocol
-
-    if protocol.dialect(device) == protocol.ATT2:
-        return (
-            "Adding or removing users from the software is not verified on this "
-            "device's protocol yet. Add or edit the user on the terminal; the user "
-            "list here updates by itself."
-        )
-    return ""
+    if measured(device, "user") or str(device_user_id) == TEST_USER_ID:
+        return ""
+    return (
+        "Writing users to this device's protocol is not measured yet, so it is only "
+        f"done for test user {TEST_USER_ID}. Add or edit the person on the terminal; "
+        "the user list here updates by itself."
+    )
 
 
 def queue_user_push(*, device, device_user_id, name="", card_number="",
@@ -418,7 +459,7 @@ def queue_user_push(*, device, device_user_id, name="", card_number="",
     clean_id, error = _validated_user_id(device_user_id)
     if error:
         return None, error
-    error = _unverified_user_writes(device)
+    error = _unverified_user_writes(device, clean_id)
     if error:
         return None, error
     if int(privilege) not in (0, 2, 6, 14):
@@ -448,9 +489,14 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
     clean_id, error = _validated_user_id(device_user_id)
     if error:
         return None, error
-    error = _unverified_user_writes(device)
-    if error:
-        return None, error
+    # Deleting is never trialled, not even on the test user: on the 2A a
+    # delete with the wrong key wiped every user and their faces. A dialect
+    # gets deletes only once the form is measured on a device we can lose.
+    if not measured(device, "delete"):
+        return None, (
+            "Removing users is not measured on this device's protocol yet. Delete "
+            "the user on the terminal itself."
+        )
 
     body = build_user_delete(device_user_id=clean_id)
     # Belt and braces: a uid-keyed delete wipes the whole device (see
@@ -489,7 +535,7 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
     clean_id, error = _validated_user_id(device_user_id)
     if error:
         return [], error
-    error = _unverified_user_writes(device)
+    error = _unverified_user_writes(device, clean_id)
     if error:
         return [], error
     try:
@@ -503,7 +549,10 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
         return [], "The card number must be digits only."
 
     templates = [t for t in (finger_template, face_template) if t]
-    unmeasured = [t for t in templates if str(t.get("type")) not in MEASURED_TEMPLATE_TYPES]
+    unmeasured = [
+        t for t in templates
+        if str(t.get("type")) not in MEASURED_TEMPLATE_TYPES or not measured(device, "template")
+    ]
     if unmeasured and clean_id != TEST_USER_ID:
         return [], (
             "Writing this kind of template is not measured on this device model yet. "
@@ -518,20 +567,64 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
         if not str(template.get("template") or "").strip():
             return [], "A template is empty."
 
-    commands = [(
-        f"push_user:{clean_id}",
-        build_user_update(device_user_id=clean_id, name=name, card_number=card,
-                          privilege=role),
-    )]
-    if needs_access_grant(device):
+    from devices.services import protocol
+
+    dialect = protocol.dialect(device)
+    if dialect == protocol.ATT2:
+        # The 2.x user row carries its own time zone and group; copy them from
+        # someone the device already holds, so a written user is not refused
+        # for a time period nobody set (the 2A's "Invalid time period").
+        sample = _att2_user_defaults(device)
+        user_body = build_user_update_att2(
+            device_user_id=clean_id, name=name, card_number=card, privilege=role,
+            group=sample["group"], timezone_code=sample["timezone_code"])
+    else:
+        user_body = build_user_update(device_user_id=clean_id, name=name,
+                                      card_number=card, privilege=role)
+    commands = [(f"push_user:{clean_id}", user_body)]
+    # A door permission belongs to an access-control device; a time-attendance
+    # device (the 3A) has no doors.
+    if dialect != protocol.ATT2 and needs_access_grant(device):
         commands.append((f"push_access:{clean_id}", build_access_grant(device_user_id=clean_id)))
     for template in templates:
         commands.append((
             f"push_template:{clean_id}:{template.get('type')}:{template.get('no')}:"
             f"{template.get('index')}",
-            build_template_update(device_user_id=clean_id, template=template),
+            build_template_update(device_user_id=clean_id, template=template, dialect=dialect),
         ))
     return _queue_group(device=device, commands=commands, requested_by=requested_by)
+
+
+def _att2_user_defaults(device):
+    """The group and time zone this device's own users carry.
+
+    Read from the raw uploads, not the roster, so this works outside a company
+    context (and does not rebuild the whole roster for one lookup).
+    """
+    from devices.services.device_roster import USER_PREFIXES, _rows
+
+    for fields in _rows(device, USER_PREFIXES):
+        group, tz = (fields.get("grp") or fields.get("group") or "").strip(), (fields.get("tz") or "").strip()
+        if group or tz:
+            return {"group": group or "1", "timezone_code": tz or DEFAULT_TZ}
+    return {"group": "1", "timezone_code": DEFAULT_TZ}
+
+
+def queue_user_query(*, device, device_user_id, requested_by=None):
+    """Ask the device to send one user back, so a write can be checked."""
+    from devices.services import protocol
+
+    clean_id, error = _validated_user_id(device_user_id)
+    if error:
+        return None, error
+    if protocol.dialect(device) != protocol.ATT2:
+        return None, "This device answers the whole user list; use Refresh user list."
+    entries, error = _queue_group(
+        device=device,
+        commands=[(f"query_user:{clean_id}", build_user_query_att2(device_user_id=clean_id))],
+        requested_by=requested_by,
+    )
+    return (entries[0] if entries else None), error
 
 
 #: Writes one device may have waiting in its outbox: a whole company's people

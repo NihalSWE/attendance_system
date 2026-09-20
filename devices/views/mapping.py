@@ -314,3 +314,25 @@ def device_job_progress(request, public_id):
 
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
     return JsonResponse(command_service.job_progress(device))
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_user_query(request, public_id):
+    """Ask the device to send one user back, so a write can be checked."""
+    from devices.services import commands as command_service
+
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    entry, error = command_service.queue_user_query(
+        device=device, device_user_id=request.POST.get("device_user_id", ""),
+        requested_by=request.user)
+    if error:
+        messages.error(request, error)
+    else:
+        messages.success(
+            request,
+            f"Asked {device.name} for user {request.POST.get('device_user_id')}. It answers on its "
+            "next check-in; reload in a few seconds and compare what it reports.",
+        )
+    return redirect("devices:device_users", public_id=device.public_id)

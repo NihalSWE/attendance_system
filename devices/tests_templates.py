@@ -242,14 +242,19 @@ class PushTests(TemplateCase):
         self.assertEqual(entries, [])
         self.assertIn("same model", error)
 
-    def test_2x_device_refused(self):
+    def test_2x_device_takes_only_the_test_user(self):
+        # Nothing is measured on the 2.x protocol yet, so a real person is
+        # refused there and only the test user goes, to measure it.
         with use_company(self.company):
             att2 = self._device("NYU0000000003", self.model)
         att2.settings = {"announced": {"pushver": "2.4.1", "device_type": "att"}}
         att2.save()
-        entries, error = push_to_device(att2, TEST_USER_ID, name="TEST")
+        entries, error = push_to_device(att2, "445900", name="Moin")
         self.assertEqual(entries, [])
-        self.assertIn("not verified", error)
+        self.assertIn("not measured", error)
+        entries, error = push_to_device(att2, TEST_USER_ID, name="TEST")
+        self.assertEqual((len(entries), error), (1, ""))
+        self.assertTrue(entries[0]["body"].startswith("DATA UPDATE USERINFO PIN=99999"))
 
     def test_bad_input_refused(self):
         for kwargs in ({"device_user_id": "12a"}, {"device_user_id": ""},

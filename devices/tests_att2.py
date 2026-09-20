@@ -180,7 +180,7 @@ class CommandTests(Att2Case):
     def test_user_writes_wait_until_measured_on_this_protocol(self):
         entry, error = queue_user_push(device=self.device, device_user_id="5", name="X")
         self.assertIsNone(entry)
-        self.assertIn("not verified", error)
+        self.assertIn("not measured", error)
         entry, error = queue_user_delete(device=self.device, device_user_id="5")
         self.assertIsNone(entry)
         self.assertEqual(pending_summary(self.device), [])
@@ -265,3 +265,86 @@ class DialectWhenNothingWasAnnouncedTests(Att2Case):
             self.device.settings = {}
             self.device.save()
             self.assertEqual(protocol.dialect(self.device), protocol.PUSH3)
+
+
+class TrialWritesTests(Att2Case):
+    """Writing to a 2.x device: the test user only, and never a delete.
+
+    The forms are ZKTeco's documented 2.x ones, not yet measured on hardware
+    (2026-09-20). They go out for user 99999 so the device itself can prove
+    them, each followed by a read-back.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.handshake()
+        self.reload()
+        self.post("OPERLOG", USERS)  # the device's own users, with Grp and TZ
+
+    def push(self, pin, **kwargs):
+        from devices.services.commands import push_to_device
+
+        with use_company(self.company):
+            return push_to_device(self.device, pin, **kwargs)
+
+    def test_a_real_person_is_still_refused(self):
+        entries, error = self.push("445900", name="Moin")
+        self.assertEqual(entries, [])
+        self.assertIn("99999", error)
+
+    def test_the_test_user_goes_in_the_2x_form_with_the_device_s_own_group_and_timezone(self):
+        entries, error = self.push("99999", name="TEST 99999", card="12345", role=0)
+        self.assertEqual(error, "")
+        self.assertEqual([e["key"] for e in entries], ["push_user:99999"])
+        self.assertEqual(
+            entries[0]["body"],
+            "DATA UPDATE USERINFO PIN=99999\tName=TEST 99999\tPri=0\tPasswd=\tCard=12345"
+            "\tGrp=1\tTZ=0000000100000000",
+        )
+
+    def test_no_door_permission_on_a_time_attendance_device(self):
+        entries, _ = self.push("99999", name="TEST")
+        self.assertNotIn("push_access:99999", [e["key"] for e in entries])
+
+    def test_a_template_uses_the_upper_case_table(self):
+        from cryptography.fernet import Fernet
+        from django.test import override_settings
+
+        from devices.services import templates
+
+        with override_settings(BIOMETRIC_TEMPLATE_KEY=Fernet.generate_key().decode()):
+            self.post("BIODATA", BIODATA)
+            templates.save_from_messages(self.device)
+            finger, _ = templates.templates_for(self.device, "1")
+            entries, error = self.push("99999", name="TEST", finger_template=finger)
+        self.assertEqual(error, "")
+        body = entries[1]["body"]
+        self.assertTrue(body.startswith("DATA UPDATE BIODATA Pin=99999\tNo=6\tIndex=0"))
+        self.assertIn("\tType=1\tMajorVer=13\tMinorVer=0\tFormat=0\tTmp=", body)
+
+    def test_deleting_is_never_trialled(self):
+        for pin in ("99999", "1"):
+            entry, error = queue_user_delete(device=self.device, device_user_id=pin)
+            self.assertIsNone(entry)
+            self.assertIn("not measured", error)
+
+    def test_reading_one_user_back(self):
+        from devices.services.commands import queue_user_query
+
+        with use_company(self.company):
+            entry, error = queue_user_query(device=self.device, device_user_id="99999")
+        self.assertEqual((entry["body"], error), ("DATA QUERY USERINFO PIN=99999", ""))
+
+    def test_the_page_offers_the_trial_and_the_read_back(self):
+        from django.contrib.auth import get_user_model
+
+        from accounts.models import CompanyMembership
+
+        admin = get_user_model().objects.create_user(email="admin2@a.test")
+        CompanyMembership.all_objects.create(company=self.company, user=admin,
+                                             role="company_admin", status="active")
+        self.client.force_login(admin)
+        page = self.client.get(f"/devices/{self.device.public_id}/users/").content.decode()
+        self.assertIn("Test writing to this device", page)
+        self.assertIn("Ask the device about user 99999", page)
+        self.assertNotIn("Push to device", page)

@@ -976,7 +976,11 @@ def device_users(request, public_id):
                "saved_total", "card_number", "has_password", "has_photo",
                "employee_name", None, "counts_for_attendance"),
     )
-    user_writes = protocol.dialect(device) != protocol.ATT2
+    # What this device's protocol has been proven for (commands.MEASURED_WRITES):
+    # until a write is proven it is offered only for the test user, on the
+    # trial card, and never for a real person.
+    user_writes = command_service.measured(device, "user")
+    trial_writes = not (user_writes and command_service.measured(device, "template"))
 
     return table_render(request, "devices/device_users.html", {
         "device": device,
@@ -992,7 +996,9 @@ def device_users(request, public_id):
         "trial_sources": [r for r in full_roster if r["saved_total"] and r["pin"] != TEST_USER_ID],
         "test_user_id": TEST_USER_ID,
         "test_user_on_device": any(r["pin"] == TEST_USER_ID for r in full_roster),
-        "face_writes_measured": "9" in MEASURED_TEMPLATE_TYPES,
+        "trial_writes": trial_writes,
+        "can_read_back": protocol.dialect(device) == protocol.ATT2,
+        "test_user_row": next((r for r in full_roster if r["pin"] == TEST_USER_ID), None),
         "recent_results": recent_results(device),
         # Copy to another device: the company's other devices of this model.
         "transfer_targets": mapping_service.transfer_targets(device) if user_writes else [],

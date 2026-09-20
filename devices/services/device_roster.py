@@ -143,6 +143,7 @@ def build_roster(device):
     def blank(pin):
         return {
             "pin": pin, "uid": "", "name": "", "card_number": "", "has_password": False,
+            "group": "", "tz": "",
             "privilege_code": "", "disabled_on_device": False, "fingerprint_count": 0,
             "face_count": 0, "other_biometric_count": 0, "has_photo": False,
             "only_in_scans": False,
@@ -160,6 +161,10 @@ def build_roster(device):
             "has_password": bool((fields.get("password") or fields.get("passwd") or "").strip()),
             "privilege_code": (fields.get("privilege") or fields.get("pri") or "").strip(),
             "disabled_on_device": (fields.get("disable") or "0").strip() == "1",
+            # The 2.x row carries its own access group and time zone; a user
+            # written without them can be recognised and still refused.
+            "group": (fields.get("grp") or fields.get("group") or "").strip(),
+            "tz": (fields.get("tz") or "").strip(),
         })
         users[pin] = row
 

@@ -495,21 +495,45 @@
             This is the device's own report, not a live query — we never poll the device.
         </p>
     {% endif %}
-    {% if user_writes and not face_writes_measured %}
+    {% if trial_writes %}
         <div class="card">
             <div class="card__head">
                 <h2>
-                    Test the face copy on test user {{ test_user_id }}
+                    Test writing to this device — user {{ test_user_id }} only
                 </h2>
             </div>
             <div class="card__body stack">
                 <p class="t-muted">
-                    Copying a fingerprint to this device model is proven. Copying a <strong>face</strong>
-                    is not yet, so a face only goes to test user <span class="mono">{{ test_user_id }}</span>,
-                    a number nobody uses. Pick a person whose face is saved here; the device gets user
-                    {{ test_user_id }} with a copy of it, with door access. Then check on the terminal that
-                    that person's face is recognised as {{ test_user_id }}.
+                    Writing users to this device's protocol is not proven yet, so it is done only for
+                    <span class="mono">{{ test_user_id }}</span>, a number nobody uses. Pick someone whose
+                    fingerprint and face are saved here; the device is sent user {{ test_user_id }} with a
+                    copy of them. Then <strong>ask the device to read {{ test_user_id }} back</strong> and
+                    compare — this firmware can answer "done" and store something else. Removing users is
+                    never trialled: delete on the terminal.
                 </p>
+                {% if can_read_back %}
+                    <div class="trial-readback">
+                        <form method="post" action="{% url 'devices:device_user_query' device.public_id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="device_user_id" value="{{ test_user_id }}">
+                            <button class="btn btn--ghost" type="submit">
+                                Ask the device about user {{ test_user_id }}
+                            </button>
+                        </form>
+                        {% if test_user_row %}
+                            <span class="badge badge--success">
+                                The device reports {{ test_user_id }}: name "{{ test_user_row.name|default:"(none)" }}",
+                                role {{ test_user_row.privilege_label|default:"—" }},
+                                card {{ test_user_row.card_number|default:"—" }},
+                                {{ test_user_row.fingerprint_count }} fingerprint(s), {{ test_user_row.face_count }} face(s)
+                            </span>
+                        {% else %}
+                            <span class="t-faint">
+                                The device has not reported user {{ test_user_id }} (yet).
+                            </span>
+                        {% endif %}
+                    </div>
+                {% endif %}
                 {% if trial_sources %}
                     <form method="post" action="{% url 'devices:device_template_trial' device.public_id %}" class="stack">
                         {% csrf_token %}

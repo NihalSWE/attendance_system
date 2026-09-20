@@ -1443,3 +1443,9 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     flex-wrap: wrap;
     margin-left: auto;
 }
+.trial-readback {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
