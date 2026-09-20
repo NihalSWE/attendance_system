@@ -37,10 +37,12 @@ urlpatterns = [
         adoption_views.adoption_status,
         name="adoption_status",
     ),
+    path("designations/", adoption_views.designation_list, name="designation_list"),
+    path("designations/add/", adoption_views.designation_create, name="designation_create"),
     path(
-        "departments/<int:pk>/designations/add/",
-        adoption_views.designation_add,
-        name="designation_add",
+        "designations/<int:pk>/edit/",
+        adoption_views.designation_edit,
+        name="designation_edit",
     ),
     path(
         "designations/<int:pk>/status/",
