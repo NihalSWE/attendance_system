@@ -1118,10 +1118,8 @@ def device_template_trial(request, public_id):
         finger = None
     if request.POST.get("face") != "on":
         face = None
-    if not (finger or face):
-        messages.error(request, f"Device user {source or '—'} has no saved fingerprint or face to copy.")
-        return back
-
+    # The user record alone is a valid first step: on an unproven protocol the
+    # field names are measured before any biometric data is sent.
     entries, error = push_to_device(
         device, TEST_USER_ID, name=name, card=request.POST.get("card", ""), role=0,
         finger_template=finger, face_template=face, requested_by=request.user,
@@ -1135,12 +1133,14 @@ def device_template_trial(request, public_id):
         "fingerprint": bool(finger), "face": bool(face),
         "commands": [e["body"] for e in entries],
     })
+    carried = [k for k, v in (("fingerprint", finger), ("face", face)) if v]
     messages.success(
         request,
-        f"Queued test user {TEST_USER_ID} with {source}'s "
-        + " and ".join(k for k, v in (("fingerprint", finger), ("face", face)) if v)
-        + ". The device takes it on its next check-in; its answers appear under "
-        "Commands and answers below.",
+        f"Queued test user {TEST_USER_ID}"
+        + (f" with {source}'s " + " and ".join(carried) if carried
+           else " (the user record only: name, role and card)")
+        + ". The device takes it on its next check-in; then press “Ask the device about "
+        f"user {TEST_USER_ID}” and compare what it reports.",
     )
     return back
 

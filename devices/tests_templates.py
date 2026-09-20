@@ -392,10 +392,13 @@ class ScreenTests(TemplateCase):
              "push_template:99999:9:0:0"],
         )
 
-    def test_trial_without_saved_templates(self):
+    def test_trial_without_saved_templates_writes_the_user_record_alone(self):
+        # Nothing saved for that number yet: the user record still goes, which
+        # is how an unproven protocol's field names are measured first.
         response = self.client.post(
             reverse("devices:device_template_trial", args=[self.device.public_id]),
             {"source": "445900", "finger": "on"}, follow=True,
         )
-        self.assertContains(response, "has no saved fingerprint or face")
-        self.assertEqual(self.pending(), [])
+        self.assertContains(response, "the user record only")
+        self.assertEqual([e["key"] for e in self.pending()],
+                         ["push_user:99999", "push_access:99999"])

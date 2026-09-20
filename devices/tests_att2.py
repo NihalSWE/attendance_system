@@ -348,3 +348,33 @@ class TrialWritesTests(Att2Case):
         self.assertIn("Test writing to this device", page)
         self.assertIn("Ask the device about user 99999", page)
         self.assertNotIn("Push to device", page)
+
+
+class TrialCardTests(Att2Case):
+    """The trial card writes the user record alone (Ajay, 2026-09-20)."""
+
+    def setUp(self):
+        super().setUp()
+        from django.contrib.auth import get_user_model
+
+        from accounts.models import CompanyMembership
+
+        self.handshake()
+        self.reload()
+        self.post("OPERLOG", USERS)
+        admin = get_user_model().objects.create_user(email="admin3@a.test")
+        CompanyMembership.all_objects.create(company=self.company, user=admin,
+                                             role="company_admin", status="active")
+        self.client.force_login(admin)
+
+    def test_no_templates_ticked_still_writes_the_user(self):
+        from devices.models import DeviceOutboxCommand
+
+        response = self.client.post(
+            f"/devices/{self.device.public_id}/users/templates/trial/",
+            {"source": "1", "name": "TEST 99999"}, follow=True)
+        self.assertContains(response, "the user record only")
+        bodies = list(DeviceOutboxCommand.all_objects.filter(device=self.device)
+                      .values_list("body", flat=True))
+        self.assertEqual(len(bodies), 1)
+        self.assertTrue(bodies[0].startswith("DATA UPDATE USERINFO PIN=99999\tName=TEST 99999"))
