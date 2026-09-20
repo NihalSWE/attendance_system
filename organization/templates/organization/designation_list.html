@@ -1,0 +1,177 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Designations · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Designations
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Designations
+            </h1>
+            <p class="page__sub">
+                The job titles this company uses, each inside one department.
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_manage %}
+                <a class="btn btn--primary" href="{% url 'organization:designation_create' %}">
+                    Add a designation
+                </a>
+            {% else %}
+                <button class="btn btn--primary" type="button" disabled
+                        title="Adding a designation requires owner or company administrator access">
+                    Add a designation
+                </button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Designations
+            </h2>
+            <span class="badge badge--neutral">
+                {{ server_table.total }}
+            </span>
+        </div>
+        <form method="get" class="toolbar">
+            <label class="sr-only" for="designation-status">
+                Status
+            </label>
+            <select class="input select js-select" id="designation-status" name="status">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if status == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+        </form>
+        {% if not page.object_list %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    {% if status or server_table.query %}
+                        Nothing matches that filter
+                    {% else %}
+                        No designations yet
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    {% if status or server_table.query %}
+                        Clear the filters to see every designation.
+                    {% else %}
+                        Add a designation and choose the department it belongs to.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table.total %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Designation
+                            </th>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Department
+                            </th>
+                            <th>
+                                Branch
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="numeric">
+                                Employees
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for designation in page.object_list %}
+                            <tr>
+                                <td>
+                                    {{ designation.name }}
+                                    {% if designation.parent %}
+                                        <div class="t-faint">
+                                            reports to {{ designation.parent.name }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ designation.code }}
+                                </td>
+                                <td>
+                                    {{ designation.department.name }}
+                                </td>
+                                <td>
+                                    {{ designation.department.branch.name }}
+                                </td>
+                                <td>
+                                    {% if designation.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Inactive
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">
+                                    {{ designation.employee_count }}
+                                </td>
+                                <td>
+                                    {% if can_manage %}
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'organization:designation_edit' designation.pk %}">
+                                            Edit
+                                        </a>
+                                        <form method="post" action="{% url 'organization:designation_status' designation.pk %}" class="inline-form">
+                                            {% csrf_token %}
+                                            {% if designation.status == 'active' %}
+                                                <input type="hidden" name="status" value="inactive">
+                                                <button class="btn btn--quiet btn--sm" type="submit">
+                                                    Deactivate
+                                                </button>
+                                            {% else %}
+                                                <input type="hidden" name="status" value="active">
+                                                <button class="btn btn--quiet btn--sm" type="submit">
+                                                    Activate
+                                                </button>
+                                            {% endif %}
+                                        </form>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+{% endblock %}

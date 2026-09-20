@@ -178,6 +178,85 @@ def add_designation(*, actor, company_id, adoption_id, code, name):
         )
 
 
+def visible_designations(membership):
+    """Designations this membership may see, respecting branch scope."""
+    queryset = Designation.objects.select_related("department", "department__branch", "parent")
+    if membership.allowed_branches.exists():
+        queryset = queryset.filter(
+            department__branch__in=membership.allowed_branches.values("pk")
+        )
+    return queryset
+
+
+def get_designation_for_edit(*, actor, company_id, designation_id):
+    membership = require_structure_manager(actor, company_id)
+    with use_company(company_id):
+        designation = (
+            Designation.objects.select_related("department__branch")
+            .filter(pk=designation_id).first()
+        )
+        if designation is None:
+            raise PermissionDenied("Designation not found in this company.")
+        assert_branch_in_scope(membership, designation.department.branch)
+    return membership, designation
+
+
+@transaction.atomic
+def create_designation(*, actor, company_id, values):
+    """Create a designation under one of the company's departments."""
+    membership = require_structure_manager(actor, company_id)
+    values = dict(values)
+    department = values.get("department")
+    if department is None or not values.get("code") or not values.get("name"):
+        raise ValidationError("A department, code and name are required.")
+    with use_company(company_id):
+        assert_branch_in_scope(membership, department.branch)
+        if Designation.objects.filter(department=department, code=values["code"]).exists():
+            raise ValidationError({
+                "code": f"{department.name} already has a designation with code "
+                        f"{values['code']}."
+            })
+        designation = create_validated(
+            Designation, company=membership.company,
+            created_by=actor, updated_by=actor, **values,
+        )
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="designation.created", obj=designation,
+            after={"department_id": designation.department_id, "code": designation.code,
+                   "name": designation.name, "status": designation.status},
+        )
+    return designation
+
+
+@transaction.atomic
+def update_designation(*, actor, company_id, designation_id, values):
+    """Edit one of the company's designations. The department is fixed once set."""
+    membership, designation = get_designation_for_edit(
+        actor=actor, company_id=company_id, designation_id=designation_id
+    )
+    values = dict(values)
+    # The department is fixed once created: moving it would reshape who holds
+    # the title. Add a new designation under another department instead.
+    values.pop("department", None)
+    with use_company(company_id):
+        before = {"code": designation.code, "name": designation.name,
+                  "parent_id": designation.parent_id, "status": designation.status}
+        for field, value in values.items():
+            setattr(designation, field, value)
+        designation.updated_by = actor
+        designation.full_clean()
+        designation.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="designation.updated", obj=designation,
+            before=before,
+            after={"code": designation.code, "name": designation.name,
+                   "parent_id": designation.parent_id, "status": designation.status},
+        )
+    return designation
+
+
 @transaction.atomic
 def set_designation_status(*, actor, company_id, designation_id, status):
     """Activate or deactivate a designation. Never deletes; refuses if in use."""
