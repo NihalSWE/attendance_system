@@ -3663,3 +3663,29 @@ unproven until someone stands at a 3A — recommend a 3A in the office.
 - The confirm modal now also takes its wording from the **button** pressed, so
   one bar with several actions asks only for the risky one.
 - Tests: `RemoveFromDeviceTests`, `JobProgressTests` (devices: 362 OK).
+
+## 2026-09-20 — Tests for the department and designation screens (Nihal)
+
+Branch `feature/department-screen-tests`, from main. The screens rebuilt on
+2026-09-19 (Departments repurposed, Designations given their own page) shipped
+without tests; Ajay asked for them. 19 tests in
+`organization/tests_department_screens.py`, covering the refusals that carry
+the rules rather than only that a page renders:
+
+- Departments: the list shows the department and its branch; adding one;
+  a branch refusing a second department with the same code; the same code
+  being free in another branch; editing renaming it while the **branch stays
+  fixed**; a department with employees refusing to deactivate; an empty one
+  deactivating; copying to another branch bringing the designations but
+  **not** the head; copying twice skipping what is already there.
+- Designations: the list showing the title, its department and branch; adding
+  one; a department refusing a second title with the same code; the same code
+  being free in another department; editing renaming it while the
+  **department stays fixed**; a parent in another department being refused;
+  a title somebody holds refusing to deactivate; an unused one deactivating
+  from the list.
+- Who may: an Employee login is sent to My account from all four pages, and
+  the services refuse a crafted call as well.
+
+No migration, no `.env` change. Full suite 1213 OK.
+
