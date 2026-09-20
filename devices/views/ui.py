@@ -64,6 +64,7 @@ from devices.services.commands import (
     recent_results,
     waiting_count,
 )
+from devices.services import commands as command_service
 from devices.services import mapping as mapping_service
 from devices.services.device_roster import build_roster
 from devices.services.user_sync import SyncNotPossible, sync_device_users
@@ -995,6 +996,7 @@ def device_users(request, public_id):
         # Copy to another device: the company's other devices of this model.
         "transfer_targets": mapping_service.transfer_targets(device) if user_writes else [],
         "waiting_count": waiting_count(device),
+        "job": command_service.job_progress(device),
         # A new or replaced device is filled from the company (Load employees).
         "branch_employee_count": len(mapping_service.branch_employees(device)) if user_writes else 0,
         "pending_commands": pending_summary(device),
@@ -1269,31 +1271,30 @@ def device_user_push(request, public_id):
 @login_required
 @company_user_required
 def device_user_delete(request, public_id):
-    """Remove one user from the device.
+    """Remove one user from the device (the row's Remove button).
 
-    Irreversible from here: deleting the user also destroys the face and
-    fingerprint enrolled on that terminal, and those templates exist nowhere
-    else. Their punch history is untouched — that is our evidence, not the
+    Goes through the same service as the bulk removal, so the device's last
+    super admin is refused here too. The face and fingerprint enrolled on the
+    terminal are destroyed; the copy saved here stays, so they can be sent
+    back. Their punch history is untouched — that is our evidence, not the
     device's.
     """
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
     device_user_id = request.POST.get("device_user_id", "")
-
-    entry, error = queue_user_delete(
-        device=device, device_user_id=device_user_id, requested_by=request.user
-    )
-    if error:
-        messages.error(request, error)
-    else:
-        _audit(
-            request, "device.user_deleted", device,
-            after={"device_user_id": device_user_id, "command": entry["body"]},
-        )
+    try:
+        result = mapping_service.remove_users(
+            actor=request.user, device=device, pins=[device_user_id])
+    except mapping_service.MappingError as exc:
+        messages.error(request, str(exc))
+        return redirect("devices:device_users", public_id=device.public_id)
+    for pin, reason in result.skipped:
+        messages.error(request, f"{pin} kept: {reason}")
+    if result.removed:
+        _audit(request, "device.user_deleted", device, after={"device_user_id": device_user_id})
         messages.warning(
             request,
-            f"Queued removal of device user {device_user_id}. Their enrolled "
-            "face/fingerprint on this terminal will be destroyed and cannot be "
-            "restored from here — they must be enrolled again in person. "
+            f"Queued removal of device user {device_user_id}. Their face and fingerprint on "
+            "this terminal are destroyed; the copy saved here stays, so they can be sent back. "
             "Punch history is kept.",
         )
     return redirect("devices:device_users", public_id=device.public_id)

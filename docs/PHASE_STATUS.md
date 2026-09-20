@@ -3642,3 +3642,24 @@ the company-departments migration: wipe or a data-keeping migration).
 
 Recognition (does the copied face open for the person) and delete stay
 unproven until someone stands at a 3A — recommend a 3A in the office.
+
+### Part 2c — remove from the device in bulk, and a progress card — 2026-09-20
+
+- **Remove from device** in the Device users selection bar (and the row's own
+  Remove button, now through the same service): deletes **by user number only**
+  — the form measured as safe — and **never the device's last super admin**
+  (removing every administrator leaves a terminal nobody can open the menu on;
+  only a factory reset recovers it). Saved fingerprints/faces, the enrollment
+  and the punch history are all kept, so anyone removed can be sent back.
+  `mapping.remove_users`; refused on a 2.x device (unmeasured).
+- **Single user writes now use the outbox too** (`queue_user_push`,
+  `queue_user_delete`): they went to the 10-slot refresh queue, which a bulk
+  removal would have overflowed — found by the new tests.
+- **Progress card** on Device users: "Sending to <device> — N of M", a bar,
+  done / waiting / refused, time left (from the queue and the device's
+  check-in interval), refreshing every 5 s and stopping when the run ends.
+  It survives leaving the page. `commands.job_progress` +
+  `devices:device_job_progress` (JSON) + `devices/js/job_progress.js`.
+- The confirm modal now also takes its wording from the **button** pressed, so
+  one bar with several actions asks only for the risky one.
+- Tests: `RemoveFromDeviceTests`, `JobProgressTests` (devices: 362 OK).

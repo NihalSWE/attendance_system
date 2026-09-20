@@ -1345,3 +1345,79 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     font-size: 14px;
     line-height: 1.55;
 }
+.selection-bar .btn--danger-ghost {
+    border-color: rgba(255, 170, 160, .55);
+    color: #ffd9d3;
+}
+.selection-bar .btn--danger-ghost:hover {
+    background: rgba(255, 120, 100, .18);
+    border-color: rgba(255, 170, 160, .9);
+    color: #fff;
+}
+
+/* ---------- A long job the device is working through (job_progress.js) ---------- */
+.job {
+    margin-bottom: var(--s4, 16px);
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+.job__head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+.job__title { font-weight: 600; }
+.job__count { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.job__bar {
+    position: relative;
+    height: 8px;
+    margin: 10px 0 8px;
+    border-radius: var(--r-pill);
+    background: var(--surface-sunken);
+    overflow: hidden;
+}
+.job__bar > span {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: var(--r-pill);
+    background: var(--accent);
+    transition: width .4s ease;
+}
+.job--running .job__bar > span {
+    background-image: linear-gradient(90deg, rgba(255,255,255,.28) 25%, transparent 25%,
+        transparent 50%, rgba(255,255,255,.28) 50%, rgba(255,255,255,.28) 75%, transparent 75%);
+    background-size: 18px 18px;
+    animation: job-stripes 1s linear infinite;
+}
+.job--done .job__bar > span { background: var(--success); }
+.job--refused .job__bar > span { background: var(--warning); }
+.job__meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    flex-wrap: wrap;
+}
+.job__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--faint);
+}
+.job__dot--done { background: var(--success); }
+.job__dot--wait { background: var(--accent); }
+.job__dot--bad { background: var(--warning); }
+.job__left { margin-left: auto; }
+.job__note { margin: 8px 0 0; font-size: 12px; }
+@keyframes job-stripes { to { background-position: 18px 0; } }
+@media (prefers-reduced-motion: reduce) {
+    .job--running .job__bar > span { animation: none; }
+    .job__bar > span { transition: none; }
+}

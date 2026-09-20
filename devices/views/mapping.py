@@ -8,6 +8,7 @@ import datetime
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
@@ -268,3 +269,48 @@ def device_load(request, public_id):
     for employee, _, reason in result.failed[:10]:
         messages.warning(request, f"{employee.full_name}: {reason}")
     return back
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_users_remove(request, public_id):
+    """Device users → Remove from device: the ticked users, or all of them.
+
+    The last super admin is kept whatever is ticked (the service refuses it).
+    """
+    from devices.services.device_roster import build_roster
+
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    back = redirect("devices:device_users", public_id=device.public_id)
+    pins = _picked(request)
+    if pins is None:
+        pins = [row["pin"] for row in build_roster(device)
+                if not row.get("removed_from_device") and not row.get("only_in_scans")]
+    if not pins:
+        messages.error(request, "Tick at least one user to remove.")
+        return back
+    try:
+        result = mapping.remove_users(actor=request.user, device=device, pins=pins)
+    except mapping.MappingError as exc:
+        messages.error(request, str(exc))
+        return back
+    if result.removed:
+        messages.success(
+            request,
+            f"Removing {len(result.removed)} user(s) from {device.name}; the device takes a few "
+            "per check-in. Their fingerprints and faces stay saved here, so they can be sent back.",
+        )
+    for pin, reason in result.skipped[:10]:
+        messages.warning(request, f"{pin} kept: {reason}")
+    return back
+
+
+@login_required
+@company_user_required
+def device_job_progress(request, public_id):
+    """JSON for the progress card: how the device's queued writes are going."""
+    from devices.services import commands as command_service
+
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    return JsonResponse(command_service.job_progress(device))

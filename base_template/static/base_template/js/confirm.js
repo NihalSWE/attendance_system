@@ -1,6 +1,9 @@
 /* Confirm before a form is sent, in the project's own modal — never the
    browser's built-in confirmation box.
 
+   The same attributes work on a submit button inside a form with several
+   actions, so only that action asks.
+
    <form data-confirm="What will happen, in a sentence or two."
          data-confirm-title="Remove this user?"
          data-confirm-button="Remove"
@@ -47,7 +50,12 @@
 
     document.addEventListener("submit", function (e) {
         var form = e.target;
-        if (!form.matches || !form.matches("form[data-confirm]")) return;
+        if (!form.matches) return;
+        // The pressed button may carry its own wording: one bar, several
+        // actions, only some of them worth asking about.
+        var asker = (e.submitter && e.submitter.dataset && e.submitter.dataset.confirm)
+            ? e.submitter : (form.dataset.confirm ? form : null);
+        if (!asker) return;
         if (form.dataset.confirmed === "1") {
             delete form.dataset.confirmed;
             return;
@@ -55,10 +63,10 @@
         e.preventDefault();
         if (!dialog) build();
         pending = {form: form, submitter: e.submitter};
-        titleEl.textContent = form.dataset.confirmTitle || "Are you sure?";
-        bodyEl.textContent = form.dataset.confirm;
-        okBtn.textContent = form.dataset.confirmButton || "Continue";
-        okBtn.className = "btn " + (form.dataset.confirmTone === "danger" ? "btn--danger" : "btn--primary");
+        titleEl.textContent = asker.dataset.confirmTitle || "Are you sure?";
+        bodyEl.textContent = asker.dataset.confirm;
+        okBtn.textContent = asker.dataset.confirmButton || "Continue";
+        okBtn.className = "btn " + (asker.dataset.confirmTone === "danger" ? "btn--danger" : "btn--primary");
         if (typeof dialog.showModal === "function") dialog.showModal();
         else dialog.setAttribute("open", "");
         okBtn.focus();

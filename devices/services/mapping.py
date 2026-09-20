@@ -575,6 +575,63 @@ def _send(actor, employees, result, only_device=None):
     return result
 
 
+SUPER_ADMIN = "14"
+
+
+@dataclass
+class RemoveResult:
+    removed: list = field(default_factory=list)     # pins
+    skipped: list = field(default_factory=list)     # (pin, reason)
+
+
+def remove_users(*, actor, device, pins):
+    """Remove device users from the terminal, by their number only.
+
+    The software keeps their saved fingerprint and face, so they can be sent
+    back later; their enrollment (who the number is) and their punch history
+    are untouched — this only takes them off the terminal.
+
+    **The last super admin is never removed.** Deleting every administrator
+    leaves a terminal nobody can open the menu on, and only a factory reset
+    gets it back.
+    """
+    if not upload_supported(device):
+        raise MappingError(
+            f"Removing users from {device.name} is not measured on its protocol yet; "
+            "delete them on the terminal."
+        )
+    with _roster_memo():
+        roster = _on_device(device)
+        wanted = [p for p in dict.fromkeys(str(p) for p in pins)]
+        admins = {pin for pin, row in roster.items() if str(row.get("privilege_code")) == SUPER_ADMIN}
+        result = RemoveResult()
+        for pin in wanted:
+            row = roster.get(pin)
+            if row is None:
+                result.skipped.append((pin, "not on this device"))
+                continue
+            if pin in admins and len(admins) <= 1:
+                result.skipped.append((
+                    pin,
+                    "the device's only super admin — removing them would lock everyone out of "
+                    "the terminal's menu. Make someone else a super admin first.",
+                ))
+                continue
+            entry, error = commands.queue_user_delete(
+                device=device, device_user_id=pin, requested_by=actor)
+            if error:
+                result.skipped.append((pin, error))
+                continue
+            admins.discard(pin)
+            result.removed.append(pin)
+    if result.removed:
+        _audit(actor, device, "device.users_removed", device, {
+            "device": device.serial_number, "removed": result.removed,
+            "skipped": [pin for pin, _ in result.skipped],
+        })
+    return result
+
+
 def transfer_targets(device):
     """The company's other devices of the same model: where users can be copied."""
     return list(

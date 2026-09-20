@@ -437,3 +437,104 @@ class RefillAfterRemovalTests(MappingCase):
         self.assertIn("CardNo=8868366", moin.body)
         self.assertIn("push_template:445900:1:6:0", self.outbox(self.device))
         self.assertIn("push_template:445900:9:0:0", self.outbox(self.device))
+
+
+class RemoveFromDeviceTests(MappingCase):
+    """Bulk and single removal, and the device's last super admin (Ajay, 2026-09-20)."""
+
+    def setUp(self):
+        super().setUp()
+        self.upload(USERS)  # 445962 Ajay (Privilege 14), 445900 Moin, 777 Nobody
+
+    def queued(self):
+        return [key for key in self.outbox(self.device) if key.startswith("delete_user:")]
+
+    def test_selected_users_are_removed_but_the_last_super_admin_is_kept(self):
+        with use_company(self.company):
+            result = mapping.remove_users(actor=self.admin, device=self.device,
+                                          pins=["445900", "777", "445962"])
+        self.assertEqual(result.removed, ["445900", "777"])
+        self.assertEqual([pin for pin, _ in result.skipped], ["445962"])
+        self.assertIn("only super admin", result.skipped[0][1])
+        self.assertEqual(self.queued(), ["delete_user:445900", "delete_user:777"])
+        body = DeviceOutboxCommand.all_objects.get(device=self.device, key="delete_user:445900").body
+        self.assertEqual(body, "DATA DELETE user Pin=445900")
+
+    def test_a_second_super_admin_makes_the_first_removable(self):
+        self.upload(USERS.replace("pin=445900\tpassword=\tgroup=1\tstarttime=0\tendtime=0"
+                                  "\tname=Moin\tprivilege=0",
+                                  "pin=445900\tpassword=\tgroup=1\tstarttime=0\tendtime=0"
+                                  "\tname=Moin\tprivilege=14"), cmdid="2")
+        with use_company(self.company):
+            result = mapping.remove_users(actor=self.admin, device=self.device, pins=["445962"])
+        self.assertEqual((result.removed, result.skipped), (["445962"], []))
+
+    def test_unknown_number_and_a_2x_device(self):
+        with use_company(self.company):
+            result = mapping.remove_users(actor=self.admin, device=self.device, pins=["123"])
+            self.assertEqual(result.skipped, [("123", "not on this device")])
+            att2 = self.device_at(self.hq, "NYU0000000008", "3A-ish")
+            att2.settings = {"announced": {"pushver": "2.4.1", "device_type": "att"}}
+            att2.save()
+            with self.assertRaisesMessage(mapping.MappingError, "not measured"):
+                mapping.remove_users(actor=self.admin, device=att2, pins=["1"])
+
+    def test_the_row_button_and_the_bar_both_use_the_guard(self):
+        self.client.force_login(self.admin)
+        url = reverse("devices:device_user_delete", args=[self.device.public_id])
+        response = self.client.post(url, {"device_user_id": "445962"}, follow=True)
+        self.assertContains(response, "only super admin")
+        self.assertEqual(self.queued(), [])
+        response = self.client.post(url, {"device_user_id": "777"}, follow=True)
+        self.assertContains(response, "Queued removal of device user 777")
+        response = self.client.post(
+            reverse("devices:device_users_remove", args=[self.device.public_id]),
+            {"pin": ["445900"]}, follow=True)
+        self.assertContains(response, "Removing 1 user(s) from Main Entrance")
+        self.assertEqual(self.queued(), ["delete_user:777", "delete_user:445900"])
+
+    def test_remove_everyone_keeps_the_admin(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            reverse("devices:device_users_remove", args=[self.device.public_id]),
+            {"all": "1"}, follow=True)
+        self.assertContains(response, "Removing 2 user(s)")
+        self.assertContains(response, "445962 kept")
+        self.assertEqual(self.queued(), ["delete_user:445900", "delete_user:777"])
+
+    def test_the_bar_offers_removal(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("devices:device_users", args=[self.device.public_id])).content.decode()
+        self.assertIn("Remove from device", page)
+        self.assertIn('data-confirm-tone="danger"', page)
+
+
+class JobProgressTests(MappingCase):
+    def test_counts_bar_and_time_left(self):
+        from devices.services.commands import job_progress, note_results, take_pending_commands
+
+        self.upload(USERS)
+        with use_company(self.company):
+            mapping.send_employees(actor=self.admin, employees=[self.new])  # 2 commands per device
+            job = job_progress(self.device)
+            self.assertEqual((job["running"], job["waiting"], job["done"], job["percent"]),
+                             (True, 2, 0, 0))
+            # 10s check-in, 5 per poll -> a few seconds for two commands.
+            self.assertGreater(job["seconds_left"], 0)
+            _, issued = take_pending_commands(self.device)
+            note_results(self.device, f"ID={issued[0]['id']}&Return=0&CMD=DATA UPDATE\n"
+                                      f"ID={issued[1]['id']}&Return=-1&CMD=DATA UPDATE")
+            job = job_progress(self.device)
+            self.assertEqual((job["running"], job["done"], job["refused"], job["percent"]),
+                             (False, 1, 1, 100))
+            self.assertEqual(job["refused_users"], ["445999"])
+
+    def test_the_page_shows_the_card_and_the_endpoint_answers(self):
+        self.client.force_login(self.admin)
+        with use_company(self.company):
+            mapping.send_employees(actor=self.admin, employees=[self.new])
+        page = self.client.get(reverse("devices:device_users", args=[self.device.public_id])).content.decode()
+        self.assertIn("Sending to Main Entrance", page)
+        self.assertIn('data-job-bar', page)
+        answer = self.client.get(reverse("devices:device_job_progress", args=[self.device.public_id]))
+        self.assertEqual(answer.json()["waiting"], 2)

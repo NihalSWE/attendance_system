@@ -424,17 +424,18 @@ def queue_user_push(*, device, device_user_id, name="", card_number="",
     if int(privilege) not in (0, 2, 6, 14):
         return None, "Unknown privilege level."
 
-    return _queue_raw(
+    # Writes go in the outbox, not the small refresh queue: a company's worth
+    # of them must fit.
+    entries, error = _queue_group(
         device=device,
-        key=f"push_user:{clean_id}",
-        body=build_user_update(
-            device_user_id=clean_id,
-            name=name,
-            card_number=card_number,
-            privilege=privilege,
-        ),
+        commands=[(
+            f"push_user:{clean_id}",
+            build_user_update(device_user_id=clean_id, name=name,
+                              card_number=card_number, privilege=privilege),
+        )],
         requested_by=requested_by,
     )
+    return (entries[0] if entries else None), error
 
 
 def queue_user_delete(*, device, device_user_id, requested_by=None):
@@ -459,12 +460,12 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
         if f"{forbidden}=" in body:
             return None, "Refusing to send a delete that could clear the device."
 
-    return _queue_raw(
+    entries, error = _queue_group(
         device=device,
-        key=f"delete_user:{clean_id}",
-        body=body,
+        commands=[(f"delete_user:{clean_id}", body)],
         requested_by=requested_by,
     )
+    return (entries[0] if entries else None), error
 
 
 ROLE_PRIVILEGES = (0, 2, 6, 14)
@@ -1005,3 +1006,43 @@ def waiting_count(device):
     return queued + DeviceOutboxCommand.all_objects.filter(
         device=device, status=DeviceOutboxCommand.Status.QUEUED
     ).count()
+
+
+#: Answers older than this are not counted as part of "the job on screen".
+JOB_WINDOW_MINUTES = 60
+
+
+def job_progress(device, now=None):
+    """How a device's queued writes are going, for the progress card.
+
+    "The job" is what is still waiting or in flight, plus what was answered
+    within the last hour — enough to show a run through to its end without
+    dragging in last week's commands.
+    """
+    from datetime import timedelta
+
+    from devices.models import DeviceOutboxCommand
+
+    now = now or timezone.now()
+    rows = DeviceOutboxCommand.all_objects.filter(device=device)
+    waiting = rows.filter(status=DeviceOutboxCommand.Status.QUEUED).count()
+    sent = rows.filter(status=DeviceOutboxCommand.Status.SENT).count()
+    since = now - timedelta(minutes=JOB_WINDOW_MINUTES)
+    answered = rows.filter(answered_at__gte=since)
+    done = answered.filter(status=DeviceOutboxCommand.Status.DONE).count()
+    refused = answered.exclude(status=DeviceOutboxCommand.Status.DONE).count()
+    total = waiting + sent + done + refused
+    interval = int((device.settings or {}).get("push_interval_seconds") or 10)
+    # The device takes COMMANDS_PER_POLL per check-in, one check-in per interval.
+    seconds_left = 0 if not (waiting + sent) else int(
+        ((waiting + sent) / COMMANDS_PER_POLL) * interval)
+    people = sorted({row.device_user_id for row in answered.exclude(
+        status=DeviceOutboxCommand.Status.DONE) if row.device_user_id})
+    return {
+        "running": bool(waiting or sent),
+        "waiting": waiting, "sent": sent, "done": done, "refused": refused,
+        "total": total,
+        "percent": int(round(100 * (done + refused) / total)) if total else 0,
+        "seconds_left": seconds_left,
+        "refused_users": people[:20],
+    }

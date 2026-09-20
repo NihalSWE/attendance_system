@@ -4,6 +4,8 @@
     {{ block.super }}
     <script defer src="{% static 'base_template/js/selection.js' %}">
     </script>
+    <script defer src="{% static 'devices/js/job_progress.js' %}">
+    </script>
 {% endblock %}
 {% block title %}
     Device users · {{ device.name }}
@@ -74,6 +76,28 @@
                 Map a user
             </a>
         </div>
+    </div>
+    <div class="job" data-job="{% url 'devices:device_job_progress' device.public_id %}"
+         {% if not job.total %}hidden{% endif %}>
+        <div class="job__head">
+            <span class="job__title" data-job-title>
+                {% if job.running %}Sending to {{ device.name }}{% else %}Finished sending to {{ device.name }}{% endif %}
+            </span>
+            <span class="job__count"><span data-job-count>{{ job.done|add:job.refused }}</span> of <span data-job-total>{{ job.total }}</span></span>
+        </div>
+        <div class="job__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="{{ job.percent }}" data-job-bar>
+            <span style="width: {{ job.percent }}%"></span>
+        </div>
+        <div class="job__meta">
+            <span class="job__dot job__dot--done"></span><span data-job-done>{{ job.done }}</span> done
+            <span class="job__dot job__dot--wait"></span><span data-job-waiting>{{ job.waiting|add:job.sent }}</span> waiting
+            <span class="job__dot job__dot--bad"></span><span data-job-refused>{{ job.refused }}</span> refused
+            <span class="job__left" data-job-left></span>
+        </div>
+        <p class="job__note t-faint">
+            The device collects a few per check-in; you can leave this page and come back.
+        </p>
     </div>
     {% if template_key_problem %}
         <div class="alert alert--danger">
@@ -390,6 +414,13 @@
                             formaction="{% url 'devices:device_map_automatically' device.public_id %}"
                             title="Links users whose number is already an employee's Employee ID">
                         Link to existing employees
+                    </button>
+                    <button class="btn btn--ghost btn--danger-ghost" type="submit"
+                            formaction="{% url 'devices:device_users_remove' device.public_id %}"
+                            data-confirm-title="Remove the selected users from {{ device.name }}?"
+                            data-confirm="Their face and fingerprint are deleted from this terminal. The copies saved here stay, so they can be sent back later, and their punch history is kept. The device's last super admin is never removed."
+                            data-confirm-button="Remove from device" data-confirm-tone="danger">
+                        Remove from device
                     </button>
                     {% if transfer_targets %}
                         <span class="selection-bar__divider" aria-hidden="true"></span>
