@@ -1421,3 +1421,25 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     .job--running .job__bar > span { animation: none; }
     .job__bar > span { transition: none; }
 }
+
+/* "Saved on this server": did the save work, and in which format. */
+.saved-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: var(--s4, 16px);
+    padding: 10px 14px;
+    border-radius: var(--r);
+    background: var(--success-soft);
+    color: var(--success-ink);
+    font-size: 13px;
+}
+.saved-line svg { width: 16px; height: 16px; flex: none; }
+.saved-line strong { font-weight: 700; }
+.saved-line__formats {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-left: auto;
+}

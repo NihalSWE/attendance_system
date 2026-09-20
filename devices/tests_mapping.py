@@ -538,3 +538,22 @@ class JobProgressTests(MappingCase):
         self.assertIn('data-job-bar', page)
         answer = self.client.get(reverse("devices:device_job_progress", args=[self.device.public_id]))
         self.assertEqual(answer.json()["waiting"], 2)
+
+
+class SavedSummaryTests(MappingCase):
+    def test_the_page_says_what_is_saved_and_in_which_format(self):
+        self.upload(USERS)
+        self.upload(BIODATA, table="biodata", cmdid="2")
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("devices:device_users", args=[self.device.public_id])).content.decode()
+        self.assertIn("Saved on this server", page)
+        self.assertIn("<strong>1</strong> fingerprint", page)
+        self.assertIn("<strong>1</strong> face", page)
+        self.assertIn("1 fingerprint · type 1 · v13.0", page)
+        self.assertIn("1 face · type 9 · v40.1", page)
+
+    def test_nothing_saved_yet_shows_no_line(self):
+        self.upload(USERS)
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("devices:device_users", args=[self.device.public_id])).content.decode()
+        self.assertNotIn("Saved on this server", page)

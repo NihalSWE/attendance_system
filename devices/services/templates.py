@@ -164,6 +164,33 @@ def saved_counts(device):
     return counts
 
 
+def saved_summary(device):
+    """What this device's saved templates are, for the screen.
+
+    Answers two questions an administrator actually has: did the save work,
+    and what format does this device's fingerprints/faces come in (the second
+    decides whether a template can be copied to another device).
+    """
+    rows = list(DeviceUserTemplate.all_objects.filter(device=device))
+    kinds = {}
+    for row in rows:
+        key = (row.bio_type, row.vendor_type, row.major_version, row.minor_version,
+               row.template_format)
+        kinds[key] = kinds.get(key, 0) + 1
+    return {
+        "people": len({row.device_user_id for row in rows}),
+        "fingerprints": sum(1 for row in rows if row.bio_type == DeviceUserTemplate.BioType.FINGERPRINT),
+        "faces": sum(1 for row in rows if row.bio_type == DeviceUserTemplate.BioType.FACE),
+        "other": sum(1 for row in rows if row.bio_type == DeviceUserTemplate.BioType.OTHER),
+        "last_saved": max((row.captured_at for row in rows), default=None),
+        "formats": [
+            {"kind": kind, "type": vendor_type, "version": f"{major}.{minor}" if major else "",
+             "format": fmt, "count": count}
+            for (kind, vendor_type, major, minor, fmt), count in sorted(kinds.items())
+        ],
+    }
+
+
 def as_payload(row):
     """The plain values ``commands.push_to_device`` takes for one saved template."""
     return {

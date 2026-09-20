@@ -99,6 +99,27 @@
             The device collects a few per check-in; you can leave this page and come back.
         </p>
     </div>
+    {% if saved_templates.people or saved_templates.formats %}
+        <div class="saved-line">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 12.5l4.5 4.5L19 7.5"/>
+            </svg>
+            <span>
+                Saved on this server: <strong>{{ saved_templates.fingerprints }}</strong> fingerprint{{ saved_templates.fingerprints|pluralize }}
+                and <strong>{{ saved_templates.faces }}</strong> face{{ saved_templates.faces|pluralize }}
+                from <strong>{{ saved_templates.people }}</strong> user{{ saved_templates.people|pluralize }}{% if saved_templates.other %},
+                plus {{ saved_templates.other }} of another kind{% endif %}.
+                {% if saved_templates.last_saved %}Last saved {{ saved_templates.last_saved }} (UTC).{% endif %}
+            </span>
+            <span class="saved-line__formats">
+                {% for f in saved_templates.formats %}
+                    <span class="badge badge--neutral" title="What this device's {{ f.kind }} templates are: type {{ f.type }}, version {{ f.version }}, format {{ f.format }}. A template only transfers to a device of the same model.">
+                        {{ f.count }} {{ f.kind }} · type {{ f.type }}{% if f.version %} · v{{ f.version }}{% endif %}
+                    </span>
+                {% endfor %}
+            </span>
+        </div>
+    {% endif %}
     {% if template_key_problem %}
         <div class="alert alert--danger">
             <p>

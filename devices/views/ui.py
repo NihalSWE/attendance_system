@@ -988,6 +988,7 @@ def device_users(request, public_id):
         # No user writes to a 2.x device until its write form is measured.
         "user_writes": user_writes,
         "template_key_problem": templates.key_problem(),
+        "saved_templates": templates.saved_summary(device),
         "trial_sources": [r for r in full_roster if r["saved_total"] and r["pin"] != TEST_USER_ID],
         "test_user_id": TEST_USER_ID,
         "test_user_on_device": any(r["pin"] == TEST_USER_ID for r in full_roster),
