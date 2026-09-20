@@ -72,15 +72,89 @@ venv/bin/python manage.py collectstatic --noinput
 systemctl restart attendance_web
 ```
 
+All four in one line:
+
+```
+venv/bin/pip install -r requirements.txt && venv/bin/python manage.py migrate && venv/bin/python manage.py collectstatic --noinput && systemctl restart attendance_web
+```
+
+`BIOMETRIC_TEMPLATE_KEY` must be in `/opt/attendance/.env` before templates can
+be saved (its own key per server; see `.env.example`), and `cryptography` comes
+from `requirements.txt`.
+
+## Restarting the services
+
+| When | Command |
+|---|---|
+| After code, `.env` or a migration | `systemctl restart attendance_web` |
+| After an Nginx config or certificate change | `nginx -t && systemctl reload nginx` |
+| Database (rarely) | `systemctl restart postgresql` |
+| Everything, in order | `systemctl restart postgresql && systemctl restart attendance_web && systemctl reload nginx` |
+| Are they up? | `systemctl status attendance_web nginx postgresql --no-pager` |
+
 ## Devices
 
 A terminal is pointed at the server on the device itself (COMM → Cloud Server:
 `workforce.iglweb.com`, port 443, HTTPS on). The software's "Change server
 address" only moves a device that already talks to *that* server.
 
+A device is refused (401) until it is registered here with its exact serial, so
+after rebuilding the database register the terminals promptly; a 2.x device
+hands over the scans it kept back when asked (Fetch attendance history).
+
 ## Logs
+
+Recent, then errors only, then since the last restart or a time:
+
+```
+journalctl -u attendance_web -n 200 --no-pager
+journalctl -u attendance_web -n 500 --no-pager | grep -iE "error|traceback|exception|warning"
+journalctl -u attendance_web -b --no-pager
+journalctl -u attendance_web --since "1 hour ago" --no-pager
+tail -n 100 /var/log/nginx/error.log
+tail -n 100 /var/log/nginx/access.log
+journalctl -u postgresql -n 100 --no-pager
+```
+
+Live (Ctrl+C stops):
 
 ```
 journalctl -u attendance_web -f
+journalctl -u attendance_web -f | grep -iE "error|traceback|exception"
 tail -f /var/log/nginx/error.log
+journalctl -u attendance_web -f & tail -f /var/log/nginx/error.log
 ```
+
+**Device traffic only** — each check-in, upload and command answer as it
+happens; keep this running in one SSH window while testing a terminal:
+
+```
+journalctl -u attendance_web -f | grep -i iclock
+```
+
+## Rebuilding the database (destructive)
+
+Needed once for the company-level departments change (see the warning at the
+top). It keeps nothing: companies, employees, device *registrations*,
+attendance, leave and salary all go. The device catalogue (vendors and models)
+is re-created by the migrations themselves, and the terminals keep their own
+users and templates.
+
+```
+cd /opt/attendance
+sudo -u postgres pg_dump attendance_system > /opt/attendance_backup_$(date +%F).sql
+git pull
+venv/bin/pip install -r requirements.txt
+# add BIOMETRIC_TEMPLATE_KEY=<new key> to .env first:
+venv/bin/python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+sudo -u postgres psql attendance_system -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public AUTHORIZATION attendance; GRANT ALL ON SCHEMA public TO attendance;"
+sudo -u postgres psql attendance_system -c "CREATE EXTENSION IF NOT EXISTS btree_gist;"
+venv/bin/python manage.py migrate
+venv/bin/python manage.py createsuperuser
+venv/bin/python manage.py collectstatic --noinput
+systemctl restart attendance_web
+```
+
+Then sign in, create the company and branch, register each terminal with its
+exact serial, and press Refresh user list, Fetch attendance history and Save
+fingerprints and faces on each.
