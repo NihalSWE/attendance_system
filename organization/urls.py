@@ -13,6 +13,7 @@ from organization import (
     employee_detail_views,
     employee_edit_views,
     employee_views,
+    import_views,
     views,
 )
 
@@ -55,6 +56,18 @@ urlpatterns = [
     path("access/<int:employee_id>/", access_views.access_person, name="access_person"),
 
     path("employees/new/", employee_views.employee_create, name="employee_create"),
+    # Bulk import: upload, preview, confirm (nothing is written until confirmed).
+    path("employees/import/", import_views.employee_import, name="employee_import"),
+    path(
+        "employees/import/confirm/",
+        import_views.employee_import_confirm,
+        name="employee_import_confirm",
+    ),
+    path(
+        "employees/import/template/",
+        import_views.employee_import_template,
+        name="employee_import_template",
+    ),
     path("company/", company_views.company_profile, name="company_profile"),
     path("employees/<int:pk>/", employee_detail_views.employee_detail, name="employee_detail"),
     path("employees/<int:pk>/edit/", employee_edit_views.employee_edit, name="employee_edit"),

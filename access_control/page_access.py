@@ -26,6 +26,14 @@ BRANCH_PAGES = {
     # making a branch manager stay with the company.
     "employee_list": "employees.view",
     "organization:employee_create": "employees.edit",
+    # Bulk import (2026-09-20). Purely additive, and the same permission the
+    # one-at-a-time page already asks for: the import checks every row's branch
+    # against employees.edit AND salary.prepare, so a branch manager imports
+    # into their own branches only and a row naming another branch is a named
+    # bad row rather than a silent write.
+    "organization:employee_import": "employees.edit",
+    "organization:employee_import_confirm": "employees.edit",
+    "organization:employee_import_template": "employees.edit",
     "organization:employee_edit": "employees.edit",
     "organization:employee_branch_departments": "employees.edit",
     "organization:employee_department_designations": "employees.edit",

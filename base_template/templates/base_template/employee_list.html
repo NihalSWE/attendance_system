@@ -44,6 +44,9 @@
                 </button>
             {% endif %}
             {% if can_create %}
+                <a class="btn btn--ghost" href="{% url 'organization:employee_import' %}">
+                    Import from a file
+                </a>
                 <a class="btn btn--primary" href="{% url 'organization:employee_create' %}">
                     Create employee
                 </a>

@@ -3801,3 +3801,63 @@ another department in the same branch, another branch), no editing / no pay /
 no deciding overtime, losing access when the head field or the department
 status changes, and the audit line.
 
+
+## Bulk employee import from CSV or Excel (2026-09-20)
+
+Ajay's second task: a new company arrives with 400-600 people in a
+spreadsheet. Three steps, and the middle one writes nothing.
+
+**Download the template** — `Employee ID, Name, Branch, Department,
+Designation, Joining date, Pay basis, Base rate, Phone, Email`, as .xlsx (a
+People sheet plus a Notes sheet) or .csv, with two example rows. What it writes
+is what it reads back; a test asserts exactly that, so the template can never
+drift from the parser.
+
+**Upload** — the file is read and every row checked. Nothing is written. The
+preview names **every** bad row with its line number and what is wrong with it,
+in the reader's words ("Employee ID “90A003” is not digits. The terminals only
+accept a number.", "“the first of March” is not a date we can read."). Good
+rows are listed too, the first 100 of them.
+
+**Confirm** — offered only when every row is good, because the import is all or
+nothing: one transaction, one audit line (`employees.imported`, with the codes
+and the new employee ids). The rows are re-checked from scratch at confirm
+time, because they reach it through the reader's own session — a department
+deactivated between the preview and the confirm rolls the whole import back.
+
+Decisions worth knowing:
+
+- **Branch, department and designation are matched, never created.** A typo
+  must not quietly invent a department.
+- **The lookup is keyed by the parent**, not by the bare word: two branches
+  routinely hold a department called "Software" (copying one branch's structure
+  into another is a button on the Departments page), so a global index would
+  have called it ambiguous and failed every row. A word ambiguous *within one
+  parent* is still refused rather than guessed, and "right name, wrong branch"
+  is said differently from "no such name".
+- **Pay may be left blank per row**, with one default pay basis and rate asked
+  for on the upload form — compensation is mandatory in the model, so a blank
+  row with no default is a named bad row, not a zero.
+- **Name** splits on the last space, so "Md Fazle Rabbi" is Md Fazle / Rabbi
+  and a one-word name stays the first name.
+- Excel numbers and dates are normalised (`445962.0` -> `445962`).
+- 2000 rows per file, refused before any row is checked.
+
+**Who may import**: `employees.edit` **and** `salary.prepare` in the branch each
+row names — the same pair the one-at-a-time Create employee page asks for,
+because creating someone sets their pay. A branch manager holds both in their
+own branches automatically, so a row naming another branch is a named bad row
+and their own good rows are not written either.
+
+**One access_control change, which Ajay asked to be consulted on first:** the
+three import views are added to `BRANCH_PAGES` under `employees.edit`, beside
+`organization:employee_create`. It is purely additive — three new keys, no
+semantics touched — and without it `SelfServiceGate` bounces a branch manager
+to `/me/`, which would contradict "branch managers import into their own
+branches only". Deleting the three lines is the whole revert.
+
+`openpyxl==3.1.5` (and `et-xmlfile`) added to requirements.txt. No migration.
+No new sidebar destination: the way in is an "Import from a file" button beside
+Create employee on the Employees list, shown on the same condition.
+
+34 tests in `organization/tests_employee_import.py`.
