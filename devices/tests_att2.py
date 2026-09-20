@@ -177,13 +177,15 @@ class CommandTests(Att2Case):
     def test_requests_it_has_no_form_for_are_refused(self):
         self.assertIsNone(queue_command(device=self.device, command_key="query_biodata"))
 
-    def test_user_writes_wait_until_measured_on_this_protocol(self):
+    def test_the_user_record_goes_but_deleting_waits_to_be_measured(self):
+        # The user record was proven on the client's 3A (2026-09-20); deleting
+        # was not, and is never trialled.
         entry, error = queue_user_push(device=self.device, device_user_id="5", name="X")
-        self.assertIsNone(entry)
-        self.assertIn("not measured", error)
+        self.assertEqual(error, "")
+        self.assertTrue(entry["body"].startswith("DATA UPDATE USERINFO PIN=5	Name=X"))
         entry, error = queue_user_delete(device=self.device, device_user_id="5")
         self.assertIsNone(entry)
-        self.assertEqual(pending_summary(self.device), [])
+        self.assertIn("not measured", error)
 
     def test_history_is_replayed_without_counting_twice(self):
         self.post("ATTLOG", ATTLOG, stamp="Stamp")
@@ -287,8 +289,12 @@ class TrialWritesTests(Att2Case):
         with use_company(self.company):
             return push_to_device(self.device, pin, **kwargs)
 
-    def test_a_real_person_is_still_refused(self):
+    def test_a_real_person_gets_the_record_but_no_template(self):
         entries, error = self.push("445900", name="Moin")
+        self.assertEqual((len(entries), error), (1, ""))
+        entries, error = self.push("445900", name="Moin",
+                                   finger_template={"type": "1", "no": "6", "index": "0",
+                                                    "template": "x", "device_model_id": self.device.device_model_id})
         self.assertEqual(entries, [])
         self.assertIn("99999", error)
 
@@ -378,3 +384,47 @@ class TrialCardTests(Att2Case):
                       .values_list("body", flat=True))
         self.assertEqual(len(bodies), 1)
         self.assertTrue(bodies[0].startswith("DATA UPDATE USERINFO PIN=99999\tName=TEST 99999"))
+
+
+class MeasuredUserWritesTests(Att2Case):
+    """2026-09-20, the client's 3A: the user record is proven, templates are not."""
+
+    def setUp(self):
+        super().setUp()
+        self.handshake()
+        self.reload()
+        self.post("OPERLOG", USERS)
+
+    def push(self, pin, **kwargs):
+        from devices.services.commands import push_to_device
+
+        with use_company(self.company):
+            return push_to_device(self.device, pin, **kwargs)
+
+    def test_a_real_person_now_gets_their_user_record(self):
+        entries, error = self.push("445900", name="Moin", card="8868366", role=14)
+        self.assertEqual(error, "")
+        self.assertEqual(
+            entries[0]["body"],
+            "DATA UPDATE USERINFO PIN=445900\tName=Moin\tPri=14\tPasswd=\tCard=8868366"
+            "\tGrp=1\tTZ=0000000100000000",
+        )
+
+    def test_a_template_for_a_real_person_still_waits_for_a_scan(self):
+        from cryptography.fernet import Fernet
+        from django.test import override_settings
+
+        from devices.services import templates
+
+        with override_settings(BIOMETRIC_TEMPLATE_KEY=Fernet.generate_key().decode()):
+            self.post("BIODATA", BIODATA)
+            templates.save_from_messages(self.device)
+            finger, _ = templates.templates_for(self.device, "1")
+            entries, error = self.push("445900", name="Moin", finger_template=finger)
+        self.assertEqual(entries, [])
+        self.assertIn("99999", error)
+
+    def test_deleting_is_still_refused(self):
+        entry, error = queue_user_delete(device=self.device, device_user_id="445900")
+        self.assertIsNone(entry)
+        self.assertIn("not measured", error)

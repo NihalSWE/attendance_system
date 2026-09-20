@@ -262,11 +262,16 @@ TEST_USER_ID = "99999"
 
 #: What has been proven on hardware, per dialect (see PHASE_STATUS.md).
 #: PUSH3: the office SenseFace 2A, 2026-09-19 — user record, card, role
-#: (Privilege), door permission, fingerprint, face, delete by Pin.
-#: ATT2: nothing yet. Until a write is listed here it goes only to
-#: TEST_USER_ID, and a delete is refused outright — a wrong delete key once
-#: wiped a device.
-MEASURED_WRITES = {"push3": {"user", "access", "template", "delete"}, "att2": set()}
+#: (Privilege), door permission, fingerprint, face, delete by Pin; each proven
+#: by a real person scanning afterwards.
+#: ATT2: the client's SenseFace 3A, 2026-09-20 — the user record, name, role
+#: and card were written to test user 99999 and read back exactly
+#: (DATA QUERY USERINFO PIN=99999). Templates were stored too (1 fingerprint,
+#: 1 face) but **nobody has scanned against a copied one**, so "template" is
+#: not listed: a face copy still goes only to TEST_USER_ID. A delete is
+#: refused outright on this dialect — a wrong delete key once wiped a device,
+#: and this one is at a client with nobody on site.
+MEASURED_WRITES = {"push3": {"user", "access", "template", "delete"}, "att2": {"user"}}
 
 
 def measured(device, what):
@@ -466,17 +471,27 @@ def queue_user_push(*, device, device_user_id, name="", card_number="",
         return None, "Unknown privilege level."
 
     # Writes go in the outbox, not the small refresh queue: a company's worth
-    # of them must fit.
+    # of them must fit. The body follows the device's own dialect.
     entries, error = _queue_group(
         device=device,
-        commands=[(
-            f"push_user:{clean_id}",
-            build_user_update(device_user_id=clean_id, name=name,
-                              card_number=card_number, privilege=privilege),
-        )],
+        commands=[(f"push_user:{clean_id}",
+                   _user_body(device, clean_id, name, card_number, privilege))],
         requested_by=requested_by,
     )
     return (entries[0] if entries else None), error
+
+
+def _user_body(device, device_user_id, name, card_number, privilege):
+    """The user-record write in the language this device speaks."""
+    from devices.services import protocol
+
+    if protocol.dialect(device) == protocol.ATT2:
+        sample = _att2_user_defaults(device)
+        return build_user_update_att2(
+            device_user_id=device_user_id, name=name, card_number=card_number,
+            privilege=privilege, group=sample["group"], timezone_code=sample["timezone_code"])
+    return build_user_update(device_user_id=device_user_id, name=name,
+                             card_number=card_number, privilege=privilege)
 
 
 def queue_user_delete(*, device, device_user_id, requested_by=None):
@@ -570,18 +585,10 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
     from devices.services import protocol
 
     dialect = protocol.dialect(device)
-    if dialect == protocol.ATT2:
-        # The 2.x user row carries its own time zone and group; copy them from
-        # someone the device already holds, so a written user is not refused
-        # for a time period nobody set (the 2A's "Invalid time period").
-        sample = _att2_user_defaults(device)
-        user_body = build_user_update_att2(
-            device_user_id=clean_id, name=name, card_number=card, privilege=role,
-            group=sample["group"], timezone_code=sample["timezone_code"])
-    else:
-        user_body = build_user_update(device_user_id=clean_id, name=name,
-                                      card_number=card, privilege=role)
-    commands = [(f"push_user:{clean_id}", user_body)]
+    # On 2.x the user row carries its own group and time zone; _user_body
+    # copies them from someone the device already holds, so a written user is
+    # not refused for a time period nobody set (the 2A's "Invalid time period").
+    commands = [(f"push_user:{clean_id}", _user_body(device, clean_id, name, card, role))]
     # A door permission belongs to an access-control device; a time-attendance
     # device (the 3A) has no doors.
     if dialect != protocol.ATT2 and needs_access_grant(device):

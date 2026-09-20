@@ -3663,3 +3663,35 @@ unproven until someone stands at a 3A — recommend a 3A in the office.
 - The confirm modal now also takes its wording from the **button** pressed, so
   one bar with several actions asks only for the risky one.
 - Tests: `RemoveFromDeviceTests`, `JobProgressTests` (devices: 362 OK).
+
+### 3A writes measured on the client's device — 2026-09-20
+
+Remote, through `workforce.iglweb.com`, nobody on site; one device only
+("Healthy Chooice Shade - 1"), test user 99999, every write read back with
+`DATA QUERY USERINFO PIN=99999`.
+
+| Sent | Answer | Read back |
+|---|---|---|
+| `DATA QUERY tablename=user,…` (3.x) | **Refused (-1004)** | — |
+| `DATA QUERY USERINFO` | Done (0) | the whole user list, with BIODATA |
+| `DATA UPDATE USERINFO PIN=99999⇥Name=TEST 99999⇥Pri=0⇥Passwd=⇥Card=⇥Grp=1⇥TZ=0000000100000000` | Done (0) | `name "TEST 99999", role Normal User` — **the 2.x user write is proven** |
+| the same with `Card=987654321` and one `DATA UPDATE BIODATA` per template | Done (0) | `card 987654321, 1 fingerprint, 1 face` — the device **stored** both templates |
+
+Also found and fixed on the way: after the server's database was rebuilt the
+device never re-announced, so the dialect fell back to 3.x and Refresh user
+list was refused — `protocol.dialect` now falls back to the model catalogue
+(`senseface-3a` speaks ATT2) and Edit device offers a 2.x override. The trial
+card also refused to write a user record without a template; it now writes the
+record alone, which is the right first step on an unproven protocol.
+
+**What this changes:** `MEASURED_WRITES["att2"] = {"user"}` — a real person's
+record, name, role and card may now be written to a 3A (so the client's people
+can be put on their devices from the software). **Templates still go only to
+test user 99999**: the device stored a copied fingerprint and face, but nobody
+has scanned against one, so "it stores it" is not yet "it recognises them".
+**Deleting stays refused on ATT2 entirely**, not even trialled — the wrong
+delete key wiped a 2A, and this device is at a client with nobody on site.
+
+Still open for the 3A: recognition of a copied template (watch for punches
+from 99999, or someone at the terminal), deletes, and a second 3A for a true
+device-to-device copy.

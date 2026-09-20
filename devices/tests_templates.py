@@ -249,12 +249,14 @@ class PushTests(TemplateCase):
             att2 = self._device("NYU0000000003", self.model)
         att2.settings = {"announced": {"pushver": "2.4.1", "device_type": "att"}}
         att2.save()
+        # The record is proven on 2.x; a template is not, so it goes only to
+        # the test user.
         entries, error = push_to_device(att2, "445900", name="Moin")
-        self.assertEqual(entries, [])
-        self.assertIn("not measured", error)
-        entries, error = push_to_device(att2, TEST_USER_ID, name="TEST")
         self.assertEqual((len(entries), error), (1, ""))
-        self.assertTrue(entries[0]["body"].startswith("DATA UPDATE USERINFO PIN=99999"))
+        self.assertTrue(entries[0]["body"].startswith("DATA UPDATE USERINFO PIN=445900"))
+        entries, error = push_to_device(att2, "445900", name="Moin", finger_template=self.finger)
+        self.assertEqual(entries, [])
+        self.assertIn(TEST_USER_ID, error)
 
     def test_bad_input_refused(self):
         for kwargs in ({"device_user_id": "12a"}, {"device_user_id": ""},
