@@ -433,3 +433,29 @@ class MeasuredUserWritesTests(Att2Case):
         entry, error = queue_user_delete(device=self.device, device_user_id="445900")
         self.assertIsNone(entry)
         self.assertIn("not measured", error)
+
+
+class RemoveTestUserTests(Att2Case):
+    """The Remove button must let the test-user delete trial through (2026-09-20)."""
+
+    def setUp(self):
+        super().setUp()
+        self.handshake()
+        self.reload()
+        self.post("OPERLOG", USERS + (
+            "USER PIN=99999\tName=TEST 99999\tPri=0\tPasswd=\tCard=987654321\tGrp=1"
+            "\tTZ=0000000100000000\tVerify=-1\tViceCard=\tExpires=0\tStartDatetime=0"
+            "\tEndDatetime=0\n"))
+
+    def test_the_test_user_can_be_removed_but_a_real_person_cannot(self):
+        from devices.models import DeviceOutboxCommand
+        from devices.services import mapping
+
+        with use_company(self.company):
+            result = mapping.remove_users(actor=None, device=self.device, pins=["99999"])
+            self.assertEqual((result.removed, result.skipped), (["99999"], []))
+            body = DeviceOutboxCommand.all_objects.get(
+                device=self.device, key="delete_user:99999").body
+            self.assertEqual(body, "DATA DELETE USERINFO PIN=99999")
+            with self.assertRaisesMessage(mapping.MappingError, "not measured"):
+                mapping.remove_users(actor=None, device=self.device, pins=["2"])

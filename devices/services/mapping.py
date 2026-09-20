@@ -595,7 +595,11 @@ def remove_users(*, actor, device, pins):
     leaves a terminal nobody can open the menu on, and only a factory reset
     gets it back.
     """
-    if not upload_supported(device):
+    # No blanket refusal here: ``queue_user_delete`` decides per user, so a
+    # protocol without a measured delete still lets the test user through —
+    # which is how that form gets measured.
+    if not (commands.measured(device, "delete")
+            or any(str(p) == commands.TEST_USER_ID for p in pins)):
         raise MappingError(
             f"Removing users from {device.name} is not measured on its protocol yet; "
             "delete them on the terminal."
