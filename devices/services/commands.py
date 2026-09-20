@@ -546,13 +546,37 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
 #: is not proof on this firmware. Each is fixed to the test user: no form here
 #: can ever name another number, and a uid-keyed delete (which wiped a 2A)
 #: is not among them.
+#: Round 1 on the client's 3A, 2026-09-20: USERINFO (either spelling) and
+#: BIODATA answered Return=0 and changed nothing; ``user`` answered -1004 (no
+#: such table on 2.x); FINGERTMP answered -10, so that table exists but the
+#: command was malformed — it wants the finger id. Round 2 fills those in, and
+#: adds the other way to stop a leaver: write them back unusable. For a person
+#: who has left, "cannot open the door" is what matters; the row can be tidied
+#: at the terminal later.
 DELETE_FORMS = {
-    "userinfo_upper": ("DATA DELETE USERINFO PIN=%s", "USERINFO with PIN (tried, ignored)"),
-    "userinfo_mixed": ("DATA DELETE USERINFO Pin=%s", "USERINFO with Pin"),
-    "user_upper": ("DATA DELETE user PIN=%s", "user with PIN"),
-    "user_mixed": ("DATA DELETE user Pin=%s", "user with Pin (the 2A's form)"),
-    "fingertmp": ("DATA DELETE FINGERTMP PIN=%s", "the fingerprint only (FINGERTMP)"),
-    "biodata": ("DATA DELETE BIODATA Pin=%s", "the templates only (BIODATA)"),
+    "fingertmp_fid6": ("DATA DELETE FINGERTMP PIN=%s	FID=6", "fingerprint, with FID=6"),
+    "fingertmp_fid0": ("DATA DELETE FINGERTMP PIN=%s	FID=0", "fingerprint, with FID=0"),
+    "biodata_full": (
+        "DATA DELETE BIODATA Pin=%s	No=6	Index=0	Type=1",
+        "fingerprint, fully named (BIODATA No/Index/Type)",
+    ),
+    "biodata_face": (
+        "DATA DELETE BIODATA Pin=%s	No=0	Index=0	Type=9",
+        "face, fully named (BIODATA No/Index/Type)",
+    ),
+    "face_fid": ("DATA DELETE FACE PIN=%s	FID=0", "face, older form (FACE with FID)"),
+    "userinfo_upper": ("DATA DELETE USERINFO PIN=%s", "USERINFO with PIN (tried: done, ignored)"),
+    "userinfo_mixed": ("DATA DELETE USERINFO Pin=%s", "USERINFO with Pin (tried: done, ignored)"),
+    "block_timezone": (
+        "DATA UPDATE USERINFO PIN=%s	Name=BLOCKED	Pri=0	Passwd=	Card=	Grp=1"
+        "	TZ=0000000000000000",
+        "BLOCK instead of delete: no valid time zone",
+    ),
+    "block_expired": (
+        "DATA UPDATE USERINFO PIN=%s	Name=BLOCKED	Pri=0	Passwd=	Card=	Grp=1"
+        "	TZ=0000000100000000	Expires=1	StartDatetime=1	EndDatetime=2",
+        "BLOCK instead of delete: validity already expired",
+    ),
 }
 
 
@@ -565,6 +589,10 @@ def queue_delete_trial(*, device, form, requested_by=None):
     for forbidden in FORBIDDEN_DELETE_KEYS:
         if f"{forbidden}=" in body:
             return None, "Refusing to send a delete that could clear the device."
+    # Every form names the test user once and nobody else: a trial must not be
+    # able to reach a real person, whatever is added to the list later.
+    if body.count(TEST_USER_ID) != 1:
+        return None, "That form does not name the test user exactly once."
     entries, error = _queue_group(
         device=device, commands=[(f"delete_trial:{form}", body)], requested_by=requested_by)
     return (entries[0] if entries else None), error

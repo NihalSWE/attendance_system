@@ -473,13 +473,13 @@ class DeleteFormTrialTests(Att2Case):
         self.handshake()
         self.reload()
 
-    def test_each_form_is_fixed_to_the_test_user(self):
+    def test_each_form_names_the_test_user_once_and_nobody_else(self):
         from devices.services.commands import DELETE_FORMS, FORBIDDEN_DELETE_KEYS, TEST_USER_ID
 
         for body, _ in DELETE_FORMS.values():
             sent = body % TEST_USER_ID
-            self.assertIn(TEST_USER_ID, sent)
-            self.assertEqual(sent.count("="), 1)
+            # Exactly once: a trial can never reach a real person.
+            self.assertEqual(sent.count(TEST_USER_ID), 1, sent)
             for forbidden in FORBIDDEN_DELETE_KEYS:
                 self.assertNotIn(f"{forbidden}=", sent)
 
@@ -487,8 +487,9 @@ class DeleteFormTrialTests(Att2Case):
         from devices.services.commands import queue_delete_trial
 
         with use_company(self.company):
-            entry, error = queue_delete_trial(device=self.device, form="user_mixed")
-            self.assertEqual((entry["body"], error), ("DATA DELETE user Pin=99999", ""))
+            entry, error = queue_delete_trial(device=self.device, form="fingertmp_fid6")
+            self.assertEqual((entry["body"], error),
+                             ("DATA DELETE FINGERTMP PIN=99999	FID=6", ""))
             entry, error = queue_delete_trial(device=self.device, form="whatever")
         self.assertIsNone(entry)
         self.assertIn("Unknown", error)
@@ -504,4 +505,4 @@ class DeleteFormTrialTests(Att2Case):
         self.client.force_login(admin)
         page = self.client.get(f"/devices/{self.device.public_id}/users/").content.decode()
         self.assertIn("Which delete does this device understand?", page)
-        self.assertIn("DATA DELETE user Pin=99999", page)
+        self.assertIn("DATA DELETE FINGERTMP PIN=99999", page)
