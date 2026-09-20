@@ -632,6 +632,64 @@ def remove_users(*, actor, device, pins):
     return result
 
 
+def remove_on_leaving(*, actor, employee, at=None):
+    """Take a leaver off the terminals they are on.
+
+    Ending employment already stops their scans counting; this takes their
+    face and fingerprint off the device as well, so an ex-employee cannot open
+    the door. The copies saved on the server stay, so someone who returns can
+    be put back. A device whose protocol has no measured delete (the 3A) is
+    listed for a human to do on the terminal instead of pretending.
+
+    Returns ``(queued, manual)``: the devices it was sent to, and the
+    ``(device, pin)`` pairs that must be done by hand.
+    """
+    at = at or timezone.now()
+    queued, manual = [], []
+    rows = (
+        DeviceEnrollment.all_objects.filter(employee=employee)
+        .exclude(enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED)
+        .select_related("device", "device__branch").order_by("device__name")
+    )
+    seen = set()
+    for enrollment in rows:
+        key = (enrollment.device_id, enrollment.device_user_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        device = enrollment.device
+        if device.status == BiometricDevice.Status.RETIRED:
+            continue
+        if not commands.measured(device, "delete"):
+            manual.append((device, enrollment.device_user_id))
+            continue
+        entry, error = commands.queue_user_delete(
+            device=device, device_user_id=enrollment.device_user_id, requested_by=actor)
+        if entry is None:
+            manual.append((device, enrollment.device_user_id))
+            continue
+        queued.append((device, enrollment.device_user_id))
+    if queued:
+        _audit(actor, queued[0][0], "device.users_removed_on_leaving", employee, {
+            "employee_id": employee.pk,
+            "removed": [f"{d.serial_number}:{pin}" for d, pin in queued],
+            "by_hand": [f"{d.serial_number}:{pin}" for d, pin in manual],
+        })
+    return queued, manual
+
+
+def still_on_devices(employee, at=None):
+    """``[(device, pin)]`` a person is still on, for the "still on N devices" note."""
+    at = at or timezone.now()
+    return [
+        (e.device, e.device_user_id)
+        for e in DeviceEnrollment.all_objects.filter(employee=employee)
+        .exclude(enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED)
+        .select_related("device").order_by("device__name")
+        if e.device.status != BiometricDevice.Status.RETIRED
+    ]
+
+
 def transfer_targets(device):
     """The company's other devices of the same model: where users can be copied."""
     return list(

@@ -22,9 +22,12 @@ class EndEmploymentForm(StyledFormMixin, forms.Form):
         help_text="They can no longer sign in to this company. It can be enabled again on Edit employee.",
     )
     end_device_enrollments = forms.BooleanField(
-        label="End their device enrollments", required=False, initial=True,
+        label="End their device access", required=False, initial=True,
         help_text=(
-            "Their user numbers stop counting for them after the last day. They "
-            "stay on the terminals themselves until removed on the device's users page."
+            "Their user numbers stop counting after the last day, and they are "
+            "removed from the terminals so their face or finger no longer opens "
+            "the door. The fingerprint and face saved here are kept, so someone "
+            "who returns can be put straight back. A device whose protocol has no "
+            "proven delete is named for you to clear on the terminal itself."
         ),
     )

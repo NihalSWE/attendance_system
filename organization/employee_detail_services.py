@@ -333,7 +333,8 @@ def end_employment(*, actor, company_id, employee_id, last_day, status, reason,
     ends_at = datetime.datetime.combine(
         last_day + datetime.timedelta(days=1), datetime.time.min, tzinfo=tz
     )
-    summary = {"login_disabled": False, "enrollments_ended": 0, "days_rebuilt": 0}
+    summary = {"login_disabled": False, "enrollments_ended": 0, "days_rebuilt": 0,
+               "devices_cleared": [], "devices_by_hand": []}
 
     with transaction.atomic():
         before = {
@@ -384,6 +385,18 @@ def end_employment(*, actor, company_id, employee_id, last_day, status, reason,
                     )
                     summary["enrollments_ended"] += 1
 
+                # Ending the mapping stops their scans counting; it does not
+                # take their face and fingerprint off the terminal, where they
+                # would still open the door. Remove them there too, and say
+                # plainly which devices a person must be deleted from by hand.
+                from devices.services import mapping as device_mapping
+
+                queued, by_hand = device_mapping.remove_on_leaving(
+                    actor=actor, employee=employee)
+                summary["devices_cleared"] = [device.name for device, _ in queued]
+                summary["devices_by_hand"] = [
+                    {"device": device.name, "pin": pin} for device, pin in by_hand]
+
             record_company_event(
                 actor=actor, membership=membership, company=company,
                 action="employee.employment_ended", obj=employee,
@@ -394,6 +407,8 @@ def end_employment(*, actor, company_id, employee_id, last_day, status, reason,
                     "ends_at": ends_at.isoformat(),
                     "reason": reason,
                     "enrollments_ended": summary["enrollments_ended"],
+                    "devices_cleared": summary["devices_cleared"],
+                    "devices_by_hand": summary["devices_by_hand"],
                 },
             )
 

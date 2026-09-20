@@ -243,7 +243,7 @@ class PageTests(DetailTestCase):
         self.give_login()
         page = self.client.get(self.end_url)
         self.assertContains(page, "Disable their login")
-        self.assertContains(page, "End their device enrollments")
+        self.assertContains(page, "End their device access")
         response = self.client.post(self.end_url, {
             "last_day": "2026-08-11", "status": "resigned", "reason": "Moved abroad",
             "disable_login": "on", "end_device_enrollments": "on",

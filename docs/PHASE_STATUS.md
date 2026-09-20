@@ -3801,3 +3801,24 @@ another department in the same branch, another branch), no editing / no pay /
 no deciding overtime, losing access when the head field or the department
 status changes, and the audit line.
 
+
+### Leavers are taken off the terminals — 2026-09-20
+
+Ending employment already closed the device enrollments, so a leaver's scans
+stopped counting — but their face and fingerprint stayed on the terminal and
+still opened the door until somebody deleted them there by hand.
+
+**End employment → "End their device access"** (the same tick, renamed) now
+also removes them from every device they are on:
+
+- `mapping.remove_on_leaving` deletes by user number only, the proven form.
+- A device whose protocol has **no measured delete** (the 3A) is **named on
+  screen** — "Delete them on the terminal itself: <device> (user <n>)" —
+  rather than silently leaving them enrolled.
+- Their saved fingerprint and face are **kept**, so someone who returns is put
+  straight back with Send to devices.
+- Audited as `device.users_removed_on_leaving`, with what went to each device
+  and what was left for a person.
+- `mapping.still_on_devices(employee)` gives the devices someone is still on.
+
+Tests: `LeaverRemovalTests` in devices/tests_mapping.py (5). Full suite 1261 OK.

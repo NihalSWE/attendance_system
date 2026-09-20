@@ -557,3 +557,66 @@ class SavedSummaryTests(MappingCase):
         self.client.force_login(self.admin)
         page = self.client.get(reverse("devices:device_users", args=[self.device.public_id])).content.decode()
         self.assertNotIn("Saved on this server", page)
+
+
+class LeaverRemovalTests(MappingCase):
+    """Ending employment takes the person off the terminals (Ajay, 2026-09-20).
+
+    Ending the mapping alone stops their scans counting, but their face and
+    finger still open the door until the device is told.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.upload(USERS)
+        with use_company(self.company):
+            mapping.map_employee(actor=self.admin, device=self.device, employee=self.moin)
+            mapping.map_employee(actor=self.admin, device=self.second, employee=self.moin)
+
+    def test_removed_from_every_device_they_are_on(self):
+        with use_company(self.company):
+            queued, by_hand = mapping.remove_on_leaving(actor=self.admin, employee=self.moin)
+        self.assertEqual([d.name for d, _ in queued], ["Back Door", "Main Entrance"])
+        self.assertEqual(by_hand, [])
+        self.assertIn("delete_user:445900", self.outbox(self.device))
+        body = DeviceOutboxCommand.all_objects.get(device=self.device, key="delete_user:445900").body
+        self.assertEqual(body, "DATA DELETE user Pin=445900")
+
+    def test_a_device_without_a_proven_delete_is_listed_for_a_person(self):
+        with use_company(self.company):
+            self.device.settings = {"announced": {"pushver": "2.4.1", "device_type": "att"}}
+            self.device.save()
+            queued, by_hand = mapping.remove_on_leaving(actor=self.admin, employee=self.moin)
+        self.assertEqual([d.name for d, _ in queued], ["Back Door"])
+        self.assertEqual([(d.name, pin) for d, pin in by_hand], [("Main Entrance", "445900")])
+        self.assertNotIn("delete_user:445900", self.outbox(self.device))
+
+    def test_their_saved_fingerprint_and_face_are_kept(self):
+        from devices.models import DeviceUserTemplate
+
+        self.upload(BIODATA.replace("445962", "445900"), table="biodata", cmdid="2")
+        before = DeviceUserTemplate.all_objects.filter(device_user_id="445900").count()
+        with use_company(self.company):
+            mapping.remove_on_leaving(actor=self.admin, employee=self.moin)
+        self.assertEqual(DeviceUserTemplate.all_objects.filter(device_user_id="445900").count(), before)
+        self.assertEqual(before, 2)
+
+    def test_ending_employment_does_it(self):
+        from organization.employee_detail_services import end_employment
+        from organization.employee_detail_services import company_today
+
+        with use_company(self.company):
+            employee, summary = end_employment(
+                actor=self.admin, company_id=self.company.pk, employee_id=self.moin.pk,
+                last_day=company_today(self.company), status="resigned",
+                reason="Moved abroad", disable_login=False, end_device_enrollments=True)
+        self.assertEqual(summary["enrollments_ended"], 2)
+        self.assertEqual(sorted(summary["devices_cleared"]), ["Back Door", "Main Entrance"])
+        self.assertEqual(summary["devices_by_hand"], [])
+        self.assertIn("delete_user:445900", self.outbox(self.device))
+
+    def test_still_on_devices_lists_them(self):
+        with use_company(self.company):
+            self.assertEqual(
+                [(d.name, pin) for d, pin in mapping.still_on_devices(self.moin)],
+                [("Back Door", "445900"), ("Main Entrance", "445900")])
