@@ -3801,3 +3801,26 @@ another department in the same branch, another branch), no editing / no pay /
 no deciding overtime, losing access when the head field or the department
 status changes, and the audit line.
 
+
+## The Employees list drops the pay column when there is no pay to show (2026-09-20)
+
+Ajay's answer to the note left on the department head work: the "Base rate"
+column used to be rendered for every viewer, showing a dash to anyone without
+`salary.view`. It is now built only when the viewer may see pay in **at least
+one** branch — otherwise the header and every cell go together, so the table is
+not left with a column of dashes.
+
+Who keeps it: owner, company admin and any company login, and a **branch
+manager**, who holds every branch permission in their own branches
+automatically, `salary.view` included. Who loses it: a **department head**, and
+an employee login granted `employees.view` without `salary.view`.
+
+Seeing pay in one branch is enough for the column to exist; the existing
+per-row `show_rate` check still withholds another branch's rate, so a partly
+granted viewer sees the column with dashes where they may not look. Sorting by
+pay is still offered only to a company login, and the sortable-column list is
+built from the same column list, so the two cannot drift apart.
+
+9 tests in `base_template/tests_employee_list_pay.py`, including one that
+counts `<th>` against `<td>` so a dropped header can never leave its cells
+behind, and one that pins the sortable-column list for both shapes.

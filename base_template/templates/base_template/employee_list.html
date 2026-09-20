@@ -145,9 +145,11 @@
                             <th>
                                 Status
                             </th>
-                            <th class="numeric">
-                                Base rate
-                            </th>
+                            {% if show_rate_column %}
+                                <th class="numeric">
+                                    Base rate
+                                </th>
+                            {% endif %}
                             <th class="no-sort">
                                 Devices
                             </th>
@@ -228,16 +230,18 @@
                                         </span>
                                     {% endif %}
                                 </td>
-                                <td class="numeric">
-                                    {% if r.c and r.show_rate %}
-                                        {{ r.c.base_rate|money }}
-                                        <span class="t-faint">
-                                            {{ r.c.currency }}
-                                        </span>
-                                    {% else %}
-                                        —
-                                    {% endif %}
-                                </td>
+                                {% if show_rate_column %}
+                                    <td class="numeric">
+                                        {% if r.c and r.show_rate %}
+                                            {{ r.c.base_rate|money }}
+                                            <span class="t-faint">
+                                                {{ r.c.currency }}
+                                            </span>
+                                        {% else %}
+                                            —
+                                        {% endif %}
+                                    </td>
+                                {% endif %}
                                 <td>
                                     <div class="device-chips">
                                         {% for d in r.device.names %}
