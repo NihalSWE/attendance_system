@@ -24,6 +24,7 @@ from attendance.forms import (
     AcceptReviewForm,
     AddScanForm,
     ChangeStatusForm,
+    DailyListFilterForm,
     WithdrawForm,
 )
 from attendance.models import AttendanceCorrection, AttendanceRecord
@@ -82,10 +83,17 @@ def attendance_list(request):
         return bail
     membership, visible = access.view_branches(request.user, company_id)
     year, month = read_month(request.GET)
-    first, last = month_bounds(year, month)
     branch_id = request.GET.get("branch", "").strip()
     employee_id = request.GET.get("employee", "").strip()
     status = request.GET.get("status", "").strip()
+
+    # A single date or a from/to range narrows the window; otherwise the month.
+    date_filter = DailyListFilterForm(request.GET)
+    date_window = date_filter.window() if date_filter.is_valid() else None
+    if date_window is not None:
+        first, last = date_window
+    else:
+        first, last = month_bounds(year, month)
 
     refresh(company_id, start=first, end=last)
 
@@ -138,7 +146,11 @@ def attendance_list(request):
         "status": status,
         "statuses": AttendanceRecord.AttendanceStatus.choices,
         "can_manage": membership.role in STRUCTURE_ROLES,
-        "filtered": bool(branch_id or employee_id or status),
+        "date_filter": date_filter,
+        "date_window": date_window,
+        "window_start": first,
+        "window_end": last,
+        "filtered": bool(branch_id or employee_id or status or date_window),
         # Punch times are stored in UTC; people read them in company time.
         "company_tz": membership.company.timezone or "UTC",
     })
@@ -167,6 +179,10 @@ def attendance_calendar(request):
         return bail
     membership, visible = access.view_branches(request.user, company_id)
     year, month = read_month(request.GET)
+    # "Jump to date": a picked day sets the month shown (nav arrows still work).
+    jump = _parse_day(request.GET.get("date", ""))
+    if jump is not None:
+        year, month = jump.year, jump.month
     company_tz = membership.company.timezone or "UTC"
     requested = request.GET.get("employee", "").strip()
 
