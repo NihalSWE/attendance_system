@@ -3519,3 +3519,147 @@ sent (a second dev server without the key had returned 500 to every poll).
 Next: a second device of the same model for the real device-to-device test
 (so far each template was written back to the device that captured it); the 3A the same way (ATT2 forms) once a 3A is
 reachable; then bulk queueing beyond `MAX_PENDING` for whole fleets.
+
+## Device data flow, part 2: mapping, bulk map, copy between devices — 2026-09-19 (Claude, Ajay's session)
+
+Built on main after the company-departments merge (branch `feature/device-mapping`).
+The Employee ID (the employee's current code) is the device user number.
+
+- **Employees list:** a **Devices** column (Mapped · N / Not mapped, and Finger ·
+  Face when the server holds them), a **Map** button per row and **Bulk map to
+  devices** on the page. Map dialog: the employee's branch shown read-only, a
+  device of that branch (Select2), "Counts from" date, both switches ticked.
+  Bulk map: a branch (read-only when the viewer has one) and all its devices or
+  one. Anyone who may edit employees in the branch (`employees.edit`) may map;
+  both views are in `BRANCH_PAGES`.
+- **Mapping** (`devices/services/mapping.py` `map_employee`, `map_one`,
+  `map_branch`): creates the DeviceEnrollment under the Employee ID (digits only,
+  ≤ 20); refuses another branch's device, a second mapping, a number another
+  person holds there. A person not on the device yet — or on it without a
+  fingerprint/face another same-model device captured — is **sent to it** via
+  `push_to_device` with name, card, role (from any company device that reports
+  them), door permission, fingerprint and face. A start day before today
+  re-checks the company's excluded punches from that day (administrators).
+- **Device users:** **Map automatically by Employee ID** (unmapped users whose
+  number is an employee's current code; nothing written to the device).
+  **Removed from device**: a user absent from the device's latest complete user
+  list (the upload answering "Refresh user list" carries `cmdid`) is kept on
+  the list, marked, sorted last and not counted as unmapped.
+- **Copy users to another device** (Ajay, 2026-09-19): checkboxes with a
+  select-all on Device users; ticking shows a selection bar (count, "Select all
+  N on this device", Clear, the target device, Copy to device). Targets are the
+  company's other devices **of the same model** only. `transfer_users` copies
+  name, card, role, door permission, fingerprint and face from the source's
+  saved templates; a user mapped to an employee on the source is mapped on the
+  target too when it is in that employee's branch. Ticks survive paging.
+- **Outbox** (`DeviceOutboxCommand`, `devices.0007`): device writes now wait in
+  their own table (up to 5,000 per device) instead of the 10-slot refresh queue,
+  handed over 5 per check-in after any refresh commands; answers mark each row
+  done/refused; a template body waits encrypted and is cleared once sent.
+- Shared UI: a native `<dialog>` modal and the selection bar/checkbox in
+  `components.css`; the date picker attaches to a dialog it sits in and follows
+  a value set by script.
+- Tests: `devices/tests_mapping.py` (23); table/template tests updated for the
+  new columns and the outbox. Browser-checked (rendered pages) at 1280 and 375.
+- No `.env` change. Migration `devices.0007`.
+
+### Part 2b — the scenarios (Ajay, 2026-09-19)
+
+| Situation | Where | What happens |
+|---|---|---|
+| People enrolled at the terminal, not in the software | Device users → tick (or "Add them all") → **Add as employees** | Employee per user: name from the device, Employee ID = device number, device's branch, department/designation **"Unassigned"** (made on first use; HR moves them later), linked at once, fingerprint/face kept. No salary yet. Someone whose number is already an Employee ID is linked, not duplicated (`import_users`) |
+| Employees in the software (bulk-made), not on devices | Employees → tick / Select all → **Send to devices** | To every device of their branch: ID and name (+ card, fingerprint, face when saved); enrol the rest at the terminal and the device reports the templates back (`send_employees`) |
+| Both exist, numbers match | Device users → **Link to existing employees** | Linked by Employee ID, nothing written |
+| New or replaced device of the same model | New device's Users → **Load employees onto this device** | Every active employee of its branch, with the saved fingerprint/face from any device of the model (`load_device`) |
+| A second device alongside the first | Device users → tick → **Copy to device** | Same model only (`transfer_users`) |
+
+Checkboxes are always on Device users now (not only when a copy target exists).
+The old "Create employees for the unmapped users" (draft codes `DEV-<n>`) is
+replaced on the page by Add as employees (Employee ID = device number).
+Tests: `ScenarioTests` in `devices/tests_mapping.py`.
+
+### Verified on the office 2A — 2026-09-19 (Ajay at the device)
+
+Everyone except Ajay deleted on the terminal, then **Load employees onto this
+device**: Moin, Nihal and Sajal came back with name, card, role, door
+permission, fingerprint and face — **faces and fingers recognised for everyone,
+Nihal's card works and he opens the admin menu (Super Admin restored)**.
+Rayhan went back with ID and name only (nothing captured yet). The
+device → software → device loop is proven on the 2A for all of it.
+
+Still open: capture on one 2A and write to a *second* 2A (no second unit yet);
+the 3A (ATT2, writes refused, unmeasured); volume; the raw-upload encryption
+decision; merging `feature/device-mapping` to main (awaiting Ajay).
+
+### Plan — next session (2026-09-20), agreed with Ajay
+
+1. **Volume test on the 2A, outside office hours:** put **at least 50 test
+   users** on the device from the software, time it, then **remove them all from
+   the software** and confirm the device's user count is back to where it was.
+   Only test numbers (a reserved range, e.g. 90001–90050), deleted by Pin only.
+2. Needed for that test, to build first:
+   - **Bulk "Remove from device"** in the Device users selection bar (today
+     Remove is one row at a time), behind the confirm modal, delete by Pin only.
+   - **A progress card** on the device's Users page: done / refused / waiting,
+     a bar and time left, refreshing itself, kept when you leave the page; a
+     "Sending…" badge on the device in the Devices list; refused ones listed per
+     person with Retry.
+3. **Speed, measured during that test:** raise commands per check-in from 5
+   (cautious, not measured) to 20, then 50 (the 2A reports MaxPackageSize ≈ 2 MB,
+   a template command is ≈ 1.5 KB); and shorten the device's check-in interval
+   (Delay 10 s → 2–3 s) while a job runs, restored to 10 s when it finishes.
+   Watch that scans are still recognised promptly while a batch is written.
+   Target: 500 people ≈ 7 min at 50/check-in, ≈ 2 min with the shorter interval.
+4. Then: merge to main (after Ajay's go, full suite first), CSV/Excel bulk
+   employee import, removal from devices when employment ends.
+
+### 3A remote test — checklist from what the 2A taught us (2026-09-19)
+
+The 3A is reachable only through `workforce.iglweb.com` and nobody is on site,
+so the device must prove every write itself: **each write is followed by a
+read-back** (`DATA QUERY USERINFO PIN=99999`, proven on this 3A) and compared.
+Test user 99999 only, on the less-used 3A, outside office hours, one command at a
+time. Before anything: pull both 3As' users + fingerprints/faces (read-only,
+proven) — the backup. Needs the new code on the live server first (blocked by
+the company-departments migration: wipe or a data-keeping migration).
+
+| 2A trap (what happened) | Check on the 3A |
+|---|---|
+| **"Done" is not proof.** `Return=0` came back for commands that changed nothing or did the wrong thing | Read back after every write; compare field by field |
+| **Write names ≠ upload names.** Lowercase `pin=` was accepted and made a user with an **empty number** (the three empty rows on the 2A, undeletable by Pin); `Card` was ignored, `CardNo` worked | Write with the spelling the 3A *uploads* (`PIN`, `Name`, `Pri`, `Card`, `Grp`, `TZ`) and read back; any field missing from the read-back means a wrong name |
+| **Role silently ignored.** `Pri=14` → nothing; `Privilege=14` worked | Test the role on its own (0 → 14) and read back; on the 3A `Pri` is the documented name — prove it |
+| **"Invalid time period"** (rtlog event 23): a user written from software had **no door permission** (`userauthorize`), so the device recognised and refused them | The 3A is time-attendance (`DeviceType=att`): expect no door table, **but** its user row carries `TZ=0000000100000000` and `Grp=1` — a wrong or blank TZ/group can refuse the same way. Write TZ and Grp exactly as the 3A uploads them, and look for the refusal code in its scans |
+| **Device type forgotten after the DB rebuild** (the device does not re-register), so the door permission was skipped | Do not rely on registration data; the dialect comes from what the device announced/sent, and the 3A is already known as ATT2 |
+| **A wrong delete key wiped every user** (`uid=` on the 2A) | **No deletes on the client's 3A.** 99999 stays, harmless, with no templates of its own. Delete is measured on an office 3A |
+| **Several options in one command** became one wrong value (`SET OPTION` with tabs) | One field/option per command when in doubt; never the server address on the 3A |
+| **Template types.** 2A: fingerprint Type 1 v13, face Type 9 v40.1; templates only transfer within one model | Read the 3A's own types/versions from the backup; `BIODATA` vs the older `FINGERTMP`/`FACE` — try `BIODATA` first (it uploads that), read back, compare the stored template exactly (hash) |
+| **Verify mode.** The 3A uploads `Verify=-1` (device default) | Send `Verify=-1` or omit it; a wrong verify mode could stop face/finger working |
+| **Query forms differ per dialect** (3.x table form → `-1004` on the 3A; `USERINFO` → `-629` on the 2A) | Only the 2.x forms on the 3A |
+| **Scans made while offline were not re-sent** by the 3A until asked (`DATA QUERY ATTLOG`) | Already handled (catch-up); after the test, confirm no scans were missed |
+| **"Removed from device" needs a complete user list** marked with `cmdid` — the 2A's answers have it | The 3A's `USERINFO` answer may not; check before trusting the Removed badge there |
+| **Invented comm key → 401** after registration | Leave the 3A's comm key as it is |
+| **Two dev servers on one port** split device and browser traffic | Not relevant on the live server; check only one worker set is serving |
+
+Recognition (does the copied face open for the person) and delete stay
+unproven until someone stands at a 3A — recommend a 3A in the office.
+
+### Part 2c — remove from the device in bulk, and a progress card — 2026-09-20
+
+- **Remove from device** in the Device users selection bar (and the row's own
+  Remove button, now through the same service): deletes **by user number only**
+  — the form measured as safe — and **never the device's last super admin**
+  (removing every administrator leaves a terminal nobody can open the menu on;
+  only a factory reset recovers it). Saved fingerprints/faces, the enrollment
+  and the punch history are all kept, so anyone removed can be sent back.
+  `mapping.remove_users`; refused on a 2.x device (unmeasured).
+- **Single user writes now use the outbox too** (`queue_user_push`,
+  `queue_user_delete`): they went to the 10-slot refresh queue, which a bulk
+  removal would have overflowed — found by the new tests.
+- **Progress card** on Device users: "Sending to <device> — N of M", a bar,
+  done / waiting / refused, time left (from the queue and the device's
+  check-in interval), refreshing every 5 s and stopping when the run ends.
+  It survives leaving the page. `commands.job_progress` +
+  `devices:device_job_progress` (JSON) + `devices/js/job_progress.js`.
+- The confirm modal now also takes its wording from the **button** pressed, so
+  one bar with several actions asks only for the risky one.
+- Tests: `RemoveFromDeviceTests`, `JobProgressTests` (devices: 362 OK).

@@ -1,4 +1,12 @@
 {% extends "devices/base.html" %}
+{% load static %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'base_template/js/selection.js' %}">
+    </script>
+    <script defer src="{% static 'devices/js/job_progress.js' %}">
+    </script>
+{% endblock %}
 {% block title %}
     Device users · {{ device.name }}
 {% endblock %}
@@ -49,6 +57,18 @@
                     Save fingerprints and faces
                 </button>
             </form>
+            {% if branch_employee_count %}
+                <form method="post" action="{% url 'devices:device_load' device.public_id %}"
+                      data-confirm-title="Load employees onto {{ device.name }}?"
+                      data-confirm="All {{ branch_employee_count }} active employee{{ branch_employee_count|pluralize }} of {{ device.branch.name }} will be sent to this device with their Employee ID and name, plus their card, fingerprint and face wherever the company has them. People already on it are updated, not duplicated."
+                      data-confirm-button="Load {{ branch_employee_count }} employee{{ branch_employee_count|pluralize }}">
+                    {% csrf_token %}
+                    <button class="btn btn--ghost" type="submit"
+                            title="Sends every employee of {{ device.branch.name }} to this device, with the fingerprint and face the company keeps for them">
+                        Load employees onto this device
+                    </button>
+                </form>
+            {% endif %}
             <a class="btn btn--ghost" href="{% url 'devices:punch_list' %}?device={{ device.pk }}">
                 View punches
             </a>
@@ -56,6 +76,28 @@
                 Map a user
             </a>
         </div>
+    </div>
+    <div class="job" data-job="{% url 'devices:device_job_progress' device.public_id %}"
+         {% if not job.total %}hidden{% endif %}>
+        <div class="job__head">
+            <span class="job__title" data-job-title>
+                {% if job.running %}Sending to {{ device.name }}{% else %}Finished sending to {{ device.name }}{% endif %}
+            </span>
+            <span class="job__count"><span data-job-count>{{ job.done|add:job.refused }}</span> of <span data-job-total>{{ job.total }}</span></span>
+        </div>
+        <div class="job__bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="{{ job.percent }}" data-job-bar>
+            <span style="width: {{ job.percent }}%"></span>
+        </div>
+        <div class="job__meta">
+            <span class="job__dot job__dot--done"></span><span data-job-done>{{ job.done }}</span> done
+            <span class="job__dot job__dot--wait"></span><span data-job-waiting>{{ job.waiting|add:job.sent }}</span> waiting
+            <span class="job__dot job__dot--bad"></span><span data-job-refused>{{ job.refused }}</span> refused
+            <span class="job__left" data-job-left></span>
+        </div>
+        <p class="job__note t-faint">
+            The device collects a few per check-in; you can leave this page and come back.
+        </p>
     </div>
     {% if template_key_problem %}
         <div class="alert alert--danger">
@@ -65,27 +107,45 @@
         </div>
     {% endif %}
     {% if unmapped_count %}
-        <div class="alert alert--warning">
-            <p>
-                {{ unmapped_count }} user{{ unmapped_count|pluralize }} on this device
-                {{ unmapped_count|pluralize:"is,are" }} not mapped to an employee. Their scans are
-                stored, but they resolve to nobody and cannot count towards attendance until mapped.
-            </p>
-            <form method="post" action="{% url 'devices:device_users_sync' device.public_id %}"
-                  onsubmit="return confirm('Create {{ unmapped_count }} draft employee record(s) from this device? They will be recognition-only until you authorise them.')">
-                {% csrf_token %}
-                <button class="btn btn--ghost" type="submit">
-                    Create employees for the unmapped users
-                </button>
-            </form>
-            <p class="t-faint">
-                This creates a draft employee per unmapped device user and maps it, so their punches
-                resolve straight away. Drafts are <strong>recognition only</strong> — their punches
-                are kept and marked, and start counting once you authorise the enrollment. A user
-                with no name on the device gets a clearly-labelled placeholder for HR to complete,
-                never an invented name.
-            </p>
-        </div>
+        <section class="notice notice--warning" aria-labelledby="unmapped-title">
+            <div class="notice__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M19 8v6M22 11h-6"/>
+                </svg>
+            </div>
+            <div class="notice__body">
+                <h2 class="notice__title" id="unmapped-title">
+                    {{ unmapped_count }} user{{ unmapped_count|pluralize }} not linked to an employee yet
+                </h2>
+                <p class="notice__text">
+                    Their scans are saved, but they don't count towards attendance until each user is linked to an employee.
+                </p>
+                <div class="notice__actions">
+                    <form method="post" action="{% url 'devices:device_users_import' device.public_id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="all" value="1">
+                        <button class="btn btn--primary" type="submit">
+                            Add them all as employees
+                        </button>
+                    </form>
+                    <form method="post" action="{% url 'devices:device_map_automatically' device.public_id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="all" value="1">
+                        <button class="btn btn--ghost" type="submit">
+                            Link to existing employees
+                        </button>
+                    </form>
+                </div>
+                <p class="notice__hint">
+                    <strong>Add as employees</strong> makes each user an employee — Employee ID = their device number,
+                    filed under "Unassigned" until you give them a department — and keeps their fingerprint and face.
+                    <strong>Link</strong> only connects users whose number is already an employee's Employee ID.
+                    To pick some users, tick them in the list below.
+                </p>
+            </div>
+        </section>
     {% endif %}
     <div class="card">
         <div class="card__head">
@@ -113,10 +173,10 @@
                         All users
                     </option>
                     <option value="mapped" {% if mapping == 'mapped' %}selected{% endif %}>
-                        Mapped to an employee
+                        Linked to an employee
                     </option>
                     <option value="unmapped" {% if mapping == 'unmapped' %}selected{% endif %}>
-                        Not mapped
+                        Not linked
                     </option>
                 </select>
             </div>
@@ -129,6 +189,14 @@
                 <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
                     <thead>
                         <tr>
+                            <th class="pick-cell">
+                                {% if server_table.total %}
+                                    <label class="pick" title="Select every user on this page">
+                                        <input type="checkbox" data-pick-all aria-label="Select every user on this page">
+                                        <span class="pick__box"></span>
+                                    </label>
+                                {% endif %}
+                            </th>
                             <th>
                                 User ID
                             </th>
@@ -170,6 +238,15 @@
                     <tbody>
                         {% for row in page.object_list %}
                             <tr>
+                                <td class="pick-cell">
+                                    {% if not row.removed_from_device %}
+                                        <label class="pick" title="Select {{ row.name|default:row.pin }}">
+                                            <input type="checkbox" name="pin" value="{{ row.pin }}" form="transfer-form" data-pick
+                                                   aria-label="Select user {{ row.pin }}">
+                                            <span class="pick__box"></span>
+                                        </label>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     <span class="mono">
                                         {{ row.pin }}
@@ -178,6 +255,11 @@
                                 <td>
                                     {% if row.name %}
                                         {{ row.name }}
+                                        {% if row.removed_from_device %}
+                                            <span class="badge badge--neutral" title="Not in the device's latest user list: deleted on the device. Kept here because their scans belong to this number.">
+                                                Removed from device
+                                            </span>
+                                        {% endif %}
                                     {% elif row.only_in_scans %}
                                         <span class="t-faint" title="This number has scanned, but the device has not sent its user record yet. Refresh user list fetches it.">
                                             (seen in scans; name not received yet)
@@ -239,10 +321,17 @@
                                 </td>
                                 <td>
                                     {% if row.employee %}
-                                        {{ row.employee.full_name }}
+                                        <div class="linked-employee">
+                                            <span class="badge badge--success">
+                                                Linked
+                                            </span>
+                                            <a href="{% url 'organization:employee_detail' row.employee.pk %}">
+                                                {{ row.employee.full_name }}
+                                            </a>
+                                        </div>
                                     {% else %}
                                         <span class="badge badge--warning">
-                                            Not mapped
+                                            Not linked
                                         </span>
                                     {% endif %}
                                 </td>
@@ -259,7 +348,9 @@
                                         </form>
                                         <form method="post"
                                               action="{% url 'devices:device_user_delete' device.public_id %}"
-                                              onsubmit="return confirm('Remove device user {{ row.pin }} from {{ device.name|escapejs }}?\n\nThis destroys their face and fingerprint on this terminal. Those cannot be restored from the software — the person must be enrolled again in person. Punch history is kept.')">
+                                              data-confirm-title="Remove user {{ row.pin }} from {{ device.name }}?"
+                                              data-confirm="Their face and fingerprint are deleted from this terminal. The copy saved in the software stays, so they can be sent back later. Their punch history is kept."
+                                              data-confirm-button="Remove from device" data-confirm-tone="danger">
                                             {% csrf_token %}
                                             <input type="hidden" name="device_user_id" value="{{ row.pin }}">
                                             <button class="btn btn--quiet btn--sm" type="submit"
@@ -298,17 +389,82 @@
                 </table>
             </div>
             {% include "base_template/includes/table_pagination.html" %}
+            <form class="selection-bar" id="transfer-form" method="post"
+                  action="{% url 'devices:device_users_import' device.public_id %}" data-selection-bar hidden>
+                {% csrf_token %}
+                <input type="hidden" name="all" value="" data-pick-everyone-field>
+                <div class="selection-bar__count">
+                    <span class="selection-bar__number" data-pick-count>0</span>
+                    <span>selected</span>
+                    <button class="btn btn--quiet btn--sm" type="button" data-pick-everyone
+                            data-total="{{ server_table.total }}" title="Every user on this device, on every page">
+                        Select all {{ server_table.total }}
+                    </button>
+                    <button class="btn btn--quiet btn--sm" type="button" data-pick-clear>
+                        Clear
+                    </button>
+                </div>
+                <div class="selection-bar__action">
+                    <button class="btn btn--primary" type="submit"
+                            formaction="{% url 'devices:device_users_import' device.public_id %}"
+                            title="Employee ID = device number, filed under Unassigned; fingerprints and faces are kept">
+                        Add as employees
+                    </button>
+                    <button class="btn btn--ghost" type="submit"
+                            formaction="{% url 'devices:device_map_automatically' device.public_id %}"
+                            title="Links users whose number is already an employee's Employee ID">
+                        Link to existing employees
+                    </button>
+                    <button class="btn btn--ghost btn--danger-ghost" type="submit"
+                            formaction="{% url 'devices:device_users_remove' device.public_id %}"
+                            data-confirm-title="Remove the selected users from {{ device.name }}?"
+                            data-confirm="Their face and fingerprint are deleted from this terminal. The copies saved here stay, so they can be sent back later, and their punch history is kept. The device's last super admin is never removed."
+                            data-confirm-button="Remove from device" data-confirm-tone="danger">
+                        Remove from device
+                    </button>
+                    {% if transfer_targets %}
+                        <span class="selection-bar__divider" aria-hidden="true"></span>
+                        <label class="sr-only" for="transfer-target">
+                            Copy to
+                        </label>
+                        <select class="select js-select2" id="transfer-target" name="target">
+                            {% for target in transfer_targets %}
+                                <option value="{{ target.pk }}">
+                                    {{ target.name }} · {{ target.branch.name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <button class="btn btn--ghost" type="submit"
+                                formaction="{% url 'devices:device_users_transfer' device.public_id %}">
+                            Copy to device
+                        </button>
+                    {% endif %}
+                </div>
+            </form>
         {% endif %}
         {% if not page.object_list %}
             <div class="empty server-table-empty">
                 <div class="empty__title">
-                    No users reported yet
+                    No users on this device yet
                 </div>
                 <div class="empty__text">
-                    This device has not uploaded its user table. It sends one automatically after
-                    it connects; if the device is online and this stays empty, check the raw
-                    <a href="{% url 'devices:message_list' %}?device={{ device.pk }}">message log</a>.
+                    {% if branch_employee_count %}
+                        A new or replaced device? Load {{ device.branch.name }}'s {{ branch_employee_count }}
+                        employee{{ branch_employee_count|pluralize }} onto it — with their card, fingerprint and face
+                        wherever the company has them.
+                    {% else %}
+                        Enrol people at the terminal, then press Refresh user list. If the device is online and
+                        this stays empty, check the <a href="{% url 'devices:message_list' %}?device={{ device.pk }}">message log</a>.
+                    {% endif %}
                 </div>
+                {% if branch_employee_count %}
+                    <form method="post" action="{% url 'devices:device_load' device.public_id %}" class="empty__action">
+                        {% csrf_token %}
+                        <button class="btn btn--primary" type="submit">
+                            Load {{ branch_employee_count }} employee{{ branch_employee_count|pluralize }} onto this device
+                        </button>
+                    </form>
+                {% endif %}
             </div>
         {% endif %}
     </div>
@@ -388,7 +544,9 @@
                 {% endif %}
                 {% if test_user_on_device %}
                     <form method="post" action="{% url 'devices:device_user_delete' device.public_id %}"
-                          onsubmit="return confirm('Remove test user {{ test_user_id }} from {{ device.name|escapejs }}? Only user {{ test_user_id }} is removed.')">
+                          data-confirm-title="Remove test user {{ test_user_id }}?"
+                          data-confirm="Only user {{ test_user_id }} is removed from {{ device.name }}."
+                          data-confirm-button="Remove" data-confirm-tone="danger">
                         {% csrf_token %}
                         <input type="hidden" name="device_user_id" value="{{ test_user_id }}">
                         <button class="btn btn--ghost" type="submit">
@@ -407,7 +565,7 @@
                 </h2>
                 {% if pending_commands %}
                     <span class="badge badge--info">
-                        {{ pending_commands|length }} waiting for the device
+                        {{ waiting_count }} waiting for the device
                     </span>
                 {% endif %}
             </div>

@@ -7,6 +7,8 @@ in the repository.
 """
 
 from cryptography.fernet import Fernet
+from unittest import mock
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -16,6 +18,7 @@ from common.tenant import use_company
 from devices.models import (
     BiometricDevice,
     DeviceModel,
+    DeviceOutboxCommand,
     DeviceSyncState,
     DeviceUserTemplate,
     DeviceVendor,
@@ -80,8 +83,7 @@ class TemplateCase(TestCase):
         )
 
     def pending(self, device=None):
-        state = DeviceSyncState.all_objects.filter(device=device or self.device).first()
-        return (state.state_data or {}).get("pending_commands") or [] if state else []
+        return commands.pending_summary(device or self.device, limit=100)
 
 
 class SavingTests(TemplateCase):
@@ -213,6 +215,14 @@ class PushTests(TemplateCase):
         entries, error = push_to_device(self.device, "445900", name="Moin", card="8868366")
         self.assertEqual((len(entries), error), (2, ""))
 
+    def test_door_permission_when_the_device_type_is_not_known(self):
+        # After a database rebuild the device does not register again, so its
+        # type is unknown (seen 2026-09-19): it must still get the permission.
+        self.device.settings = {"push_protocol": "auto"}
+        self.device.save()
+        entries, _ = push_to_device(self.device, "445990", name="Rayhan")
+        self.assertEqual([e["key"] for e in entries], ["push_user:445990", "push_access:445990"])
+
     def test_no_door_permission_for_a_time_attendance_device(self):
         self.device.settings = {"announced": {"pushver": "3.1.2", "device_type": "att"}}
         self.device.save()
@@ -249,14 +259,15 @@ class PushTests(TemplateCase):
             self.assertTrue(error, kwargs)
 
     def test_all_or_nothing_when_the_queue_is_full(self):
-        for n in range(commands.MAX_PENDING - 2):
-            commands._queue_raw(device=self.device, key=f"k{n}", body=f"DATA QUERY {n}")
-        entries, error = push_to_device(
-            self.device, TEST_USER_ID, finger_template=self.finger, face_template=self.face
-        )
+        with mock.patch.object(commands, "OUTBOX_LIMIT", 5):
+            push_to_device(self.device, "1", name="x")
+            push_to_device(self.device, "2", name="y")
+            entries, error = push_to_device(
+                self.device, TEST_USER_ID, finger_template=self.finger, face_template=self.face
+            )
         self.assertEqual(entries, [])
-        self.assertIn("Too many", error)
-        self.assertEqual(len(self.pending()), commands.MAX_PENDING - 2)
+        self.assertIn("writes waiting", error)
+        self.assertEqual(len(self.pending()), 4)
 
 
 class HandOverAndResultTests(TemplateCase):
@@ -302,7 +313,9 @@ class HandOverAndResultTests(TemplateCase):
         note_results(self.device, f"ID={issued[2]['id']}&Return=0&CMD=DATA UPDATE")
         stored = str(DeviceSyncState.all_objects.get(device=self.device).state_data)
         self.assertNotIn(FINGER_TMP, stored)
-        self.assertIn("Tmp=…", stored)
+        row = DeviceOutboxCommand.all_objects.get(device=self.device, command_id=issued[2]["id"])
+        self.assertEqual((row.status, row.body, row.body_encrypted), ("done", "", None))
+        self.assertTrue(row.description.endswith("Tmp=…"))
 
     def test_missing_key_drops_only_the_template(self):
         self.upload()

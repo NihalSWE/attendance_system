@@ -191,8 +191,9 @@
         btn.innerHTML = ICON_CAL + '<span class="dp__value dp__value--empty"></span>' + ICON_CHEV;
         var panel = document.createElement("div");
         panel.className = "dp__panel";
-        // Lives on <body> so no ancestor overflow can clip it.
-        document.body.appendChild(panel);
+        // Lives on <body> so no ancestor overflow can clip it; inside a modal
+        // <dialog> it lives on the dialog, as the page behind is unreachable.
+        (input.closest("dialog") || document.body).appendChild(panel);
         wrap.append(btn);
         input.parentNode.insertBefore(wrap, input);
         wrap.appendChild(input);
@@ -300,6 +301,16 @@
             closeOpen();
         });
         shell.panel.appendChild(calendar.el);
+
+        // Follow a value set by a script (e.g. a dialog pre-filling today).
+        input.addEventListener("change", function () {
+            var now = parseIso(input.value);
+            if ((now && now.getTime()) === (selected && selected.getTime())) return;
+            selected = now;
+            calendar.setState({single: selected});
+            calendar.focusOn(selected);
+            paint();
+        });
 
         var foot = document.createElement("div");
         foot.className = "dp__foot";

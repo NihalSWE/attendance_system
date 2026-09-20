@@ -221,10 +221,17 @@ def build_access_grant(*, device_user_id):
 
 
 def needs_access_grant(device):
-    """True for an access-control device, which refuses users without one."""
+    """True unless the device is known to be time-attendance only (DeviceType=att).
+
+    An access-control device refuses a user without a door permission. What
+    the device is comes from its registration, which it does not repeat while
+    it stays registered — so a device the server has not heard register (e.g.
+    after the database was rebuilt) is treated as access control: on a device
+    without doors the permission is simply refused, harmlessly.
+    """
     settings = device.settings or {}
     announced = settings.get("announced") or {}
-    return (announced.get("device_type") or settings.get("device_type") or "").lower() == "acc"
+    return (announced.get("device_type") or settings.get("device_type") or "").lower() != "att"
 
 
 def build_user_delete(*, device_user_id):
@@ -417,17 +424,18 @@ def queue_user_push(*, device, device_user_id, name="", card_number="",
     if int(privilege) not in (0, 2, 6, 14):
         return None, "Unknown privilege level."
 
-    return _queue_raw(
+    # Writes go in the outbox, not the small refresh queue: a company's worth
+    # of them must fit.
+    entries, error = _queue_group(
         device=device,
-        key=f"push_user:{clean_id}",
-        body=build_user_update(
-            device_user_id=clean_id,
-            name=name,
-            card_number=card_number,
-            privilege=privilege,
-        ),
+        commands=[(
+            f"push_user:{clean_id}",
+            build_user_update(device_user_id=clean_id, name=name,
+                              card_number=card_number, privilege=privilege),
+        )],
         requested_by=requested_by,
     )
+    return (entries[0] if entries else None), error
 
 
 def queue_user_delete(*, device, device_user_id, requested_by=None):
@@ -452,12 +460,12 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
         if f"{forbidden}=" in body:
             return None, "Refusing to send a delete that could clear the device."
 
-    return _queue_raw(
+    entries, error = _queue_group(
         device=device,
-        key=f"delete_user:{clean_id}",
-        body=body,
+        commands=[(f"delete_user:{clean_id}", body)],
         requested_by=requested_by,
     )
+    return (entries[0] if entries else None), error
 
 
 ROLE_PRIVILEGES = (0, 2, 6, 14)
@@ -526,32 +534,52 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
     return _queue_group(device=device, commands=commands, requested_by=requested_by)
 
 
+#: Writes one device may have waiting in its outbox: a whole company's people
+#: (user, door, finger, face each) with room to spare.
+OUTBOX_LIMIT = 5000
+
+
 def _queue_group(*, device, commands, requested_by=None):
-    """Queue several ``(key, body)`` commands in order, all or none."""
+    """Queue several ``(key, body)`` writes in the outbox, in order, all or none.
+
+    A write still waiting with the same key is replaced (marked not sent), so
+    mapping someone twice does not send them twice.
+    """
+    from devices.models import DeviceOutboxCommand
+    from devices.services import templates
+
+    now = timezone.now()
     with transaction.atomic():
         state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        outbox = DeviceOutboxCommand.all_objects.filter(
+            device=device, status=DeviceOutboxCommand.Status.QUEUED
+        )
+        keys = [key for key, _ in commands]
+        outbox.filter(key__in=keys).update(
+            status=DeviceOutboxCommand.Status.DROPPED, return_code="replaced", answered_at=now,
+            body="", body_encrypted=None,
+        )
+        if outbox.count() + len(commands) > OUTBOX_LIMIT:
+            return [], (
+                f"This device already has {OUTBOX_LIMIT} writes waiting. Let it catch up first."
+            )
         data = dict(state.state_data or {})
-        keys = {key for key, _ in commands}
-        pending = [e for e in (data.get("pending_commands") or []) if e.get("key") not in keys]
-        if len(pending) + len(commands) > MAX_PENDING:
-            return [], "Too many commands are already queued for this device. Try again in a minute."
         next_id = int(data.get("last_command_id") or 0)
         entries = []
         for key, body in commands:
             next_id += 1
-            entry = {
-                "id": next_id, "key": key, "body": _describe(body),
-                "queued_at": timezone.now().isoformat(),
-                "requested_by": getattr(requested_by, "email", "") or "",
-            }
-            if entry["body"] != body:
-                # A template is biometric data: it waits for the device
-                # encrypted, like the saved templates themselves.
-                from devices.services import templates
-
-                entry["body_encrypted"] = templates.encrypt(body).decode("ascii")
-            entries.append(entry)
-        data["pending_commands"] = pending + entries
+            description = _describe(body)
+            # A template is biometric data: it waits encrypted, like the
+            # saved templates themselves.
+            secret = description != body
+            row = DeviceOutboxCommand.all_objects.create(
+                company_id=device.company_id, device=device, command_id=next_id, key=key,
+                device_user_id=key.split(":")[1] if ":" in key else "",
+                description=description, body="" if secret else body,
+                body_encrypted=templates.encrypt(body) if secret else None,
+                requested_by=getattr(requested_by, "email", "") or "", queued_at=now,
+            )
+            entries.append({"id": row.command_id, "key": key, "body": description})
         data["last_command_id"] = next_id
         state.state_data = data
         state.version = (state.version or 0) + 1
@@ -752,11 +780,25 @@ def take_pending_commands(device):
     At most COMMANDS_PER_POLL go per check-in, in the order they were queued,
     except a server-address change, whose port and host always go together.
     """
+    lines, pending = _take_refresh_queue(device)
+    # Writes waiting in the outbox fill what is left of this check-in; an
+    # address change goes alone.
+    if not any(str(e.get("key", "")).startswith(SERVER_ADDRESS_COMMAND_KEY) for e in pending):
+        more_lines, more = _take_outbox(device, COMMANDS_PER_POLL - len(pending))
+        lines += more_lines
+        pending += more
+    if not lines:
+        return "", []
+    return "\n".join(lines) + "\n", pending
+
+
+def _take_refresh_queue(device):
+    """The DeviceSyncState queue part of a check-in: ``(lines, entries)``."""
     state = _sync_state(device)
     data = dict(state.state_data or {})
     queued = list(data.get("pending_commands") or [])
     if not queued:
-        return "", []
+        return [], []
 
     if any(str(e.get("key", "")).startswith(SERVER_ADDRESS_COMMAND_KEY) for e in queued):
         pending, rest = queued, []
@@ -806,9 +848,43 @@ def take_pending_commands(device):
             device=device, command_ids={e["id"] for e in pending}
         )
 
-    if not lines:
-        return "", []
-    return "\n".join(lines) + "\n", pending
+    return lines, pending
+
+
+def _take_outbox(device, room):
+    """Hand over up to ``room`` outbox writes, oldest first: ``(lines, entries)``.
+
+    The body leaves the database as it is sent. A template that cannot be
+    decrypted (key missing or changed) is marked not sent and skipped, never
+    allowed to stop the device getting the rest.
+    """
+    from devices.models import DeviceOutboxCommand
+    from devices.services import templates
+
+    if room <= 0:
+        return [], []
+    now = timezone.now()
+    lines, entries = [], []
+    with transaction.atomic():
+        rows = list(
+            DeviceOutboxCommand.all_objects.select_for_update()
+            .filter(device=device, status=DeviceOutboxCommand.Status.QUEUED)
+            .order_by("command_id")[:room]
+        )
+        for row in rows:
+            try:
+                body = templates.decrypt(row.body_encrypted) if row.body_encrypted else row.body
+            except templates.TemplateKeyMissing:
+                row.status, row.return_code = DeviceOutboxCommand.Status.DROPPED, "template key missing"
+                row.answered_at = now
+            else:
+                lines.append(f"C:{row.command_id}:{body}")
+                entries.append({"id": row.command_id, "key": row.key, "body": row.description})
+                row.status, row.sent_at = DeviceOutboxCommand.Status.SENT, now
+            row.body, row.body_encrypted = "", None
+            row.save(update_fields=["status", "sent_at", "answered_at", "return_code",
+                                    "body", "body_encrypted", "updated_at"])
+    return lines, entries
 
 
 def _full_body(entry):
@@ -841,16 +917,31 @@ def parse_results(raw_body):
 
 def note_results(device, raw_body):
     """Remember each command's answer next to the command, for the screen."""
+    from devices.models import DeviceOutboxCommand
+
     results = parse_results(raw_body)
     if not results:
         return []
     now = timezone.now().isoformat()
     with transaction.atomic():
+        outbox = {
+            row.command_id: row for row in DeviceOutboxCommand.all_objects.select_for_update()
+            .filter(device=device, command_id__in=[r[0] for r in results])
+        }
+        for command_id, code, _ in results:
+            row = outbox.get(command_id)
+            if row is not None:
+                row.status = (DeviceOutboxCommand.Status.DONE if str(code).isdigit()
+                              else DeviceOutboxCommand.Status.REFUSED)
+                row.return_code, row.answered_at = code, timezone.now()
+                row.save(update_fields=["status", "return_code", "answered_at", "updated_at"])
         state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
         data = dict(state.state_data or {})
         sent = {e.get("id"): e for e in data.get("in_flight_commands") or []}
         remembered = list(data.get("command_results") or [])
         for command_id, code, verb in results:
+            if command_id in outbox:
+                continue
             entry = sent.get(command_id, {})
             remembered.append({
                 "id": command_id, "key": entry.get("key", ""),
@@ -871,18 +962,93 @@ def _describe(body):
 
 
 def recent_results(device, limit=10):
-    """The latest answers, newest first, for the Device users page."""
+    """The latest answers from both queues, newest first, for the screen."""
+    from devices.models import DeviceOutboxCommand
+
     state = DeviceSyncState.all_objects.filter(device=device).first()
-    if not state:
-        return []
-    results = list(reversed((state.state_data or {}).get("command_results") or []))[:limit]
+    results = list((state.state_data or {}).get("command_results") or []) if state else []
+    finished = (
+        DeviceOutboxCommand.all_objects.filter(device=device)
+        .exclude(status__in=[DeviceOutboxCommand.Status.QUEUED, DeviceOutboxCommand.Status.SENT])
+        .order_by("-command_id")[:limit]
+    )
+    results += [
+        {"id": row.command_id, "key": row.key, "command": row.description,
+         "return": row.return_code, "at": (row.answered_at or row.queued_at).isoformat()}
+        for row in finished
+    ]
+    results.sort(key=lambda r: r["id"], reverse=True)
     # 0 or a row count is success; a negative code or "not sent" is not.
-    return [{**r, "ok": str(r.get("return", "")).isdigit()} for r in results]
+    return [{**r, "ok": str(r.get("return", "")).isdigit()} for r in results[:limit]]
 
 
-def pending_summary(device):
+def pending_summary(device, limit=20):
     """Commands still waiting for the device's next poll, for the UI."""
+    from devices.models import DeviceOutboxCommand
+
     state = DeviceSyncState.all_objects.filter(device=device).first()
-    if not state:
-        return []
-    return list((state.state_data or {}).get("pending_commands") or [])
+    pending = list((state.state_data or {}).get("pending_commands") or []) if state else []
+    pending += [
+        {"id": row.command_id, "key": row.key, "body": row.description}
+        for row in DeviceOutboxCommand.all_objects.filter(
+            device=device, status=DeviceOutboxCommand.Status.QUEUED
+        ).order_by("command_id")[:limit]
+    ]
+    return pending[:limit]
+
+
+def waiting_count(device):
+    """How many commands and writes are still waiting for this device."""
+    from devices.models import DeviceOutboxCommand
+
+    state = DeviceSyncState.all_objects.filter(device=device).first()
+    queued = len((state.state_data or {}).get("pending_commands") or []) if state else 0
+    return queued + DeviceOutboxCommand.all_objects.filter(
+        device=device, status=DeviceOutboxCommand.Status.QUEUED
+    ).count()
+
+
+#: Answers older than this are not counted as part of "the job on screen".
+JOB_WINDOW_MINUTES = 60
+
+#: How often a device asks for work, measured on the office 2A (2026-09-20):
+#: 100 commands, 20 check-ins, 12 seconds.
+POLLS_PER_SECOND = 1.7
+
+
+def job_progress(device, now=None):
+    """How a device's queued writes are going, for the progress card.
+
+    "The job" is what is still waiting or in flight, plus what was answered
+    within the last hour — enough to show a run through to its end without
+    dragging in last week's commands.
+    """
+    from datetime import timedelta
+
+    from devices.models import DeviceOutboxCommand
+
+    now = now or timezone.now()
+    rows = DeviceOutboxCommand.all_objects.filter(device=device)
+    waiting = rows.filter(status=DeviceOutboxCommand.Status.QUEUED).count()
+    sent = rows.filter(status=DeviceOutboxCommand.Status.SENT).count()
+    since = now - timedelta(minutes=JOB_WINDOW_MINUTES)
+    answered = rows.filter(answered_at__gte=since)
+    done = answered.filter(status=DeviceOutboxCommand.Status.DONE).count()
+    refused = answered.exclude(status=DeviceOutboxCommand.Status.DONE).count()
+    total = waiting + sent + done + refused
+    # Measured on the office 2A, 2026-09-20: it asks for work about twice a
+    # second (not once per push interval, which is about sending data), so
+    # 100 commands went over in 12 seconds. Estimate from that pace, and never
+    # promise less than a second.
+    seconds_left = 0 if not (waiting + sent) else max(
+        1, int(round((waiting + sent) / (COMMANDS_PER_POLL * POLLS_PER_SECOND))))
+    people = sorted({row.device_user_id for row in answered.exclude(
+        status=DeviceOutboxCommand.Status.DONE) if row.device_user_id})
+    return {
+        "running": bool(waiting or sent),
+        "waiting": waiting, "sent": sent, "done": done, "refused": refused,
+        "total": total,
+        "percent": int(round(100 * (done + refused) / total)) if total else 0,
+        "seconds_left": seconds_left,
+        "refused_users": people[:20],
+    }

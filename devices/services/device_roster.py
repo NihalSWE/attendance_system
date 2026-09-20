@@ -83,6 +83,54 @@ def _rows(device, prefixes):
         yield from _tabledata_rows(device, prefix)
 
 
+def _removed_pins(device):
+    """Numbers the device no longer holds, judged by its latest complete list.
+
+    A 3.x device answers "Refresh user list" with its whole user table, the
+    upload's query carrying the ``cmdid`` it answers (split into ``packidx``
+    parts when large). Anything else (a user added or edited on the terminal)
+    is sent on its own, without ``cmdid``. A number seen only before the
+    latest complete answer, and not in it, has been deleted from the device.
+    Rows are kept on the screen — their scans still belong to that number —
+    and marked. A 2.x device (the 3A) sends no such answer, so nothing is
+    marked there.
+    """
+    uploads = list(
+        DeviceMessage.all_objects.filter(device=device, raw_payload_text__contains="user ")
+        .order_by("received_at")
+        .values_list("received_at", "payload_json", "raw_payload_text")
+    )
+    answers = [
+        (received, (payload or {}).get("query", {}))
+        for received, payload, _ in uploads
+        if (payload or {}).get("query", {}).get("cmdid")
+        and ((payload or {}).get("query", {}).get("tablename") or [""])[0] == "user"
+    ]
+    if not answers:
+        return set()
+    latest_cmd = answers[-1][1]["cmdid"]
+    listed_at = min(received for received, query in answers if query["cmdid"] == latest_cmd)
+
+    def pins(text):
+        for line in (text or "").splitlines():
+            line = line.strip()
+            if line.startswith("user "):
+                pin = {k.lower(): v for k, v in parse_kv_row(line[5:]).items()}.get("pin", "").strip()
+                if pin:
+                    yield pin
+
+    listed, later, earlier = set(), set(), set()
+    for received, payload, text in uploads:
+        query = (payload or {}).get("query", {})
+        if query.get("cmdid") == latest_cmd:
+            listed.update(pins(text))
+        elif received > listed_at:
+            later.update(pins(text))
+        else:
+            earlier.update(pins(text))
+    return earlier - listed - later
+
+
 def build_roster(device):
     """Return one dict per user the device has reported, newest values winning.
 
@@ -165,8 +213,10 @@ def build_roster(device):
         .order_by("effective_from")
     }
 
+    removed = _removed_pins(device)
     roster = []
     for pin, row in users.items():
+        row["removed_from_device"] = pin in removed
         enrollment = enrollments.get(pin)
         row["privilege_label"] = PRIVILEGE_LABELS.get(
             row["privilege_code"], f"Code {row['privilege_code']}" if row["privilege_code"] else ""
@@ -189,5 +239,5 @@ def build_roster(device):
         )
         roster.append(row)
 
-    roster.sort(key=lambda r: (not r["is_mapped"], r["name"].lower(), r["pin"]))
+    roster.sort(key=lambda r: (r["removed_from_device"], not r["is_mapped"], r["name"].lower(), r["pin"]))
     return roster

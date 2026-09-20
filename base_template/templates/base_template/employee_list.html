@@ -8,6 +8,10 @@
     {{ block.super }}
     <script defer src="{% static 'attendance/js/now_badge.js' %}">
     </script>
+    <script defer src="{% static 'base_template/js/device_mapping.js' %}">
+    </script>
+    <script defer src="{% static 'base_template/js/selection.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="page__head">
@@ -34,6 +38,11 @@
             <button class="btn btn--ghost" type="button" disabled title="Export is not available yet">
                 Export (unavailable)
             </button>
+            {% if map_branches %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="bulk-map-dialog">
+                    Bulk map to devices
+                </button>
+            {% endif %}
             {% if can_create %}
                 <a class="btn btn--primary" href="{% url 'organization:employee_create' %}">
                     Create employee
@@ -107,6 +116,14 @@
                 <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
                     <thead>
                         <tr>
+                            <th class="pick-cell no-sort">
+                                {% if map_branches %}
+                                    <label class="pick" title="Select everyone on this page">
+                                        <input type="checkbox" data-pick-all aria-label="Select everyone on this page">
+                                        <span class="pick__box"></span>
+                                    </label>
+                                {% endif %}
+                            </th>
                             <th>
                                 Code
                             </th>
@@ -132,6 +149,9 @@
                                 Base rate
                             </th>
                             <th class="no-sort">
+                                Devices
+                            </th>
+                            <th class="no-sort">
                                 Action
                             </th>
                         </tr>
@@ -139,6 +159,15 @@
                     <tbody>
                         {% for r in rows %}
                             <tr>
+                                <td class="pick-cell">
+                                    {% if r.can_map %}
+                                        <label class="pick" title="Select {{ r.e.full_name }}">
+                                            <input type="checkbox" name="employee" value="{{ r.e.pk }}" form="send-form" data-pick
+                                                   aria-label="Select {{ r.e.full_name }}">
+                                            <span class="pick__box"></span>
+                                        </label>
+                                    {% endif %}
+                                </td>
                                 <td>
                                     {{ r.a.employee_code|default:"—" }}
                                 </td>
@@ -210,11 +239,43 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if r.can_edit %}
-                                        <a class="btn btn--quiet btn--sm" href="{% url 'organization:employee_edit' r.e.pk %}">
-                                            Edit
-                                        </a>
+                                    <div class="device-chips">
+                                        {% for d in r.device.names %}
+                                            <span class="device-chip" title="Linked on {{ d.name }} as user {{ d.pin }}">
+                                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                                    <path d="M5 12.5l4.5 4.5L19 7.5"/>
+                                                </svg>
+                                                {{ d.name }}
+                                            </span>
+                                        {% empty %}
+                                            <span class="device-chip device-chip--none">
+                                                Not on any device
+                                            </span>
+                                        {% endfor %}
+                                    </div>
+                                    {% if r.device.fingerprint or r.device.face %}
+                                        <div class="device-bio" title="Saved on the server, ready to copy to the company's other devices">
+                                            {% if r.device.fingerprint %}Finger{% endif %}{% if r.device.fingerprint and r.device.face %} · {% endif %}{% if r.device.face %}Face{% endif %} saved
+                                        </div>
                                     {% endif %}
+                                </td>
+                                <td>
+                                    <div class="row-actions">
+                                        {% if r.can_edit %}
+                                            <a class="btn btn--quiet btn--sm" href="{% url 'organization:employee_edit' r.e.pk %}">
+                                                Edit
+                                            </a>
+                                        {% endif %}
+                                        {% if r.can_map %}
+                                            <button class="btn btn--quiet btn--sm" type="button"
+                                                    data-map-employee="{{ r.e.pk }}"
+                                                    data-map-name="{{ r.e.full_name }}"
+                                                    data-map-code="{{ r.a.employee_code }}"
+                                                    data-map-branch="{{ r.a.branch_id }}">
+                                                Map
+                                            </button>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                         {% endfor %}
@@ -222,6 +283,30 @@
                 </table>
             </div>
         {% include "base_template/includes/table_pagination.html" %}
+        {% if map_branches %}
+            <form class="selection-bar" id="send-form" method="post" action="{% url 'devices:employees_send' %}" data-selection-bar hidden>
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="selection-bar__count">
+                    <span class="selection-bar__number" data-pick-count>0</span>
+                    <span>selected</span>
+                    <input type="hidden" name="all" value="" data-pick-everyone-field>
+                    <button class="btn btn--quiet btn--sm" type="button" data-pick-everyone
+                            data-total="{{ paginator.count }}" title="Everyone in this list, on every page">
+                        Select all {{ paginator.count }}
+                    </button>
+                    <button class="btn btn--quiet btn--sm" type="button" data-pick-clear>
+                        Clear
+                    </button>
+                </div>
+                <div class="selection-bar__action">
+                    <button class="btn btn--primary" type="submit"
+                            title="Puts them on every device of their branch: Employee ID and name, plus card, fingerprint and face when the company has them">
+                        Send to devices
+                    </button>
+                </div>
+            </form>
+        {% endif %}
             {# Pagination is required on every table, with a real count — spec §4. #}
 
         {% else %}
@@ -245,4 +330,145 @@
             </div>
         {% endif %}
     </div>
+    {% if map_branches %}
+        {{ map_branches|json_script:"map-branches" }}
+        <dialog class="modal" id="map-dialog" aria-labelledby="map-dialog-title">
+            <form class="modal__card" method="post" action="{% url 'devices:employee_map' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <input type="hidden" name="employee" data-map-field="employee">
+                <div class="modal__head">
+                    <h2 id="map-dialog-title">
+                        Map to a device
+                    </h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">
+                        ×
+                    </button>
+                </div>
+                <div class="modal__body stack">
+                    <p class="t-muted">
+                        <strong data-map-field="name"></strong>
+                        — Employee ID <span class="mono" data-map-field="code"></span>.
+                        The device knows them by this number. If they are not on the device yet, they are
+                        sent to it with any fingerprint and face another device of this model captured.
+                    </p>
+                    <div class="field">
+                        <span class="field__label">
+                            Branch
+                        </span>
+                        <div class="input input--static" data-map-field="branch-name"></div>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="map-device">
+                            Device
+                        </label>
+                        <select class="select js-select2" id="map-device" name="device" required data-map-field="device"></select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="map-start">
+                            Counts from
+                        </label>
+                        <input class="input" type="date" id="map-start" name="start_day" data-datepicker data-map-field="start">
+                        <div class="field__help">
+                            Scans from this day count. An earlier day re-checks the scans already received.
+                        </div>
+                    </div>
+                    <label class="check" for="map-enabled">
+                        <input class="check__input" type="checkbox" id="map-enabled" name="attendance_enabled" checked>
+                        <span>
+                            Attendance enabled
+                        </span>
+                    </label>
+                    <label class="check" for="map-assigned">
+                        <input class="check__input" type="checkbox" id="map-assigned" name="assigned" checked>
+                        <span>
+                            Authorised for assigned-devices mode
+                        </span>
+                    </label>
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>
+                        Cancel
+                    </button>
+                    <button class="btn btn--primary" type="submit">
+                        Map
+                    </button>
+                </div>
+            </form>
+        </dialog>
+        <dialog class="modal" id="bulk-map-dialog" aria-labelledby="bulk-map-title">
+            <form class="modal__card" method="post" action="{% url 'devices:employee_bulk_map' %}">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="modal__head">
+                    <h2 id="bulk-map-title">
+                        Bulk map a branch
+                    </h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">
+                        ×
+                    </button>
+                </div>
+                <div class="modal__body stack">
+                    <p class="t-muted">
+                        Every active employee of the branch is mapped under their Employee ID, and anyone
+                        not on the device yet is sent to it. People already mapped are left as they are.
+                    </p>
+                    <div class="field">
+                        <label class="field__label" for="bulk-branch">
+                            Branch
+                        </label>
+                        {% if map_branches|length == 1 %}
+                            <input type="hidden" name="branch" value="{{ map_branches.0.id }}" data-bulk-field="branch">
+                            <div class="input input--static">
+                                {{ map_branches.0.name }}
+                            </div>
+                        {% else %}
+                            <select class="select js-select2" id="bulk-branch" name="branch" required data-bulk-field="branch">
+                                {% for branch in map_branches %}
+                                    <option value="{{ branch.id }}">
+                                        {{ branch.name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        {% endif %}
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="bulk-device">
+                            Devices
+                        </label>
+                        <select class="select js-select2" id="bulk-device" name="device" data-bulk-field="device"></select>
+                    </div>
+                    <div class="field">
+                        <label class="field__label" for="bulk-start">
+                            Counts from
+                        </label>
+                        <input class="input" type="date" id="bulk-start" name="start_day" data-datepicker>
+                        <div class="field__help">
+                            Blank means now. An earlier day re-checks the scans already received.
+                        </div>
+                    </div>
+                    <label class="check" for="bulk-enabled">
+                        <input class="check__input" type="checkbox" id="bulk-enabled" name="attendance_enabled" checked>
+                        <span>
+                            Attendance enabled
+                        </span>
+                    </label>
+                    <label class="check" for="bulk-assigned">
+                        <input class="check__input" type="checkbox" id="bulk-assigned" name="assigned" checked>
+                        <span>
+                            Authorised for assigned-devices mode
+                        </span>
+                    </label>
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>
+                        Cancel
+                    </button>
+                    <button class="btn btn--primary" type="submit">
+                        Map the branch
+                    </button>
+                </div>
+            </form>
+        </dialog>
+    {% endif %}
 {% endblock %}

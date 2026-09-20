@@ -41,7 +41,9 @@
             </a>
             {% if device.status != 'retired' %}
                 <form method="post" action="{% url 'devices:device_retire' device.public_id %}"
-                      onsubmit="return confirm('Retire {{ device.name|escapejs }}? It will stop accepting data. Its punch history is kept.')">
+                      data-confirm-title="Retire {{ device.name }}?"
+                      data-confirm="It stops accepting data from the terminal. Its punch history is kept."
+                      data-confirm-button="Retire device" data-confirm-tone="danger">
                     {% csrf_token %}
                     <button class="btn btn--danger-soft" type="submit">
                         Retire device

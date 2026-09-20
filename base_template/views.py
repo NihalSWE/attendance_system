@@ -151,7 +151,7 @@ def employee_list(request):
     page = paginate(request, qs,
         search=("first_name", "last_name", "work_email", "table_code", "table_branch", "table_department", "table_designation", "employment_status"),
         # Sorting by pay would reveal pay order to someone who may not see pay.
-        order=("table_code", ("first_name", "last_name"), "table_branch", "table_department", "table_designation", None, "employment_status", "table_rate" if company_wide else None, None))
+        order=(None, "table_code", ("first_name", "last_name"), "table_branch", "table_department", "table_designation", None, "employment_status", "table_rate" if company_wide else None, None, None))
     paginator, per_page = page.paginator, page.paginator.per_page
 
     # Current assignment per employee, for code/branch/department columns.
@@ -182,11 +182,25 @@ def employee_list(request):
         request.user, request.company_id, "salary.view")
     edit_branches = ALL_BRANCHES if company_wide else branches_for(
         request.user, request.company_id, "employees.edit")
+    # Device mapping (Map / Bulk map): the active devices of each branch this
+    # viewer may map in, and what each row already has.
+    from devices.models import BiometricDevice
+    from devices.services.mapping import device_badges
+
+    devices_by_branch = {}
+    for device in BiometricDevice.objects.exclude(status__in=["retired", "suspended"]).select_related(
+            "branch").order_by("name"):
+        if edit_branches is ALL_BRANCHES or device.branch_id in edit_branches:
+            devices_by_branch.setdefault(device.branch_id, {"name": device.branch.name, "devices": []})[
+                "devices"].append({"id": device.pk, "name": device.name})
+    badges = device_badges(request.company_id, [row["e"].pk for row in rows])
     for row in rows:
         row["now"] = now_by_employee.get(row["e"].pk)
         branch_id = row["a"].branch_id if row["a"] else None
         row["show_rate"] = branch_id in salary_branches if branch_id else company_wide
         row["can_edit"] = branch_id in edit_branches if branch_id else company_wide
+        row["device"] = badges.get(row["e"].pk)
+        row["can_map"] = row["can_edit"] and branch_id in devices_by_branch
 
     return render(request, "base_template/employee_list.html", {
         "rows": rows,
@@ -199,6 +213,10 @@ def employee_list(request):
         "statuses": Employee.EmploymentStatus.choices,
         "company_wide": company_wide,
         "can_create": bool(edit_branches),
+        "map_branches": [
+            {"id": pk, "name": value["name"], "devices": value["devices"]}
+            for pk, value in sorted(devices_by_branch.items(), key=lambda item: item[1]["name"])
+        ],
         # Nihal's pages: linked once they are open to this viewer (A12 part 7).
         "live_now": company_wide or may_open(request.user, request.company_id, "attendance:attendance_now"),
         "detail_links": company_wide or may_open(request.user, request.company_id, "organization:employee_detail"),
