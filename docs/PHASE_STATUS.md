@@ -3742,4 +3742,62 @@ No migration, no `.env` change. Full suite 1163 OK.
 one-sided range as a single day, a backwards range falling back to the month,
 the single date overriding a range, the inputs rendering, and the calendar
 jump landing on the right month.
+## 2026-09-20 — Department head access (Nihal, framework included)
+
+Branch `feature/department-head-access`, from main `5302833`. Ajay's decision:
+the head of a department manages that department's people, and Nihal writes all
+of it including `access_control`. No migration, no `.env` change, no new
+sidebar destination (a head uses pages already in `BRANCH_PAGES`).
+Full suite **1214 OK with no existing test changed** — the only test file added
+is `access_control/tests_department_head.py`.
+
+**The framework, beside the branch one** (`access_control/branch_access.py`):
+
+- `HEAD_CODES` — `employees.view`, `attendance.view`, `attendance.fix`,
+  `leave.view`, `leave.approve`, `overtime.view`. Deliberately out:
+  `employees.edit`, `employees.logins`, `salary.view`, `salary.prepare`,
+  `overtime.decide` (it changes pay) and `access.grant`.
+- `headed_departments(user, company_id, at=None)` — the active departments
+  whose `head` is this user. The field keeps no dated history, so `at` is
+  accepted (a dated head would slot in) but unused.
+- `scope_for(...) -> Scope(branches, departments)`, and
+  `can(..., branch_id=None, department_id=None)`,
+  `scope_queryset(..., department_field=None)`.
+
+Two semantics worth remembering:
+
+- **`can(branch_id=X)` keeps its old meaning.** Heading a department inside X
+  does *not* open branch X — a head is not a branch-wide anything. The row's
+  `department_id` must be passed for a head to pass.
+- **`can()` with neither id** answers "anywhere", and that now counts
+  departments. That is what makes `page_access.may_open` open the page to a
+  head, and it is the only behaviour change; nothing depended on it before,
+  because nobody was a head.
+- `scope_queryset` **without** `department_field` is byte-identical to before.
+
+**Pages filtered by department as well as branch** (Ajay's as well as Nihal's):
+employees list and employee page, attendance daily list / calendar / day panel
+/ days to review / fix a day / withdraw / missed scans, leave list and approval
+inbox, overtime list (view only). Enforced in the services too —
+`require_fix_day`, `correction_services`, `scan_requests.reviewable/decide`,
+`leaves.workflow.reviewable` (which `decide_request` re-runs), and payroll's
+`_record_in_scope`.
+
+**A head never decides their own** day fix, missed scan or leave; those fall
+back to the branch manager or the company. Pay stays hidden. Access ends the
+moment the head field changes or the department is deactivated, and the change
+is audited on its own line, `department.head_changed`, with the before/after
+employee id.
+
+**A leak caught during the build, recorded because it nearly shipped:** the
+first cut widened payroll's branch queryset to include the head's branch, which
+would have let a head open *another department's* overtime day in that branch.
+`branches` is now the genuine branch reach used for filtering, a separate
+`choice_branches` feeds only the branch dropdown, and `_record_in_scope` allows
+a branch match **or** a headed-department match. Two tests cover it.
+
+20 tests: what a head holds and does not, the three boundaries (own record,
+another department in the same branch, another branch), no editing / no pay /
+no deciding overtime, losing access when the head field or the department
+status changes, and the audit line.
 

@@ -55,22 +55,35 @@ def _form_page(request, *, form, title, submit_label, action, success, redirect_
 # --------------------------------------------------------------------------
 
 def _list_scope(user, company_id):
-    """``(company_wide, view_branches, record_branches)`` for the Leave list (A12 part 5).
+    """``(company_wide, Scope, record_branches)`` for the Leave list (A12 part 5).
 
     Company logins (owner, admin, HR and the other company roles) see every
     branch's leave, exactly as before. A branch manager or a person given access
-    sees leave in the branches where they may view or record it.
+    sees leave in the branches where they may view or record it; a department
+    head sees their own department's.
     """
-    from access_control.branch_access import ALL_BRANCHES, branches_for, branches_for_any
+    from access_control.branch_access import (
+        ALL_BRANCHES, Scope, branches_for, scope_for,
+    )
     from common.middleware import SELF_SERVICE_ROLES
 
     membership = require_company_membership(user, company_id)
     record = branches_for(user, company_id, "leave.record")
     if membership.role not in SELF_SERVICE_ROLES:
-        return True, ALL_BRANCHES, record
-    view = branches_for_any(user, company_id, "leave.view", "leave.record")
+        return True, Scope(ALL_BRANCHES), record
+    # "View leave" or "Record leave" in a branch, or heading the department.
+    viewing = scope_for(user, company_id, "leave.view")
+    recording = scope_for(user, company_id, "leave.record")
+    if viewing.is_all or recording.is_all:
+        return False, Scope(ALL_BRANCHES), record
+    view = Scope(
+        set(viewing.branches) | set(recording.branches),
+        viewing.departments | recording.departments,
+    )
     if not view:
-        raise PermissionDenied("Viewing leave requires access to leave in a branch.")
+        raise PermissionDenied(
+            "Viewing leave requires access to leave in a branch, or heading a department."
+        )
     return False, view, record
 
 
@@ -106,8 +119,13 @@ def leave_list(request):
             .prefetch_related("segments__leave_type")
             .filter(Exists(in_month))
         )
-        if view_branches is not ALL_BRANCHES:
-            queryset = queryset.filter(submission_assignment__branch_id__in=view_branches)
+        if not view_branches.is_all:
+            reachable = Q(submission_assignment__branch_id__in=view_branches.branches)
+            if view_branches.departments:
+                reachable |= Q(
+                    submission_assignment__department_id__in=view_branches.departments
+                )
+            queryset = queryset.filter(reachable)
         queryset = (
             queryset.select_related("submission_assignment")
             .annotate(first_day=Min("segments__start_date"), last_day=Max("segments__end_date"),

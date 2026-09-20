@@ -33,7 +33,9 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from access_control.branch_access import ALL_BRANCHES, branches_for, branches_for_any
+from access_control.branch_access import (
+    ALL_BRANCHES, branches_for, branches_for_any, headed_departments,
+)
 from accounts.models import CompanyMembership
 from attendance.models import AttendanceRecord
 from attendance.services import locked_ranges, month_bounds, recalculate, refresh
@@ -79,6 +81,12 @@ class Scope:
     branches: object      # Branch queryset
     company_wide: bool    # owner, company admin or HR: as before A12
     decide: object        # ALL_BRANCHES or the branch ids where they may decide
+    # Departments this person heads: they SEE their department's overtime and
+    # never decide it, because deciding changes pay (Ajay, 2026-09-20).
+    departments: frozenset = frozenset()
+    # The branch dropdown may offer a head their department's branch even
+    # though the branch itself is not theirs; filtering still uses `branches`.
+    choice_branches: object = None
 
     def may_decide(self, branch_id):
         return branch_id in self.decide
@@ -91,22 +99,34 @@ def overtime_scope(actor, company_id, code="overtime.view"):
     membership = require_company_membership(actor, company_id)
     if membership.role in OVERTIME_ROLES:
         with use_company(company_id):
-            return Scope(membership, visible_branches(membership), True, ALL_BRANCHES)
+            branches_qs = visible_branches(membership)
+            return Scope(membership, branches_qs, True, ALL_BRANCHES,
+                         frozenset(), branches_qs)
     decide = branches_for(actor, company_id, "overtime.decide")
     if code == "overtime.decide":
         branches = decide
     else:
         branches = branches_for_any(actor, company_id, "overtime.view", "overtime.decide")
-    if not branches:
+    # A head sees their department's overtime; they never decide it.
+    headed = (
+        headed_departments(actor, company_id)
+        if code != "overtime.decide" else set()
+    )
+    if not branches and not headed:
         raise PermissionDenied(
             "Deciding overtime needs owner, company administrator or HR access, "
             "or access to overtime in a branch."
         )
     with use_company(company_id):
         queryset = Branch.objects.all()
+        choices = Branch.objects.all()
         if branches is not ALL_BRANCHES:
             queryset = queryset.filter(pk__in=branches)
-        return Scope(membership, queryset, False, decide)
+            # The dropdown also offers the branch a headed department sits in.
+            choices = choices.filter(
+                Q(pk__in=branches) | Q(departments__in=headed)
+            ).distinct() if headed else queryset
+        return Scope(membership, queryset, False, decide, frozenset(headed), choices)
 
 
 @dataclass
@@ -232,16 +252,22 @@ def _snapshot(decision):
 
 def _record_in_scope(scope, record_id):
     record = (
-        AttendanceRecord.objects.select_related("employee", "shift", "branch")
+        AttendanceRecord.objects.select_related(
+            "employee", "shift", "branch", "employee_assignment")
         .prefetch_related("sessions")
         .filter(pk=record_id)
         .first()
     )
     if record is None:
         raise PermissionDenied("Day not found in this company.")
-    if not scope.branches.filter(pk=record.branch_id).exists():
-        raise PermissionDenied("That branch is outside your assigned scope.")
-    return record
+    if scope.branches.filter(pk=record.branch_id).exists():
+        return record
+    # A department head reaches their own department's day and no other, even
+    # inside the same branch.
+    department_id = getattr(record.employee_assignment, "department_id", None)
+    if scope.departments and department_id in scope.departments:
+        return record
+    raise PermissionDenied("That branch is outside your assigned scope.")
 
 
 @dataclass

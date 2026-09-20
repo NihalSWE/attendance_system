@@ -139,6 +139,7 @@ def update_adoption(*, actor, company_id, adoption_id, values):
 
     with use_company(company_id):
         before = adoption_snapshot(department)
+        head_before = department.head_id
         for field, value in values.items():
             setattr(department, field, value)
         department.updated_by = actor
@@ -149,6 +150,15 @@ def update_adoption(*, actor, company_id, adoption_id, values):
             action="department.updated", obj=department,
             before=before, after=adoption_snapshot(department),
         )
+        if department.head_id != head_before:
+            # The head carries access to everyone in the department, so the
+            # change gets its own audit line rather than hiding in the diff.
+            record_company_event(
+                actor=actor, membership=membership, company=membership.company,
+                action="department.head_changed", obj=department,
+                before={"head_id": head_before},
+                after={"head_id": department.head_id},
+            )
     return department
 
 

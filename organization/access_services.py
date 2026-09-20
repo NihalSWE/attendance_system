@@ -11,7 +11,7 @@ branches). They see the people currently placed in those branches.
 
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Subquery, Q
 from django.utils import timezone
 
 from access_control import branch_access as access
@@ -44,12 +44,20 @@ def grant_branches(actor, company_id):
     return branches
 
 
-def branch_choices(company_id, branches):
-    """The branches the page shows, as Branch rows. Call inside the company."""
+def branch_choices(company_id, scope):
+    """The branches the page shows, as Branch rows. Call inside the company.
+
+    ``scope`` is an ``access.Scope`` or plain branches. A department head gets
+    the branch their department sits in, and no other.
+    """
     queryset = Branch.objects.order_by("name")
-    if branches is not access.ALL_BRANCHES:
-        queryset = queryset.filter(pk__in=branches)
-    return list(queryset)
+    branches, departments = as_scope(scope)
+    if branches is access.ALL_BRANCHES:
+        return list(queryset)
+    matches = Q(pk__in=branches)
+    if departments:
+        matches |= Q(departments__in=departments)
+    return list(queryset.filter(matches).distinct())
 
 
 def _current_placement():
@@ -60,17 +68,33 @@ def _current_placement():
     )
 
 
-def people(branches):
-    """Employees placed now in ``branches``. Call inside the company's context."""
+def as_scope(value):
+    """``(branches, departments)`` from a Scope, or from plain branches."""
+    branches = getattr(value, "branches", value)
+    return branches, set(getattr(value, "departments", ()) or ())
+
+
+def people(scope):
+    """Employees placed now in ``scope``. Call inside the company's context.
+
+    ``scope`` is an ``access.Scope`` (branches plus the departments someone
+    heads) or, as before, just branches. A department head sees the people
+    placed in the department they head and nobody else.
+    """
     placement = _current_placement()
     queryset = Employee.objects.select_related("user").annotate(
         table_code=Subquery(placement.values("employee_code")[:1]),
         table_branch=Subquery(placement.values("branch__name")[:1]),
         table_branch_id=Subquery(placement.values("branch_id")[:1]),
+        table_department_id=Subquery(placement.values("department_id")[:1]),
     ).filter(table_branch_id__isnull=False)
-    if branches is not access.ALL_BRANCHES:
-        queryset = queryset.filter(table_branch_id__in=branches)
-    return queryset
+    branches, departments = as_scope(scope)
+    if branches is access.ALL_BRANCHES:
+        return queryset
+    matches = Q(table_branch_id__in=branches)
+    if departments:
+        matches |= Q(table_department_id__in=departments)
+    return queryset.filter(matches)
 
 
 def granted(employee):

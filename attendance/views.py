@@ -81,7 +81,7 @@ def attendance_list(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership, visible = access.view_branches(request.user, company_id)
+    membership, visible = access.view_scope(request.user, company_id)
     year, month = read_month(request.GET)
     branch_id = request.GET.get("branch", "").strip()
     employee_id = request.GET.get("employee", "").strip()
@@ -177,7 +177,7 @@ def attendance_calendar(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership, visible = access.view_branches(request.user, company_id)
+    membership, visible = access.view_scope(request.user, company_id)
     year, month = read_month(request.GET)
     # "Jump to date": a picked day sets the month shown (nav arrows still work).
     jump = _parse_day(request.GET.get("date", ""))
@@ -246,13 +246,13 @@ def attendance_now(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    _membership, visible = access.now_branches(request.user, company_id)
+    _membership, visible = access.now_scope(request.user, company_id)
 
     wanted = request.GET.get("employees", "").strip()
     employee_ids = [
         int(value) for value in wanted.split(",") if value.strip().isdigit()
     ] or None
-    if visible is not ALL_BRANCHES:
+    if not visible.is_all:
         with use_company(company_id):
             allowed = set(people(visible).values_list("pk", flat=True))
         employee_ids = sorted(
@@ -283,12 +283,12 @@ def attendance_day(request, employee_id, on):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership, visible = access.view_branches(request.user, company_id)
+    membership, visible = access.view_scope(request.user, company_id)
     company_tz = membership.company.timezone or "UTC"
 
     day = _parse_day(on)
     if day is None:
-        if visible is not ALL_BRANCHES:
+        if not visible.is_all:
             raise PermissionDenied("That is not a date.")
     else:
         # Before anything is worked out: a day in another branch is refused.
@@ -348,15 +348,15 @@ def _pickable(branches):
     Company logins: every employee, as before. A branch login: people placed now
     in its branches.
     """
-    return Employee.objects.all() if branches is ALL_BRANCHES else people(branches)
+    return Employee.objects.all() if branches.is_all else people(branches)
 
 
 def _may_see_calendar(user, company_id, employee_id):
     try:
-        _membership, visible = access.view_branches(user, company_id)
+        _membership, visible = access.view_scope(user, company_id)
     except PermissionDenied:
         return False
-    if visible is ALL_BRANCHES:
+    if visible.is_all:
         return True
     with use_company(company_id):
         return people(visible).filter(pk=employee_id).exists()
@@ -378,7 +378,7 @@ def attendance_day_fix(request, employee_id, on):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    access.fix_branches(request.user, company_id)
+    access.fix_scope(request.user, company_id)
     day = _parse_day(on)
     if day is None:
         messages.error(request, "That is not a date.")
@@ -480,7 +480,7 @@ def attendance_correction_withdraw(request, pk):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    access.fix_branches(request.user, company_id)
+    access.fix_scope(request.user, company_id)
     with use_company(company_id):
         correction = AttendanceCorrection.objects.filter(pk=pk).first()
     if correction is None:
@@ -513,7 +513,7 @@ def attendance_review(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    membership, fixable = access.fix_branches(request.user, company_id)
+    membership, fixable = access.fix_scope(request.user, company_id)
     # Bring this month and last up to date first: a day that has closed since
     # anybody last looked is exactly the kind that lands here.
     today = timezone.now().astimezone(month_view.zone(membership.company.timezone)).date()

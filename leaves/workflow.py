@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
-from access_control.branch_access import ALL_BRANCHES, branches_for
+from access_control.branch_access import ALL_BRANCHES, branches_for, headed_departments
 from accounts.models import CompanyMembership
 from attendance.services import locked_ranges, recalculate
 from auditlog.services import record_company_event
@@ -32,10 +32,11 @@ def reviewer(actor, company_id):
     member = require_company_membership(actor, company_id)
     if actor.is_superuser:
         raise PermissionDenied('Use your company login to decide leave.')
-    if member.role in (*STRUCTURE_ROLES, 'manager') or approve_branches(member):
+    if (member.role in (*STRUCTURE_ROLES, 'manager') or approve_branches(member)
+            or headed_departments(actor, company_id)):
         return member
     raise PermissionDenied('Leave decisions require a branch manager, access to approve '
-                           'leave, or a company administrator.')
+                           'leave, heading a department, or a company administrator.')
 
 
 def branch_ids(member):
@@ -71,7 +72,13 @@ def reviewable(member):
         branches = approve_branches(member)
         if branches is ALL_BRANCHES:
             return requests
-        return requests.filter(submission_assignment__branch_id__in=branches)
+        # A head decides their own department's leave (never their own, which
+        # the exclude above already took out).
+        headed = headed_departments(member.user, member.company_id)
+        reachable = Q(submission_assignment__branch_id__in=branches)
+        if headed:
+            reachable |= Q(submission_assignment__department_id__in=headed)
+        return requests.filter(reachable)
     requests = requests.filter(Q(requester_is_manager=True) | Q(has_branch_manager=False))
     allowed = branch_ids(member)
     if allowed:
