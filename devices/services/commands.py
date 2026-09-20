@@ -1011,6 +1011,10 @@ def waiting_count(device):
 #: Answers older than this are not counted as part of "the job on screen".
 JOB_WINDOW_MINUTES = 60
 
+#: How often a device asks for work, measured on the office 2A (2026-09-20):
+#: 100 commands, 20 check-ins, 12 seconds.
+POLLS_PER_SECOND = 1.7
+
 
 def job_progress(device, now=None):
     """How a device's queued writes are going, for the progress card.
@@ -1032,10 +1036,12 @@ def job_progress(device, now=None):
     done = answered.filter(status=DeviceOutboxCommand.Status.DONE).count()
     refused = answered.exclude(status=DeviceOutboxCommand.Status.DONE).count()
     total = waiting + sent + done + refused
-    interval = int((device.settings or {}).get("push_interval_seconds") or 10)
-    # The device takes COMMANDS_PER_POLL per check-in, one check-in per interval.
-    seconds_left = 0 if not (waiting + sent) else int(
-        ((waiting + sent) / COMMANDS_PER_POLL) * interval)
+    # Measured on the office 2A, 2026-09-20: it asks for work about twice a
+    # second (not once per push interval, which is about sending data), so
+    # 100 commands went over in 12 seconds. Estimate from that pace, and never
+    # promise less than a second.
+    seconds_left = 0 if not (waiting + sent) else max(
+        1, int(round((waiting + sent) / (COMMANDS_PER_POLL * POLLS_PER_SECOND))))
     people = sorted({row.device_user_id for row in answered.exclude(
         status=DeviceOutboxCommand.Status.DONE) if row.device_user_id})
     return {
