@@ -92,3 +92,59 @@ class DecideMissedScanForm(StyledFormMixin, forms.Form):
         widget=forms.Textarea(attrs={"rows": 2, "placeholder": "e.g. Checked with the guard at the gate"}),
     )
 
+
+
+def _range_input(key, placeholder):
+    """Two inputs sharing a data-daterange key become one range picker."""
+    return forms.DateInput(
+        format="%Y-%m-%d",
+        attrs={
+            "type": "date", "data-daterange": key,
+            "data-placeholder": placeholder, "data-presets": "none",
+        },
+    )
+
+
+class DailyListFilterForm(StyledFormMixin, forms.Form):
+    """Narrow the Daily list to one day, or a from/to range (plan step N12).
+
+    Precedence in the view: a single ``on`` date wins; else a ``from``/``to``
+    range; else the month selectors. Blank means "use the month".
+    """
+
+    on = forms.DateField(
+        required=False, label="On date", widget=date_widget("Any day"),
+        help_text="Show just this day.",
+    )
+    date_from = forms.DateField(
+        required=False, label="From", widget=_range_input("att-range", "From"),
+    )
+    date_to = forms.DateField(
+        required=False, label="To", widget=_range_input("att-range", "To"),
+    )
+
+    #: A range wider than this is refused: the whole span is recalculated on
+    #: read, so an unbounded range would be a heavy query (mirrors Re-check).
+    MAX_SPAN_DAYS = 366
+
+    def clean(self):
+        cleaned = super().clean()
+        start, end = cleaned.get("date_from"), cleaned.get("date_to")
+        if start and end:
+            if end < start:
+                self.add_error("date_to", "The end date is before the start date.")
+            elif (end - start).days + 1 > self.MAX_SPAN_DAYS:
+                self.add_error("date_to", "Choose a range of at most 366 days.")
+        return cleaned
+
+    def window(self):
+        """The (start, end) the filter selects, or None to use the month."""
+        on = self.cleaned_data.get("on")
+        if on:
+            return on, on
+        start, end = self.cleaned_data.get("date_from"), self.cleaned_data.get("date_to")
+        if start or end:
+            start = start or end
+            end = end or start
+            return start, end
+        return None

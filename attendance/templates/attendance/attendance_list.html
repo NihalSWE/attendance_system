@@ -33,7 +33,7 @@
     <div class="card">
         <div class="card__head">
             <h2>
-                {{ month_name }} {{ year }}
+                {% if date_window %}{{ window_start|date:"j M Y" }}{% if window_start != window_end %} – {{ window_end|date:"j M Y" }}{% endif %}{% else %}{{ month_name }} {{ year }}{% endif %}
             </h2>
             <span class="badge badge--neutral">
                 {% if filtered %}{{ server_table.total }} of {% endif %}{{ month_total }} days
@@ -99,6 +99,18 @@
                     </option>
                 {% endfor %}
             </select>
+            <label class="sr-only" for="{{ date_filter.on.id_for_label }}">
+                On date
+            </label>
+            {{ date_filter.on }}
+            <label class="sr-only" for="{{ date_filter.date_from.id_for_label }}">
+                From
+            </label>
+            {{ date_filter.date_from }}
+            <label class="sr-only" for="{{ date_filter.date_to.id_for_label }}">
+                To
+            </label>
+            {{ date_filter.date_to }}
             <button class="btn btn--ghost" type="submit">
                 Apply
             </button>
@@ -108,6 +120,15 @@
                 </a>
             {% endif %}
         </form>
+        {% if date_filter.errors %}
+            <div class="alert alert--danger" role="alert">
+                {% for field in date_filter %}
+                    {% for error in field.errors %}
+                        {{ error }}
+                    {% endfor %}
+                {% endfor %}
+            </div>
+        {% endif %}
         {% if not page.object_list %}
             <div class="empty server-table-empty">
                 {% if filtered or server_table.query %}
