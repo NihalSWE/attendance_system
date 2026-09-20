@@ -459,3 +459,49 @@ class RemoveTestUserTests(Att2Case):
             self.assertEqual(body, "DATA DELETE USERINFO PIN=99999")
             with self.assertRaisesMessage(mapping.MappingError, "not measured"):
                 mapping.remove_users(actor=None, device=self.device, pins=["2"])
+
+
+class DeleteFormTrialTests(Att2Case):
+    """Finding the delete this firmware understands (2026-09-20).
+
+    ``DATA DELETE USERINFO PIN=99999`` was answered Return=0 on the client's
+    3A and the user stayed, so the candidates are tried one at a time.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.handshake()
+        self.reload()
+
+    def test_each_form_is_fixed_to_the_test_user(self):
+        from devices.services.commands import DELETE_FORMS, FORBIDDEN_DELETE_KEYS, TEST_USER_ID
+
+        for body, _ in DELETE_FORMS.values():
+            sent = body % TEST_USER_ID
+            self.assertIn(TEST_USER_ID, sent)
+            self.assertEqual(sent.count("="), 1)
+            for forbidden in FORBIDDEN_DELETE_KEYS:
+                self.assertNotIn(f"{forbidden}=", sent)
+
+    def test_one_form_is_queued_and_an_unknown_one_refused(self):
+        from devices.services.commands import queue_delete_trial
+
+        with use_company(self.company):
+            entry, error = queue_delete_trial(device=self.device, form="user_mixed")
+            self.assertEqual((entry["body"], error), ("DATA DELETE user Pin=99999", ""))
+            entry, error = queue_delete_trial(device=self.device, form="whatever")
+        self.assertIsNone(entry)
+        self.assertIn("Unknown", error)
+
+    def test_the_page_offers_the_forms_until_delete_is_measured(self):
+        from django.contrib.auth import get_user_model
+
+        from accounts.models import CompanyMembership
+
+        admin = get_user_model().objects.create_user(email="admin4@a.test")
+        CompanyMembership.all_objects.create(company=self.company, user=admin,
+                                             role="company_admin", status="active")
+        self.client.force_login(admin)
+        page = self.client.get(f"/devices/{self.device.public_id}/users/").content.decode()
+        self.assertIn("Which delete does this device understand?", page)
+        self.assertIn("DATA DELETE user Pin=99999", page)

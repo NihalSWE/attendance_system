@@ -336,3 +336,24 @@ def device_user_query(request, public_id):
             "next check-in; reload in a few seconds and compare what it reports.",
         )
     return redirect("devices:device_users", public_id=device.public_id)
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_delete_trial(request, public_id):
+    """Try one candidate delete form on the test user, to measure it."""
+    from devices.services import commands as command_service
+
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    entry, error = command_service.queue_delete_trial(
+        device=device, form=request.POST.get("form", ""), requested_by=request.user)
+    if error:
+        messages.error(request, error)
+    else:
+        messages.success(
+            request,
+            f"Sent “{entry['body']}”. When the device has taken it, press “Ask the device about "
+            f"user {command_service.TEST_USER_ID}”: if it reports nothing, this form works.",
+        )
+    return redirect("devices:device_users", public_id=device.public_id)

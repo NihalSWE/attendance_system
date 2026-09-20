@@ -540,6 +540,36 @@ def queue_user_delete(*, device, device_user_id, requested_by=None):
     return (entries[0] if entries else None), error
 
 
+#: Candidate delete forms for a dialect whose delete is not measured, tried
+#: one at a time on TEST_USER_ID and checked by reading the user back. The 3A
+#: answered the first with Return=0 and kept the user (2026-09-20) — "done"
+#: is not proof on this firmware. Each is fixed to the test user: no form here
+#: can ever name another number, and a uid-keyed delete (which wiped a 2A)
+#: is not among them.
+DELETE_FORMS = {
+    "userinfo_upper": ("DATA DELETE USERINFO PIN=%s", "USERINFO with PIN (tried, ignored)"),
+    "userinfo_mixed": ("DATA DELETE USERINFO Pin=%s", "USERINFO with Pin"),
+    "user_upper": ("DATA DELETE user PIN=%s", "user with PIN"),
+    "user_mixed": ("DATA DELETE user Pin=%s", "user with Pin (the 2A's form)"),
+    "fingertmp": ("DATA DELETE FINGERTMP PIN=%s", "the fingerprint only (FINGERTMP)"),
+    "biodata": ("DATA DELETE BIODATA Pin=%s", "the templates only (BIODATA)"),
+}
+
+
+def queue_delete_trial(*, device, form, requested_by=None):
+    """Send one candidate delete form for the test user, to measure it."""
+    shape = DELETE_FORMS.get(form)
+    if shape is None:
+        return None, "Unknown delete form."
+    body = shape[0] % TEST_USER_ID
+    for forbidden in FORBIDDEN_DELETE_KEYS:
+        if f"{forbidden}=" in body:
+            return None, "Refusing to send a delete that could clear the device."
+    entries, error = _queue_group(
+        device=device, commands=[(f"delete_trial:{form}", body)], requested_by=requested_by)
+    return (entries[0] if entries else None), error
+
+
 ROLE_PRIVILEGES = (0, 2, 6, 14)
 
 

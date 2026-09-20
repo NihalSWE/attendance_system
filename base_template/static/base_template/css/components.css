@@ -1449,3 +1449,23 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     gap: 10px;
     flex-wrap: wrap;
 }
+
+/* Measuring the one command a protocol has not proven (delete). */
+.delete-trial {
+    padding: 14px 16px;
+    border: 1px dashed var(--field);
+    border-radius: var(--r);
+    background: var(--surface-sunken);
+}
+.delete-trial__title {
+    margin: 0 0 6px;
+    font-size: 14px;
+}
+.delete-trial__form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 10px;
+}
+.delete-trial__form .select2-container { min-width: 320px; flex: 1; }

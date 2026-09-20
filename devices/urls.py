@@ -80,6 +80,8 @@ ui_urlpatterns = [
         mapping.device_users_import,
         name="device_users_import",
     ),
+    path("devices/<uuid:public_id>/users/delete-trial/", mapping.device_delete_trial,
+         name="device_delete_trial"),
     path("devices/<uuid:public_id>/users/ask/", mapping.device_user_query,
          name="device_user_query"),
     path("devices/<uuid:public_id>/users/progress/", mapping.device_job_progress,

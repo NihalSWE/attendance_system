@@ -613,6 +613,37 @@
                         </button>
                     </form>
                 {% endif %}
+                {% if delete_forms %}
+                    <div class="delete-trial">
+                        <h3 class="delete-trial__title">
+                            Which delete does this device understand?
+                        </h3>
+                        <p class="t-muted">
+                            Removing a user is the one command not proven on this protocol: the device
+                            answered “done” and kept the user. Try a form, then press
+                            <strong>Ask the device about user {{ test_user_id }}</strong> — when it reports
+                            nothing, that form works. Every one of these is fixed to user
+                            <span class="mono">{{ test_user_id }}</span> and can never name anybody else.
+                        </p>
+                        <form class="delete-trial__form" method="post"
+                              action="{% url 'devices:device_delete_trial' device.public_id %}">
+                            {% csrf_token %}
+                            <label class="sr-only" for="delete-form">
+                                Delete form
+                            </label>
+                            <select class="select js-select2" id="delete-form" name="form">
+                                {% for option in delete_forms %}
+                                    <option value="{{ option.key }}" title="{{ option.body }}">
+                                        {{ option.body }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <button class="btn btn--ghost" type="submit">
+                                Try this form
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
             </div>
         </div>
     {% endif %}

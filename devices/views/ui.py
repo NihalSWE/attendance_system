@@ -998,6 +998,13 @@ def device_users(request, public_id):
         "test_user_on_device": any(r["pin"] == TEST_USER_ID for r in full_roster),
         "trial_writes": trial_writes,
         "can_read_back": protocol.dialect(device) == protocol.ATT2,
+        # The last unmeasured command on this protocol: candidate forms, each
+        # fixed to the test user, tried one at a time and checked by read-back.
+        "delete_forms": (
+            [{"key": key, "label": label, "body": body % command_service.TEST_USER_ID}
+             for key, (body, label) in command_service.DELETE_FORMS.items()]
+            if not command_service.measured(device, "delete") else []
+        ),
         "test_user_row": next((r for r in full_roster if r["pin"] == TEST_USER_ID), None),
         "recent_results": recent_results(device),
         # Copy to another device: the company's other devices of this model.
