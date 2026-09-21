@@ -122,7 +122,6 @@ def update_employee_details(*, actor, company_id, employee_id, values):
     return employee
 
 
-@transaction.atomic
 def _on_the_day(starts, began, company):
     """``began`` when ``starts`` falls earlier on the same local day; else ``starts``.
 
@@ -141,6 +140,7 @@ def _on_the_day(starts, began, company):
     return starts
 
 
+@transaction.atomic
 def change_placement(*, actor, company_id, employee_id, values):
     """New branch / department / designation / code from a date."""
     membership, employee, current, _ = get_employee_for_edit(
