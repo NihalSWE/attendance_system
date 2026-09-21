@@ -182,7 +182,7 @@ def department_designations(request):
 CONSTRAINT_MESSAGES = {
     "excl_employee_code_overlap_per_company": (
         "employee_code",
-        "That employee code is already held by someone whose placement has not "
+        "That EMP-ID is already held by someone whose placement has not "
         "ended. Codes can be reused once the previous placement closes — use a "
         "different code, or end the earlier one first.",
     ),

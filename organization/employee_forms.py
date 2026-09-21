@@ -29,7 +29,7 @@ class EmployeeCreateForm(StyledFormMixin, forms.Form):
     last_name = forms.CharField(max_length=150, required=False, label="Last name")
     employee_code = forms.CharField(
         max_length=64,
-        label="Employee code",
+        label="EMP-ID",
         help_text=(
             "Your own reference for this person. It can be reused by someone "
             "else after this person's placement ends, but not while it is open."

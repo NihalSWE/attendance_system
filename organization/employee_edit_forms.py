@@ -52,7 +52,7 @@ class PlacementForm(StyledFormMixin, forms.Form):
         queryset=Designation.all_objects.none(), label="Designation",
         help_text="Only designations assigned to the chosen department are listed.",
     )
-    employee_code = forms.CharField(max_length=64, label="Employee code")
+    employee_code = forms.CharField(max_length=64, label="EMP-ID")
     placement_from = forms.DateField(
         label="From",
         help_text=(
