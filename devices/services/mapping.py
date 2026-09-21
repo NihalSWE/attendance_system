@@ -577,6 +577,20 @@ def _send(actor, employees, result, only_device=None):
 
 SUPER_ADMIN = "14"
 
+#: Why a device is left for a person to clear by hand.
+NO_DELETE = "its protocol has no measured delete yet"
+LAST_ADMIN = ("the device's only super admin — removing them would lock everyone out of the "
+              "terminal's menu. Make someone else a super admin first.")
+
+
+def super_admins(roster):
+    """The numbers holding super admin on a terminal, from ``_on_device`` rows.
+
+    One place, because two callers must agree: removing the last one leaves a
+    terminal whose menu nobody can open, and only a factory reset gets it back.
+    """
+    return {pin for pin, row in roster.items() if str(row.get("privilege_code")) == SUPER_ADMIN}
+
 
 @dataclass
 class RemoveResult:
@@ -607,7 +621,7 @@ def remove_users(*, actor, device, pins):
     with _roster_memo():
         roster = _on_device(device)
         wanted = [p for p in dict.fromkeys(str(p) for p in pins)]
-        admins = {pin for pin, row in roster.items() if str(row.get("privilege_code")) == SUPER_ADMIN}
+        admins = super_admins(roster)
         result = RemoveResult()
         for pin in wanted:
             row = roster.get(pin)
@@ -615,11 +629,7 @@ def remove_users(*, actor, device, pins):
                 result.skipped.append((pin, "not on this device"))
                 continue
             if pin in admins and len(admins) <= 1:
-                result.skipped.append((
-                    pin,
-                    "the device's only super admin — removing them would lock everyone out of "
-                    "the terminal's menu. Make someone else a super admin first.",
-                ))
+                result.skipped.append((pin, LAST_ADMIN))
                 continue
             entry, error = commands.queue_user_delete(
                 device=device, device_user_id=pin, requested_by=actor)
@@ -645,8 +655,13 @@ def remove_on_leaving(*, actor, employee, at=None):
     be put back. A device whose protocol has no measured delete (the 3A) is
     listed for a human to do on the terminal instead of pretending.
 
+    **The last super admin is never removed**, exactly as in ``remove_users``:
+    a leaver who is the only administrator of a terminal is left on it and
+    named, because deleting them leaves a menu nobody can open (Nihal found
+    this path skipped the guard, 2026-09-21).
+
     Returns ``(queued, manual)``: the devices it was sent to, and the
-    ``(device, pin)`` pairs that must be done by hand.
+    ``(device, pin, reason)`` triples that must be done by hand.
     """
     at = at or timezone.now()
     queued, manual = [], []
@@ -656,28 +671,39 @@ def remove_on_leaving(*, actor, employee, at=None):
         .select_related("device", "device__branch").order_by("device__name")
     )
     seen = set()
-    for enrollment in rows:
-        key = (enrollment.device_id, enrollment.device_user_id)
-        if key in seen:
-            continue
-        seen.add(key)
-        device = enrollment.device
-        if device.status == BiometricDevice.Status.RETIRED:
-            continue
-        if not commands.measured(device, "delete"):
-            manual.append((device, enrollment.device_user_id))
-            continue
-        entry, error = commands.queue_user_delete(
-            device=device, device_user_id=enrollment.device_user_id, requested_by=actor)
-        if entry is None:
-            manual.append((device, enrollment.device_user_id))
-            continue
-        queued.append((device, enrollment.device_user_id))
-    if queued:
-        _audit(actor, queued[0][0], "device.users_removed_on_leaving", employee, {
+    with _roster_memo():
+        for enrollment in rows:
+            key = (enrollment.device_id, enrollment.device_user_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            device, pin = enrollment.device, enrollment.device_user_id
+            if device.status == BiometricDevice.Status.RETIRED:
+                continue
+            if not commands.measured(device, "delete"):
+                manual.append((device, pin, NO_DELETE))
+                continue
+            roster = _on_device(device)
+            # An empty roster means the device has never sent its users, not
+            # that it holds nobody: only judge what it has actually reported.
+            if roster and pin not in roster:
+                continue  # already gone from the terminal; nothing to send
+            admins = super_admins(roster)
+            if pin in admins and len(admins) <= 1:
+                manual.append((device, pin, LAST_ADMIN))
+                continue
+            entry, error = commands.queue_user_delete(
+                device=device, device_user_id=pin, requested_by=actor)
+            if entry is None:
+                manual.append((device, pin, error or NO_DELETE))
+                continue
+            queued.append((device, pin))
+    if queued or manual:
+        _audit(actor, queued[0][0] if queued else manual[0][0],
+               "device.users_removed_on_leaving", employee, {
             "employee_id": employee.pk,
             "removed": [f"{d.serial_number}:{pin}" for d, pin in queued],
-            "by_hand": [f"{d.serial_number}:{pin}" for d, pin in manual],
+            "by_hand": [f"{d.serial_number}:{pin}" for d, pin, _ in manual],
         })
     return queued, manual
 

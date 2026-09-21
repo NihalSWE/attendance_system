@@ -395,7 +395,8 @@ def end_employment(*, actor, company_id, employee_id, last_day, status, reason,
                     actor=actor, employee=employee)
                 summary["devices_cleared"] = [device.name for device, _ in queued]
                 summary["devices_by_hand"] = [
-                    {"device": device.name, "pin": pin} for device, pin in by_hand]
+                    {"device": device.name, "pin": pin, "reason": reason}
+                    for device, pin, reason in by_hand]
 
             record_company_event(
                 actor=actor, membership=membership, company=company,

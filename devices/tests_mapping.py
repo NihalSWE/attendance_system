@@ -588,7 +588,34 @@ class LeaverRemovalTests(MappingCase):
             self.device.save()
             queued, by_hand = mapping.remove_on_leaving(actor=self.admin, employee=self.moin)
         self.assertEqual([d.name for d, _ in queued], ["Back Door"])
-        self.assertEqual([(d.name, pin) for d, pin in by_hand], [("Main Entrance", "445900")])
+        self.assertEqual([(d.name, pin) for d, pin, _ in by_hand], [("Main Entrance", "445900")])
+        self.assertEqual(by_hand[0][2], mapping.NO_DELETE)
+        self.assertNotIn("delete_user:445900", self.outbox(self.device))
+
+    def test_the_only_super_admin_is_kept_and_named(self):
+        """A leaver who is a terminal's only admin stays on it.
+
+        Deleting them leaves a menu nobody can open, and only a factory reset
+        gets it back — the same guard ``remove_users`` has. Ajay (445962) is
+        privilege 14 on Main Entrance and the only one.
+        """
+        with use_company(self.company):
+            mapping.map_employee(actor=self.admin, device=self.device, employee=self.ajay,
+                                 upload=False)
+            queued, by_hand = mapping.remove_on_leaving(actor=self.admin, employee=self.ajay)
+        self.assertEqual(queued, [])
+        self.assertEqual([(d.name, pin) for d, pin, _ in by_hand], [("Main Entrance", "445962")])
+        self.assertEqual(by_hand[0][2], mapping.LAST_ADMIN)
+        self.assertNotIn("delete_user:445962", self.outbox(self.device))
+
+    def test_someone_already_gone_from_the_terminal_is_not_sent_a_delete(self):
+        """The terminal reported them removed: nothing left to send it."""
+        kept = [line for line in USERS.splitlines() if "pin=445900" not in line]
+        self.upload("\n".join(kept) + "\n", cmdid="2")
+        with use_company(self.company):
+            queued, by_hand = mapping.remove_on_leaving(actor=self.admin, employee=self.moin)
+        self.assertEqual([d.name for d, _ in queued], ["Back Door"])
+        self.assertEqual(by_hand, [])
         self.assertNotIn("delete_user:445900", self.outbox(self.device))
 
     def test_their_saved_fingerprint_and_face_are_kept(self):

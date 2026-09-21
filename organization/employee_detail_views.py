@@ -98,8 +98,9 @@ def employee_end(request, pk):
             if summary["devices_by_hand"]:
                 # Not pretending: these terminals have no proven delete, so a
                 # person must do it there or the leaver still opens the door.
-                messages.warning(request, "Delete them on the terminal itself: " + ", ".join(
-                    f"{item['device']} (user {item['pin']})" for item in summary["devices_by_hand"]))
+                messages.warning(request, "Delete them on the terminal itself: " + "; ".join(
+                    f"{item['device']} (user {item['pin']}) — {item['reason']}"
+                    for item in summary["devices_by_hand"]))
             if not is_company_wide(page["membership"]):
                 # Once ended they are placed nowhere, so no longer in a branch
                 # this login looks after; their page stays with the company.
