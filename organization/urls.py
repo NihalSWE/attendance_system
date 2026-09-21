@@ -64,7 +64,7 @@ urlpatterns = [
         name="employee_import_confirm",
     ),
     path(
-        "employees/import/demo.csv",
+        "employees/import/demo/",
         import_views.employee_import_demo,
         name="employee_import_demo",
     ),

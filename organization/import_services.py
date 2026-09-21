@@ -401,3 +401,29 @@ def demo_csv():
         writer.writerow(row)
     # utf-8-sig so Excel opens Bangla and other non-English names correctly.
     return buffer.getvalue().encode("utf-8-sig")
+
+
+def demo_xlsx():
+    """The demo file as an Excel workbook: same headings, same people.
+
+    Employee IDs are written as text, so Excel shows 445961 rather than turning
+    a long one into 4.46E+05 - and the parser reads text or numbers alike.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Employees"
+    sheet.append(HEADINGS)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+    for code, name in DEMO_ROWS:
+        sheet.append([code, name])
+    for row in sheet.iter_rows(min_row=2, max_col=1):
+        row[0].number_format = "@"
+    sheet.column_dimensions["A"].width = 16
+    sheet.column_dimensions["B"].width = 32
+    buffer = io.BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()

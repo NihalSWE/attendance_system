@@ -79,6 +79,26 @@ class DemoFileTests(ImportCase):
         self.assertEqual(len(rows), len(import_services.DEMO_ROWS))
         self.assertEqual((rows[0]["employee_id"], rows[0]["name"]), ("445961", "Sajal Ahmed"))
 
+    def test_the_excel_demo_file_round_trips_through_the_parser(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("organization:employee_import_demo") + "?format=xlsx")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("spreadsheetml", page["Content-Type"])
+        self.assertIn("employee-import-demo.xlsx", page["Content-Disposition"])
+        rows = import_services.read_file(SimpleUploadedFile("demo.xlsx", page.content))
+        # Same people as the CSV one, in the same order, read the same way.
+        csv_rows = import_services.read_file(
+            SimpleUploadedFile("demo.csv", import_services.demo_csv()))
+        self.assertEqual([(r["employee_id"], r["name"]) for r in rows],
+                         [(r["employee_id"], r["name"]) for r in csv_rows])
+        self.assertEqual(len(rows), len(import_services.DEMO_ROWS))
+
+    def test_the_page_offers_both_demo_files(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(self.url)
+        self.assertContains(page, "Download demo file (CSV)")
+        self.assertContains(page, "Download demo file (Excel)")
+
     def test_a_branch_manager_can_download_it_too(self):
         self.client.force_login(self.manager)
         page = self.client.get(reverse("organization:employee_import_demo"))

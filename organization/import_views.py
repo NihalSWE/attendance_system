@@ -135,11 +135,19 @@ def employee_import_confirm(request):
 @login_required
 @require_http_methods(["GET"])
 def employee_import_demo(request):
-    """The demo CSV: the format the import accepts, with made-up people."""
+    """The demo file, CSV or (``?format=xlsx``) Excel: the format the import
+    accepts, with made-up people."""
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
     import_services.import_scope(request.user, company_id)
+    if request.GET.get("format") == "xlsx":
+        response = HttpResponse(
+            import_services.demo_xlsx(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = 'attachment; filename="employee-import-demo.xlsx"'
+        return response
     response = HttpResponse(import_services.demo_csv(), content_type="text/csv; charset=utf-8")
     response["Content-Disposition"] = 'attachment; filename="employee-import-demo.csv"'
     return response
