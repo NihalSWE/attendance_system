@@ -81,7 +81,10 @@ class Employee(TenantOwned, ActorTracked):
         choices=EmploymentStatus.choices,
         default=EmploymentStatus.ACTIVE,
     )
-    # FileField (not ImageField) keeps Pillow out of the dependency set.
+    # FileField, not ImageField: nothing here reads the image's dimensions, so
+    # there is no upload-time decode of whatever a browser sent. (Pillow is in
+    # the dependency set since 2026-09-21, pulled in by reportlab for PDF
+    # downloads; that is not a reason to start decoding uploads.)
     photo = models.FileField(upload_to="employee_photos/", null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
