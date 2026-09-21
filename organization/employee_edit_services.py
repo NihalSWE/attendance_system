@@ -35,6 +35,8 @@ from organization.services import (
 )
 
 DETAIL_FIELDS = ("first_name", "last_name", "work_email", "phone", "joining_date")
+#: The ones the attendance terminals display, so a change has to reach them.
+NAME_FIELDS = ("first_name", "last_name")
 
 
 def _open_row(model, employee):
@@ -119,6 +121,14 @@ def update_employee_details(*, actor, company_id, employee_id, values):
             action="employee.details_updated", obj=employee, before=before,
             after={f: str(getattr(employee, f) or "") for f in DETAIL_FIELDS},
         )
+        # The terminals show the name they were given, and keep showing the
+        # old one until they are told. Renaming someone here sends it to every
+        # device they are on; the device keys them by number, so the record is
+        # updated in place and their fingerprint and face are untouched.
+        if any(before[f] != str(getattr(employee, f) or "") for f in NAME_FIELDS):
+            from devices.services import mapping as device_mapping
+
+            device_mapping.resend_identity(actor=actor, employee=employee)
     return employee
 
 

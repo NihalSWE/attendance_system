@@ -647,3 +647,91 @@ class LeaverRemovalTests(MappingCase):
             self.assertEqual(
                 [(d.name, pin) for d, pin in mapping.still_on_devices(self.moin)],
                 [("Back Door", "445900"), ("Main Entrance", "445900")])
+
+
+class ResendIdentityTests(MappingCase):
+    """A changed name, card or role reaches the terminals (Ajay, 2026-09-21).
+
+    The device shows the name it was given and keeps showing it until told
+    otherwise. Writing the record again updates the person in place — the
+    device keys them by number — so nothing is duplicated and the fingerprint
+    and face already on the terminal are untouched.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.upload(USERS)
+        # upload=False: the mapping itself writes nothing, so what the outbox
+        # holds afterwards is what the re-send put there and nothing else.
+        with use_company(self.company):
+            mapping.map_employee(actor=self.admin, device=self.device, employee=self.moin,
+                                 upload=False)
+            mapping.map_employee(actor=self.admin, device=self.second, employee=self.moin,
+                                 upload=False)
+
+    def body(self, device, key):
+        return DeviceOutboxCommand.all_objects.get(device=device, key=key).body
+
+    def test_it_goes_to_every_device_they_are_on(self):
+        with use_company(self.company):
+            result = mapping.resend_identity(actor=self.admin, employee=self.moin)
+        self.assertEqual(sorted(d.name for d, _ in result.sent), ["Back Door", "Main Entrance"])
+        self.assertEqual(result.failed, [])
+        self.assertIn("push_user:445900", self.outbox(self.device))
+
+    def test_the_name_goes_and_no_template_does(self):
+        with use_company(self.company):
+            mapping.resend_identity(actor=self.admin, employee=self.moin)
+        body = self.body(self.device, "push_user:445900")
+        self.assertIn("Name=Moin", body)
+        self.assertIn("Pin=445900", body)
+        self.assertNotIn("Tmp=", body)
+
+    def test_an_administrator_is_not_demoted_by_a_name_change(self):
+        """445962 is privilege 14 on the terminal; re-sending must keep it.
+
+        The enrollment records the role the device reported when the mapping
+        was made, so the software does not overwrite it with its own default.
+        """
+        with use_company(self.company):
+            enrollment = mapping.map_employee(
+                actor=self.admin, device=self.device, employee=self.ajay, upload=False).enrollment
+            self.assertEqual(enrollment.device_privilege,
+                             DeviceEnrollment.Privilege.DEVICE_ADMIN)
+            mapping.resend_identity(actor=self.admin, employee=self.ajay)
+        self.assertIn("Privilege=14", self.body(self.device, "push_user:445962"))
+
+    def test_a_role_this_software_has_no_word_for_is_left_alone(self):
+        """An enroller (2) is kept as OTHER, and re-sent as what the device holds."""
+        self.upload(
+            "user uid=14\tcardno=8868366\tpin=445900\tpassword=\tgroup=1\tstarttime=0"
+            "\tendtime=0\tname=Moin\tprivilege=2\tdisable=0\tverify=0\n", cmdid="2")
+        with use_company(self.company):
+            enrollment = mapping.live_enrollment(self.device, self.moin)
+            enrollment.device_privilege = DeviceEnrollment.Privilege.OTHER
+            enrollment.save(update_fields=["device_privilege"])
+            mapping.resend_identity(actor=self.admin, employee=self.moin)
+        self.assertIn("Privilege=2", self.body(self.device, "push_user:445900"))
+
+    def test_only_the_named_device_when_one_is_given(self):
+        with use_company(self.company):
+            result = mapping.resend_identity(
+                actor=self.admin, employee=self.moin, only_device=self.device)
+        self.assertEqual([d.name for d, _ in result.sent], ["Main Entrance"])
+        self.assertNotIn("push_user:445900", self.outbox(self.second))
+
+    def test_renaming_an_employee_sends_it_by_itself(self):
+        from organization.employee_edit_services import update_employee_details
+
+        with use_company(self.company):
+            update_employee_details(actor=self.admin, company_id=self.company.pk,
+                                    employee_id=self.moin.pk, values={"first_name": "Moinul"})
+        self.assertIn("Name=Moinul", self.body(self.device, "push_user:445900"))
+
+    def test_changing_something_else_sends_nothing(self):
+        from organization.employee_edit_services import update_employee_details
+
+        with use_company(self.company):
+            update_employee_details(actor=self.admin, company_id=self.company.pk,
+                                    employee_id=self.moin.pk, values={"phone": "01711000000"})
+        self.assertNotIn("push_user:445900", self.outbox(self.device))

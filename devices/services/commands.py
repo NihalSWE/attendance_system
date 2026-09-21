@@ -495,7 +495,7 @@ def _user_body(device, device_user_id, name, card_number, privilege):
     from devices.services import protocol
 
     if protocol.dialect(device) == protocol.ATT2:
-        sample = _att2_user_defaults(device)
+        sample = _att2_user_defaults(device, device_user_id)
         return build_user_update_att2(
             device_user_id=device_user_id, name=name, card_number=card_number,
             privilege=privilege, group=sample["group"], timezone_code=sample["timezone_code"])
@@ -671,15 +671,30 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
     return _queue_group(device=device, commands=commands, requested_by=requested_by)
 
 
-def _att2_user_defaults(device):
-    """The group and time zone this device's own users carry.
+def _att2_user_defaults(device, device_user_id=None):
+    """The group and time zone to write for a user on a 2.x device.
+
+    ``device_user_id``'s own group and time zone when the device has reported
+    them, so re-sending a changed name or card does not quietly move that
+    person to the device's usual time zone — a wrong time zone is how a
+    recognised person still gets refused at the door. Otherwise, what this
+    device's other users carry.
 
     Read from the raw uploads, not the roster, so this works outside a company
     context (and does not rebuild the whole roster for one lookup).
     """
     from devices.services.device_roster import USER_PREFIXES, _rows
 
-    for fields in _rows(device, USER_PREFIXES):
+    rows = list(_rows(device, USER_PREFIXES))
+    if device_user_id is not None:
+        own = [f for f in rows if (f.get("pin") or "").strip() == str(device_user_id)]
+        # Latest upload last: their current group and time zone, not their first.
+        for fields in reversed(own):
+            group = (fields.get("grp") or fields.get("group") or "").strip()
+            tz = (fields.get("tz") or "").strip()
+            if group or tz:
+                return {"group": group or "1", "timezone_code": tz or DEFAULT_TZ}
+    for fields in rows:
         group, tz = (fields.get("grp") or fields.get("group") or "").strip(), (fields.get("tz") or "").strip()
         if group or tz:
             return {"group": group or "1", "timezone_code": tz or DEFAULT_TZ}

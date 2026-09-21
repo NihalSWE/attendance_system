@@ -178,6 +178,27 @@ def _source_user(device, pin):
     return removed
 
 
+#: The terminal's own number for a super admin: the role that opens its menu.
+SUPER_ADMIN = "14"
+
+
+def privilege_of(row):
+    """The enrollment privilege for a roster row: what the terminal reports.
+
+    Recorded when the mapping is made, so the software knows an administrator
+    is one. Without it every enrollment carries the model default, "normal
+    user", and re-sending a changed name would quietly strip a terminal's
+    administrator of the menu. A role this software has no word for (an
+    enroller, a manager) is kept as OTHER and left alone.
+    """
+    code = str((row or {}).get("privilege_code") or "").strip()
+    if code == SUPER_ADMIN:
+        return DeviceEnrollment.Privilege.DEVICE_ADMIN
+    if code in ("", "0"):
+        return DeviceEnrollment.Privilege.NORMAL_USER
+    return DeviceEnrollment.Privilege.OTHER
+
+
 def copy_to_device(*, actor, device, employee, pin, role=None):
     """Write the employee to the device with what the company holds for them.
 
@@ -244,6 +265,7 @@ def map_employee(*, actor, device, employee, start_day=None, attendance_enabled=
         enrollment = DeviceEnrollment(
             device=device, employee=employee, device_user_id=pin,
             card_number=(on_device or {}).get("card_number") or "",
+            device_privilege=privilege_of(on_device),
             attendance_enabled=attendance_enabled, assigned_device_authorized=assigned,
             effective_from=start,
             enrollment_status=(DeviceEnrollment.EnrollmentStatus.SYNCED if on_device
@@ -575,8 +597,6 @@ def _send(actor, employees, result, only_device=None):
     return result
 
 
-SUPER_ADMIN = "14"
-
 #: Why a device is left for a person to clear by hand.
 NO_DELETE = "its protocol has no measured delete yet"
 LAST_ADMIN = ("the device's only super admin — removing them would lock everyone out of the "
@@ -706,6 +726,80 @@ def remove_on_leaving(*, actor, employee, at=None):
             "by_hand": [f"{d.serial_number}:{pin}" for d, pin, _ in manual],
         })
     return queued, manual
+
+
+#: What an enrollment's privilege means to the terminal. ``OTHER`` is
+#: deliberately absent: it means "whatever the device already has", so a role
+#: the software has no word for is never overwritten by a name change.
+PRIVILEGE_CODES = {
+    DeviceEnrollment.Privilege.NORMAL_USER: 0,
+    DeviceEnrollment.Privilege.DEVICE_ADMIN: int(SUPER_ADMIN),
+}
+
+
+@dataclass
+class ResendResult:
+    sent: list = field(default_factory=list)      # (device, pin)
+    failed: list = field(default_factory=list)    # (device, pin, reason)
+
+
+def device_role(enrollment, device):
+    """The privilege number to write for this enrollment.
+
+    The software's own word for it when it has one; otherwise what the device
+    last reported for that number, so re-sending a person's name never
+    silently demotes an administrator to a normal user.
+    """
+    code = PRIVILEGE_CODES.get(enrollment.device_privilege)
+    if code is not None:
+        return code
+    reported = (_on_device(device).get(enrollment.device_user_id) or {}).get("privilege_code")
+    reported = int(reported) if str(reported or "").isdigit() else 0
+    return reported if reported in commands.ROLE_PRIVILEGES else 0
+
+
+def resend_identity(*, actor, employee, only_device=None):
+    """Send a person's number, name, card and role to the terminals again.
+
+    For a changed name, card or role: the device keys people on the number, so
+    writing the record again updates the person in place — their fingerprint
+    and face are untouched, and nothing is duplicated. Templates are not
+    re-sent; the device already has them.
+
+    A device whose protocol has no measured user write is reported, not
+    pretended at. Returns a ResendResult.
+    """
+    result = ResendResult()
+    rows = (
+        DeviceEnrollment.all_objects.filter(employee=employee)
+        .exclude(enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED)
+        .select_related("device").order_by("device__name")
+    )
+    seen = set()
+    with _roster_memo():
+        for enrollment in rows:
+            device, pin = enrollment.device, enrollment.device_user_id
+            if only_device is not None and device.pk != only_device.pk:
+                continue
+            if device.status == BiometricDevice.Status.RETIRED or (device.pk, pin) in seen:
+                continue
+            seen.add((device.pk, pin))
+            entry, error = commands.queue_user_push(
+                device=device, device_user_id=pin, name=employee.full_name,
+                card_number=enrollment.card_number,
+                privilege=device_role(enrollment, device), requested_by=actor,
+            )
+            if entry is None:
+                result.failed.append((device, pin, error))
+                continue
+            result.sent.append((device, pin))
+    if result.sent:
+        _audit(actor, result.sent[0][0], "device.identity_resent", employee, {
+            "employee_id": employee.pk,
+            "sent": [f"{d.serial_number}:{pin}" for d, pin in result.sent],
+            "failed": [f"{d.serial_number}:{pin}" for d, pin, _ in result.failed],
+        })
+    return result
 
 
 def still_on_devices(employee, at=None):

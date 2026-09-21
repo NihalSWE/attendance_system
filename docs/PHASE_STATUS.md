@@ -3947,3 +3947,52 @@ this way are fixed too, because the rule is on the edit side.
 8 tests in `organization/tests_same_day_edits.py`, driving the real device
 import and the real Edit employee page — they failed with exactly those two
 messages before the fix.
+
+## A changed name, card or role reaches the terminals — 2026-09-21
+
+The device shows the name it was given at enrolment and keeps showing it
+until something tells it otherwise. Renaming somebody in the software left
+the old name on every terminal, and there was no way at all to change their
+card or their role from here.
+
+`devices.services.mapping.resend_identity(actor, employee, only_device=None)`
+writes the record again — number, name, card, role — to every device the
+person is live on. The device keys people by number, so this updates them in
+place: nothing is duplicated, and the fingerprint and face already on the
+terminal are untouched. Templates are deliberately not re-sent; the device
+already has them. A protocol with no measured user write is reported, not
+pretended at.
+
+Three ways in:
+
+- **Renaming an employee** (Edit employee → details) sends it by itself.
+  Changing their phone or email does not.
+- **Edit enrollment** now carries **Card number** and **Role on the terminal**,
+  and saving either sends the record. This is also the only way to make
+  somebody a super admin from the software — which is what the last-super-admin
+  guard on leaver removal tells an administrator to do.
+- **Push user record** on the Device users page goes through the same service.
+
+Two traps this closed, both of which would have been silent:
+
+- The old push button sent name and card with `privilege` left at its default,
+  so pushing a terminal administrator's record demoted them to a normal user.
+  The privilege is part of the same write; it now always goes with it.
+- `DeviceEnrollment.device_privilege` defaulted to "normal user" and was never
+  filled in from the device, so the software believed every administrator was
+  an ordinary user. Mapping now records what the terminal reports
+  (`mapping.privilege_of`): 14 → Device admin, 0 → Normal user, anything else
+  (an enroller, a manager) → Other, which means "leave whatever the device
+  holds" and is never overwritten.
+
+On 2.x the user row carries its own `Grp` and `TZ`, so `_att2_user_defaults`
+now prefers **that person's** group and time zone over the device's usual ones.
+Re-sending a changed name with the wrong time zone is exactly how a recognised
+person starts being refused at the door ("Invalid time period", measured on the
+2A on 2026-09-19).
+
+Tests: 7 in `devices/tests_mapping.py::ResendIdentityTests` (both devices, the
+name going without a template, an administrator not demoted, an unnamed role
+left alone, one named device, renaming sending by itself, and another field
+sending nothing) and one in `devices/tests_att2.py` that fails if the person's
+own group and time zone are not used.

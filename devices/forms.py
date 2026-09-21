@@ -329,12 +329,14 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = DeviceEnrollment
         fields = (
-            "device", "employee", "device_user_id", "device_privilege",
+            "device", "employee", "device_user_id", "card_number", "device_privilege",
             "attendance_enabled", "assigned_device_authorized",
             "effective_from", "effective_to",
         )
         labels = {
             "device_user_id": "Device user number",
+            "card_number": "Card number",
+            "device_privilege": "Role on the terminal",
             "attendance_enabled": "Attendance enabled",
             "assigned_device_authorized": "Authorised for assigned-devices mode",
         }
@@ -342,6 +344,14 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
             "device_user_id": (
                 "The user number stored on the device itself, exactly as the "
                 "device reports it."
+            ),
+            "card_number": (
+                "Digits only, as printed on the card. Saving sends it to the "
+                "terminals this person is on."
+            ),
+            "device_privilege": (
+                "Device admin can open the terminal's own menu. “Other” "
+                "leaves whatever role the device already holds for them."
             ),
             "attendance_enabled": (
                 "Master switch. When off, punches from this enrollment are "
@@ -386,6 +396,13 @@ class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):
         end = data.get("effective_to")
         if start and end and end <= start:
             self.add_error("effective_to", "The end must be after the start.")
+
+        # The terminal stores a card as a number; letters or punctuation are
+        # accepted here and then silently dropped there.
+        card = (data.get("card_number") or "").strip()
+        if card and not card.isdigit():
+            self.add_error("card_number", "The card number must be digits only.")
+        data["card_number"] = card
 
         device = data.get("device")
         user_id = (data.get("device_user_id") or "").strip()

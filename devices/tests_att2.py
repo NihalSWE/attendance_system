@@ -187,6 +187,23 @@ class CommandTests(Att2Case):
         self.assertIsNone(entry)
         self.assertIn("not measured", error)
 
+    def test_a_resent_record_keeps_that_person_own_group_and_time_zone(self):
+        """Re-sending a changed name must not move them to another time zone.
+
+        On 2.x the user row carries its own Grp and TZ. Writing the record
+        again with the device's *usual* values is how a recognised person
+        starts being refused for a time period nobody meant to change. RYHAN
+        (PIN 2) is put in another group and time zone than the first user the
+        device reported, so taking the first row's values would fail here.
+        """
+        self.post("OPERLOG", USERS.replace(
+            "PIN=2\tName=RYHAN\tPri=0\tPasswd=\tCard=\tGrp=1\tTZ=0000000100000000",
+            "PIN=2\tName=RYHAN\tPri=0\tPasswd=\tCard=\tGrp=3\tTZ=0000000200000000"))
+        entry, error = queue_user_push(device=self.device, device_user_id="2", name="RYHAN KABIR")
+        self.assertEqual(error, "")
+        self.assertIn("Name=RYHAN KABIR", entry["body"])
+        self.assertIn("\tGrp=3\tTZ=0000000200000000", entry["body"])
+
     def test_history_is_replayed_without_counting_twice(self):
         self.post("ATTLOG", ATTLOG, stamp="Stamp")
         self.post("ATTLOG", "1\t2026-09-14 18:24:18\t255\t1\t0\t0\t0\t0\t0\t0\t\n" + ATTLOG, stamp="Stamp")

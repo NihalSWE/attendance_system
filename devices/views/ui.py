@@ -708,6 +708,8 @@ def enrollment_edit(request, pk):
         "attendance_enabled": enrollment.attendance_enabled,
         "assigned_device_authorized": enrollment.assigned_device_authorized,
         "device_user_id": enrollment.device_user_id,
+        "card_number": enrollment.card_number,
+        "device_privilege": enrollment.device_privilege,
         "effective_from": enrollment.effective_from.isoformat(),
         "effective_to": (
             enrollment.effective_to.isoformat() if enrollment.effective_to else None
@@ -730,6 +732,8 @@ def enrollment_edit(request, pk):
             "attendance_enabled": enrollment.attendance_enabled,
             "assigned_device_authorized": enrollment.assigned_device_authorized,
             "device_user_id": enrollment.device_user_id,
+            "card_number": enrollment.card_number,
+            "device_privilege": enrollment.device_privilege,
             "effective_from": enrollment.effective_from.isoformat(),
             "effective_to": (
                 enrollment.effective_to.isoformat()
@@ -737,7 +741,21 @@ def enrollment_edit(request, pk):
                 else None
             ),
         })
-        messages.success(request, "Enrollment updated.")
+        # A card or a role the terminal does not know about is no use: send
+        # the record again wherever this person is, in place, by their number.
+        note = ""
+        if (before["card_number"] != enrollment.card_number
+                or before["device_privilege"] != enrollment.device_privilege):
+            from devices.services import mapping as device_mapping
+
+            result = device_mapping.resend_identity(
+                actor=request.user, employee=enrollment.employee)
+            if result.sent:
+                note = (f" The card and role are on their way to "
+                        f"{len(result.sent)} device(s); they apply on the next check-in.")
+            for _, _, reason in result.failed[:3]:
+                messages.warning(request, reason)
+        messages.success(request, "Enrollment updated." + note)
         return redirect("devices:enrollment_list")
 
     return render(request, "devices/enrollment_form.html", {
@@ -1257,19 +1275,20 @@ def device_user_push(request, public_id):
         device=device,
     )
 
-    entry, error = queue_user_push(
-        device=device,
-        device_user_id=enrollment.device_user_id,
-        name=enrollment.employee.full_name,
-        card_number=enrollment.card_number,
-        requested_by=request.user,
-    )
+    # Through the mapping service, so the role goes with the name and card:
+    # pushing the record with a bare default demoted an administrator to a
+    # normal user, because privilege is part of the same write.
+    from devices.services import mapping as device_mapping
+
+    result = device_mapping.resend_identity(
+        actor=request.user, employee=enrollment.employee, only_device=device)
+    error = result.failed[0][2] if result.failed else ""
     if error:
         messages.error(request, error)
     else:
         _audit(
             request, "device.user_pushed", enrollment,
-            after={"device_user_id": enrollment.device_user_id, "command": entry["body"]},
+            after={"device_user_id": enrollment.device_user_id},
         )
         messages.success(
             request,
