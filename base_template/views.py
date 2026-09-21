@@ -6,12 +6,15 @@ company filter to each query. A view that forgets is not silently permissive —
 the scoped manager raises rather than returning another tenant's rows.
 """
 
+from dataclasses import dataclass, field
 from functools import wraps
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import LogoutView
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import CharField, Count, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.shortcuts import redirect
 from base_template.tables import paginate, render
 from django.views.decorators.http import require_POST
@@ -113,13 +116,51 @@ def _employee_list_scope(request):
     return scope.is_all, scope
 
 
-@login_required
-def employee_list(request):
-    if request.user.is_superuser:
-        return redirect("platform:company_list")
-    if not request.company_id:
-        return _no_company(request)
+#: The "Needs setup" filter (Ajay, 2026-09-21). An imported employee sits in
+#: the branch's Unassigned department with no salary until HR sets them up.
+#: These are computed from the live data on every request - never from the
+#: needs_hr_review flag, which is written once at import and would go stale the
+#: moment HR fixed someone. Each option is inclusive: "Needs department" is
+#: everyone still without one, whether or not they also need a salary.
+SETUP_FILTERS = (
+    ("", "All"),
+    ("department", "Needs department"),
+    ("salary", "Needs salary"),
+    ("both", "Needs both"),
+    ("complete", "Complete"),
+)
+
+
+@dataclass
+class EmployeeListQuery:
+    """Everything the Employees list shows, built once for the page and its
+    downloads so the two cannot disagree."""
+
+    queryset: object
+    company_wide: bool
+    salary_branches: object
+    show_rate_column: bool
+    columns: tuple
+    search_fields: tuple
+    search: str
+    status: str
+    setup: str
+    setup_counts: dict = field(default_factory=dict)
+    scope_name: str = ""
+
+
+def employee_list_query(request):
+    """Scope, filter and annotate the Employees list for ``request.user``.
+
+    Scoping (A12 part 4 / department heads), the page's own filters (search,
+    status, setup), and the pay rules: ``show_rate_column`` is True only for a
+    viewer who may see pay in at least one branch, and the salary side of
+    "Needs setup" only counts rows whose pay that viewer may see - so the
+    filter never tells a department head who has a salary.
+    """
     from access_control.branch_access import ALL_BRANCHES, branches_for
+    from devices.services.mapping import UNASSIGNED_CODE
+    from organization.models import Branch
 
     company_wide, view_branches = _employee_list_scope(request)
 
@@ -133,6 +174,14 @@ def employee_list(request):
         table_branch_id=Subquery(assignment.values("branch_id")[:1]),
         table_department=Subquery(assignment.values("department__name")[:1]),
         table_department_id=Subquery(assignment.values("department_id")[:1]),
+        # Coalesced: someone with no placement must still land in exactly one
+        # setup state, and NOT (NULL = x) would silently drop them.
+        setup_department_code=Coalesce(
+            Subquery(assignment.values("department__code")[:1]), Value(""),
+            output_field=CharField()),
+        setup_branch_id=Coalesce(
+            Subquery(assignment.values("branch_id")[:1]), Value(0),
+            output_field=IntegerField()),
         table_designation=Subquery(assignment.values("designation__name")[:1]),
         table_rate=Subquery(compensation.values("base_rate")[:1]),
     ).order_by("first_name", "last_name")
@@ -155,13 +204,35 @@ def employee_list(request):
     if status:
         qs = qs.filter(employment_status=status)
 
-    # A12 part 4: what this viewer may do on each row. Worked out before the
-    # table is built, because the pay column only exists for someone who may
-    # see pay somewhere (Ajay, 2026-09-20): a department head, or a branch
-    # manager without salary.view, saw a "Base rate" column of dashes.
+    # A12 part 4: the pay column only exists for someone who may see pay
+    # somewhere (Ajay, 2026-09-20).
     salary_branches = ALL_BRANCHES if company_wide else branches_for(
         request.user, request.company_id, "salary.view")
     show_rate_column = company_wide or bool(salary_branches)
+
+    needs_department = Q(setup_department_code=UNASSIGNED_CODE)
+    needs_salary = Q(table_rate__isnull=True)
+    if salary_branches is not ALL_BRANCHES:
+        # Only rows whose pay this viewer may see; for someone who may see no
+        # pay at all, nobody "needs salary" as far as they can tell.
+        needs_salary = (needs_salary & Q(setup_branch_id__in=salary_branches)
+                        if salary_branches else Q(pk__isnull=True))
+    conditions = {
+        "department": needs_department,
+        "salary": needs_salary,
+        "both": needs_department & needs_salary,
+        "complete": ~needs_department & ~needs_salary,
+    }
+    setup_counts = qs.aggregate(
+        all=Count("pk", distinct=True),
+        **{key: Count("pk", filter=condition, distinct=True)
+           for key, condition in conditions.items()},
+    )
+    setup = request.GET.get("setup", "").strip()
+    if setup in conditions:
+        qs = qs.filter(conditions[setup])
+    else:
+        setup = ""
 
     columns = [None, "table_code", ("first_name", "last_name"), "table_branch",
                "table_department", "table_designation", None, "employment_status"]
@@ -171,9 +242,56 @@ def employee_list(request):
         columns.append("table_rate" if company_wide else None)
     columns += [None, None]
 
-    page = paginate(request, qs,
-        search=("first_name", "last_name", "work_email", "table_code", "table_branch", "table_department", "table_designation", "employment_status"),
-        order=tuple(columns))
+    # What a download is named after: the one branch this viewer sees, or the
+    # company when they see more than one.
+    scope_name = ""
+    if not view_branches.is_all and len(view_branches.branches) == 1 and not view_branches.departments:
+        scope_name = Branch.objects.filter(pk__in=view_branches.branches).values_list(
+            "name", flat=True).first() or ""
+
+    return EmployeeListQuery(
+        queryset=qs, company_wide=company_wide, salary_branches=salary_branches,
+        show_rate_column=show_rate_column, columns=tuple(columns),
+        search_fields=("first_name", "last_name", "work_email", "table_code", "table_branch",
+                       "table_department", "table_designation", "employment_status"),
+        search=search, status=status, setup=setup, setup_counts=setup_counts,
+        scope_name=scope_name,
+    )
+
+
+def setup_gaps(employee, assignment, compensation, show_rate):
+    """What an employee still needs, for the chip on their row."""
+    from devices.services.mapping import UNASSIGNED_CODE
+
+    gaps = []
+    if assignment is not None and assignment.department.code == UNASSIGNED_CODE:
+        gaps.append("No department")
+    if show_rate and compensation is None:
+        gaps.append("No salary")
+    return gaps
+
+
+@login_required
+def employee_list(request):
+    if request.user.is_superuser:
+        return redirect("platform:company_list")
+    if not request.company_id:
+        return _no_company(request)
+    from access_control.branch_access import ALL_BRANCHES, branches_for
+
+    listing = employee_list_query(request)
+    # A download is this same view with ?format=, so it is the page's own
+    # permissions and the page's own query - it cannot show more than the page.
+    fmt = request.GET.get("format", "")
+    if fmt in ("xlsx", "pdf"):
+        from base_template.employee_export import export_employees
+
+        return export_employees(request, listing, fmt)
+    company_wide = listing.company_wide
+    salary_branches = listing.salary_branches
+
+    page = paginate(request, listing.queryset,
+        search=listing.search_fields, order=listing.columns)
     paginator, per_page = page.paginator, page.paginator.per_page
 
     # Current assignment per employee, for code/branch/department columns.
@@ -220,18 +338,42 @@ def employee_list(request):
         row["can_edit"] = branch_id in edit_branches if branch_id else company_wide
         row["device"] = badges.get(row["e"].pk)
         row["can_map"] = row["can_edit"] and branch_id in devices_by_branch
+        row["gaps"] = setup_gaps(row["e"], row["a"], row["c"], row["show_rate"])
+
+    # The setup filter keeps the other filters; the salary options only exist
+    # for a viewer who may see pay somewhere.
+    setup_links = []
+    for key, label in SETUP_FILTERS:
+        if key in ("salary", "both") and not listing.show_rate_column:
+            continue
+        params = request.GET.copy()
+        for drop in ("setup", "page", "table", "draw", "start", "length"):
+            params.pop(drop, None)
+        if key:
+            params["setup"] = key
+        setup_links.append({
+            "key": key, "label": label, "count": listing.setup_counts.get(key or "all", 0),
+            "url": f"?{params.urlencode()}" if params else "?",
+            "active": key == listing.setup,
+        })
+    export_params = request.GET.copy()
+    for drop in ("page", "per_page", "table", "draw", "start", "length", "format"):
+        export_params.pop(drop, None)
 
     return render(request, "base_template/employee_list.html", {
         "rows": rows,
         "employee_ids": ",".join(str(row["e"].pk) for row in rows),
         "page": page,
         "paginator": paginator,
-        "search": search,
-        "status": status,
+        "search": listing.search,
+        "status": listing.status,
+        "setup": listing.setup,
+        "setup_links": setup_links,
+        "export_query": export_params.urlencode(),
         "per_page": per_page,
         "statuses": Employee.EmploymentStatus.choices,
         "company_wide": company_wide,
-        "show_rate_column": show_rate_column,
+        "show_rate_column": listing.show_rate_column,
         "can_create": bool(edit_branches),
         "map_branches": [
             {"id": pk, "name": value["name"], "devices": value["devices"]}

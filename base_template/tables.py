@@ -26,6 +26,51 @@ def integer(value, default, low=0, high=2_147_483_647):
         return default
 
 
+def _search_and_order(request, queryset, *, search, order, query_param, use_order):
+    """The table search and column ordering, read from the request.
+
+    One implementation for the page (``paginate``) and for a download of the
+    same table (``table_queryset``), so a download sorts and searches exactly
+    as the screen did. Returns ``(queryset, query, sorted_by)`` where
+    ``sorted_by`` is ``[(column_index, descending)]`` as applied.
+    """
+    query = request.GET.get(query_param, "").strip()[:200]
+    if query and search:
+        clause = Q()
+        for field in search:
+            clause |= Q(**{f"{field}__icontains": query})
+        queryset = queryset.filter(clause).distinct()
+    ordering, sorted_by = [], []
+    if use_order:
+        for index in range(min(len(order), 8)):
+            column = integer(request.GET.get(f"order[{index}][column]"), -1)
+            if 0 <= column < len(order) and order[column]:
+                fields = order[column]
+                fields = (fields,) if isinstance(fields, str) else fields
+                descending = request.GET.get(f"order[{index}][dir]") == "desc"
+                ordering.extend(("-" if descending else "") + field for field in fields)
+                sorted_by.append((column, descending))
+    if ordering:
+        queryset = queryset.order_by(*ordering, "pk")
+    else:
+        queryset = queryset.order_by(*(queryset.query.order_by or ("pk",)), "pk")
+    return queryset, query, sorted_by
+
+
+def table_queryset(request, queryset, *, search=(), order=(), name=""):
+    """The rows a download of this table should hold: every page, not one.
+
+    Reads what the table on screen was showing - its search box and its sort,
+    which the download link carries as ``search[value]`` / ``order[i][...]``
+    (base_template/js/export_links.js), or the no-script ``table_q``. Returns
+    ``(queryset, query, sorted_by)`` like ``_search_and_order``.
+    """
+    prefix = f"{name}_" if name else ""
+    param = "search[value]" if "search[value]" in request.GET else f"{prefix}table_q"
+    return _search_and_order(request, queryset, search=search, order=order,
+                             query_param=param, use_order=True)
+
+
 def paginate(request, queryset, *, search=(), order=(), total=None, name=""):
     """Count/filter/order in SQL and fetch at most 100 rows (including fallback).
 
@@ -39,26 +84,12 @@ def paginate(request, queryset, *, search=(), order=(), total=None, name=""):
     ajax = request.method == "GET" and request.GET.get("table") == (name or "1")
     length = integer(request.GET.get("length" if ajax else params["per_page"]), 25, 10, 100)
     total = queryset.count() if total is None else total
-    query = request.GET.get("search[value]" if ajax else params["query"], "").strip()[:200]
-    if query and search:
-        clause = Q()
-        for field in search:
-            clause |= Q(**{f"{field}__icontains": query})
-        queryset = queryset.filter(clause).distinct()
-    ordering = []
-    if ajax:
+    queryset, query, _sorted = _search_and_order(
+        request, queryset, search=search, order=order,
+        query_param="search[value]" if ajax else params["query"],
         # Another list's draw on the same page must not reorder this one.
-        for index in range(min(len(order), 8)):
-            column = integer(request.GET.get(f"order[{index}][column]"), -1)
-            if 0 <= column < len(order) and order[column]:
-                fields = order[column]
-                fields = (fields,) if isinstance(fields, str) else fields
-                descending = request.GET.get(f"order[{index}][dir]") == "desc"
-                ordering.extend(("-" if descending else "") + field for field in fields)
-    if ordering:
-        queryset = queryset.order_by(*ordering, "pk")
-    else:
-        queryset = queryset.order_by(*(queryset.query.order_by or ("pk",)), "pk")
+        use_order=ajax,
+    )
     paginator = Paginator(queryset, length)
     if ajax:
         # Respect DataTables' offset, including an offset beyond the last row.

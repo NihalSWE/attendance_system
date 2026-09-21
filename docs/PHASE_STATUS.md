@@ -3996,3 +3996,81 @@ name going without a template, an administrator not demoted, an unnamed role
 left alone, one named device, renaming sending by itself, and another field
 sending nothing) and one in `devices/tests_att2.py` that fails if the person's
 own group and time zone are not used.
+
+## Excel demo file, "Needs setup" filter, Excel/PDF downloads (2026-09-21)
+
+**Import: an Excel demo file.** "Download demo file (Excel)" beside the CSV
+one — same two headings, same five people, built with openpyxl, Employee IDs
+stored as text so Excel does not reformat them. Served by the same view
+(`?format=xlsx`), so no new page-access entry. A test reads both demo files
+back through the parser and requires identical rows. The file stays two
+columns; no update mode (Ajay's decision).
+
+**"Needs setup" on the Employees list.** All / Needs department / Needs salary
+/ Needs both / Complete, each with a count, and a chip on the row ("No
+department", "No salary"). The states are **computed from the live data every
+request** — the department is the branch's Unassigned row (`department__code`),
+there is no salary record (`table_rate` is null) — never from
+`needs_hr_review`, which the import still writes for the audit trail but which
+nobody clears; a test fixes someone and watches them move while the flag stays
+set. Options are inclusive ("Needs department" includes those needing both).
+Pay rule: the salary side only counts rows whose pay the viewer may see, so a
+department head gets no salary options, no "No salary" chip, and a crafted
+`?setup=salary` returns nobody; a viewer with pay in one branch only sees that
+branch's salary gaps. Counts are one aggregate over the scoped, searched,
+status-filtered list; NULL-safe (someone with no placement lands in exactly
+one state).
+
+**Downloads — one rule above the rest: a download is the page's own view with
+`?format=xlsx|pdf`.** Employees list → Excel/PDF; Attendance Daily list →
+Excel/PDF; Attendance calendar → PDF only. Because it is the same view:
+- the **same permissions** by construction — same SelfServiceGate entry, same
+  scoping, no new URL or BRANCH_PAGES entry;
+- the **same rows** — the page and the download share one query function
+  (`base_template.views.employee_list_query`, `attendance.views.daily_list_query`),
+  and the table search/sort code is now one helper in `base_template/tables.py`
+  (`_search_and_order`) used by both `paginate` and the new `table_queryset`.
+  The live table's search box and sort live in DataTables, not the address bar,
+  so `base_template/js/export_links.js` adds them to the link at click time
+  (`search[value]`, `order[i][...]` — the table's own request format); the
+  table exposes itself as `table.serverTableApi`. Without JS the link still
+  carries the page filters and the no-script `table_q`.
+
+Pay in the Employees file follows the screen exactly: Salary / Currency / Pay
+basis columns only for a viewer who may see pay in at least one branch
+(`show_rate_column`), and blank on any row whose pay that viewer may not see
+(`show_rate`). Tested for a department head, an employees.view-only login, a
+viewer with pay in one of two branches, and a branch manager.
+
+Every file says what it is — title, filters (scope, search, status, setup,
+period, branch, employee, table search, sort), row count, who and when — as a
+header block in Excel and a subtitle in PDF. Filenames:
+`employees-headoffice-2026-09-21.xlsx`, `attendance-headoffice-2026-09.pdf`,
+`attendance-liveltd-2026-08-10-to-2026-08-12.xlsx`,
+`attendance-calendar-rahim-2026-08.pdf` — the chosen or only branch, else the
+company.
+
+**Ceilings** (`common/exports.MAX_ROWS`): 10,000 rows for Excel, 1,500 for PDF.
+Over it the download is refused with a message naming the ceiling and asking
+for a narrower filter; nothing is truncated, and nothing is recorded. Measured
+at the ceiling: PDF 1,500 rows 3.3 s, Excel 10,000 rows 2.5 s.
+
+**Audit:** every download is `export.downloaded` with page, format, filters and
+row count.
+
+**Calendar PDF** is one person's month, as the page is: the summary strip and
+the Monday-first grid, each square with status, in–out, time in office, late
+minutes and note. Same fallback as the page for someone outside the viewer's
+branches. `?format=xlsx` on the calendar just shows the page.
+
+**New dependencies:** `reportlab==5.0.1`, which brings `pillow==12.3.0` and
+`charset-normalizer==3.5.1` — prebuilt wheels, no system packages. (The
+Employee.photo comment about keeping Pillow out of the dependency set is now
+out of date; the field itself is unchanged.) PDF uses Helvetica, so a name in a
+non-Latin script prints as boxes — a Unicode TTF would fix it if needed.
+`pip install -r requirements.txt` on the server before restarting.
+
+Tests: `common/tests_exports.py` (4, plus `xlsx_table` / `pdf_text` helpers
+that read a download back), `base_template/tests_setup_filter.py` (9),
+`base_template/tests_employee_export.py` (16), `attendance/tests_exports.py`
+(15), and 2 more in `organization/tests_employee_import.py`. Full suite 1373 OK.

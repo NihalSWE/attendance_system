@@ -41,6 +41,13 @@
             <a class="btn btn--ghost" href="{% url 'attendance:attendance_list' %}?month={{ month }}&year={{ year }}">
                 Table view
             </a>
+            {% if employee %}
+                {# This person's month as on screen; a calendar is not a table, so PDF only. #}
+                <a class="btn btn--ghost"
+                   href="{% url 'attendance:attendance_calendar' %}?employee={{ employee.pk }}&amp;year={{ year }}&amp;month={{ month }}&amp;format=pdf">
+                    Download PDF
+                </a>
+            {% endif %}
         </div>
     </div>
 

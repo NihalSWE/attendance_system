@@ -14,7 +14,9 @@ document.addEventListener("DOMContentLoaded", function () {
         table.querySelectorAll("tbody tr").forEach(function (row) {
             if (row.querySelector("td[colspan]")) row.remove();
         });
-        new DataTable(table, {
+        // Kept on the element so a download link can read what the table is
+        // showing right now - its search box and sort (export_links.js).
+        table.serverTableApi = new DataTable(table, {
             serverSide: true,
             processing: true,
             searchDelay: 400,

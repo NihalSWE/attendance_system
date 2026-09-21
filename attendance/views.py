@@ -64,23 +64,35 @@ def month_context(year, month):
     }
 
 
-@login_required
-@require_http_methods(["GET"])
-def attendance_list(request):
-    """Attendance → Daily list: one row per employee-day, paged in the database.
+#: The Daily list's table search and sortable columns, by column index. Shared
+#: by the page and its downloads (attendance/exports.py).
+DAILY_SEARCH = (
+    "employee__first_name", "employee__last_name",
+    "employee_assignment__employee_code", "branch__name",
+    "attendance_status", "note",
+)
+DAILY_ORDER = (
+    "work_date",
+    ("employee__first_name", "employee__last_name"),
+    "branch__name",
+    "attendance_status",
+    "first_in_at",
+    "last_out_at",
+    "worked_minutes",
+    "late_minutes",
+    "payable_fraction",
+    "note",
+)
 
-    Month, branch, employee and status are the page's own filters and narrow
-    the set before the table sees it; the table's search, order and page are
-    then applied to that set in SQL (base_template/tables.py), so its counts
-    are the real counts, not what happens to be on screen.
 
-    Limited by branch (A12 part 7): a branch login sees only the days worked
-    in branches where it holds ``attendance.view``, and only those branches
-    and their people in the filters. Company logins see every branch.
+def daily_list_query(request, company_id):
+    """The Daily list's rows before the table's own search and sort.
+
+    Branch scoping (A12 part 7, department heads), then the page's filters:
+    the month or a date window, branch, employee and status. The page pages
+    through this; a download (``?format=``) writes all of it. Returns a dict
+    so the page and the download read the same values.
     """
-    company_id, bail = _company_or_redirect(request)
-    if bail:
-        return bail
     membership, visible = access.view_scope(request.user, company_id)
     year, month = read_month(request.GET)
     branch_id = request.GET.get("branch", "").strip()
@@ -111,34 +123,56 @@ def attendance_list(request):
             queryset = queryset.filter(employee_id=int(employee_id))
         if status in dict(AttendanceRecord.AttendanceStatus.choices):
             queryset = queryset.filter(attendance_status=status)
-        page = paginate(
-            request,
-            queryset.order_by("work_date", "employee__first_name", "employee__last_name"),
-            search=(
-                "employee__first_name", "employee__last_name",
-                "employee_assignment__employee_code", "branch__name",
-                "attendance_status", "note",
-            ),
-            order=(
-                "work_date",
-                ("employee__first_name", "employee__last_name"),
-                "branch__name",
-                "attendance_status",
-                "first_in_at",
-                "last_out_at",
-                "worked_minutes",
-                "late_minutes",
-                "payable_fraction",
-                "note",
-            ),
-        )
+        queryset = queryset.order_by("work_date", "employee__first_name", "employee__last_name")
+
+    return {
+        "membership": membership, "visible": visible, "year": year, "month": month,
+        "branch_id": branch_id, "employee_id": employee_id, "status": status,
+        "date_filter": date_filter, "date_window": date_window,
+        "first": first, "last": last, "queryset": queryset, "month_total": month_total,
+    }
+
+
+@login_required
+@require_http_methods(["GET"])
+def attendance_list(request):
+    """Attendance → Daily list: one row per employee-day, paged in the database.
+
+    Month, branch, employee and status are the page's own filters and narrow
+    the set before the table sees it; the table's search, order and page are
+    then applied to that set in SQL (base_template/tables.py), so its counts
+    are the real counts, not what happens to be on screen.
+
+    Limited by branch (A12 part 7): a branch login sees only the days worked
+    in branches where it holds ``attendance.view``, and only those branches
+    and their people in the filters. Company logins see every branch.
+
+    ``?format=xlsx|pdf`` downloads exactly this list (attendance/exports.py):
+    the same view, so the same permissions, filters, search and sort.
+    """
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    daily = daily_list_query(request, company_id)
+    if request.GET.get("format") in ("xlsx", "pdf"):
+        from attendance.exports import export_daily_list
+
+        return export_daily_list(request, company_id, daily, request.GET["format"])
+
+    membership, visible = daily["membership"], daily["visible"]
+    with use_company(company_id):
+        page = paginate(request, daily["queryset"], search=DAILY_SEARCH, order=DAILY_ORDER)
         employees = _pickable(visible).order_by("first_name", "last_name")
         branches = branch_choices(company_id, visible)
 
+    export_params = request.GET.copy()
+    for drop in ("page", "per_page", "table", "draw", "start", "length", "format"):
+        export_params.pop(drop, None)
+    branch_id, employee_id, status = daily["branch_id"], daily["employee_id"], daily["status"]
     return render(request, "attendance/attendance_list.html", {
-        **month_context(year, month),
+        **month_context(daily["year"], daily["month"]),
         "page": page,
-        "month_total": month_total,
+        "month_total": daily["month_total"],
         "employees": employees,
         "branches": branches,
         "branch_id": branch_id,
@@ -146,11 +180,12 @@ def attendance_list(request):
         "status": status,
         "statuses": AttendanceRecord.AttendanceStatus.choices,
         "can_manage": membership.role in STRUCTURE_ROLES,
-        "date_filter": date_filter,
-        "date_window": date_window,
-        "window_start": first,
-        "window_end": last,
-        "filtered": bool(branch_id or employee_id or status or date_window),
+        "date_filter": daily["date_filter"],
+        "date_window": daily["date_window"],
+        "window_start": daily["first"],
+        "window_end": daily["last"],
+        "filtered": bool(branch_id or employee_id or status or daily["date_window"]),
+        "export_query": export_params.urlencode(),
         # Punch times are stored in UTC; people read them in company time.
         "company_tz": membership.company.timezone or "UTC",
     })
@@ -216,6 +251,13 @@ def attendance_calendar(request):
             else None
         )
         has_any_record = access.scope(AttendanceRecord.objects.all(), visible).exists()
+
+    # ?format=pdf: the same person's same month, as the page shows it - same
+    # view, so the same permissions and the same branch-limited grid.
+    if request.GET.get("format") == "pdf" and calendar is not None:
+        from attendance.exports import export_calendar
+
+        return export_calendar(request, membership, employee, calendar, year, month)
 
     previous, following = _month_steps(year, month)
     return render(request, "attendance/attendance_calendar.html", {

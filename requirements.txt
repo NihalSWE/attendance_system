@@ -10,6 +10,11 @@ sqlparse==0.6.0
 # Bulk employee import reads and writes .xlsx (CSV needs nothing extra).
 openpyxl==3.1.5
 et-xmlfile==2.0.0
+# PDF downloads (Employees, Attendance, the monthly calendar). Pure Python and
+# prebuilt wheels - no system packages on the server, unlike WeasyPrint.
+reportlab==5.0.1
+pillow==12.3.0
+charset-normalizer==3.5.1
 tzdata==2026.3
 # Test-only: Django's --parallel runner needs it to carry a failure
 # back from a worker. Without it a failing test crashes the run with

@@ -12,6 +12,8 @@
     </script>
     <script defer src="{% static 'base_template/js/selection.js' %}">
     </script>
+    <script defer src="{% static 'base_template/js/export_links.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="page__head">
@@ -35,9 +37,15 @@
             </p>
         </div>
         <div class="page__actions">
-            <button class="btn btn--ghost" type="button" disabled title="Export is not available yet">
-                Export (unavailable)
-            </button>
+            {# The same view with ?format=: same permissions, same filters, same sort. #}
+            <a class="btn btn--ghost" data-export
+               href="{% url 'employee_list' %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=xlsx">
+                Download Excel
+            </a>
+            <a class="btn btn--ghost" data-export
+               href="{% url 'employee_list' %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=pdf">
+                Download PDF
+            </a>
             {% if map_branches %}
                 <button class="btn btn--ghost" type="button" data-open-dialog="bulk-map-dialog">
                     Bulk map to devices
@@ -85,15 +93,27 @@
                     </option>
                 {% endfor %}
             </select>
+            {% if setup %}
+                <input type="hidden" name="setup" value="{{ setup }}">
+            {% endif %}
             <button class="btn btn--ghost" type="submit">
                 Apply
             </button>
-            {% if search or status %}
+            {% if search or status or setup %}
                 <a class="btn btn--quiet" href="{% url 'employee_list' %}">
                     Clear
                 </a>
             {% endif %}
         </form>
+        <nav class="setup-filter" aria-label="Needs setup">
+            {% for link in setup_links %}
+                <a class="setup-filter__item{% if link.active %} is-active{% endif %}"
+                   href="{{ link.url }}"{% if link.active %} aria-current="page"{% endif %}>
+                    {{ link.label }}
+                    <span class="setup-filter__count">{{ link.count }}</span>
+                </a>
+            {% endfor %}
+        </nav>
         {% if not rows %}
             <div class="empty server-table-empty">
                 <div class="empty__icon">
@@ -106,7 +126,7 @@
                     No employees match
                 </div>
                 <div class="empty__text">
-                    {% if search or status %}
+                    {% if search or status or setup %}
                         Try clearing the filters.
                     {% else %}
                         Add your first employee to get started.
@@ -187,6 +207,13 @@
                                         </a>
                                     {% else %}
                                         {{ r.e.full_name }}
+                                    {% endif %}
+                                    {% if r.gaps %}
+                                        <div class="setup-gaps">
+                                            {% for gap in r.gaps %}
+                                                <span class="badge badge--warning">{{ gap }}</span>
+                                            {% endfor %}
+                                        </div>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -328,7 +355,7 @@
                     No employees match
                 </div>
                 <div class="empty__text">
-                    {% if search or status %}
+                    {% if search or status or setup %}
                         Try clearing the filters.
                     {% else %}
                         Add your first employee to get started.

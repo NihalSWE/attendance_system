@@ -1,7 +1,13 @@
 {% extends "base_template/base.html" %}
 {% load tz %}
+{% load static %}
 {% block title %}
     Attendance · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'base_template/js/export_links.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="crumbs">
@@ -26,6 +32,15 @@
         <div class="page__actions">
             <a class="btn btn--ghost" href="{% url 'attendance:attendance_calendar' %}?month={{ month }}&year={{ year }}">
                 Calendar view
+            </a>
+            {# The same view with ?format=: same permissions, filters, search and sort. #}
+            <a class="btn btn--ghost" data-export
+               href="{% url 'attendance:attendance_list' %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=xlsx">
+                Download Excel
+            </a>
+            <a class="btn btn--ghost" data-export
+               href="{% url 'attendance:attendance_list' %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=pdf">
+                Download PDF
             </a>
         </div>
     </div>

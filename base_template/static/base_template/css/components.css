@@ -1469,3 +1469,42 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     margin-top: 10px;
 }
 .delete-trial__form .select2-container { min-width: 320px; flex: 1; }
+
+/* "Needs setup" filter on the Employees list: one row of choices with a
+   count each, under the search toolbar. */
+.setup-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 0 16px 12px;
+}
+.setup-filter__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    color: var(--text);
+    font-size: 12px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.setup-filter__item:hover {
+    background: var(--surface-sunken);
+}
+.setup-filter__item.is-active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--surface);
+}
+.setup-filter__count {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.setup-gaps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 3px;
+}
