@@ -155,10 +155,25 @@ def employee_list(request):
     if status:
         qs = qs.filter(employment_status=status)
 
+    # A12 part 4: what this viewer may do on each row. Worked out before the
+    # table is built, because the pay column only exists for someone who may
+    # see pay somewhere (Ajay, 2026-09-20): a department head, or a branch
+    # manager without salary.view, saw a "Base rate" column of dashes.
+    salary_branches = ALL_BRANCHES if company_wide else branches_for(
+        request.user, request.company_id, "salary.view")
+    show_rate_column = company_wide or bool(salary_branches)
+
+    columns = [None, "table_code", ("first_name", "last_name"), "table_branch",
+               "table_department", "table_designation", None, "employment_status"]
+    if show_rate_column:
+        # Sorting by pay would reveal pay order to someone who may not see pay,
+        # so it is sortable only for a viewer who may see every row's rate.
+        columns.append("table_rate" if company_wide else None)
+    columns += [None, None]
+
     page = paginate(request, qs,
         search=("first_name", "last_name", "work_email", "table_code", "table_branch", "table_department", "table_designation", "employment_status"),
-        # Sorting by pay would reveal pay order to someone who may not see pay.
-        order=(None, "table_code", ("first_name", "last_name"), "table_branch", "table_department", "table_designation", None, "employment_status", "table_rate" if company_wide else None, None, None))
+        order=tuple(columns))
     paginator, per_page = page.paginator, page.paginator.per_page
 
     # Current assignment per employee, for code/branch/department columns.
@@ -184,9 +199,6 @@ def employee_list(request):
         request.company_id,
         employee_ids=[row["e"].pk for row in rows],
     )
-    # A12 part 4: what this viewer may do on each row.
-    salary_branches = ALL_BRANCHES if company_wide else branches_for(
-        request.user, request.company_id, "salary.view")
     edit_branches = ALL_BRANCHES if company_wide else branches_for(
         request.user, request.company_id, "employees.edit")
     # Device mapping (Map / Bulk map): the active devices of each branch this
@@ -219,6 +231,7 @@ def employee_list(request):
         "per_page": per_page,
         "statuses": Employee.EmploymentStatus.choices,
         "company_wide": company_wide,
+        "show_rate_column": show_rate_column,
         "can_create": bool(edit_branches),
         "map_branches": [
             {"id": pk, "name": value["name"], "devices": value["devices"]}
