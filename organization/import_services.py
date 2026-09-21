@@ -1,6 +1,6 @@
-"""Bulk employee import from a CSV (or Excel) file: EMP-ID and Name only.
+"""Bulk employee import from a CSV (or Excel) file: Employee ID and Name only.
 
-The file carries two columns and nothing else - **EMP-ID** and **Name**, the
+The file carries two columns and nothing else - **Employee ID** and **Name**, the
 same two things the attendance terminals know a person by. The upload also
 says which **branch** they join. Everything else about them (department,
 designation, salary, contact details) is filled in afterwards on Edit
@@ -17,7 +17,7 @@ both ways in behave the same:
 
 They count for attendance at once (with no department shift they work the
 company shift), and the Employees list shows them under their branch and
-EMP-ID. Their placement starts at midnight today in the company's timezone,
+Employee ID. Their placement starts at midnight today in the company's timezone,
 so when HR sets the real department "from today" on Edit employee it corrects
 that row instead of adding a one-day history line.
 
@@ -57,10 +57,10 @@ from organization.models import Branch
 from organization.services import require_company_membership
 
 #: The file format: these two headings in the first row, one person per row.
-HEADINGS = ["EMP-ID", "Name"]
+HEADINGS = ["Employee ID", "Name"]
 
 #: Headings accepted for each column, compared with spaces, dashes and case
-#: ignored - so "EMP-ID", "Emp Id", "EMPID" and "Employee ID" all work.
+#: ignored - so "Employee ID", "EMP-ID", "Emp Id" and "EMPID" all work.
 _HEADING_WORDS = {
     "employee_id": {"empid", "employeeid", "empno", "employeeno"},
     "name": {"name", "employeename", "fullname"},
@@ -70,7 +70,7 @@ _HEADING_WORDS = {
 #: enough that a wrong file is refused instead of tying up a worker.
 MAX_ROWS = 2000
 
-#: The longest EMP-ID the terminals take (the device import uses the same).
+#: The longest Employee ID the terminals take (the device import uses the same).
 MAX_ID_LENGTH = 20
 
 DEMO_ROWS = (
@@ -178,7 +178,7 @@ def read_file(upload):
                if key not in columns]
     if missing:
         raise ValidationError({
-            "upload": "The first row must be the headings EMP-ID and Name, as in "
+            "upload": "The first row must be the headings Employee ID and Name, as in "
                       f"the demo file. Missing: {', '.join(missing)}."
         })
     if not body:
@@ -279,17 +279,17 @@ def check(user, company_id, rows):
 
         code = str(row.get("employee_id", "")).strip()
         if not code:
-            errors.append("EMP-ID is missing.")
+            errors.append("Employee ID is missing.")
         elif not code.isdigit():
             errors.append(
-                f"EMP-ID “{code}” is not a number. The attendance terminals only "
+                f"Employee ID “{code}” is not a number. The attendance terminals only "
                 "accept digits.")
         elif len(code) > MAX_ID_LENGTH:
-            errors.append(f"EMP-ID “{code}” is too long.")
+            errors.append(f"Employee ID “{code}” is too long.")
         elif code in taken:
-            errors.append(f"EMP-ID {code} already belongs to an employee in this company.")
+            errors.append(f"Employee ID {code} already belongs to an employee in this company.")
         elif code in seen:
-            errors.append(f"EMP-ID {code} is also on row {seen[code]} of this file.")
+            errors.append(f"Employee ID {code} is also on row {seen[code]} of this file.")
         else:
             seen[code] = row["line"]
         row["employee_id"] = code
@@ -322,7 +322,7 @@ def commit(*, actor, company_id, rows, branch_id):
 
     The branch and the rows are re-checked here: they come back through the
     reader's session, and a branch they may no longer import into (or an
-    EMP-ID taken in between) must be caught now, not written.
+    Employee ID taken in between) must be caught now, not written.
     """
     from devices.services.mapping import unassigned_placement
 

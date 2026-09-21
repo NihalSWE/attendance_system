@@ -73,7 +73,7 @@
             </div>
             <ul class="t-faint">
                 <li>
-                    EMP-ID: digits only. It is the number the attendance terminals know the person by,
+                    Employee ID: digits only. It is the number the attendance terminals know the person by,
                     and must not already belong to someone in this company.
                 </li>
                 <li>
@@ -161,7 +161,7 @@
                                         Row
                                     </th>
                                     <th>
-                                        EMP-ID
+                                        Employee ID
                                     </th>
                                     <th>
                                         Name
@@ -213,7 +213,7 @@
                                         Row
                                     </th>
                                     <th>
-                                        EMP-ID
+                                        Employee ID
                                     </th>
                                     <th>
                                         Name
@@ -254,7 +254,7 @@
                 <div class="card__foot">
                     <form method="post" action="{% url 'organization:employee_import_confirm' %}"
                           data-confirm-title="Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:'employee,employees' }} into {{ preview.branch.name }}?"
-                          data-confirm="They are created with their EMP-ID and name, in the branch's Unassigned department. Set each one's department, designation and salary on Edit employee afterwards."
+                          data-confirm="They are created with their Employee ID and name, in the branch's Unassigned department. Set each one's department, designation and salary on Edit employee afterwards."
                           data-confirm-button="Import">
                         {% csrf_token %}
                         <button class="btn btn--primary" type="submit">

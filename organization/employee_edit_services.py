@@ -17,6 +17,8 @@ to a branch where they have it too); salary — the owner/company admin, or
 anyone with ``salary.prepare`` in that branch.
 """
 
+from zoneinfo import ZoneInfo
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
@@ -121,6 +123,24 @@ def update_employee_details(*, actor, company_id, employee_id, values):
 
 
 @transaction.atomic
+def _on_the_day(starts, began, company):
+    """``began`` when ``starts`` falls earlier on the same local day; else ``starts``.
+
+    This page works in whole days: "from 21 Sep" arrives as midnight on the
+    21st. A placement or salary can begin later that day - a device import
+    starts the placement at the moment it runs (devices/services/mapping.py,
+    user_sync.py). Read literally, midnight is "before" 14:05, so a change
+    dated the very day was refused, and so was the first salary on its own
+    default date. A date on the day something began means that day.
+    """
+    if starts >= began:
+        return starts
+    zone = ZoneInfo(getattr(company, "timezone", None) or "UTC")
+    if starts.astimezone(zone).date() == began.astimezone(zone).date():
+        return began
+    return starts
+
+
 def change_placement(*, actor, company_id, employee_id, values):
     """New branch / department / designation / code from a date."""
     membership, employee, current, _ = get_employee_for_edit(
@@ -132,7 +152,7 @@ def change_placement(*, actor, company_id, employee_id, values):
         actor, company_id, "employees.edit", values["branch"].pk
     ):
         raise PermissionDenied("You can only place people in branches you look after.")
-    starts = values["effective_at"]
+    starts = _on_the_day(values["effective_at"], current.effective_from, membership.company)
     with use_company(company_id):
         assert_branch_in_scope(membership, values["branch"])
         before = {
@@ -196,7 +216,7 @@ def change_salary(*, actor, company_id, employee_id, values):
     )
     if current is None:
         return _set_first_salary(membership, employee, values, actor)
-    starts = values["effective_at"]
+    starts = _on_the_day(values["effective_at"], current.effective_from, membership.company)
     with use_company(company_id):
         before = {
             "pay_basis": current.pay_basis, "base_rate": str(current.base_rate),
@@ -250,6 +270,9 @@ def _set_first_salary(membership, employee, values, actor):
     starts = values["effective_at"]
     with use_company(membership.company_id):
         placed = first_placement(employee)
+        if placed is not None:
+            # The day they were placed means from the placement, never before it.
+            starts = _on_the_day(starts, placed.effective_from, membership.company)
         if placed is not None and starts < placed.effective_from:
             raise ValidationError({
                 "salary_from": (

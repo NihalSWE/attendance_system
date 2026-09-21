@@ -1,6 +1,6 @@
 """The upload form for the bulk employee import: the file and the branch.
 
-The file carries EMP-ID and Name; this form says which branch everyone in it
+The file carries Employee ID and Name; this form says which branch everyone in it
 joins. The choices are narrowed for convenience - ``import_services.check_branch``
 is what enforces them, because a crafted POST reaches it too.
 """
@@ -18,7 +18,7 @@ class EmployeeImportForm(StyledFormMixin, forms.Form):
         queryset=Branch.all_objects.none(), label="Branch", required=False)
     upload = forms.FileField(
         label="Employee file",
-        help_text="A .csv file with the headings EMP-ID and Name, like the demo file.",
+        help_text="A .csv file with the headings Employee ID and Name, like the demo file.",
         widget=forms.ClearableFileInput(attrs={"accept": ".csv,.xlsx,text/csv"}),
     )
 

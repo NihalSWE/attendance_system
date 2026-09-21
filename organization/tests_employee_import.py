@@ -1,4 +1,4 @@
-"""Bulk employee import: EMP-ID and Name in the file, the branch on the form.
+"""Bulk employee import: Employee ID and Name in the file, the branch on the form.
 
 TwoBranchCase: Head Office (the company's default branch, where Manny is the
 branch manager) and Chittagong. The company picks the branch, starting on the
@@ -31,7 +31,7 @@ class ImportCase(TwoBranchCase):
         self.url = reverse("organization:employee_import")
         self.confirm_url = reverse("organization:employee_import_confirm")
 
-    def csv_file(self, rows, *, name="people.csv", headings=("EMP-ID", "Name")):
+    def csv_file(self, rows, *, name="people.csv", headings=("Employee ID", "Name")):
         buffer = io.StringIO()
         writer = csv.writer(buffer)
         writer.writerow(headings)
@@ -73,7 +73,7 @@ class DemoFileTests(ImportCase):
         self.assertIn("text/csv", page["Content-Type"])
         self.assertIn("employee-import-demo.csv", page["Content-Disposition"])
         text = page.content.decode("utf-8-sig")
-        self.assertEqual(text.splitlines()[0], "EMP-ID,Name")
+        self.assertEqual(text.splitlines()[0], "Employee ID,Name")
         # What the demo writes is what the import reads.
         rows = import_services.read_file(SimpleUploadedFile("demo.csv", page.content))
         self.assertEqual(len(rows), len(import_services.DEMO_ROWS))
@@ -87,11 +87,11 @@ class DemoFileTests(ImportCase):
 
 class ReadingTheFileTests(ImportCase):
     def test_a_missing_heading_is_named(self):
-        page = self.upload([["445962"]], headings=("EMP-ID",))
+        page = self.upload([["445962"]], headings=("Employee ID",))
         self.assertIn("Missing: Name", self.upload_error(page))
 
     def test_other_spellings_of_the_headings_are_accepted(self):
-        for headings in (("Employee ID", "Name"), ("emp id", "NAME"), ("EMPID", "Full name")):
+        for headings in (("EMP-ID", "Name"), ("emp id", "NAME"), ("EMPID", "Full name")):
             with self.subTest(headings=headings):
                 rows = import_services.read_file(
                     self.csv_file([["445962", "Ajay Kumar"]], headings=headings))
@@ -99,7 +99,7 @@ class ReadingTheFileTests(ImportCase):
 
     def test_extra_columns_are_ignored(self):
         rows = import_services.read_file(self.csv_file(
-            [["x", "445962", "Ajay Kumar"]], headings=("Notes", "EMP-ID", "Name")))
+            [["x", "445962", "Ajay Kumar"]], headings=("Notes", "Employee ID", "Name")))
         self.assertEqual((rows[0]["employee_id"], rows[0]["name"]), ("445962", "Ajay Kumar"))
 
     def test_an_empty_file_is_refused(self):
@@ -133,7 +133,7 @@ class ReadingTheFileTests(ImportCase):
         from openpyxl import Workbook
 
         book = Workbook()
-        book.active.append(["EMP-ID", "Name"])
+        book.active.append(["Employee ID", "Name"])
         book.active.append([445962, "Ajay Kumar"])        # a number, as Excel keeps it
         buffer = io.BytesIO()
         book.save(buffer)
@@ -161,7 +161,7 @@ class PreviewTests(ImportCase):
         preview = page.context["preview"]
         self.assertEqual([row["line"] for row in preview["bad"]], [2, 4, 5, 6])
         said = " ".join(e for row in preview["bad"] for e in row["errors"])
-        for phrase in ("is not a number", "EMP-ID is missing", "Name is missing",
+        for phrase in ("is not a number", "Employee ID is missing", "Name is missing",
                        "also on row 3"):
             self.assertIn(phrase, said)
         self.assertNotContains(page, "Import 1 employee")
@@ -370,6 +370,6 @@ class WhoMayImportTests(ImportCase):
     def test_the_page_shows_the_format_and_the_demo_link(self):
         self.client.force_login(self.admin)
         page = self.client.get(self.url)
-        self.assertContains(page, "EMP-ID")
+        self.assertContains(page, "Employee ID")
         self.assertContains(page, "Download demo file (CSV)")
         self.assertIsNone(page.context["preview"])

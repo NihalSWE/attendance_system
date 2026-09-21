@@ -238,7 +238,7 @@ def employee_edit(request, pk):
                     )
             except (ValidationError, IntegrityError) as exc:
                 if isinstance(exc, IntegrityError):
-                    form.add_error(None, "That EMP-ID is already in use for those dates.")
+                    form.add_error(None, "That Employee ID is already in use for those dates.")
                 else:
                     apply_service_errors(form, exc)
             else:
