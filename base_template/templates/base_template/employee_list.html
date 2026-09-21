@@ -44,6 +44,9 @@
                 </button>
             {% endif %}
             {% if can_create %}
+                <a class="btn btn--ghost" href="{% url 'organization:employee_import' %}">
+                    Import from a file
+                </a>
                 <a class="btn btn--primary" href="{% url 'organization:employee_create' %}">
                     Create employee
                 </a>
@@ -66,7 +69,7 @@
                         <circle cx="11" cy="11" r="7"/>
                         <path d="m20 20-3.5-3.5"/>
                     </svg>
-                    <input class="input" id="q" name="q" value="{{ search }}" placeholder="Name, email or employee code">
+                    <input class="input" id="q" name="q" value="{{ search }}" placeholder="Name, email or Employee ID">
                 </div>
             </div>
             <label class="sr-only" for="status">
@@ -125,7 +128,7 @@
                                 {% endif %}
                             </th>
                             <th>
-                                Code
+                                Employee ID
                             </th>
                             <th>
                                 Name

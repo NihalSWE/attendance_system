@@ -7,6 +7,9 @@ pycparser==3.0
 psycopg-binary==3.3.5
 psycopg==3.3.5
 sqlparse==0.6.0
+# Bulk employee import reads and writes .xlsx (CSV needs nothing extra).
+openpyxl==3.1.5
+et-xmlfile==2.0.0
 tzdata==2026.3
 # Test-only: Django's --parallel runner needs it to carry a failure
 # back from a worker. Without it a failing test crashes the run with

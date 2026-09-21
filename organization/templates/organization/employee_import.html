@@ -1,0 +1,268 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Import employees · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'employee_list' %}">
+            Employees
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Import from a file
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Import employees
+            </h1>
+            <p class="page__sub">
+                {{ active_company.name }}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'organization:employee_import_demo' %}">
+                Download demo file (CSV)
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                The file format
+            </h2>
+        </div>
+        <div class="card__body">
+            <p>
+                Make your file exactly like the demo file: the headings
+                {% for heading in headings %}<strong>{{ heading }}</strong>{% if not forloop.last %} and {% endif %}{% endfor %}
+                in the first row, then one person per row. Up to {{ max_rows }} people in one file.
+            </p>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            {% for heading in headings %}
+                                <th>
+                                    {{ heading }}
+                                </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for code, name in demo_rows|slice:":3" %}
+                            <tr>
+                                <td class="mono">
+                                    {{ code }}
+                                </td>
+                                <td>
+                                    {{ name }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <ul class="t-faint">
+                <li>
+                    Employee ID: digits only. It is the number the attendance terminals know the person by,
+                    and must not already belong to someone in this company.
+                </li>
+                <li>
+                    After the import, set each person's department, designation and salary on
+                    Edit employee. Until then they are in the branch's Unassigned department,
+                    and salary skips them.
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <form class="card" method="post" enctype="multipart/form-data" novalidate>
+        {% csrf_token %}
+        <div class="card__head">
+            <h2>
+                Upload
+            </h2>
+        </div>
+        <div class="card__body">
+            {% if form.non_field_errors %}
+                <div class="alert alert--danger" role="alert">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+            <div class="grid grid--2">
+                {% for field in form %}
+                    <div class="field {% if field.errors %}field-invalid{% endif %}">
+                        <label class="field__label" for="{{ field.id_for_label }}">
+                            {{ field.label }}
+                            {% if field.field.required and not field.field.disabled %}
+                                <span class="field__req" aria-label="required">
+                                    *
+                                </span>
+                            {% endif %}
+                        </label>
+                        {{ field }}
+                        {% if field.help_text %}
+                            <div class="field__help">
+                                {{ field.help_text }}
+                            </div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                            <p class="field__error">
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card__foot">
+            <a class="btn btn--ghost" href="{% url 'employee_list' %}">
+                Cancel
+            </a>
+            <button class="btn btn--primary" type="submit">
+                Check the file
+            </button>
+        </div>
+    </form>
+
+    {% if preview %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    {{ preview.file_name }}
+                </h2>
+                <p class="page__sub">
+                    {{ preview.counts.total }} {{ preview.counts.total|pluralize:"person,people" }} read,
+                    joining {{ preview.branch.name }}. Nothing has been saved yet.
+                </p>
+            </div>
+            <div class="card__body">
+                {% if preview.bad %}
+                    <div class="alert alert--danger" role="alert">
+                        {{ preview.counts.bad }} row{{ preview.counts.bad|pluralize }}
+                        cannot be imported. Fix {{ preview.counts.bad|pluralize:"it,them" }}
+                        in the file and upload it again — the import is all or nothing,
+                        so the other {{ preview.counts.good }} are waiting too.
+                    </div>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Row
+                                    </th>
+                                    <th>
+                                        Employee ID
+                                    </th>
+                                    <th>
+                                        Name
+                                    </th>
+                                    <th>
+                                        What is wrong
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview.bad %}
+                                    <tr>
+                                        <td>
+                                            {{ row.line }}
+                                        </td>
+                                        <td class="mono">
+                                            {{ row.employee_id|default:"—" }}
+                                        </td>
+                                        <td>
+                                            {{ row.name|default:"—" }}
+                                        </td>
+                                        <td>
+                                            {% for error in row.errors %}
+                                                <div class="field__error">
+                                                    {{ error }}
+                                                </div>
+                                            {% endfor %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert--success" role="status">
+                        All {{ preview.counts.total }} can be imported into {{ preview.branch.name }}.
+                    </div>
+                {% endif %}
+
+                {% if preview.good %}
+                    <h3>
+                        Ready to import
+                    </h3>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Row
+                                    </th>
+                                    <th>
+                                        Employee ID
+                                    </th>
+                                    <th>
+                                        Name
+                                    </th>
+                                    <th>
+                                        Branch
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview.good %}
+                                    <tr>
+                                        <td>
+                                            {{ row.line }}
+                                        </td>
+                                        <td class="mono">
+                                            {{ row.employee_id }}
+                                        </td>
+                                        <td>
+                                            {{ row.name }}
+                                        </td>
+                                        <td>
+                                            {{ preview.branch.name }}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if preview.good_hidden %}
+                        <p class="t-faint">
+                            … and {{ preview.good_hidden }} more.
+                        </p>
+                    {% endif %}
+                {% endif %}
+            </div>
+            {% if not preview.bad %}
+                <div class="card__foot">
+                    <form method="post" action="{% url 'organization:employee_import_confirm' %}"
+                          data-confirm-title="Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:'employee,employees' }} into {{ preview.branch.name }}?"
+                          data-confirm="They are created with their Employee ID and name, in the branch's Unassigned department. Set each one's department, designation and salary on Edit employee afterwards."
+                          data-confirm-button="Import">
+                        {% csrf_token %}
+                        <button class="btn btn--primary" type="submit">
+                            Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:"employee,employees" }}
+                        </button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+{% endblock %}

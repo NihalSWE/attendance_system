@@ -3870,3 +3870,80 @@ built from the same column list, so the two cannot drift apart.
 9 tests in `base_template/tests_employee_list_pay.py`, including one that
 counts `<th>` against `<td>` so a dropped header can never leave its cells
 behind, and one that pins the sortable-column list for both shapes.
+
+## Bulk employee import: Employee ID and Name (2026-09-21)
+
+A new company arrives with 400-600 people. The file carries **two columns
+only — `Employee ID` and `Name`**, the two things the attendance terminals know a
+person by. Everything else (department, designation, salary, contact details)
+is filled in afterwards on Edit employee, as HR gets to each person. This
+replaces the first, many-column version on this branch, which was never merged.
+
+**No database change.** Each person is created the way the device import
+already creates one (`devices.services.mapping`), so both ways in behave the
+same: placed in the branch's **Unassigned** department and designation
+(`unassigned_placement`, made on first use, reused after), **no salary
+record** (payroll already skips such people by name), `needs_hr_review` in
+their metadata. They count for attendance at once — with no department shift
+they work the company shift. Their placement starts at **midnight today** in
+the company's timezone, so HR setting the real department "from today" on
+Edit employee *corrects* that row instead of adding a one-day history line
+(tested).
+
+**Which branch:**
+- The company picks it from a dropdown that **starts on the default branch**;
+  not changing it means the default branch.
+- A **branch manager** imports into their own branch only. With one branch the
+  field is **locked** (a disabled field, so a posted value is ignored); with
+  several, the dropdown lists only theirs. `check_branch` refuses any other
+  branch in the service too.
+- Permission: `employees.edit` in that branch, as Create employee. No pay is
+  set, so `salary.prepare` is not needed.
+
+**Steps:** download the demo CSV (the headings and five made-up people) →
+upload → preview (nothing written; every bad row named with its line: not
+digits, missing, repeated in the file, already in the company) → confirm. All
+or nothing, one transaction, one `employees.imported` audit line, and
+everything re-checked at confirm because it comes back through the session.
+Headings are forgiving ("Employee ID", "emp id", "EMPID"); Excel .xlsx is still
+read (openpyxl stays in requirements.txt); 2000 rows per file.
+
+`BRANCH_PAGES` gains the three import views under `employees.edit` — purely
+additive; without it SelfServiceGate bounces a branch manager to `/me/`.
+
+35 tests in `organization/tests_employee_import.py`. Clearing the company's
+branch dropdown is not an error: an empty branch means the default branch.
+
+## "Employee ID" everywhere, and same-day edits no longer refused (2026-09-21)
+
+**Label.** The employee's number is called **Employee ID** wherever it is
+shown — the same words the device pages already use: Employees list and access
+list column, the employee page's placement history, My account, the payslip,
+Create/Edit employee, the End employment note, the code-clash messages, and
+the import (file heading, demo file, preview). Labels only; the field is still
+`employee_code`. Branch, department, designation, leave-type and shift codes
+keep "Code". The import still accepts "EMP-ID", "Emp Id" and "EMPID" as the
+heading.
+
+**Bug fixed: editing someone on the day their placement began.** Both device
+paths start a placement at the moment they run (`devices/services/mapping.py`
+`_import_rows` and `user_sync.py`, e.g. 14:05). Edit employee works in whole
+days — "from 21 Sep" arrives as midnight — and midnight is before 14:05, so:
+
+- setting the real department "from today" on the import day was refused:
+  "The current placement started on 21 Sep 2026; a change cannot start before it";
+- the **first salary on its own default date** (the day they were placed) was
+  refused on *any* day: "They were placed on 21 Sep 2026; the salary cannot
+  start before that" — so every device-imported person needed someone to type
+  a later date by hand.
+
+Fixed in one place, `organization/employee_edit_services._on_the_day`: a date
+on the same local day that the placement or salary began means *that day*. A
+placement or salary change becomes a correction of the current row; a first
+salary starts with the placement, never before it. A date on an earlier day is
+still refused. Ajay's device files are untouched, and people already imported
+this way are fixed too, because the rule is on the edit side.
+
+8 tests in `organization/tests_same_day_edits.py`, driving the real device
+import and the real Edit employee page — they failed with exactly those two
+messages before the fix.

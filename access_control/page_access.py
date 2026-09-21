@@ -26,6 +26,13 @@ BRANCH_PAGES = {
     # making a branch manager stay with the company.
     "employee_list": "employees.view",
     "organization:employee_create": "employees.edit",
+    # Bulk import (Employee ID + Name). Purely additive, and the same permission the
+    # one-at-a-time page already asks for: the service checks the chosen branch
+    # against employees.edit, so a branch manager imports into their own
+    # branch only (the field is locked for them) and nowhere else.
+    "organization:employee_import": "employees.edit",
+    "organization:employee_import_confirm": "employees.edit",
+    "organization:employee_import_demo": "employees.edit",
     "organization:employee_edit": "employees.edit",
     "organization:employee_branch_departments": "employees.edit",
     "organization:employee_department_designations": "employees.edit",
