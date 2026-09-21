@@ -3842,4 +3842,5 @@ read (openpyxl stays in requirements.txt); 2000 rows per file.
 `BRANCH_PAGES` gains the three import views under `employees.edit` — purely
 additive; without it SelfServiceGate bounces a branch manager to `/me/`.
 
-34 tests in `organization/tests_employee_import.py`.
+35 tests in `organization/tests_employee_import.py`. Clearing the company's
+branch dropdown is not an error: an empty branch means the default branch.

@@ -12,7 +12,10 @@ from organization.models import Branch
 
 
 class EmployeeImportForm(StyledFormMixin, forms.Form):
-    branch = forms.ModelChoiceField(queryset=Branch.all_objects.none(), label="Branch")
+    # Not required: an empty branch means the default branch (the service
+    # resolves it), so clearing the dropdown is never an error.
+    branch = forms.ModelChoiceField(
+        queryset=Branch.all_objects.none(), label="Branch", required=False)
     upload = forms.FileField(
         label="Employee file",
         help_text="A .csv file with the headings EMP-ID and Name, like the demo file.",
@@ -35,6 +38,6 @@ class EmployeeImportForm(StyledFormMixin, forms.Form):
             field.help_text = "You add people to your own branch."
         elif default_branch is not None:
             field.help_text = (
-                f"Everyone in the file joins this branch. It starts on the company's "
-                f"default branch, {default_branch.name}."
+                f"Everyone in the file joins this branch. Left empty, they join the "
+                f"company's default branch, {default_branch.name}."
             )

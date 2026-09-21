@@ -60,8 +60,9 @@ def employee_import(request):
             if form.is_valid():
                 data = form.cleaned_data
                 try:
-                    branch = import_services.check_branch(
-                        request.user, company_id, data["branch"].pk)
+                    # Empty means the default branch; check_branch resolves it.
+                    chosen = data["branch"].pk if data["branch"] else None
+                    branch = import_services.check_branch(request.user, company_id, chosen)
                     rows = import_services.read_file(data["upload"])
                     rows = import_services.check(request.user, company_id, rows)
                 except ValidationError as exc:

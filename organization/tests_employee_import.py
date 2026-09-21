@@ -196,6 +196,14 @@ class CompanyBranchTests(ImportCase):
         self.assertEqual(self.placement("445962").branch, self.unit)
         self.assertEqual(self.placement("445963").branch, self.unit)
 
+    def test_clearing_the_dropdown_means_the_default_branch(self):
+        self.client.force_login(self.admin)
+        page = self.client.post(self.url, {
+            "branch": "", "upload": self.csv_file([["445962", "Ajay Kumar"]])})
+        self.assertEqual(page.context["preview"]["branch"], self.branch)
+        self.confirm()
+        self.assertEqual(self.placement("445962").branch, self.branch)
+
     def test_no_branch_at_all_means_the_default_in_the_service(self):
         self.assertEqual(import_services.check_branch(self.admin, self.company.pk), self.branch)
 
