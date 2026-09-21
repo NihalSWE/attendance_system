@@ -64,9 +64,9 @@ urlpatterns = [
         name="employee_import_confirm",
     ),
     path(
-        "employees/import/template/",
-        import_views.employee_import_template,
-        name="employee_import_template",
+        "employees/import/demo.csv",
+        import_views.employee_import_demo,
+        name="employee_import_demo",
     ),
     path("company/", company_views.company_profile, name="company_profile"),
     path("employees/<int:pk>/", employee_detail_views.employee_detail, name="employee_detail"),

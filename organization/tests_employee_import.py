@@ -1,29 +1,28 @@
-"""Bulk employee import: the file, the preview, and the all-or-nothing write.
+"""Bulk employee import: EMP-ID and Name in the file, the branch on the form.
 
-TwoBranchCase is the right fixture for this on purpose: Head Office and
-Chittagong each hold a department called "Software" with a designation called
-"Developer", which is what a company gets by copying one branch's structure
-into another. The import has to resolve those per branch, not give up on the
-word — so that case is tested first.
+TwoBranchCase: Head Office (the company's default branch, where Manny is the
+branch manager) and Chittagong. The company picks the branch, starting on the
+default; a branch manager is locked to their own. Everyone lands in the
+branch's Unassigned department with no salary, exactly as a device import
+does, and HR fills in the rest on Edit employee.
 """
 
 import csv
 import datetime
 import io
-from decimal import Decimal
+from zoneinfo import ZoneInfo
 
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from auditlog.models import AuditLog
 from common.tenant import use_company
+from devices.services.mapping import UNASSIGNED_CODE
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from leaves.tests_branch_access import TwoBranchCase
 from organization import import_services
-from organization.models import Department
-
-IMPORT_URL = "/organization/employees/import/"
+from organization.models import Branch, Department
 
 
 class ImportCase(TwoBranchCase):
@@ -32,379 +31,337 @@ class ImportCase(TwoBranchCase):
         self.url = reverse("organization:employee_import")
         self.confirm_url = reverse("organization:employee_import_confirm")
 
-    # --- building files ---------------------------------------------------
-
-    def row(self, code, name, *, branch=None, department="Software",
-            designation="Developer", joining="2026-03-01", basis="monthly",
-            rate="25000", phone="", email=""):
-        return [code, name, branch or self.branch.name, department, designation,
-                joining, basis, rate, phone, email]
-
-    def csv_file(self, rows, *, name="people.csv", headings=None):
+    def csv_file(self, rows, *, name="people.csv", headings=("EMP-ID", "Name")):
         buffer = io.StringIO()
         writer = csv.writer(buffer)
-        writer.writerow(import_services.HEADINGS if headings is None else headings)
+        writer.writerow(headings)
         for row in rows:
             writer.writerow(row)
-        return SimpleUploadedFile(
-            name, buffer.getvalue().encode("utf-8"), content_type="text/csv")
+        return SimpleUploadedFile(name, buffer.getvalue().encode("utf-8"),
+                                  content_type="text/csv")
 
-    def upload(self, rows, *, user=None, follow=False, **extra):
+    def upload(self, rows, *, user=None, branch=None, **file_options):
         self.client.force_login(user or self.admin)
-        payload = {"upload": self.csv_file(rows)}
-        payload.update(extra)
-        return self.client.post(self.url, payload, follow=follow)
+        payload = {"upload": self.csv_file(rows, **file_options)}
+        if branch is not None:
+            payload["branch"] = branch.pk
+        elif user is None or user == self.admin:
+            payload["branch"] = self.branch.pk      # what the dropdown starts on
+        return self.client.post(self.url, payload)
 
-    def confirm(self, user=None):
+    def confirm(self):
         return self.client.post(self.confirm_url, follow=True)
 
-    def employee_count(self):
+    def count(self):
         with use_company(self.company):
             return Employee.objects.count()
 
     def placement(self, code):
         with use_company(self.company):
             return EmployeeAssignment.objects.select_related(
-                "branch", "department", "designation", "employee"
-            ).get(employee_code=code)
+                "branch", "department", "designation", "employee").get(employee_code=code)
+
+    def upload_error(self, page):
+        return " ".join(str(m) for m in page.context["form"].errors.get("upload", []))
 
 
-class TemplateTests(ImportCase):
-    def test_the_excel_template_downloads_and_reads_back(self):
+class DemoFileTests(ImportCase):
+    def test_the_demo_file_downloads_in_the_format_it_asks_for(self):
         self.client.force_login(self.admin)
-        page = self.client.get(reverse("organization:employee_import_template"))
+        page = self.client.get(reverse("organization:employee_import_demo"))
         self.assertEqual(page.status_code, 200)
-        self.assertIn("spreadsheetml", page["Content-Type"])
-        self.assertIn("employee-import-template.xlsx", page["Content-Disposition"])
-        # What it writes is what it accepts.
-        rows = import_services.read_file(
-            SimpleUploadedFile("t.xlsx", page.content))
-        self.assertEqual(rows[0]["employee_id"], "445962")
-        self.assertEqual(rows[0]["name"], "Ajay Kumar")
+        self.assertIn("text/csv", page["Content-Type"])
+        self.assertIn("employee-import-demo.csv", page["Content-Disposition"])
+        text = page.content.decode("utf-8-sig")
+        self.assertEqual(text.splitlines()[0], "EMP-ID,Name")
+        # What the demo writes is what the import reads.
+        rows = import_services.read_file(SimpleUploadedFile("demo.csv", page.content))
+        self.assertEqual(len(rows), len(import_services.DEMO_ROWS))
+        self.assertEqual((rows[0]["employee_id"], rows[0]["name"]), ("445961", "Sajal Ahmed"))
 
-    def test_the_csv_template_downloads_with_the_same_headings(self):
-        self.client.force_login(self.admin)
-        page = self.client.get(
-            reverse("organization:employee_import_template") + "?format=csv")
+    def test_a_branch_manager_can_download_it_too(self):
+        self.client.force_login(self.manager)
+        page = self.client.get(reverse("organization:employee_import_demo"))
         self.assertEqual(page.status_code, 200)
-        first_line = page.content.decode("utf-8-sig").splitlines()[0]
-        self.assertEqual(first_line.split(","), import_services.HEADINGS)
-
-
-class ThePageTests(ImportCase):
-    def test_it_opens_with_the_headings_and_the_notes(self):
-        self.client.force_login(self.admin)
-        page = self.client.get(self.url)
-        self.assertEqual(page.status_code, 200)
-        for heading in import_services.HEADINGS:
-            self.assertContains(page, heading)
-        self.assertContains(page, "Download template (Excel)")
-        self.assertIsNone(page.context["preview"])
-
-    def test_the_employees_list_offers_it_to_whoever_may_create(self):
-        self.client.force_login(self.admin)
-        self.assertContains(self.client.get(reverse("employee_list")), self.url)
 
 
 class ReadingTheFileTests(ImportCase):
-    def upload_error(self, response):
-        return " ".join(str(m) for m in response.context["form"].errors["upload"])
+    def test_a_missing_heading_is_named(self):
+        page = self.upload([["445962"]], headings=("EMP-ID",))
+        self.assertIn("Missing: Name", self.upload_error(page))
 
-    def test_a_missing_heading_is_refused_by_name(self):
-        headings = [h for h in import_services.HEADINGS if h != "Branch"]
-        self.client.force_login(self.admin)
-        page = self.client.post(self.url, {
-            "upload": self.csv_file([["1", "A", "x", "y", "2026-01-01", "", "", "", ""]],
-                                    headings=headings)})
-        self.assertIn("Branch", self.upload_error(page))
+    def test_other_spellings_of_the_headings_are_accepted(self):
+        for headings in (("Employee ID", "Name"), ("emp id", "NAME"), ("EMPID", "Full name")):
+            with self.subTest(headings=headings):
+                rows = import_services.read_file(
+                    self.csv_file([["445962", "Ajay Kumar"]], headings=headings))
+                self.assertEqual(rows[0]["employee_id"], "445962")
+
+    def test_extra_columns_are_ignored(self):
+        rows = import_services.read_file(self.csv_file(
+            [["x", "445962", "Ajay Kumar"]], headings=("Notes", "EMP-ID", "Name")))
+        self.assertEqual((rows[0]["employee_id"], rows[0]["name"]), ("445962", "Ajay Kumar"))
 
     def test_an_empty_file_is_refused(self):
         self.client.force_login(self.admin)
         page = self.client.post(self.url, {
+            "branch": self.branch.pk,
             "upload": SimpleUploadedFile("e.csv", b"", content_type="text/csv")})
         self.assertTrue(page.context["form"].errors)
+        self.assertEqual(self.count(), 3)
 
-    def test_headings_but_no_people_is_refused(self):
-        page = self.upload([])
-        self.assertIn("no people", self.upload_error(page))
+    def test_headings_with_no_people_is_refused(self):
+        self.assertIn("no people", self.upload_error(self.upload([])))
 
-    def test_an_old_xls_file_says_what_to_do(self):
+    def test_another_file_type_is_refused(self):
         self.client.force_login(self.admin)
         page = self.client.post(self.url, {
-            "upload": SimpleUploadedFile("old.xls", b"\xd0\xcf\x11\xe0rubbish")})
-        self.assertIn(".xlsx", self.upload_error(page))
-
-    def test_an_unknown_extension_is_refused(self):
-        self.client.force_login(self.admin)
-        page = self.client.post(self.url, {
-            "upload": SimpleUploadedFile("people.pdf", b"%PDF-1.4 ...")})
+            "branch": self.branch.pk,
+            "upload": SimpleUploadedFile("people.pdf", b"%PDF-1.4")})
         self.assertIn(".csv", self.upload_error(page))
 
-    def test_too_many_rows_is_refused_before_any_checking(self):
-        rows = [self.row(str(500000 + n), f"P{n}") for n in range(3)]
+    def test_too_many_rows_is_refused(self):
         original = import_services.MAX_ROWS
         import_services.MAX_ROWS = 2
         try:
-            page = self.upload(rows)
+            page = self.upload([[str(500000 + n), f"P {n}"] for n in range(3)])
         finally:
             import_services.MAX_ROWS = original
-        self.assertIn("3 rows", self.upload_error(page))
-        self.assertEqual(self.employee_count(), 3)   # nothing read, nothing written
+        self.assertIn("3 people", self.upload_error(page))
 
-    def test_an_excel_file_is_read_like_a_csv(self):
+    def test_an_excel_file_is_read_too(self):
         from openpyxl import Workbook
 
         book = Workbook()
-        sheet = book.active
-        sheet.append(import_services.HEADINGS)
-        # Numbers and a real date, as Excel actually stores them.
-        sheet.append([445962, "Ajay Kumar", self.branch.name, "Software", "Developer",
-                      datetime.date(2026, 3, 1), "monthly", 25000, "", ""])
+        book.active.append(["EMP-ID", "Name"])
+        book.active.append([445962, "Ajay Kumar"])        # a number, as Excel keeps it
         buffer = io.BytesIO()
         book.save(buffer)
-
-        rows = import_services.read_file(
-            SimpleUploadedFile("people.xlsx", buffer.getvalue()))
-        self.assertEqual(rows[0]["employee_id"], "445962")     # not "445962.0"
-        self.assertEqual(rows[0]["joining_date"], "2026-03-01")
-        self.assertEqual(rows[0]["base_rate"], "25000")
+        rows = import_services.read_file(SimpleUploadedFile("p.xlsx", buffer.getvalue()))
+        self.assertEqual(rows[0]["employee_id"], "445962")   # not "445962.0"
 
 
 class PreviewTests(ImportCase):
-    def rows_of(self, page):
-        return page.context["preview"]
-
-    def test_a_good_file_previews_without_writing_anything(self):
-        before = self.employee_count()
-        page = self.upload([self.row("445962", "Ajay Kumar"),
-                            self.row("445963", "Dia Rahman")])
-        preview = self.rows_of(page)
+    def test_a_good_file_previews_and_writes_nothing(self):
+        page = self.upload([["445962", "Ajay Kumar"], ["445963", "Dia Rahman"]])
+        preview = page.context["preview"]
         self.assertEqual(preview["counts"], {"total": 2, "bad": 0, "good": 2})
-        self.assertEqual(self.employee_count(), before)
+        self.assertEqual(preview["branch"], self.branch)
+        self.assertEqual(self.count(), 3)
         self.assertContains(page, "Import 2 employees")
 
-    def test_the_same_department_name_resolves_inside_each_branch(self):
-        """Head Office and Chittagong both have Software / Developer."""
+    def test_every_bad_row_is_named_with_its_line(self):
         page = self.upload([
-            self.row("445962", "Ajay Kumar", branch=self.branch.name),
-            self.row("445963", "Karim Two", branch=self.unit.name),
+            ["44A962", "Letters In Id"],
+            ["445963", "Good Person"],
+            ["", "No Id"],
+            ["445964", ""],
+            ["445963", "Same Id Again"],
         ])
-        self.assertEqual(self.rows_of(page)["counts"]["bad"], 0)
+        preview = page.context["preview"]
+        self.assertEqual([row["line"] for row in preview["bad"]], [2, 4, 5, 6])
+        said = " ".join(e for row in preview["bad"] for e in row["errors"])
+        for phrase in ("is not a number", "EMP-ID is missing", "Name is missing",
+                       "also on row 3"):
+            self.assertIn(phrase, said)
+        self.assertNotContains(page, "Import 1 employee")
+
+    def test_an_emp_id_already_in_the_company_is_refused(self):
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(employee_code="E1").update(employee_code="445962")
+        page = self.upload([["445962", "Clash"]])
+        self.assertIn("already belongs to an employee",
+                      page.context["preview"]["bad"][0]["errors"][0])
+
+
+class CompanyBranchTests(ImportCase):
+    def test_the_dropdown_starts_on_the_default_branch_and_lists_every_branch(self):
+        self.client.force_login(self.admin)
+        form = self.client.get(self.url).context["form"]
+        self.assertEqual(form.fields["branch"].initial, self.branch.pk)
+        self.assertFalse(form.fields["branch"].disabled)
+        with use_company(self.company):
+            self.assertEqual(set(form.fields["branch"].queryset), {self.branch, self.unit})
+
+    def test_leaving_the_default_puts_everyone_in_the_default_branch(self):
+        self.upload([["445962", "Ajay Kumar"]])
         self.confirm()
-        self.assertEqual(self.placement("445962").branch_id, self.branch.pk)
-        self.assertEqual(self.placement("445963").branch_id, self.unit.pk)
-        self.assertEqual(self.placement("445963").department.branch_id, self.unit.pk)
+        self.assertEqual(self.placement("445962").branch, self.branch)
 
-    def test_a_department_of_another_branch_is_named_not_guessed(self):
-        with use_company(self.company):
-            Department.objects.create(
-                company=self.company, branch=self.unit, code="SUP", name="Support")
-        page = self.upload([self.row("445962", "Ajay Kumar", department="Support")])
-        errors = self.rows_of(page)["bad"][0]["errors"]
-        self.assertTrue(any("not a department of" in e for e in errors), errors)
-
-    def test_a_designation_of_another_department_is_named(self):
-        with use_company(self.company):
-            support = Department.objects.create(
-                company=self.company, branch=self.branch, code="SUP", name="Support")
-            from organization.models import Designation
-            Designation.objects.create(
-                company=self.company, department=support, code="AGT", name="Agent")
-        page = self.upload([self.row("445962", "Ajay Kumar", designation="Agent")])
-        errors = self.rows_of(page)["bad"][0]["errors"]
-        self.assertTrue(any("does not belong to" in e for e in errors), errors)
-
-    def test_every_bad_row_is_named_with_its_line_number(self):
-        page = self.upload([
-            self.row("44A962", "Letters In Id"),
-            self.row("445963", "Good Person"),
-            self.row("445964", "No Branch", branch="Nowhere"),
-            self.row("445965", "Bad Date", joining="the first of March"),
-            self.row("445966", "Bad Basis", basis="yearly"),
-            self.row("445967", "Bad Email", email="not-an-email"),
-            self.row("", "No Id At All"),
-        ])
-        preview = self.rows_of(page)
-        self.assertEqual(preview["counts"]["bad"], 6)
-        self.assertEqual([row["line"] for row in preview["bad"]], [2, 4, 5, 6, 7, 8])
-        joined = " ".join(e for row in preview["bad"] for e in row["errors"])
-        for phrase in ("is not digits", "No active branch called", "not a date",
-                       "not a pay basis", "not an email address",
-                       "Employee ID is missing"):
-            self.assertIn(phrase, joined)
-        self.assertNotContains(page, "Import 1 employee<")
-
-    def test_an_id_repeated_in_the_file_points_at_the_other_row(self):
-        page = self.upload([self.row("445962", "First"), self.row("445962", "Second")])
-        errors = self.rows_of(page)["bad"][0]["errors"]
-        self.assertIn("also on row 2", errors[0])
-
-    def test_an_id_already_placed_is_refused(self):
-        page = self.upload([self.row("E1", "Clash")])   # Rahim already holds E1
-        errors = self.rows_of(page)["bad"][0]["errors"]
-        # It is not digits either, so the digit rule speaks first; use a real one.
-        self.assertTrue(errors)
-        with use_company(self.company):
-            EmployeeAssignment.objects.filter(employee_code="E1").update(
-                employee_code="445962")
-        page = self.upload([self.row("445962", "Clash")])
-        self.assertIn("already belongs to someone still placed",
-                      self.rows_of(page)["bad"][0]["errors"][0])
-
-    def test_a_row_with_no_pay_needs_a_default(self):
-        page = self.upload([self.row("445962", "Ajay Kumar", basis="", rate="")])
-        errors = " ".join(self.rows_of(page)["bad"][0]["errors"])
-        self.assertIn("no default chosen", errors)
-
-    def test_the_defaults_fill_the_blank_pay_columns(self):
-        page = self.upload(
-            [self.row("445962", "Ajay Kumar", basis="", rate="")],
-            default_pay_basis="daily", default_base_rate="900",
-        )
-        self.assertEqual(self.rows_of(page)["counts"]["bad"], 0)
+    def test_choosing_another_branch_puts_everyone_there(self):
+        page = self.upload([["445962", "Ajay Kumar"], ["445963", "Dia Rahman"]],
+                           branch=self.unit)
+        self.assertContains(page, "joining Chittagong")
         self.confirm()
-        with use_company(self.company):
-            pay = EmployeeCompensation.objects.get(
-                employee=self.placement("445962").employee)
-        self.assertEqual(pay.pay_basis, "daily")
-        self.assertEqual(pay.base_rate, Decimal("900.00"))
+        self.assertEqual(self.placement("445962").branch, self.unit)
+        self.assertEqual(self.placement("445963").branch, self.unit)
 
-    def test_a_default_rate_without_a_basis_is_refused_on_the_form(self):
-        page = self.upload([self.row("445962", "A B")], default_base_rate="900")
-        self.assertIn("default_pay_basis", page.context["form"].errors)
+    def test_no_branch_at_all_means_the_default_in_the_service(self):
+        self.assertEqual(import_services.check_branch(self.admin, self.company.pk), self.branch)
+
+
+class BranchManagerTests(ImportCase):
+    def test_the_branch_is_locked_to_their_own(self):
+        self.client.force_login(self.manager)
+        page = self.client.get(self.url)
+        field = page.context["form"].fields["branch"]
+        self.assertTrue(field.disabled)
+        self.assertEqual(field.initial, self.branch.pk)
+        self.assertContains(page, "You add people to your own branch.")
+
+    def test_they_import_into_their_own_branch(self):
+        page = self.upload([["445962", "Ajay Kumar"]], user=self.manager)
+        self.assertEqual(page.context["preview"]["branch"], self.branch)
+        self.confirm()
+        self.assertEqual(self.placement("445962").branch, self.branch)
+
+    def test_posting_another_branch_is_ignored(self):
+        """The locked field keeps its own value whatever the request says."""
+        page = self.upload([["445962", "Ajay Kumar"]], user=self.manager, branch=self.unit)
+        self.assertEqual(page.context["preview"]["branch"], self.branch)
+        self.confirm()
+        self.assertEqual(self.placement("445962").branch, self.branch)
+
+    def test_the_service_refuses_another_branch(self):
+        with self.assertRaises(PermissionDenied):
+            import_services.check_branch(self.manager, self.company.pk, self.unit.pk)
+        with self.assertRaises(PermissionDenied):
+            import_services.commit(actor=self.manager, company_id=self.company.pk,
+                                   rows=[{"line": 2, "employee_id": "445962",
+                                          "name": "Sneaky"}],
+                                   branch_id=self.unit.pk)
+        self.assertEqual(self.count(), 3)
+
+    def test_a_manager_of_two_branches_chooses_between_those_two_only(self):
+        with use_company(self.company):
+            Branch.objects.create(company=self.company, code="SYL", name="Sylhet",
+                                  timezone="Asia/Dhaka", country_code="BD")
+        both = self.member("both@liv.test", "manager", branches=[self.branch, self.unit])
+        self.client.force_login(both)
+        field = self.client.get(self.url).context["form"].fields["branch"]
+        self.assertFalse(field.disabled)
+        with use_company(self.company):
+            self.assertEqual(set(field.queryset), {self.branch, self.unit})
 
 
 class ConfirmTests(ImportCase):
-    def test_confirming_creates_everyone_with_placement_and_pay(self):
-        before = self.employee_count()
-        self.upload([
-            self.row("445962", "Ajay Kumar", phone="01700000000",
-                     email="ajay@example.com"),
-            self.row("445963", "Dia Rahman", rate="31000.50"),
-        ])
+    def test_they_are_created_like_a_device_import(self):
+        before = self.count()
+        self.upload([["445962", "Ajay Kumar"], ["445963", "Md Fazle Rabbi"]])
         page = self.confirm()
-        self.assertEqual(self.employee_count(), before + 2)
+        self.assertEqual(self.count(), before + 2)
         self.assertContains(page, "2 employees imported")
 
         placement = self.placement("445962")
-        self.assertEqual(placement.employee.first_name, "Ajay")
-        self.assertEqual(placement.employee.last_name, "Kumar")
-        self.assertEqual(placement.employee.work_email, "ajay@example.com")
-        self.assertEqual(placement.employee.phone, "01700000000")
-        self.assertEqual(placement.employee.joining_date, datetime.date(2026, 3, 1))
-        self.assertEqual(placement.branch_id, self.branch.pk)
-        self.assertEqual(placement.department.name, "Software")
-        self.assertEqual(placement.designation.name, "Developer")
+        employee = placement.employee
+        self.assertEqual((employee.first_name, employee.last_name), ("Ajay", "Kumar"))
+        self.assertEqual(self.placement("445963").employee.full_name, "Md Fazle Rabbi")
+        self.assertEqual(employee.employment_status, "active")
+        self.assertTrue(employee.metadata["needs_hr_review"])
+        # The branch's Unassigned department and designation, as a device import uses.
+        self.assertEqual(placement.department.code, UNASSIGNED_CODE)
+        self.assertEqual(placement.designation.code, UNASSIGNED_CODE)
+        self.assertEqual(placement.department.branch_id, self.branch.pk)
+        # No salary: payroll skips them by name until one is set.
         with use_company(self.company):
-            pay = EmployeeCompensation.objects.get(employee=placement.employee)
-        self.assertEqual(pay.base_rate, Decimal("25000.00"))
-        self.assertEqual(pay.currency, self.company.currency)
+            self.assertFalse(EmployeeCompensation.objects.filter(employee=employee).exists())
 
-    def test_a_one_word_name_is_kept_as_the_first_name(self):
-        self.upload([self.row("445962", "Dia")])
+    def test_they_start_at_midnight_today(self):
+        self.upload([["445962", "Ajay Kumar"]])
         self.confirm()
-        employee = self.placement("445962").employee
-        self.assertEqual((employee.first_name, employee.last_name), ("Dia", ""))
-        self.assertEqual(employee.full_name, "Dia")
+        placement = self.placement("445962")
+        zone = ZoneInfo(self.company.timezone or "UTC")
+        local = placement.effective_from.astimezone(zone)
+        self.assertEqual((local.hour, local.minute), (0, 0))
+        self.assertEqual(local.date(), datetime.datetime.now(zone).date())
+        self.assertEqual(placement.employee.joining_date, local.date())
 
-    def test_a_three_word_name_splits_on_the_last_space(self):
-        self.upload([self.row("445962", "Md Fazle Rabbi")])
+    def test_setting_the_department_from_today_corrects_the_row(self):
+        """The follow-up on Edit employee fixes the placement, adds no history."""
+        from organization.employee_edit_services import change_placement
+
+        self.upload([["445962", "Ajay Kumar"]])
         self.confirm()
-        employee = self.placement("445962").employee
-        self.assertEqual((employee.first_name, employee.last_name), ("Md Fazle", "Rabbi"))
+        placement = self.placement("445962")
+        change_placement(actor=self.admin, company_id=self.company.pk,
+                         employee_id=placement.employee_id, values={
+                             "branch": self.branch, "department": self.hq_department,
+                             "designation": self.hq_designation,
+                             "employee_code": "445962",
+                             "effective_at": placement.effective_from, "reason": "",
+                         })
+        with use_company(self.company):
+            rows = EmployeeAssignment.objects.filter(employee_id=placement.employee_id)
+            self.assertEqual(rows.count(), 1)
+            self.assertEqual(rows.get().department, self.hq_department)
+
+    def test_a_second_import_reuses_the_same_unassigned_department(self):
+        self.upload([["445962", "Ajay Kumar"]])
+        self.confirm()
+        self.upload([["445963", "Dia Rahman"]])
+        self.confirm()
+        with use_company(self.company):
+            self.assertEqual(Department.objects.filter(
+                branch=self.branch, code=UNASSIGNED_CODE).count(), 1)
 
     def test_one_bad_row_means_nothing_is_written(self):
-        before = self.employee_count()
-        page = self.upload([self.row("445962", "Good One"),
-                            self.row("44A963", "Bad One")])
-        self.assertNotContains(page, "Import 1 employee")
-        # The button is not offered; a crafted POST is refused all the same.
+        self.upload([["445962", "Good"], ["44A963", "Bad"]])
         page = self.confirm()
-        self.assertEqual(self.employee_count(), before)
+        self.assertEqual(self.count(), 3)
         self.assertContains(page, "can no longer be imported")
 
-    def test_confirming_twice_does_not_import_twice(self):
-        self.upload([self.row("445962", "Ajay Kumar")])
-        self.confirm()
-        before = self.employee_count()
+    def test_an_emp_id_taken_after_the_preview_rolls_everything_back(self):
+        self.upload([["445962", "Ajay Kumar"], ["445963", "Dia Rahman"]])
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(employee_code="E1").update(employee_code="445963")
         page = self.confirm()
-        self.assertEqual(self.employee_count(), before)
-        self.assertContains(page, "no longer waiting")
+        self.assertEqual(self.count(), 3)
+        self.assertContains(page, "can no longer be imported")
 
-    def test_a_confirm_with_nothing_waiting_is_sent_back(self):
-        self.client.force_login(self.admin)
-        page = self.client.post(self.confirm_url, follow=True)
-        self.assertContains(page, "no longer waiting")
+    def test_confirming_twice_imports_once(self):
+        self.upload([["445962", "Ajay Kumar"]])
+        self.confirm()
+        before = self.count()
+        self.assertContains(self.confirm(), "no longer waiting")
+        self.assertEqual(self.count(), before)
 
     def test_the_import_is_audited_on_one_line(self):
-        self.upload([self.row("445962", "Ajay Kumar"), self.row("445963", "Dia Rahman")])
+        self.upload([["445962", "Ajay Kumar"], ["445963", "Dia Rahman"]])
         self.confirm()
-        entry = AuditLog.objects.filter(action="employees.imported").get()
+        entry = AuditLog.objects.get(action="employees.imported")
         self.assertEqual(entry.actor_user_id, self.admin.pk)
         self.assertEqual(entry.after_data["count"], 2)
+        self.assertEqual(entry.after_data["branch_id"], self.branch.pk)
         self.assertEqual(entry.after_data["employee_codes"], ["445962", "445963"])
-
-    def test_a_row_that_stops_being_importable_rolls_the_whole_import_back(self):
-        """The department is deactivated between the preview and the confirm."""
-        before = self.employee_count()
-        self.upload([self.row("445962", "Ajay Kumar"), self.row("445963", "Dia Rahman")])
-        with use_company(self.company):
-            Department.objects.filter(pk=self.hq_department.pk).update(status="inactive")
-        page = self.confirm()
-        self.assertEqual(self.employee_count(), before)
-        self.assertContains(page, "can no longer be imported")
 
 
 class WhoMayImportTests(ImportCase):
-    def test_a_branch_manager_imports_into_their_own_branch(self):
-        before = self.employee_count()
-        page = self.upload([self.row("445962", "Ajay Kumar")], user=self.manager)
-        self.assertEqual(page.context["preview"]["counts"]["bad"], 0)
-        self.confirm()
-        self.assertEqual(self.employee_count(), before + 1)
-        self.assertEqual(self.placement("445962").branch_id, self.branch.pk)
-
-    def test_a_branch_manager_is_refused_another_branch_row_by_row(self):
-        before = self.employee_count()
-        page = self.upload([
-            self.row("445962", "Mine", branch=self.branch.name),
-            self.row("445963", "Not Mine", branch=self.unit.name),
-        ], user=self.manager)
-        preview = page.context["preview"]
-        self.assertEqual(preview["counts"]["bad"], 1)
-        self.assertIn("You cannot add people to", preview["bad"][0]["errors"][0])
-        # All or nothing: their own good row is not written either.
-        self.confirm()
-        self.assertEqual(self.employee_count(), before)
-
-    def test_an_employee_login_never_reaches_the_page(self):
+    def test_an_employee_login_never_reaches_it(self):
         self.client.force_login(self.clerk_user)
-        for url in (self.url, reverse("organization:employee_import_template")):
+        for url in (self.url, reverse("organization:employee_import_demo")):
             with self.subTest(url=url):
                 page = self.client.get(url)
                 self.assertEqual(page.status_code, 302)
                 self.assertIn("/me/", page["Location"])
-        page = self.client.post(self.confirm_url)
-        self.assertIn(page.status_code, (302, 403))
-        self.assertEqual(self.employee_count(), 3)
+        self.assertIn(self.client.post(self.confirm_url).status_code, (302, 403))
+        self.assertEqual(self.count(), 3)
 
-    def test_the_services_refuse_a_crafted_call_too(self):
-        """The page is one door; the service is checked on its own."""
-        rows = [dict(zip([key for key, *_ in import_services.COLUMNS],
-                         self.row("445962", "Ajay Kumar")), line=2)]
+    def test_the_services_refuse_them_too(self):
+        rows = [{"line": 2, "employee_id": "445962", "name": "Sneaky"}]
         with self.assertRaises(PermissionDenied):
             import_services.check(self.clerk_user, self.company.pk, rows)
         with self.assertRaises(PermissionDenied):
             import_services.commit(actor=self.clerk_user, company_id=self.company.pk,
-                                   rows=rows)
-        self.assertEqual(self.employee_count(), 3)
+                                   rows=rows, branch_id=self.branch.pk)
+        self.assertEqual(self.count(), 3)
 
-    def test_the_service_refuses_a_row_the_actor_may_not_write(self):
-        """A session edited to name another branch is caught at commit."""
-        keys = [key for key, *_ in import_services.COLUMNS]
-        rows = [dict(zip(keys, self.row("445962", "Sneaky", branch=self.unit.name)),
-                     line=2)]
-        with self.assertRaises(ValidationError):
-            import_services.commit(actor=self.manager, company_id=self.company.pk,
-                                   rows=rows)
-        self.assertEqual(self.employee_count(), 3)
+    def test_the_employees_list_links_to_it(self):
+        self.client.force_login(self.admin)
+        self.assertContains(self.client.get(reverse("employee_list")), self.url)
+
+    def test_the_page_shows_the_format_and_the_demo_link(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(self.url)
+        self.assertContains(page, "EMP-ID")
+        self.assertContains(page, "Download demo file (CSV)")
+        self.assertIsNone(page.context["preview"])

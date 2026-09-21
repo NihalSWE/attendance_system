@@ -28,11 +28,8 @@
             </p>
         </div>
         <div class="page__actions">
-            <a class="btn btn--ghost" href="{% url 'organization:employee_import_template' %}">
-                Download template (Excel)
-            </a>
-            <a class="btn btn--quiet" href="{% url 'organization:employee_import_template' %}?format=csv">
-                CSV
+            <a class="btn btn--ghost" href="{% url 'organization:employee_import_demo' %}">
+                Download demo file (CSV)
             </a>
         </div>
     </div>
@@ -40,25 +37,50 @@
     <div class="card">
         <div class="card__head">
             <h2>
-                What the file needs
+                The file format
             </h2>
         </div>
         <div class="card__body">
-            <p class="t-faint">
-                One row per person, with these headings in the first row.
-                Up to {{ max_rows }} rows in one file.
-            </p>
             <p>
-                {% for heading in headings %}
-                    <span class="badge badge--neutral">{{ heading }}</span>
-                {% endfor %}
+                Make your file exactly like the demo file: the headings
+                {% for heading in headings %}<strong>{{ heading }}</strong>{% if not forloop.last %} and {% endif %}{% endfor %}
+                in the first row, then one person per row. Up to {{ max_rows }} people in one file.
             </p>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            {% for heading in headings %}
+                                <th>
+                                    {{ heading }}
+                                </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for code, name in demo_rows|slice:":3" %}
+                            <tr>
+                                <td class="mono">
+                                    {{ code }}
+                                </td>
+                                <td>
+                                    {{ name }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
             <ul class="t-faint">
-                {% for note in notes %}
-                    <li>
-                        {{ note }}
-                    </li>
-                {% endfor %}
+                <li>
+                    EMP-ID: digits only. It is the number the attendance terminals know the person by,
+                    and must not already belong to someone in this company.
+                </li>
+                <li>
+                    After the import, set each person's department, designation and salary on
+                    Edit employee. Until then they are in the branch's Unassigned department,
+                    and salary skips them.
+                </li>
             </ul>
         </div>
     </div>
@@ -81,7 +103,7 @@
                     <div class="field {% if field.errors %}field-invalid{% endif %}">
                         <label class="field__label" for="{{ field.id_for_label }}">
                             {{ field.label }}
-                            {% if field.field.required %}
+                            {% if field.field.required and not field.field.disabled %}
                                 <span class="field__req" aria-label="required">
                                     *
                                 </span>
@@ -119,8 +141,8 @@
                     {{ preview.file_name }}
                 </h2>
                 <p class="page__sub">
-                    {{ preview.counts.total }} row{{ preview.counts.total|pluralize }} read.
-                    Nothing has been saved yet.
+                    {{ preview.counts.total }} {{ preview.counts.total|pluralize:"person,people" }} read,
+                    joining {{ preview.branch.name }}. Nothing has been saved yet.
                 </p>
             </div>
             <div class="card__body">
@@ -139,7 +161,7 @@
                                         Row
                                     </th>
                                     <th>
-                                        Employee ID
+                                        EMP-ID
                                     </th>
                                     <th>
                                         Name
@@ -155,7 +177,7 @@
                                         <td>
                                             {{ row.line }}
                                         </td>
-                                        <td>
+                                        <td class="mono">
                                             {{ row.employee_id|default:"—" }}
                                         </td>
                                         <td>
@@ -175,8 +197,7 @@
                     </div>
                 {% else %}
                     <div class="alert alert--success" role="status">
-                        All {{ preview.counts.total }} row{{ preview.counts.total|pluralize }}
-                        can be imported.
+                        All {{ preview.counts.total }} can be imported into {{ preview.branch.name }}.
                     </div>
                 {% endif %}
 
@@ -192,25 +213,13 @@
                                         Row
                                     </th>
                                     <th>
-                                        Employee ID
+                                        EMP-ID
                                     </th>
                                     <th>
                                         Name
                                     </th>
                                     <th>
                                         Branch
-                                    </th>
-                                    <th>
-                                        Department
-                                    </th>
-                                    <th>
-                                        Designation
-                                    </th>
-                                    <th>
-                                        Joining date
-                                    </th>
-                                    <th class="numeric">
-                                        Pay
                                     </th>
                                 </tr>
                             </thead>
@@ -220,26 +229,14 @@
                                         <td>
                                             {{ row.line }}
                                         </td>
-                                        <td>
+                                        <td class="mono">
                                             {{ row.employee_id }}
                                         </td>
                                         <td>
                                             {{ row.name }}
                                         </td>
                                         <td>
-                                            {{ row.branch }}
-                                        </td>
-                                        <td>
-                                            {{ row.department }}
-                                        </td>
-                                        <td>
-                                            {{ row.designation }}
-                                        </td>
-                                        <td>
-                                            {{ row.joining_date }}
-                                        </td>
-                                        <td class="numeric">
-                                            {{ row.base_rate }} {{ row.pay_basis }}
+                                            {{ preview.branch.name }}
                                         </td>
                                     </tr>
                                 {% endfor %}
@@ -248,8 +245,7 @@
                     </div>
                     {% if preview.good_hidden %}
                         <p class="t-faint">
-                            … and {{ preview.good_hidden }} more row{{ preview.good_hidden|pluralize }}
-                            just like these.
+                            … and {{ preview.good_hidden }} more.
                         </p>
                     {% endif %}
                 {% endif %}
@@ -257,12 +253,12 @@
             {% if not preview.bad %}
                 <div class="card__foot">
                     <form method="post" action="{% url 'organization:employee_import_confirm' %}"
-                          data-confirm-title="Import {{ preview.counts.good }} employee{{ preview.counts.good|pluralize }}?"
-                          data-confirm="They are created with their Employee ID, placement and pay, all together. Send them to the terminals afterwards from the Employees list."
-                          data-confirm-button="Import them">
+                          data-confirm-title="Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:'employee,employees' }} into {{ preview.branch.name }}?"
+                          data-confirm="They are created with their EMP-ID and name, in the branch's Unassigned department. Set each one's department, designation and salary on Edit employee afterwards."
+                          data-confirm-button="Import">
                         {% csrf_token %}
                         <button class="btn btn--primary" type="submit">
-                            Import {{ preview.counts.good }} employee{{ preview.counts.good|pluralize }}
+                            Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:"employee,employees" }}
                         </button>
                     </form>
                 </div>

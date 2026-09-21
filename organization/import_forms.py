@@ -1,44 +1,40 @@
-"""The upload form for the bulk employee import.
+"""The upload form for the bulk employee import: the file and the branch.
 
-Only the file and the two pay defaults live here; everything the rows are
-checked against is in ``organization.import_services``, because a crafted POST
-straight to the confirm step must be checked the same way.
+The file carries EMP-ID and Name; this form says which branch everyone in it
+joins. The choices are narrowed for convenience - ``import_services.check_branch``
+is what enforces them, because a crafted POST reaches it too.
 """
 
 from django import forms
 
 from common.forms import StyledFormMixin
-from employees.models import EmployeeCompensation
+from organization.models import Branch
 
 
 class EmployeeImportForm(StyledFormMixin, forms.Form):
+    branch = forms.ModelChoiceField(queryset=Branch.all_objects.none(), label="Branch")
     upload = forms.FileField(
-        label="Spreadsheet",
-        help_text="A .csv or .xlsx file with the template's column headings.",
-        widget=forms.ClearableFileInput(attrs={"accept": ".csv,.xlsx,.xlsm,text/csv"}),
-    )
-    default_pay_basis = forms.ChoiceField(
-        label="Pay basis for rows that leave it empty",
-        required=False,
-        choices=[("", "No default — every row must say")]
-        + list(EmployeeCompensation.PayBasis.choices),
-    )
-    default_base_rate = forms.DecimalField(
-        label="Base rate for rows that leave it empty",
-        required=False, max_digits=18, decimal_places=2, min_value=0.01,
-        help_text="Per month, day or hour, matching the pay basis above.",
+        label="Employee file",
+        help_text="A .csv file with the headings EMP-ID and Name, like the demo file.",
+        widget=forms.ClearableFileInput(attrs={"accept": ".csv,.xlsx,text/csv"}),
     )
 
-    def clean(self):
-        cleaned = super().clean()
-        # Everyone in one import is usually on the same footing, so one of the
-        # two without the other is almost certainly a slip.
-        basis = cleaned.get("default_pay_basis")
-        rate = cleaned.get("default_base_rate")
-        if basis and rate is None:
-            self.add_error("default_base_rate",
-                           "Give the rate as well, or leave the pay basis empty.")
-        if rate is not None and not basis:
-            self.add_error("default_pay_basis",
-                           "Say what that rate is per, or leave the rate empty.")
-        return cleaned
+    def __init__(self, *args, branches, default_branch, locked=False, **kwargs):
+        """``branches``: where the actor may import. ``locked``: a branch
+        manager with a single branch - the field shows it and cannot change."""
+        super().__init__(*args, **kwargs)
+        field = self.fields["branch"]
+        field.queryset = branches
+        field.empty_label = None          # always a branch; it starts on the default
+        field.initial = default_branch.pk if default_branch else None
+        self.locked = locked
+        if locked:
+            # A disabled field ignores whatever is posted and keeps its initial
+            # value, so the branch cannot be swapped in the request.
+            field.disabled = True
+            field.help_text = "You add people to your own branch."
+        elif default_branch is not None:
+            field.help_text = (
+                f"Everyone in the file joins this branch. It starts on the company's "
+                f"default branch, {default_branch.name}."
+            )
