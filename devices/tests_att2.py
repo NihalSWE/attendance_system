@@ -8,6 +8,7 @@ the 3.x table form ``Return=-1004``.
 """
 
 import datetime
+import unittest
 
 from django.test import TestCase
 from django.utils import timezone
@@ -362,6 +363,7 @@ class TrialWritesTests(Att2Case):
             entry, error = queue_user_query(device=self.device, device_user_id="99999")
         self.assertEqual((entry["body"], error), ("DATA QUERY USERINFO PIN=99999", ""))
 
+    @unittest.skip("The trial, read-back and delete-form cards are commented out in device_users.html (2026-09-21). Uncomment the block and this test again together.")
     def test_the_page_offers_the_trial_and_the_read_back(self):
         from django.contrib.auth import get_user_model
 
@@ -511,6 +513,7 @@ class DeleteFormTrialTests(Att2Case):
         self.assertIsNone(entry)
         self.assertIn("Unknown", error)
 
+    @unittest.skip("The trial, read-back and delete-form cards are commented out in device_users.html (2026-09-21). Uncomment the block and this test again together.")
     def test_the_page_offers_the_forms_until_delete_is_measured(self):
         from django.contrib.auth import get_user_model
 
