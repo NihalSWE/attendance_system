@@ -4074,3 +4074,44 @@ Tests: `common/tests_exports.py` (4, plus `xlsx_table` / `pdf_text` helpers
 that read a download back), `base_template/tests_setup_filter.py` (9),
 `base_template/tests_employee_export.py` (16), `attendance/tests_exports.py`
 (15), and 2 more in `organization/tests_employee_import.py`. Full suite 1373 OK.
+
+## Bangla names print correctly in every PDF (2026-09-22)
+
+Ajay's next item: HR types real Bangla names, and a printed sheet of boxes
+reads as lost data. Every PDF (Employees, Attendance, the calendar) now uses
+one bundled font for the whole document, set on the document, every paragraph
+style, the tables and the page footer — no per-string switching, and no
+Helvetica left anywhere in the file (tested).
+
+**The font is Hind Siliguri, not Noto Sans Bengali.** Noto Sans Bengali was
+downloaded first and checked: it has **no Latin letters, no digits and no
+punctuation**, so as the one font for a document every English name, date and
+number would have printed as boxes. Hind Siliguri (Indian Type Foundry, SIL
+Open Font License, from Google Fonts) has Bangla, Bangla digits, Latin, digits
+and the `–` / `·` the files use, in Regular and Bold. Files and licence:
+`common/fonts/` (~540 KB).
+
+**Shaping, the part that is easy to miss.** Bangla letters present is not
+enough: vowel signs such as ি are written after their consonant but drawn
+before it, and conjuncts like ক্ষ্ম join into one glyph. reportlab does this
+only when (a) `uharfbuzz` is installed — now in requirements.txt, prebuilt
+wheel — and (b) the paragraph style has `shaping=1`, which reportlab defaults
+**off**. Without (b) a "no boxes" test passes while names print scrambled, so
+every style sets it and a test pins it; `_register_fonts` refuses to run
+without uharfbuzz.
+
+Tests (`common/tests_exports.py`, +5, and +2 in tests_employee_export):
+Bangla names shape to real glyphs, never glyph 0 (.notdef, the box); a
+control proves the check catches boxes (reportlab's Latin-only Vera draws the
+same name as boxes); কি comes out with ি first; লক্ষ্মী is 3 glyphs from 7
+characters; every style is the bundled font with shaping on; a PDF with a
+Bangla title, line and row carries only Hind Siliguri; and a real employee
+renamed in Bangla goes through the real Employees download (Excel keeps the
+name exactly; the PDF has no Helvetica).
+
+`tables.table_queryset` also carries Ajay's note: its `search[value]` /
+`order[...]` params are not namespaced by table name yet — do that before a
+download goes on a page with two server tables.
+
+**Server:** `pip install -r requirements.txt` (adds uharfbuzz) before restart.
+Full suite 1380 OK.

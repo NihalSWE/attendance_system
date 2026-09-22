@@ -15,6 +15,10 @@ et-xmlfile==2.0.0
 reportlab==5.0.1
 pillow==12.3.0
 charset-normalizer==3.5.1
+# Bangla in PDFs: reportlab shapes complex scripts (conjuncts, vowel signs that
+# draw before their consonant) only when uharfbuzz is importable. Prebuilt
+# wheel; without it Bangla names print in the wrong letter order.
+uharfbuzz==0.56.2
 tzdata==2026.3
 # Test-only: Django's --parallel runner needs it to carry a failure
 # back from a worker. Without it a failing test crashes the run with

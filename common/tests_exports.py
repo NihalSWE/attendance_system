@@ -76,3 +76,80 @@ class SharedRulesTests(SimpleTestCase):
                                           headers=["A"], rows=[["Rahim (HQ)"]]))
         self.assertIn("Title here", text)
         self.assertIn("Rahim (HQ)", text)
+
+
+# Bangla names in PDFs (Ajay, 2026-09-21): HR types real names, and a printed
+# sheet of boxes reads as lost data. Written with \u escapes so the file stays
+# ASCII: "রহিম আহমেদ" (Rahim Ahmed), "কি", "লক্ষ্মী" (Lakshmi, a three-letter conjunct).
+RAHIM_AHMED = "\u09b0\u09b9\u09bf\u09ae \u0986\u09b9\u09ae\u09c7\u09a6"
+KI = "\u0995\u09bf"
+LAKSHMI = "\u09b2\u0995\u09cd\u09b7\u09cd\u09ae\u09c0"
+BANGLA_NAMES = (RAHIM_AHMED, LAKSHMI, "\u09a8\u09c1\u09b8\u09b0\u09be\u09a4 \u099c\u09be\u09b9\u09be\u09a8",
+                "\u09ae\u09cb\u0983 \u09ab\u099c\u09b2\u09c7 \u09b0\u09be\u09ac\u09cd\u09ac\u09bf")
+
+
+def glyph_ids(font_name, text):
+    """The glyphs a registered TTF font draws for ``text``, after shaping.
+
+    Glyph 0 is .notdef - the empty box a font draws for a character it lacks.
+    """
+    import uharfbuzz
+    from reportlab.pdfbase import pdfmetrics
+
+    buffer = uharfbuzz.Buffer()
+    buffer.add_str(text)
+    buffer.guess_segment_properties()
+    uharfbuzz.shape(pdfmetrics.getFont(font_name).hbFont(10), buffer)
+    return [info.codepoint for info in buffer.glyph_infos]
+
+
+class BanglaInPdfTests(SimpleTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        exports._register_fonts()
+
+    def test_bangla_names_draw_real_glyphs_not_boxes(self):
+        for name in BANGLA_NAMES + ("Rahim Ahmed", "Employee ID 445962 · 09:00 – 18:00"):
+            with self.subTest(name=name.encode("unicode_escape")):
+                self.assertNotIn(0, glyph_ids(exports.FONT, name))
+                self.assertNotIn(0, glyph_ids(exports.FONT_BOLD, name))
+
+    def test_the_check_would_catch_boxes(self):
+        """Control: an English-only font draws Bangla as boxes, and the check sees it."""
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+
+        if "ControlVera" not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont("ControlVera", "Vera.ttf"))
+        self.assertIn(0, glyph_ids("ControlVera", RAHIM_AHMED))
+
+    def test_bangla_is_shaped_not_just_drawn(self):
+        """Letters present is not enough: in the wrong order it is still unreadable."""
+        from reportlab.pdfbase.ttfonts import shapeStr
+
+        # The vowel sign "ি" is written after "ক" but drawn before it.
+        self.assertEqual(str(shapeStr(KI, exports.FONT, 10)), KI[1] + KI[0])
+        # A three-letter conjunct (ক্ষ্ম) becomes one joined glyph: 7 characters, 3 glyphs.
+        self.assertEqual(len(glyph_ids(exports.FONT, LAKSHMI)), 3)
+
+    def test_every_pdf_style_uses_the_bundled_font_with_shaping_on(self):
+        """reportlab defaults shaping OFF; one style missing it prints scrambled Bangla."""
+        for key, style in exports._styles().items():
+            with self.subTest(style=key):
+                self.assertIn(style.fontName, (exports.FONT, exports.FONT_BOLD))
+                self.assertTrue(style.shaping)
+
+    def test_a_pdf_with_a_bangla_name_carries_only_the_bundled_font(self):
+        content = exports.table_pdf(
+            title=f"\u09a2\u09be\u0995\u09be Ltd \u2014 Employees",
+            lines=[f"Search: \"{KI}\""],
+            headers=["Employee ID", "Name"],
+            rows=[["445962", RAHIM_AHMED], ["445963", "Rahim Ahmed"]])
+        self.assertTrue(content.startswith(b"%PDF"))
+        self.assertIn(b"HindSiliguri", content)
+        self.assertNotIn(b"Helvetica", content)
+        grid = exports.grid_pdf(title="Calendar", lines=[RAHIM_AHMED],
+                                blocks=[("", ["Mon"], [["1\n" + KI]])])
+        self.assertIn(b"HindSiliguri", grid)
+        self.assertNotIn(b"Helvetica", grid)

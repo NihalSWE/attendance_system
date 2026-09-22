@@ -161,3 +161,30 @@ class CeilingAndAuditTests(EmployeeExportCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("/me/", response.url)
         self.assertFalse(AuditLog.objects.filter(action="export.downloaded").exists())
+
+
+class BanglaNameTests(EmployeeExportCase):
+    """A real Bangla name through the real download (Ajay, 2026-09-21)."""
+
+    def setUp(self):
+        super().setUp()
+        from common.tests_exports import RAHIM_AHMED
+
+        self.bangla = RAHIM_AHMED
+        first, last = RAHIM_AHMED.split(" ")
+        with use_company(self.company):
+            self.employee.first_name, self.employee.last_name = first, last
+            self.employee.save(update_fields=["first_name", "last_name"])
+
+    def test_excel_keeps_the_name_exactly(self):
+        _lines, _headers, rows = self.table()
+        self.assertIn(self.bangla, self.names(rows))
+
+    def test_the_pdf_draws_it_in_the_bundled_font_only(self):
+        from common.tests_exports import glyph_ids
+
+        response = self.download("pdf")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"HindSiliguri", response.content)
+        self.assertNotIn(b"Helvetica", response.content)
+        self.assertNotIn(0, glyph_ids(exports.FONT, self.bangla))

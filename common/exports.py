@@ -14,13 +14,21 @@ This module only writes the file, and holds the rules every download shares:
   with who, which page, which format, which filters and how many rows.
 - **It is named for what it holds:** ``employees-headoffice-2026-09-21.xlsx``.
 
-PDF uses reportlab (pure Python; no system libraries on the server), with the
-standard Helvetica font - names in non-Latin scripts would print as boxes.
+PDF uses reportlab (pure Python; no system libraries on the server) with one
+bundled font for the whole document, **Hind Siliguri** (common/fonts/, SIL Open
+Font License): it has Bangla *and* Latin, so a Bangla name and an English one
+print from the same font. (Noto Sans Bengali was the first choice but carries
+no Latin letters, digits or punctuation - everything English would have been
+boxes.) Bangla needs shaping - conjuncts, and vowel signs drawn before their
+consonant - which reportlab does through ``uharfbuzz``; it is in
+requirements.txt, and ``_register_fonts`` refuses to run without it rather
+than print names in the wrong letter order.
 """
 
 import datetime
 import io
 import re
+from pathlib import Path
 
 from django.http import HttpResponse
 
@@ -139,19 +147,55 @@ def table_xlsx(*, title, lines, headers, rows, numeric=(), widths=None):
 # --- PDF -------------------------------------------------------------------
 
 
+#: The one font family every PDF uses (see the module docstring).
+FONT = "HindSiliguri"
+FONT_BOLD = "HindSiliguri-Bold"
+FONT_DIR = Path(__file__).resolve().parent / "fonts"
+
+
+def _register_fonts():
+    """Register the bundled font with reportlab, once per process."""
+    from reportlab.lib.fonts import addMapping
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+
+    if FONT in pdfmetrics.getRegisteredFontNames():
+        return
+    try:
+        import uharfbuzz  # noqa: F401 - reportlab shapes Bangla only with it
+    except ModuleNotFoundError:  # pragma: no cover - listed in requirements.txt
+        raise RuntimeError(
+            "uharfbuzz is not installed: Bangla would print in the wrong letter "
+            "order. Run pip install -r requirements.txt."
+        )
+    pdfmetrics.registerFont(TTFont(FONT, str(FONT_DIR / "HindSiliguri-Regular.ttf")))
+    pdfmetrics.registerFont(TTFont(FONT_BOLD, str(FONT_DIR / "HindSiliguri-Bold.ttf")))
+    # So <b> inside a paragraph picks the bold face of the same family.
+    addMapping(FONT, 0, 0, FONT)
+    addMapping(FONT, 1, 0, FONT_BOLD)
+    addMapping(FONT, 0, 1, FONT)
+    addMapping(FONT, 1, 1, FONT_BOLD)
+
+
 def _styles():
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 
+    _register_fonts()
     base = getSampleStyleSheet()
+    # shaping=1 on every style: reportlab defaults it OFF, and unshaped Bangla
+    # prints its letters in the wrong order (a vowel sign after its consonant
+    # instead of before). Bangla sits taller than Latin, so the leading is a
+    # little looser than Helvetica needed.
     return {
-        "title": ParagraphStyle("t", parent=base["Title"], fontSize=14, leading=17,
-                                alignment=0, spaceAfter=2),
-        "sub": ParagraphStyle("s", parent=base["Normal"], fontSize=8, leading=10,
-                              textColor=colors.HexColor("#4a5a6b")),
-        "cell": ParagraphStyle("c", parent=base["Normal"], fontSize=7.5, leading=9),
-        "head": ParagraphStyle("h", parent=base["Normal"], fontSize=7.5, leading=9,
-                               fontName="Helvetica-Bold"),
+        "title": ParagraphStyle("t", parent=base["Title"], fontName=FONT_BOLD, fontSize=14,
+                                leading=19, alignment=0, spaceAfter=2, shaping=1),
+        "sub": ParagraphStyle("s", parent=base["Normal"], fontName=FONT, fontSize=8,
+                              leading=11, textColor=colors.HexColor("#4a5a6b"), shaping=1),
+        "cell": ParagraphStyle("c", parent=base["Normal"], fontName=FONT, fontSize=7.5,
+                               leading=10, shaping=1),
+        "head": ParagraphStyle("h", parent=base["Normal"], fontName=FONT_BOLD, fontSize=7.5,
+                               leading=10, shaping=1),
     }
 
 
@@ -164,11 +208,14 @@ def _document(buffer, title, landscape_page=True):
 
     def footer(canvas, doc):
         canvas.saveState()
-        canvas.setFont("Helvetica", 7)
-        canvas.drawRightString(size[0] - 12 * mm, 8 * mm, f"{title} · page {doc.page}")
+        canvas.setFont(FONT, 7)
+        canvas.drawRightString(size[0] - 12 * mm, 8 * mm, f"{title} · page {doc.page}",
+                               shaping=True)
         canvas.restoreState()
 
-    doc = SimpleDocTemplate(buffer, pagesize=size, title=title,
+    # initialFontName: reportlab opens every page with an (empty) text block in
+    # its default Helvetica; starting on our font keeps Helvetica out entirely.
+    doc = SimpleDocTemplate(buffer, pagesize=size, title=title, initialFontName=FONT,
                             leftMargin=12 * mm, rightMargin=12 * mm,
                             topMargin=12 * mm, bottomMargin=14 * mm)
     return doc, footer
@@ -207,6 +254,7 @@ def table_pdf(*, title, lines, headers, rows, numeric=(), widths=None):
     col_widths = [doc.width * w / total for w in weights]
     table = Table(data, colWidths=col_widths, repeatRows=1)
     table.setStyle(TableStyle([
+        ("FONTNAME", (0, 0), (-1, -1), FONT),    # not the table default, Helvetica
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8ecf1")),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f6f8fa")]),
         ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.HexColor("#9aa7b5")),
@@ -244,6 +292,7 @@ def grid_pdf(*, title, lines, blocks):
         grid = Table(data, colWidths=[doc.width / len(header_row)] * len(header_row),
                      repeatRows=1)
         grid.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), FONT),
             ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#c3ccd6")),
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8ecf1")),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
