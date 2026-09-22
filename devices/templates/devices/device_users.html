@@ -495,7 +495,6 @@
             This is the device's own report, not a live query — we never poll the device.
         </p>
     {% endif %}
-    {% comment %} Test-user trial, read-back and delete-form cards — hidden 2026-09-21 at Ajay's request while the 3A delete is unfinished; the views and their tests are untouched, so uncommenting brings them straight back.
     {% if trial_writes or can_read_back %}
         <div class="card">
             <div class="card__head">
@@ -648,7 +647,6 @@
             </div>
         </div>
     {% endif %}
-    {% endcomment %}
     {% if recent_results or pending_commands %}
         <div class="card">
             <div class="card__head">
