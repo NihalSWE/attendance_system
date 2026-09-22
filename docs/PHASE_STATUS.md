@@ -4115,3 +4115,15 @@ download goes on a page with two server tables.
 
 **Server:** `pip install -r requirements.txt` (adds uharfbuzz) before restart.
 Full suite 1380 OK.
+
+## Daily list filters on one row (2026-09-22)
+
+The date picker's wrapper (`.dp`) is `width: 100%` so it fills a form field;
+inside a `.toolbar` flex row that made "Any day" and "From – To" each take a
+whole line of their own. In any toolbar a date picker now sizes like the
+selects beside it (`.toolbar > .dp`). The Daily list's eight filters also get
+`toolbar--fit`, which sizes its selects to their contents instead of the
+150 px floor (a year does not need 150 px): month, year, branch, employee,
+status, day, range and Apply now sit on one row at 1440 px and wrap cleanly on
+a narrower screen, with no horizontal scroll. Checked in the running app at
+1440 and 1100 px, both calendars still open full size. CSS only.

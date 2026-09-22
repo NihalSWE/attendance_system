@@ -330,6 +330,36 @@ Page furniture
 .toolbar > .select2-container {
     min-width: 220px;
 }
+/* A date picker is width:100% so it fills a form field; in a filter row that
+   made "Any day" and "From – To" each take a whole line of their own. Here
+   they size like the selects beside them. The From – To picker holds two
+   inputs and needs room for two dates. */
+.toolbar > .dp {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 160px;
+}
+.toolbar > .dp:has(.dp__native ~ .dp__native) {
+    min-width: 230px;
+}
+/* A filter row with many controls (the attendance Daily list: month, year,
+   branch, employee, status, a day, a range, Apply) sized to its contents so
+   it fits one row on a 1440px screen; on a narrower one it wraps as usual.
+   The 150px floor above suits two or three filters, not eight - a year does
+   not need 150px. */
+.toolbar--fit > .cs {
+    min-width: 0;
+}
+.toolbar--fit > .select2-container {
+    min-width: 180px;
+    width: 180px !important;
+}
+.toolbar--fit > .dp {
+    min-width: 140px;
+}
+.toolbar--fit > .dp:has(.dp__native ~ .dp__native) {
+    min-width: 210px;
+}
 /* Empty state — sunken well, never a bare white void. */
 .empty {
     padding: var(--s8) var(--s5);
