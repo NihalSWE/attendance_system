@@ -21,10 +21,12 @@
             <p class="page__sub">
                 {% if company_wide %}
                     Generating a month recalculates its attendance first. The result is a
-                    draft and can be generated again until you finalise it.
+                    draft: generate it again as often as you need, then submit it for
+                    approval. Approving finalises the month.
                 {% else %}
                     Salary for the people placed in your branches. Generating rebuilds only
-                    their payslips; the owner or company administrator finalises the month.
+                    their payslips. When it is ready, submit the month for approval; the
+                    owner or company administrator approves it.
                 {% endif %}
             </p>
         </div>
@@ -42,13 +44,26 @@
                     <a class="btn btn--ghost" href="{% url 'payroll:payroll_reopen' %}?month={{ month }}&year={{ year }}">
                         Undo finalise
                     </a>
-                {% elif run %}
-                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}">
-                        Finalise {{ month_name }}
-                    </a>
                 {% endif %}
             {% endif %}
-            {% if can_generate and run.status != 'posted' %}
+            {# Approval (A11): whoever prepares submits; the owner/admin approves. #}
+            {% if run.status == 'submitted' %}
+                {% if can_manage or is_submitter %}
+                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_return' %}?month={{ month }}&year={{ year }}">
+                        {% if can_manage %}Send back{% else %}Take back{% endif %}
+                    </a>
+                {% endif %}
+                {% if can_manage and not approval_blocked %}
+                    <a class="btn btn--primary" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}">
+                        Approve {{ month_name }}
+                    </a>
+                {% endif %}
+            {% elif run.status == 'draft' and can_generate %}
+                <a class="btn btn--ghost" href="{% url 'payroll:payroll_submit' %}?month={{ month }}&year={{ year }}">
+                    Submit {{ month_name }} for approval
+                </a>
+            {% endif %}
+            {% if can_generate and run.status != 'posted' and run.status != 'submitted' %}
                 <form method="post" action="{% url 'payroll:payroll_generate' %}">
                     {% csrf_token %}
                     <input type="hidden" name="month" value="{{ month }}">
@@ -61,6 +76,22 @@
         </div>
     </div>
 
+    {% if run.status == 'submitted' %}
+        <div class="alert alert--info">
+            {{ month_name }} {{ year }} is waiting for approval — submitted by
+            {{ run.submitted_by.get_full_name|default:run.submitted_by.email|default:"someone" }}
+            on {{ run.submitted_at|date:"d M Y, H:i" }}. It cannot be regenerated or have lines
+            added until it is approved or sent back.
+            {% if not can_manage %}
+                The owner or company administrator approves it.
+            {% endif %}
+        </div>
+    {% elif run.status == 'draft' and run.return_reason %}
+        <div class="alert alert--warning">
+            Sent back by {{ run.returned_by.get_full_name|default:run.returned_by.email|default:"someone" }}
+            on {{ run.returned_at|date:"d M Y, H:i" }}: {{ run.return_reason }}
+        </div>
+    {% endif %}
     {% if overtime_since_run %}
         <div class="alert alert--warning">
             Overtime was decided for {{ overtime_since_run }} day{{ overtime_since_run|pluralize }} after this
@@ -83,6 +114,10 @@
             {% if run.status == 'posted' %}
                 <span class="badge badge--success">
                     Finalised {{ run.posted_at|date:"d M Y" }}
+                </span>
+            {% elif run.status == 'submitted' %}
+                <span class="badge badge--info">
+                    Waiting for approval
                 </span>
             {% elif run %}
                 <span class="badge badge--warning">

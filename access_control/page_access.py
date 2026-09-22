@@ -57,6 +57,10 @@ BRANCH_PAGES = {
     # not listed: they stay with the owner and company admin.
     "payroll:payroll_home": ("salary.view", "salary.prepare"),
     "payroll:payroll_generate": "salary.prepare",
+    # Salary approval (A11): whoever prepares salary submits the month, and
+    # can take it back; approving stays with the owner and company admin.
+    "payroll:payroll_submit": "salary.prepare",
+    "payroll:payroll_return": "salary.prepare",
     "payroll:payslip": ("salary.view", "salary.prepare"),
     "payroll:payslip_adjustment_add": "salary.prepare",
     "payroll:payslip_adjustment_remove": "salary.prepare",

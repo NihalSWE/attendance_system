@@ -11,7 +11,8 @@ from common.tenant import use_company
 from leaves.tests_branch_access import AUGUST, MONDAY, TwoBranchCase
 from payroll import overtime
 from payroll.models import PayrollRun
-from payroll.services import add_adjustment, finalise_payroll, generate_payroll
+from payroll.services import add_adjustment, generate_payroll
+from payroll.tests_approval import finalise_payroll
 from payroll.tests_overtime import LATER
 
 
@@ -133,7 +134,8 @@ class SalaryPageTests(BranchSalaryBase):
         page = self.client.get(reverse("payroll:payroll_home"), AUGUST)
         for name in ("Rahim", "Karim"):
             self.assertContains(page, name)
-        self.assertContains(page, reverse("payroll:payroll_finalise"))
+        # A draft month offers Submit for approval; Approve comes once submitted.
+        self.assertContains(page, reverse("payroll:payroll_submit"))
         self.assertNotContains(page, "for your branches")
         self.client.force_login(self.hr)
         page = self.client.get(reverse("payroll:payroll_home"), AUGUST)

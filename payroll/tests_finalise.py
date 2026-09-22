@@ -8,7 +8,8 @@ from django.urls import reverse
 from accounts.models import CompanyMembership, User
 from attendance.services import locked_ranges
 from payroll.models import PayrollRun
-from payroll.services import finalise_payroll, generate_payroll, reopen_payroll
+from payroll.services import generate_payroll, reopen_payroll
+from payroll.tests_approval import finalise_payroll
 from payroll.tests_overtime import OvertimeBase
 
 AUGUST = (datetime.date(2026, 8, 1), datetime.date(2026, 8, 31))
@@ -58,6 +59,10 @@ class FinaliseTests(OvertimeBase):
         self.month(generate_payroll)
         self.client.force_login(self.admin)
         home = reverse("payroll:payroll_home") + "?month=8&year=2026"
+        # Submit, then approve (a single owner/admin approves their own).
+        submit = reverse("payroll:payroll_submit") + "?month=8&year=2026"
+        self.assertContains(self.client.get(home), submit)
+        self.assertRedirects(self.client.post(reverse("payroll:payroll_submit"), {"month": 8, "year": 2026}), home)
         finalise = reverse("payroll:payroll_finalise") + "?month=8&year=2026"
         self.assertContains(self.client.get(home), finalise)
         self.assertEqual(self.client.get(finalise).status_code, 200)

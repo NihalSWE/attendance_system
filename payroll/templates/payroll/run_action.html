@@ -28,16 +28,38 @@
                         Status: {{ run.get_status_display }}
                     </p>
                 {% endif %}
-                {% if reopen %}
+                {% if run.submitted_by and action != 'submit' %}
+                    <p>
+                        Submitted by {{ run.submitted_by.get_full_name|default:run.submitted_by.email }}
+                        on {{ run.submitted_at|date:"d M Y, H:i" }}.
+                    </p>
+                {% endif %}
+                {% if action == 'submit' %}
                     <p class="field__help">
-                        The month becomes a draft again: its attendance and overtime can
-                        change, and employees stop seeing these payslips. Generate it
-                        again after fixing the mistake, then finalise.
+                        The month goes to the owner or company administrator to approve. Until
+                        it is approved or sent back it cannot be regenerated, and no bonus or
+                        deduction lines can be added or removed. Check the salaries first.
+                    </p>
+                {% elif action == 'approve' %}
+                    <p class="field__help">
+                        Approving finalises the month: its attendance and overtime are locked,
+                        and employees see their payslips under My payslips.
+                    </p>
+                    {% if blocked %}
+                        <div class="alert alert--warning" role="alert">
+                            {{ blocked }}
+                        </div>
+                    {% endif %}
+                {% elif action == 'return' %}
+                    <p class="field__help">
+                        The month becomes a draft again, so it can be corrected and generated
+                        again, then submitted.
                     </p>
                 {% else %}
                     <p class="field__help">
-                        Finalising locks the month's attendance and overtime, and employees
-                        see their payslips under My payslips. Check the salaries first.
+                        The month becomes a draft again: its attendance and overtime can
+                        change, and employees stop seeing these payslips. Generate it
+                        again after fixing the mistake, then submit it for approval.
                     </p>
                 {% endif %}
                 <form method="post" class="stack" novalidate>
@@ -51,9 +73,11 @@
                         {% endfor %}
                     {% endif %}
                     <div class="row">
-                        <button class="btn {% if reopen %}btn--danger{% else %}btn--primary{% endif %}" type="submit">
-                            {{ submit_label }}
-                        </button>
+                        {% if not blocked %}
+                            <button class="btn btn--{{ tone }}" type="submit">
+                                {{ submit_label }}
+                            </button>
+                        {% endif %}
                         <a class="btn btn--ghost" href="{{ back }}">
                             Cancel
                         </a>

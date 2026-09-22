@@ -7,7 +7,10 @@ app_name = "payroll"
 urlpatterns = [
     path("", views.payroll_home, name="payroll_home"),
     path("generate/", views.payroll_generate, name="payroll_generate"),
+    # Draft -> submit -> approve (finalise) -> undo; or send a submitted month back.
+    path("submit/", views.payroll_submit, name="payroll_submit"),
     path("finalise/", views.payroll_finalise, name="payroll_finalise"),
+    path("return/", views.payroll_return, name="payroll_return"),
     path("finalise/undo/", views.payroll_reopen, name="payroll_reopen"),
     path("settings/", views.salary_settings, name="salary_settings"),
     path("settings/penalties/add/", views.penalty_rule_create, name="penalty_rule_create"),

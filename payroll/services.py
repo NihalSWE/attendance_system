@@ -600,6 +600,11 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
         )
         if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.POSTED).exists():
             raise ValidationError("This month's salary is finalised and cannot be regenerated.")
+        if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.SUBMITTED).exists():
+            raise ValidationError(
+                "This month's salary is waiting for approval. Send it back before "
+                "generating it again."
+            )
 
         records_by_employee = {}
         for record in (
@@ -779,9 +784,80 @@ def _run_for_month(company_id, year, month, status):
     ).first()
 
 
+def _is_approver(actor, company_id):
+    """The company's owner/administrator - there is exactly one per company
+    (accounts: uniq_current_company_administrator)."""
+    from accounts.models import CompanyMembership
+
+    return CompanyMembership.all_objects.filter(
+        company_id=company_id, user=actor, status=CompanyMembership.Status.ACTIVE,
+        role__in=STRUCTURE_ROLES,
+    ).exists()
+
+
+def approval_blocker(actor, company_id, run):
+    """Why ``actor`` may not approve ``run`` right now, or None if they may.
+
+    Whoever prepares salary submits it - a branch manager with salary access,
+    and later the payroll manager - and the owner/administrator approves it:
+    two people see the month before employees do. A company has exactly one
+    owner/administrator, so when they prepared the month themselves they
+    approve their own submission; there is nobody else to ask.
+    """
+    if run is None or run.status != PayrollRun.Status.SUBMITTED:
+        return "This month's salary is not waiting for approval."
+    if not _is_approver(actor, company_id):
+        return "Only the owner or company administrator can approve salary."
+    return None
+
+
 @transaction.atomic
-def finalise_payroll(*, actor, company_id, year, month):
-    """Finalise a month's draft salary (A11, kept simple).
+def submit_payroll(*, actor, company_id, year, month):
+    """Send a month's draft salary for approval (A11: finalise with approval).
+
+    Whoever may prepare salary submits: the owner/administrator, or a branch
+    manager with salary access (the month is one run for the company, so a
+    branch submits all of it; the approver sees every branch and can send it
+    back). Nothing about the month can change while it waits - Generate and
+    the bonus/deduction lines refuse - so the approver approves exactly what
+    was submitted.
+    """
+    from payroll import overtime
+
+    membership, prepare = salary_branches(actor, company_id, "salary.prepare")
+    if not prepare:
+        raise PermissionDenied("Submitting salary needs access to prepare it.")
+    with use_company(company_id):
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.DRAFT)
+        if run is None:
+            if _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED):
+                raise ValidationError("This month's salary is already waiting for approval.")
+            raise ValidationError("Generate this month's salary before submitting it.")
+        if overtime.decided_after(company_id, run):
+            raise ValidationError(
+                "Overtime was decided after this salary was generated. "
+                "Generate the month again, then submit it."
+            )
+        run.status = PayrollRun.Status.SUBMITTED
+        run.submitted_by = actor
+        run.submitted_at = timezone.now()
+        run.returned_by = None
+        run.returned_at = None
+        run.return_reason = ""
+        run.updated_by = actor
+        run.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.submitted", obj=run,
+            before={"status": PayrollRun.Status.DRAFT},
+            after={"status": PayrollRun.Status.SUBMITTED, "net": run.totals_snapshot.get("net")},
+        )
+    return run
+
+
+@transaction.atomic
+def approve_payroll(*, actor, company_id, year, month):
+    """Approve a submitted month: it is finalised.
 
     Employees then see their payslips, and the month's attendance and overtime
     stop changing (``attendance.services.locked_ranges`` reads the status).
@@ -789,15 +865,15 @@ def finalise_payroll(*, actor, company_id, year, month):
     from payroll import overtime
 
     membership = require_structure_manager(actor, company_id)
-    first, last = month_bounds(year, month)
     with use_company(company_id):
-        run = _run_for_month(company_id, year, month, PayrollRun.Status.DRAFT)
-        if run is None:
-            raise ValidationError("Generate this month's salary before finalising it.")
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED)
+        refusal = approval_blocker(actor, company_id, run)
+        if refusal:
+            raise ValidationError(refusal)
         if overtime.decided_after(company_id, run):
             raise ValidationError(
                 "Overtime was decided after this salary was generated. "
-                "Generate the month again, then finalise."
+                "Send it back, generate the month again, then submit it."
             )
         run.status = PayrollRun.Status.POSTED
         run.posted_by = actor
@@ -810,8 +886,44 @@ def finalise_payroll(*, actor, company_id, year, month):
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="payroll.finalised", obj=run,
-            before={"status": PayrollRun.Status.DRAFT},
-            after={"status": PayrollRun.Status.POSTED, "net": run.totals_snapshot.get("net")},
+            before={"status": PayrollRun.Status.SUBMITTED},
+            after={"status": PayrollRun.Status.POSTED, "net": run.totals_snapshot.get("net"),
+                   "submitted_by": run.submitted_by_id, "approved_by": actor.pk},
+        )
+    return run
+
+
+@transaction.atomic
+def return_payroll(*, actor, company_id, year, month, reason):
+    """Send a submitted month back to Draft, with a reason.
+
+    The owner/administrator sends it back to have it corrected; whoever
+    submitted it can also take it back themselves on noticing a mistake.
+    """
+    membership = require_company_membership(actor, company_id)
+    reason = str(reason or "").strip()
+    with use_company(company_id):
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED)
+        if run is None:
+            raise ValidationError("This month's salary is not waiting for approval.")
+        if not (_is_approver(actor, company_id) or run.submitted_by_id == actor.pk):
+            raise PermissionDenied(
+                "Only the owner or company administrator, or whoever submitted it, "
+                "can send it back."
+            )
+        if not reason:
+            raise ValidationError({"reason": "Say what needs changing, so it can be fixed."})
+        run.status = PayrollRun.Status.DRAFT
+        run.returned_by = actor
+        run.returned_at = timezone.now()
+        run.return_reason = reason
+        run.updated_by = actor
+        run.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.returned", obj=run,
+            before={"status": PayrollRun.Status.SUBMITTED, "submitted_by": run.submitted_by_id},
+            after={"status": PayrollRun.Status.DRAFT, "reason": reason},
         )
     return run
 
@@ -932,7 +1044,10 @@ def remove_adjustment(*, actor, company_id, adjustment_id):
             payroll_run__payroll_period=period, employee_id=adjustment.employee_id,
         ).order_by("-pk").first()
         membership, branch_ids = _preparer(actor, company_id, record)
-        if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.POSTED).exists():
+        if PayrollRun.objects.filter(
+            payroll_period=period,
+            status__in=(PayrollRun.Status.POSTED, PayrollRun.Status.SUBMITTED),
+        ).exists():
             raise ValidationError(
                 "Bonus and deduction lines can only change while the salary is a draft."
             )

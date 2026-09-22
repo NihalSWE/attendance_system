@@ -614,8 +614,12 @@ class PayrollPeriod(TenantOwned, ActorTracked):
 
 
 class PayrollRun(TenantOwned, ActorTracked):
+    # Draft -> Waiting for approval -> Finalised. Whoever submits cannot also
+    # approve, unless the company has a single owner/admin (payroll/services.py
+    # approval_blocker); send back returns it to Draft with a reason.
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
+        SUBMITTED = "submitted", "Waiting for approval"
         POSTED = "posted", "Finalised"
 
     payroll_period = models.ForeignKey(
@@ -639,6 +643,19 @@ class PayrollRun(TenantOwned, ActorTracked):
         related_name="posted_payroll_runs",
     )
     posted_at = models.DateTimeField(null=True, blank=True)
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="submitted_payroll_runs",
+    )
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    # The last send-back, shown on the Salary page until it is submitted again
+    # (every send-back is also in the audit trail).
+    returned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="returned_payroll_runs",
+    )
+    returned_at = models.DateTimeField(null=True, blank=True)
+    return_reason = models.TextField(blank=True)
     totals_snapshot = models.JSONField(default=dict, blank=True)
 
     class Meta:

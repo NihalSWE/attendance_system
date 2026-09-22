@@ -50,11 +50,14 @@ from payroll.models import (
 )
 from payroll.services import (
     add_adjustment,
-    finalise_payroll,
+    approval_blocker,
+    approve_payroll,
     record_branch_id,
     remove_adjustment,
     generate_payroll,
     reopen_payroll,
+    return_payroll,
+    submit_payroll,
     salary_branches,
     summarise,
     waive_penalty,
@@ -115,6 +118,14 @@ def payroll_home(request):
         "overtime_waiting": (
             overtime.undecided_count(company_id, first, last, overtime_branches)
             if decides_overtime else 0
+        ),
+        # Approval (A11): whoever submitted a waiting month can take it back.
+        "is_submitter": bool(run and run.submitted_by_id == request.user.pk),
+        # May this viewer approve the waiting month, and if not, why - said on
+        # the page, not discovered after a click.
+        "approval_blocked": (
+            approval_blocker(request.user, company_id, run)
+            if run and run.status == PayrollRun.Status.SUBMITTED else None
         ),
         # Decisions made since the draft was generated are not in it yet.
         "overtime_since_run": (
@@ -191,6 +202,13 @@ class ReopenForm(StyledFormMixin, forms.Form):
     )
 
 
+class ReturnForm(StyledFormMixin, forms.Form):
+    reason = forms.CharField(
+        label="What needs changing?", widget=forms.Textarea,
+        help_text="Shown on the Salary page until it is submitted again, and kept in the audit trail.",
+    )
+
+
 class AdjustmentForm(StyledFormMixin, forms.Form):
     adjustment_type = forms.ChoiceField(
         label="Type", choices=PayrollAdjustment.AdjustmentType.choices
@@ -204,57 +222,90 @@ class AdjustmentForm(StyledFormMixin, forms.Form):
     )
 
 
-def _run_action(request, *, reopen):
-    """Confirmation page for Finalise month / Undo finalise (owner or company admin)."""
+#: The four things that move a month between Draft, Waiting for approval and
+#: Finalised: (service, form, page title, button label, button tone, done message).
+RUN_ACTIONS = {
+    "submit": (submit_payroll, None, "Submit salary for approval", "Submit for approval", "primary",
+               "Salary submitted. An owner or company administrator approves it; until then "
+               "it cannot be regenerated."),
+    "approve": (approve_payroll, None, "Approve salary", "Approve and finalise", "primary",
+                "Salary approved and finalised. Employees can now see their payslips; the "
+                "month's attendance and overtime are locked."),
+    "return": (return_payroll, ReturnForm, "Send salary back", "Send back", "danger",
+               "Salary sent back. It is a draft again: fix it, generate it, then submit it."),
+    "reopen": (reopen_payroll, ReopenForm, "Undo finalise", "Undo finalise", "danger",
+               "Salary is a draft again. Fix what was wrong, generate it, then submit it for approval."),
+}
+
+
+def _run_action(request, action):
+    """Confirmation page for Submit / Approve / Send back / Undo finalise.
+
+    Submit: whoever may prepare salary (the owner/administrator, or a branch
+    manager with salary access). Approve and Undo finalise: the owner or
+    company administrator. Send back: the owner/administrator, or whoever
+    submitted it. The services check all of this again.
+    """
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    require_structure_manager(request.user, company_id)
+    if action in ("approve", "reopen"):
+        require_structure_manager(request.user, company_id)
+    elif action == "submit" and not salary_branches(request.user, company_id, "salary.prepare")[1]:
+        raise PermissionDenied("Submitting salary needs access to prepare it.")
+    service, form_class, title, submit_label, tone, done = RUN_ACTIONS[action]
     year, month = read_month(request.POST if request.method == "POST" else request.GET)
     back = f"{reverse('payroll:payroll_home')}?month={month}&year={year}"
-    form = ReopenForm(request.POST or None) if reopen else None
+    form = form_class(request.POST or None) if form_class else None
     if request.method == "POST" and (form is None or form.is_valid()):
+        extra = {"reason": form.cleaned_data["reason"]} if form else {}
         try:
-            if reopen:
-                reopen_payroll(actor=request.user, company_id=company_id, year=year, month=month,
-                               reason=form.cleaned_data["reason"])
-            else:
-                finalise_payroll(actor=request.user, company_id=company_id, year=year, month=month)
+            service(actor=request.user, company_id=company_id, year=year, month=month, **extra)
         except ValidationError as exc:
             if form is None:
                 messages.error(request, " ".join(exc.messages))
                 return redirect(back)
             apply_service_errors(form, exc)
         else:
-            messages.success(request, (
-                "Salary is a draft again. Fix what was wrong, generate it, then finalise."
-                if reopen else
-                "Salary finalised. Employees can now see their payslips; the month's attendance and overtime are locked."
-            ))
+            messages.success(request, done)
             return redirect(back)
     first, last = month_bounds(year, month)
     with use_company(company_id):
-        run = PayrollRun.objects.filter(
+        run = PayrollRun.objects.select_related("submitted_by").filter(
             payroll_period__start_date=first, payroll_period__end_date=last
         ).order_by("-pk").first()
     return render(request, "payroll/run_action.html", {
         **month_context(year, month),
-        "run": run, "form": form, "reopen": reopen, "back": back,
-        "title": "Undo finalise" if reopen else "Finalise salary",
-        "submit_label": "Undo finalise" if reopen else "Finalise",
+        "run": run, "form": form, "action": action, "back": back,
+        "title": title, "submit_label": submit_label, "tone": tone,
+        # Said on the page rather than only after the click.
+        "blocked": approval_blocker(request.user, company_id, run) if action == "approve" else None,
     })
 
 
 @login_required
 @require_http_methods(["GET", "POST"])
+def payroll_submit(request):
+    return _run_action(request, "submit")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
 def payroll_finalise(request):
-    return _run_action(request, reopen=False)
+    """Approve a submitted month, which finalises it (the URL keeps its old name)."""
+    return _run_action(request, "approve")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def payroll_return(request):
+    return _run_action(request, "return")
 
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def payroll_reopen(request):
-    return _run_action(request, reopen=True)
+    return _run_action(request, "reopen")
 
 
 @login_required
@@ -735,9 +786,13 @@ def payslip(request, pk):
         draft = record.payroll_run.status == PayrollRun.Status.DRAFT
         context["can_adjust"] = draft and (
             prepare is ALL_BRANCHES or record_branch_id(record) in prepare)
+        status = record.payroll_run.status
         context["adjust_note"] = (
+            "This salary is waiting for approval. Send it back on Salary by month to change these lines."
+            if status == PayrollRun.Status.SUBMITTED else
             "This salary is finalised. Undo finalise on Salary by month to change these lines."
-            if not draft else "Adding lines needs access to prepare salary."
+            if status == PayrollRun.Status.POSTED else
+            "Adding lines needs access to prepare salary."
         )
         # Waiving a penalty stays with the owner and company admin.
         context["can_waive"] = context["can_waive"] and company_wide

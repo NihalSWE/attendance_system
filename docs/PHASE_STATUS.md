@@ -4165,3 +4165,57 @@ which, once it starts at midnight, it does.
 3 tests in `devices/tests_mapping.py::PlacementStartsAtMidnightTests`: a
 mapping made now starts at the start of today, an imported employee is placed
 from the start of today, and a chosen day is still that day.
+
+## Salary approval: submit, then approve (A11, 2026-09-22)
+
+**What already existed, and what did not.** Ajay's A11 list opened with
+"finalise / lock a month, with approval — nothing is finalised today". Checked
+against the code: Finalise/lock was already built (button on Salary by month,
+locks attendance and overtime via `locked_ranges`, employees then see My
+payslips, audited Undo finalise); D Company's August and September are simply
+drafts nobody has finalised. So were mid-month salary changes and proration,
+manual bonus/deduction lines and the employee's salary history. Still
+missing: **approval** (this entry), allowances/components, payslip PDF and
+email, a carried-over correction after finalising, undo a waived penalty.
+
+**The design, and why.** `accounts.uniq_current_company_administrator` allows
+exactly **one** owner-or-company-admin per company, so "a second admin
+approves" is impossible. The second person is whoever *prepares* salary:
+
+- **Draft → Waiting for approval** — `submit_payroll`, by anyone who may
+  prepare salary: the owner/admin, or a branch manager with `salary.prepare`
+  (and later the payroll manager, once those pages exist). The month is one
+  run for the company, so a branch submits all of it; the approver sees every
+  branch.
+- **Waiting → Finalised** — `approve_payroll`, the owner/admin only
+  (`approval_blocker` says why not, on the page, before any click). When the
+  owner/admin prepared the month themselves they approve their own: there is
+  nobody else to ask.
+- **Waiting → Draft** — `return_payroll`, with a reason: the owner/admin sends
+  it back, or the submitter takes it back. The last reason shows on the Salary
+  page until it is submitted again; every one is audited.
+- **Finalised → Draft** — Undo finalise, unchanged.
+
+**Nothing changes while it waits:** Generate refuses (it would otherwise have
+quietly created a *second* draft run beside the submitted one — found while
+reading `generate_payroll`), and bonus/deduction lines can be neither added
+nor removed (`remove_adjustment` only refused a finalised month). Approving
+re-runs the "overtime decided after this was generated" check that
+finalising had.
+
+`PayrollRun`: status `submitted` ("Waiting for approval"), `submitted_by/at`,
+`returned_by/at`, `return_reason` — migration 0007, nullable fields only.
+URLs: `payroll_submit`, `payroll_finalise` (kept, now the approve step, so the
+sidebar's existing reference still matches), `payroll_return`,
+`payroll_reopen`. `BRANCH_PAGES` gains submit and return under
+`salary.prepare`; approve stays owner/admin. The one-step `finalise_payroll`
+is gone from the real code; tests that only need a finalised month use a
+helper in `payroll/tests_approval.py`.
+
+Not changed, same as before this work: attendance fixed between generating
+and approving does not block approval (finalising never checked it either).
+
+17 tests in `payroll/tests_approval.py`; the older finalise/branch-salary/
+adjustment tests now go through submit → approve. Checked in the running app
+as the admin and as a branch manager (no submit/approve pressed on real data).
+Full suite 1400 OK.

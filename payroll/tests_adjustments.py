@@ -8,7 +8,8 @@ from django.urls import reverse
 
 from accounts.models import CompanyMembership, User
 from common.tenant import use_company
-from payroll.services import add_adjustment, finalise_payroll, generate_payroll, remove_adjustment
+from payroll.services import add_adjustment, generate_payroll, remove_adjustment
+from payroll.tests_approval import finalise_payroll
 from payroll.tests_overtime import OvertimeBase
 
 
