@@ -927,8 +927,10 @@ worktree `D:\\attendance_device_a5`). No migration.**
   filter. Asking for leave from here is A8.
 - **My payslips** (`/me/payslips/`): **finalised months only** — a draft can
   still change, so the company checks it before anyone reads it as their
-  salary. Finalising a month is not built yet (A11), so the list says "No
-  payslips yet" until then. Opening one shows the same payslip page as the
+  salary. It says "No payslips yet" until a month is finalised — which was
+  true of every company for a while, and this line used to say finalising
+  itself was not built, which was wrong from A11 onwards and misled a later
+  session (corrected 2026-09-22). Opening one shows the same payslip page as the
   company's (`payroll.views.payslip_context(record, for_employee=True)`: no
   Waive). N7 is asked to make the payslip's breadcrumbs and "Draft" label
   follow `for_employee` and the run's status.
