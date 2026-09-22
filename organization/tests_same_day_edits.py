@@ -34,10 +34,20 @@ class SameDayCase(MappingCase):
         with use_company(self.company):
             result = mapping.import_users(actor=self.admin, device=self.device, pins=["777"])
         self.imported = result.created[0]
-        with use_company(self.company):
-            self.placement = EmployeeAssignment.objects.get(employee=self.imported)
         self.today = company_today(self.company)
         self.midnight = _start_of(self.today, self.company)
+        with use_company(self.company):
+            self.placement = EmployeeAssignment.objects.get(employee=self.imported)
+            # The import itself starts placements at midnight now
+            # (devices.services.mapping.day_start, 2026-09-22), which is what
+            # stopped a person brought in after noon losing that day. A row
+            # that begins mid-afternoon is still reachable - an employee
+            # created some other way, or one of these rows before that fix -
+            # and it is that row these tests are about, so one is made here
+            # rather than relying on the import to produce it.
+            self.placement.effective_from = self.midnight + datetime.timedelta(
+                hours=14, minutes=5)
+            self.placement.save(update_fields=["effective_from"])
 
     def placements(self):
         with use_company(self.company):
@@ -50,9 +60,23 @@ class SameDayCase(MappingCase):
 
 
 class PlacementTests(SameDayCase):
-    def test_the_import_really_starts_after_midnight(self):
+    def test_the_placement_under_test_really_starts_after_midnight(self):
         """The premise: without it, none of this is being tested."""
         self.assertGreater(self.placement.effective_from, self.midnight)
+
+    def test_the_import_itself_places_people_from_midnight(self):
+        """The bug these rules worked around is fixed at its source.
+
+        A placement stamped at the moment of import left anyone brought in
+        after noon with no attendance day at all (Dia, 2026-09-22).
+        """
+        row = ("user uid=20\tcardno=\tpin=888\tpassword=\tgroup=1\tstarttime=0"
+               "\tendtime=0\tname=Newcomer\tprivilege=0\tdisable=0\tverify=0\n")
+        self.upload(row, cmdid="9")
+        with use_company(self.company):
+            fresh = mapping.import_users(actor=self.admin, device=self.device, pins=["888"])
+            placement = EmployeeAssignment.objects.get(employee=fresh.created[0])
+        self.assertEqual(placement.effective_from, self.midnight)
 
     def test_setting_the_department_from_today_is_accepted_as_a_correction(self):
         change_placement(actor=self.admin, company_id=self.company.pk,

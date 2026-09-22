@@ -4127,3 +4127,41 @@ selects beside it (`.toolbar > .dp`). The Daily list's eight filters also get
 status, day, range and Apply now sit on one row at 1440 px and wrap cleanly on
 a narrower screen, with no horizontal scroll. Checked in the running app at
 1440 and 1100 px, both calendars still open full size. CSS only.
+
+## A person brought in after noon lost that whole day — 2026-09-22
+
+Dia scanned on the office 2A and her punches were **authorised** — and no
+attendance day existed to hold them. Not a setting, and nothing on the screens
+could have fixed it.
+
+Attendance finds a person's shift by asking where they were placed at **noon**
+on that day (`attendance/services.py`, `shift_on` → `_assignment_on`). The
+device import stamped her placement at the moment it ran, **12:54**. At noon
+she was placed nowhere, so no shift, so no window, so no record — while her
+punches sat in the punch list marked authorised. Moin, imported on a previous
+day at 00:00, was fine; that was the only difference between them.
+
+**The code:** `mapping.day_start(company, day=None)` returns company midnight,
+and everything the devices create now starts there — `_start()` (so the
+mapping/enrollment), the assignment in `_import_rows`, and both rows in
+`user_sync`. The other two doors into a placement were already correct:
+Create employee converts the picked date to local midnight
+(`organization/employee_forms.py`), and Nihal's CSV import does the same. All
+four ways in now agree.
+
+**The rows already written:** `devices/0008_first_placements_start_at_midnight`
+moves them, so people imported before the fix are not left with a hole in
+their first day either. Deliberately narrow — only a person's *earliest*
+placement and the *earliest* mapping of one number on one device, only where
+the employee's metadata or change reason says a device created them, only
+where it is not already midnight, and never across a day boundary. A transfer
+genuinely recorded at 3pm is a real event at a real time and is left alone.
+
+Afterwards, "Re-check punches" for the day is what makes the earlier scans
+count: identity is resolved at each punch's own instant, so scans from before
+the mapping existed stay `unknown_employee` until the mapping covers them —
+which, once it starts at midnight, it does.
+
+3 tests in `devices/tests_mapping.py::PlacementStartsAtMidnightTests`: a
+mapping made now starts at the start of today, an imported employee is placed
+from the start of today, and a chosen day is still that day.

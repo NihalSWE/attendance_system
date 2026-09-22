@@ -107,13 +107,27 @@ def _audit(actor, device, action, obj, after):
     )
 
 
+def day_start(company, day=None):
+    """Company midnight of ``day`` (today by default).
+
+    Attendance works in whole days: it asks where somebody was placed at noon
+    to find their shift (attendance/services.py). A placement or mapping
+    stamped at the moment it was made therefore loses that whole day when it
+    is made in the afternoon - the person punches, the punch is authorised,
+    and no attendance day exists to hold it (Dia, 2026-09-22, imported at
+    12:54). Everything created today begins at the start of today instead,
+    which is what the CSV import already does.
+    """
+    zone = _zone(company)
+    day = day or timezone.now().astimezone(zone).date()
+    return datetime.datetime.combine(day, datetime.time.min, tzinfo=zone)
+
+
 def _start(device, day):
-    """The mapping's start: the company's midnight of ``day``, or now."""
-    if day is None:
-        return timezone.now()
+    """The mapping's start: the company's midnight of ``day``, or of today."""
     if isinstance(day, datetime.datetime):
         return day
-    return datetime.datetime.combine(day, datetime.time.min, tzinfo=_zone(device.company))
+    return day_start(device.company, day)
 
 
 #: Within one batch (bulk map, import, send, copy) each device's roster is
@@ -521,7 +535,8 @@ def _import_rows(actor, device, wanted, result, now):
                     employee.save()
                     assignment = EmployeeAssignment(
                         employee=employee, employee_code=pin, branch=device.branch,
-                        department=department, designation=designation, effective_from=now,
+                        department=department, designation=designation,
+                        effective_from=day_start(device.company),
                         change_reason=f"Imported from {device.name} (device user {pin}).",
                     )
                     assignment.company_id = device.company_id

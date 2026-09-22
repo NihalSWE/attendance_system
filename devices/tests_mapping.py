@@ -735,3 +735,46 @@ class ResendIdentityTests(MappingCase):
             update_employee_details(actor=self.admin, company_id=self.company.pk,
                                     employee_id=self.moin.pk, values={"phone": "01711000000"})
         self.assertNotIn("push_user:445900", self.outbox(self.device))
+
+
+class PlacementStartsAtMidnightTests(MappingCase):
+    """Someone brought in this afternoon still gets today (Dia, 2026-09-22).
+
+    Attendance finds a person's shift from where they were placed at noon
+    (attendance/services.py), so a placement stamped 12:54 leaves that whole
+    day without a record — the punches are authorised and there is nowhere to
+    put them.
+    """
+
+    def local(self, when):
+        import zoneinfo
+
+        return when.astimezone(zoneinfo.ZoneInfo(self.company.timezone or "UTC"))
+
+    def test_a_mapping_made_now_starts_at_the_start_of_today(self):
+        self.upload(USERS)
+        with use_company(self.company):
+            outcome = mapping.map_employee(actor=self.admin, device=self.device,
+                                           employee=self.moin, upload=False)
+        start = self.local(outcome.enrollment.effective_from)
+        self.assertEqual((start.hour, start.minute, start.second), (0, 0, 0))
+        self.assertEqual(start.date(), self.local(timezone.now()).date())
+
+    def test_an_imported_employee_is_placed_from_the_start_of_today(self):
+        self.upload(USERS)
+        with use_company(self.company):
+            result = mapping.import_users(actor=self.admin, device=self.device, pins=["777"])
+        employee = result.created[0]
+        with use_company(self.company):
+            assignment = mapping.current_assignment(employee)
+        start = self.local(assignment.effective_from)
+        self.assertEqual((start.hour, start.minute, start.second), (0, 0, 0))
+
+    def test_a_chosen_day_is_still_that_day(self):
+        self.upload(USERS)
+        with use_company(self.company):
+            outcome = mapping.map_employee(
+                actor=self.admin, device=self.device, employee=self.moin, upload=False,
+                start_day=datetime.date(2026, 9, 1))
+        start = self.local(outcome.enrollment.effective_from)
+        self.assertEqual((start.date(), start.hour), (datetime.date(2026, 9, 1), 0))

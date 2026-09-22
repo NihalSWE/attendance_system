@@ -26,6 +26,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from devices.models import DeviceEnrollment
+from devices.services import mapping
 from devices.services.device_roster import build_roster
 
 # Every employee created this way carries this prefix in its assignment code,
@@ -95,6 +96,11 @@ def sync_device_users(*, device, actor=None, pins=None):
 
     branch, department, designation = _placement(device)
     now = timezone.now()
+    # Whole days, not the minute this ran: attendance finds a person's shift
+    # from where they were placed at noon, so an afternoon sync would leave
+    # them with authorised punches and no day to put them on. See
+    # devices.services.mapping.day_start.
+    day_start = mapping.day_start(device.company)
     created, skipped, errors = [], [], []
 
     for row in targets:
@@ -133,7 +139,7 @@ def sync_device_users(*, device, actor=None, pins=None):
                     branch=branch,
                     department=department,
                     designation=designation,
-                    effective_from=now,
+                    effective_from=day_start,
                     change_reason=(
                         f"Draft created by device sync from {device.name} "
                         f"(device user {pin}). Details pending HR review."
@@ -148,7 +154,7 @@ def sync_device_users(*, device, actor=None, pins=None):
                     employee=employee,
                     device_user_id=pin,
                     card_number=row.get("card_number") or "",
-                    effective_from=now,
+                    effective_from=day_start,
                     attendance_enabled=True,
                     # Recognition only. A human decides whether these punches
                     # count; syncing must never hand out permission.
