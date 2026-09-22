@@ -64,6 +64,12 @@ def table_queryset(request, queryset, *, search=(), order=(), name=""):
     which the download link carries as ``search[value]`` / ``order[i][...]``
     (base_template/js/export_links.js), or the no-script ``table_q``. Returns
     ``(queryset, query, sorted_by)`` like ``_search_and_order``.
+
+    Not namespaced yet (Ajay, 2026-09-21): ``search[value]`` and
+    ``order[i][...]`` carry no table name, so on a page with two server tables
+    a download would take whichever table's search is in the URL. No page with
+    a download has two tables today. Before adding one that does, namespace
+    these (``{name}_search`` / ``{name}_order...``) here and in export_links.js.
     """
     prefix = f"{name}_" if name else ""
     param = "search[value]" if "search[value]" in request.GET else f"{prefix}table_q"
