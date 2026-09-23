@@ -4457,3 +4457,44 @@ regeneration will not find it.
 8 tests in `payroll/tests_unwaive.py`.
 
 **Server:** `migrate` after pulling. Full suite 1432 OK.
+
+### The payroll manager on the salary pages; HR sees no pay — 2026-09-23
+
+Ajay's decision (2026-09-23): the **payroll manager** views salary, prepares it
+and submits it for approval, across every branch. Not approve: there is exactly
+one owner-or-admin per company, and approving stays theirs. **HR has no salary
+access at all**: HR already sees attendance and leave company-wide, and pay
+stays with the people who administer pay.
+
+**No new permission codes.** `access_control/branch_access.py` gains
+`PAYROLL_MANAGER_COMPANY_WIDE = {"salary.view", "salary.prepare"}`, held in
+every branch the same way HR holds `HR_COMPANY_WIDE`. HR's set is unchanged and
+holds no salary code.
+
+What that opens, and what it does not:
+
+| | Payroll manager | HR |
+|---|---|---|
+| Salary by month, every branch; Generate the whole month | yes | no (was: saw the month page, every figure) |
+| Payslips, bonus/deduction lines, corrections, email, PDF | yes | no |
+| Submit for approval; take back their own submission | yes | no |
+| Approve, send back someone else's, Undo finalise | no | no |
+| Waive or un-waive a penalty, salary settings, allowance catalogue | no | no |
+
+Found while doing it: `_salary_scope` let **every** company login into Salary
+by month, so HR (and the auditor, and the payroll manager) saw every
+employee's gross and net there while being refused the payslips themselves.
+Salary by month now follows the salary codes (`salary_month_branches`). The
+**auditor** keeps exactly what it had (the month page, not payslips) under A12
+rule 4, "other company roles keep today's behaviour", pending Ajay.
+
+Also changed so the payroll manager is not offered what it cannot do:
+- Generating the whole month, and `calculate_attendance` (used only by that),
+  allow whoever prepares salary in every branch, not just owner/admin.
+- The payslip's Waive button follows the owner/admin role, not "sees every branch".
+- "Generate … for your branches" follows `company_wide`, not the owner/admin flag.
+- **Sidebar** (`base_template/navigation.py`, Ajay's): "Salary by month" gets a
+  `salary=True` flag, mirroring `record=True`, so HR no longer sees a link that
+  refuses. Nothing else in the menus changes; HR keeps Record leave and Overtime.
+
+19 tests in `payroll/tests_payroll_manager.py`; Ajay's `test_the_owner_and_hr_are_unchanged` now pins the new HR rule (renamed `test_the_owner_is_unchanged_and_hr_sees_no_salary`). No migration. Full suite 1497 OK.

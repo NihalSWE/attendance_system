@@ -6,6 +6,8 @@ older department/designation model, which no page uses):
 - Owner and company admin: every permission in every branch.
 - Branch manager: every branch permission in their own branches, automatically.
 - The existing HR role keeps company-wide leave recording and overtime decisions.
+- The payroll manager views, prepares and submits salary in every branch
+  (Ajay, 2026-09-23). Approving and finalising stay with the owner/admin.
 - Anyone else: only what an owner, admin or branch manager granted them, per
   branch, as ``EmployeePermissionOverride`` rows (dated, revocable, audited).
   A granter can only hand on access they hold, in branches where they may
@@ -79,10 +81,16 @@ HR_COMPANY_WIDE = frozenset({
     # HR already saw and fixed attendance company-wide (the old N5 rule).
     "attendance.view", "attendance.fix",
 })
+# The payroll manager (Ajay, 2026-09-23): view salary, prepare it, and submit
+# it for approval, across every branch. Not approve: there is exactly one
+# owner-or-admin per company, and approving stays theirs. HR holds no salary
+# code at all - pay stays with the people who administer pay.
+PAYROLL_MANAGER_COMPANY_WIDE = frozenset({"salary.view", "salary.prepare"})
 
 
 class _AllBranches:
-    """Every branch in the company (owner, company admin, company-wide HR)."""
+    """Every branch in the company (owner, company admin, and HR or the
+    payroll manager for their codes)."""
 
     def __contains__(self, branch_id):
         return True
@@ -120,6 +128,8 @@ def branches_for(user, company_id, code, at=None):
     if membership.role in COMPANY_WIDE_ROLES:
         return ALL_BRANCHES
     if membership.role == Role.HR and code in HR_COMPANY_WIDE:
+        return ALL_BRANCHES
+    if membership.role == Role.PAYROLL_MANAGER and code in PAYROLL_MANAGER_COMPANY_WIDE:
         return ALL_BRANCHES
     with use_company(company_id):
         branches = set()

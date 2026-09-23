@@ -12,6 +12,7 @@ from base_template.navigation import company_menus
 from devices.services.panel_access import may_manage_devices
 from leaves.services import LEAVE_RECORDER_ROLES
 from organization.services import STRUCTURE_ROLES
+from payroll.services import salary_month_branches
 
 
 def shell(request):
@@ -43,6 +44,7 @@ def shell(request):
             request, can_manage=membership.role in STRUCTURE_ROLES,
             can_manage_devices=unrestricted_admin,
             can_record_leave=membership.role in LEAVE_RECORDER_ROLES,
+            can_see_salary=bool(salary_month_branches(user, company_id)[1]),
         )
     elif membership and self_service:
         # A12: the company pages this branch manager / person given access may

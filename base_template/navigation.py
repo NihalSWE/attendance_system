@@ -7,10 +7,13 @@ Aliases keep an area's item selected while editing one of its records.
 from django.urls import reverse
 
 
-def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False):
+def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False,
+         salary=False):
     # record: shown to people who may record leave (HR as well as administrators).
+    # salary: shown to people who see pay (the payroll manager as well; not HR).
     return {"label": label, "view": view, "aliases": aliases, "fragment": fragment,
-            "manage": manage, "unrestricted": unrestricted, "record": record}
+            "manage": manage, "unrestricted": unrestricted, "record": record,
+            "salary": salary}
 
 
 COMPANY_MENUS = (
@@ -36,7 +39,7 @@ COMPANY_MENUS = (
     ("salary", "Salary", (
         item("Salary by month", "payroll:payroll_home", "payroll:payslip", "payroll:penalty_waive",
              "payroll:payroll_submit", "payroll:payroll_finalise", "payroll:payroll_return",
-             "payroll:payroll_reopen"),
+             "payroll:payroll_reopen", salary=True),
         item("Salary settings", "payroll:salary_settings", manage=True),
         item("Penalty rules", "payroll:salary_settings", "payroll:penalty_rule_create",
              "payroll:penalty_rule_change", "payroll:penalty_rule_stop",
@@ -81,7 +84,8 @@ COMPANY_MENUS = (
 )
 
 
-def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=None, allowed=None):
+def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=None,
+                  can_see_salary=None, allowed=None):
     """The company menus for this request.
 
     ``allowed`` (A12): for a branch manager or a person given access, a check
@@ -90,6 +94,7 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
     """
     current = getattr(getattr(request, "resolver_match", None), "view_name", "")
     can_record_leave = can_manage if can_record_leave is None else can_record_leave
+    can_see_salary = can_manage if can_see_salary is None else can_see_salary
     menus = []
     for key, label, entries in COMPANY_MENUS:
         if key == "devices" and not can_manage_devices and allowed is None:
@@ -102,6 +107,8 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
             elif entry["manage"] and not can_manage:
                 continue
             elif entry["record"] and not can_record_leave:
+                continue
+            elif entry["salary"] and not can_see_salary:
                 continue
             elif entry["unrestricted"] and not can_manage_devices:
                 continue

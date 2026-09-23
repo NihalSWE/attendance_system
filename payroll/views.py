@@ -60,6 +60,7 @@ from payroll.services import (
     return_payroll,
     submit_payroll,
     salary_branches,
+    salary_month_branches,
     summarise,
     waive_penalty,
 )
@@ -146,19 +147,17 @@ def payroll_home(request):
 def _salary_scope(user, company_id):
     """``(membership, view_branches, prepare_branches, company_wide)`` (A12 part 6).
 
-    Company logins see Salary by month as before (owner and admin also
-    generate it). A branch manager or a person given access sees the payslips
-    of people placed in their branches, and generates those.
+    The owner/admin and the payroll manager see and generate the whole month.
+    A branch manager or a person given access sees the payslips of people
+    placed in their branches, and generates those. HR sees no pay at all
+    (Ajay, 2026-09-23); ``salary_month_branches`` says who else is let in.
     """
-    from common.middleware import SELF_SERVICE_ROLES
-
-    membership, prepare = salary_branches(user, company_id, "salary.prepare")
-    if membership.role not in SELF_SERVICE_ROLES:
-        return membership, ALL_BRANCHES, prepare, True
-    _, view = salary_branches(user, company_id, "salary.view", "salary.prepare")
+    membership, view = salary_month_branches(user, company_id)
     if not view:
-        raise PermissionDenied("Salary needs owner or company administrator access, or salary access in a branch.")
-    return membership, view, prepare, False
+        raise PermissionDenied("Salary needs owner, company administrator or payroll manager "
+                               "access, or salary access in a branch.")
+    _, prepare = salary_branches(user, company_id, "salary.prepare")
+    return membership, view, prepare, view is ALL_BRANCHES
 
 
 @login_required
@@ -932,7 +931,7 @@ def payslip(request, pk):
         return bail
     # Owner/admin: any payslip, as before. A12 part 6: someone with salary
     # access in the payslip's branch sees it; preparing adds Bonus/Deduction.
-    _, view = salary_branches(request.user, company_id, "salary.view", "salary.prepare")
+    membership, view = salary_branches(request.user, company_id, "salary.view", "salary.prepare")
     _, prepare = salary_branches(request.user, company_id, "salary.prepare")
     if not view:
         raise PermissionDenied("Payslips need owner or company administrator access, or salary access in a branch.")
@@ -966,8 +965,9 @@ def payslip(request, pk):
             if status == PayrollRun.Status.POSTED else
             "Adding lines needs access to prepare salary."
         )
-        # Waiving a penalty stays with the owner and company admin.
-        context["can_waive"] = context["can_waive"] and company_wide
+        # Waiving a penalty stays with the owner and company admin - not the
+        # payroll manager, who also sees every branch.
+        context["can_waive"] = context["can_waive"] and membership.role in STRUCTURE_ROLES
         context["calendar_link"] = _calendar_link(request, company_id, company_wide)
         context["adjustment_form"] = AdjustmentForm()
         # Emailing it: the owner/admin, or whoever may prepare salary in this

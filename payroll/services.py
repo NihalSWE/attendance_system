@@ -670,6 +670,25 @@ def salary_branches(actor, company_id, *codes):
     return membership, branches_for_any(actor, company_id, *codes)
 
 
+# Kept exactly as it was before the payroll-manager decision (A12 rule 4:
+# "other company roles keep today's behaviour"): the auditor sees Salary by
+# month, company-wide, but not the payslips. Ajay decides whether that changes.
+MONTH_READERS = ("auditor",)
+
+
+def salary_month_branches(actor, company_id):
+    """``(membership, branches)`` where ``actor`` sees Salary by month.
+
+    Whoever holds salary view or prepare there: the owner/admin and the
+    payroll manager everywhere, a branch manager or a person given access in
+    their branches. HR holds neither code, so sees no pay (Ajay, 2026-09-23).
+    """
+    membership, view = salary_branches(actor, company_id, "salary.view", "salary.prepare")
+    if membership.role in MONTH_READERS:
+        return membership, ALL_BRANCHES
+    return membership, view
+
+
 def record_branch_id(record):
     assignment = record.employee_assignment_at_period_end
     return assignment.branch_id if assignment else None
@@ -709,7 +728,14 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
     stays one per month for the company, finalised once by the owner or admin.
     """
     if branch_ids is None:
-        membership = require_structure_manager(actor, company_id)
+        # The whole month: the owner/admin, or the payroll manager, who
+        # prepares salary in every branch.
+        membership, prepare = salary_branches(actor, company_id, "salary.prepare")
+        if prepare is not ALL_BRANCHES:
+            raise PermissionDenied(
+                "Generating the whole month needs owner, company administrator or "
+                "payroll manager access."
+            )
         calculate_attendance(actor=actor, company_id=company_id, year=year, month=month)
     else:
         membership = require_company_membership(actor, company_id)

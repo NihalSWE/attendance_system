@@ -128,7 +128,7 @@ class SalaryPageTests(BranchSalaryBase):
                            record_id=before["Rahim"].pk, adjustment_type="earning",
                            amount="500", reason="Eid bonus")
 
-    def test_the_owner_and_hr_are_unchanged(self):
+    def test_the_owner_is_unchanged_and_hr_sees_no_salary(self):
         self.generate()
         self.client.force_login(self.admin)
         page = self.client.get(reverse("payroll:payroll_home"), AUGUST)
@@ -137,8 +137,9 @@ class SalaryPageTests(BranchSalaryBase):
         # A draft month offers Submit for approval; Approve comes once submitted.
         self.assertContains(page, reverse("payroll:payroll_submit"))
         self.assertNotContains(page, "for your branches")
+        # HR has no salary access at all (Ajay, 2026-09-23); it used to see this
+        # page, every figure on it, while being refused the payslips.
         self.client.force_login(self.hr)
         page = self.client.get(reverse("payroll:payroll_home"), AUGUST)
-        self.assertContains(page, "Karim")
-        self.assertNotContains(page, reverse("payroll:payroll_generate"))
+        self.assertEqual(page.status_code, 403)
         self.assertEqual(self.client.get(self.payslip_url(self.records()["Karim"])).status_code, 403)

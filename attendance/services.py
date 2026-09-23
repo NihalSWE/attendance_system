@@ -46,7 +46,7 @@ import zoneinfo
 from collections import defaultdict
 from decimal import Decimal
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -63,7 +63,7 @@ from common.tenant import use_company
 from devices.models import PunchEvent
 from employees.models import Employee, EmployeeAssignment
 from leaves.models import LeaveDay
-from organization.services import require_structure_manager
+from organization.services import require_company_membership
 from scheduling.calendar import HOLIDAY, WEEKLY_OFF, WorkCalendar
 from scheduling.models import CompanyAttendanceSettings
 
@@ -819,8 +819,19 @@ def calculate_attendance(*, actor, company_id, year, month):
     Attendance is live now — ``recalculate`` runs on its own when punches
     arrive and when days close — so nothing on screen calls this. Payroll
     still brings a month fully up to date before it generates.
+
+    So it is allowed to whoever may generate the whole month: the owner or
+    company admin, or someone who prepares salary in every branch (the payroll
+    manager). A branch's own salary uses ``_bring_branches_up_to_date`` instead.
     """
-    membership = require_structure_manager(actor, company_id)
+    from access_control.branch_access import ALL_BRANCHES, branches_for
+
+    membership = require_company_membership(actor, company_id)
+    if branches_for(actor, company_id, "salary.prepare") is not ALL_BRANCHES:
+        raise PermissionDenied(
+            "Calculating a whole month needs owner, company administrator or "
+            "payroll manager access."
+        )
     first, last = month_bounds(year, month)
     today = timezone.localdate()
     if first > today:
