@@ -64,6 +64,7 @@ BRANCH_PAGES = {
     "payroll:payslip": ("salary.view", "salary.prepare"),
     "payroll:payslip_email": "salary.prepare",
     "payroll:payslip_adjustment_add": "salary.prepare",
+    "payroll:payslip_correction_add": "salary.prepare",
     "payroll:payslip_adjustment_remove": "salary.prepare",
     # A12 part 7 (Nihal's N10): attendance and the employee page. The Daily list,
     # Calendar and day panel show only days worked in your branches and pick

@@ -640,6 +640,27 @@ def penalty_waive(request, pk):
 
 @login_required
 @require_http_methods(["POST"])
+def penalty_unwaive(request, pk):
+    """Undo a waiver given by mistake, while the month is still a draft."""
+    from payroll.services import unwaive_penalty
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    try:
+        record = unwaive_penalty(actor=request.user, company_id=company_id, assessment_id=pk)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return redirect("payroll:payroll_home")
+    messages.success(
+        request, "Waiver undone. The month's salary was regenerated with the penalty.")
+    if record is None:
+        return redirect("payroll:payroll_home")
+    return redirect("payroll:payslip", record.pk)
+
+
+@login_required
+@require_http_methods(["POST"])
 def payslip_adjustment_add(request, pk):
     company_id, bail = _company_or_redirect(request)
     if bail:
@@ -656,6 +677,32 @@ def payslip_adjustment_add(request, pk):
         return redirect("payroll:payslip", pk)
     messages.success(request, "Line added. The month's salary was regenerated with it.")
     return redirect("payroll:payslip", record.pk) if record else redirect("payroll:payroll_home")
+
+
+@login_required
+@require_http_methods(["POST"])
+def payslip_correction_add(request, pk):
+    """Put right a finalised month, in the first month still open."""
+    from payroll.services import correct_finalised_month
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    form = AdjustmentForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, "Choose Bonus or Deduction, and enter an amount above zero and a reason.")
+        return redirect("payroll:payslip", pk)
+    try:
+        adjustment = correct_finalised_month(
+            actor=request.user, company_id=company_id, record_id=pk, **form.cleaned_data)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+    else:
+        messages.success(request, (
+            f"Correction saved. It is paid with {adjustment.target_payroll_period.name}'s "
+            f"salary; {adjustment.source_payroll_period.name} stays as it was paid."
+        ))
+    return redirect("payroll:payslip", pk)
 
 
 @login_required
@@ -899,6 +946,15 @@ def payslip(request, pk):
             employee=record.employee, target_payroll_period=context["period"],
             status=PayrollAdjustment.Status.ACTIVE,
         ))
+        # A finalised month is put right in a later one (A11): what was paid
+        # stays paid, and the correction is a line on the next open month.
+        from payroll.services import corrections_for
+
+        finalised = record.payroll_run.status == PayrollRun.Status.POSTED
+        context["can_correct"] = finalised and (
+            prepare is ALL_BRANCHES or record_branch_id(record) in prepare)
+        context["corrections"] = list(corrections_for(company_id, record)) if finalised else []
+        context["correction_form"] = AdjustmentForm()
         draft = record.payroll_run.status == PayrollRun.Status.DRAFT
         context["can_adjust"] = draft and (
             prepare is ALL_BRANCHES or record_branch_id(record) in prepare)

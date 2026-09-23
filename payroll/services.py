@@ -407,9 +407,12 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     for adjustment in adjustments:
         kind = "earning" if adjustment.adjustment_type == "earning" else "deduction"
         adjustment_lines.append((len(lines), adjustment.pk))
+        source = getattr(adjustment, "source_payroll_period", None)
         lines.append((
-            kind, "BONUS" if kind == "earning" else "DEDUCTION",
-            adjustment.reason, ONE, adjustment.amount, money(adjustment.amount),
+            kind, "CORRECTION" if source else ("BONUS" if kind == "earning" else "DEDUCTION"),
+            f"{adjustment.reason} (correction for {source.name})" if source
+            else adjustment.reason,
+            ONE, adjustment.amount, money(adjustment.amount),
         ))
 
     gross = sum((amount for kind, *_, amount in lines if kind == "earning"), Decimal("0"))
@@ -605,6 +608,54 @@ def waive_penalty(*, actor, company_id, assessment_id):
         return run.records.filter(employee_id=employee_id).first()
 
 
+@transaction.atomic
+def unwaive_penalty(*, actor, company_id, assessment_id):
+    """Undo a waiver, then regenerate that month's draft salary.
+
+    For a waiver given by mistake: the penalty goes back to proposed, so the
+    next generation charges it again like any other. Only while the month is
+    still a draft - a finalised month is put right with a correction instead.
+    """
+    membership = require_structure_manager(actor, company_id)
+    with use_company(company_id):
+        assessment = (
+            PenaltyAssessment.objects.select_for_update(of=("self",)).select_related("payroll_period")
+            .filter(pk=assessment_id).first()
+        )
+        if assessment is None:
+            raise PermissionDenied("Penalty not found in this company.")
+        if assessment.status != PenaltyAssessment.Status.WAIVED:
+            raise ValidationError("That penalty is not waived.")
+        period = assessment.payroll_period
+        if period is not None and PayrollRun.objects.filter(
+            payroll_period=period,
+            status__in=(PayrollRun.Status.POSTED, PayrollRun.Status.SUBMITTED),
+        ).exists():
+            raise ValidationError(
+                "That month's salary is no longer a draft, so the waiver cannot be "
+                "undone. Put the month right with a correction instead."
+            )
+        assessment.status = PenaltyAssessment.Status.PROPOSED
+        assessment.approved_by = None
+        assessment.approved_at = None
+        assessment.save(update_fields=["status", "approved_by", "approved_at"])
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="penalty.waiver_undone", obj=assessment,
+            before={"status": "waived"},
+            after={"status": "proposed", "amount": str(assessment.deduction_amount)},
+        )
+        employee_id = assessment.employee_id
+    if period is None:
+        return None
+    run = generate_payroll(
+        actor=actor, company_id=company_id,
+        year=period.start_date.year, month=period.start_date.month,
+    )
+    with use_company(company_id):
+        return run.records.filter(employee_id=employee_id).first()
+
+
 def salary_branches(actor, company_id, *codes):
     """``(membership, branches)`` for the salary pages (A12 part 6).
 
@@ -748,7 +799,9 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
             ).values_list("occurrence_identity", flat=True)
         )
         adjustments_by_employee = {}
-        for adjustment in PayrollAdjustment.objects.filter(
+        for adjustment in PayrollAdjustment.objects.select_related(
+            "source_payroll_period"
+        ).filter(
             target_payroll_period=period, status=PayrollAdjustment.Status.ACTIVE
         ).order_by("pk"):
             adjustments_by_employee.setdefault(adjustment.employee_id, []).append(adjustment)
@@ -1183,6 +1236,99 @@ def add_adjustment(*, actor, company_id, record_id, adjustment_type, amount, rea
         )
         employee_id = record.employee_id
     return _regenerated_record(actor, company_id, period, employee_id, branch_ids)
+
+
+def open_period_after(company_id, period, months=12):
+    """The first month after ``period`` whose salary is not finalised.
+
+    A correction is paid in the next month; if that one is finalised too it
+    moves to the one after. The period row is made if the month has none yet,
+    so a correction can be raised before anybody generates that month.
+    """
+    first = period.end_date + datetime.timedelta(days=1)
+    with use_company(company_id):
+        for _ in range(months):
+            start, end = month_bounds(first.year, first.month)
+            row, _made = PayrollPeriod.objects.get_or_create(
+                company_id=company_id, start_date=start, end_date=end,
+                defaults={"name": start.strftime("%B %Y")},
+            )
+            if not PayrollRun.objects.filter(
+                payroll_period=row, status=PayrollRun.Status.POSTED
+            ).exists():
+                return row
+            first = end + datetime.timedelta(days=1)
+    raise ValidationError(
+        "Every month after this one is finalised too. Undo a finalise to make "
+        "room for the correction."
+    )
+
+
+@transaction.atomic
+def correct_finalised_month(*, actor, company_id, record_id, adjustment_type, amount, reason):
+    """Put right a month already finalised, in the first month still open.
+
+    The finalised month is never touched - what was paid stays what was paid,
+    and the employee's payslip for it does not change under them. The money
+    is paid as a line on the next open month, saying which month it is for.
+    """
+    if adjustment_type not in PayrollAdjustment.AdjustmentType.values:
+        raise ValidationError({"adjustment_type": "Choose Bonus or Deduction."})
+    try:
+        amount = Decimal(str(amount))
+    except ArithmeticError:
+        amount = Decimal("0")
+    if not amount > 0:
+        raise ValidationError({"amount": "Enter an amount above zero."})
+    reason = str(reason or "").strip()
+    if not reason:
+        raise ValidationError({"reason": "Say what is being put right; it is shown on the payslip."})
+    with use_company(company_id):
+        record = PayrollRecord.objects.select_related(
+            "payroll_run__payroll_period", "employee_assignment_at_period_end", "employee"
+        ).filter(pk=record_id).first()
+        if record is None:
+            raise PermissionDenied("Payslip not found in this company.")
+        membership, branch_ids = _preparer(actor, company_id, record)
+        if record.payroll_run.status != PayrollRun.Status.POSTED:
+            raise ValidationError(
+                "This month is not finalised. Add a bonus or deduction line to it instead."
+            )
+        source = record.payroll_run.payroll_period
+    target = open_period_after(company_id, source)
+    with use_company(company_id):
+        adjustment = PayrollAdjustment(
+            company=membership.company, employee_id=record.employee_id,
+            target_payroll_period=target, source_payroll_period=source,
+            adjustment_type=adjustment_type, amount=amount, reason=reason,
+            created_by=actor, updated_by=actor,
+        )
+        adjustment.full_clean()
+        adjustment.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.correction_added", obj=adjustment,
+            after={"employee_id": record.employee_id, "type": adjustment_type,
+                   "amount": str(amount), "reason": reason,
+                   "for_month": source.name, "paid_in": target.name},
+        )
+        # If that month is already a draft, show it there straight away.
+        exists = PayrollRun.objects.filter(
+            payroll_period=target, status=PayrollRun.Status.DRAFT).exists()
+    if exists:
+        _regenerated_record(actor, company_id, target, record.employee_id, branch_ids)
+    return adjustment
+
+
+def corrections_for(company_id, record):
+    """Corrections raised from this finalised payslip. Call in the company."""
+    return (
+        PayrollAdjustment.objects.select_related("target_payroll_period")
+        .filter(employee_id=record.employee_id,
+                source_payroll_period=record.payroll_run.payroll_period)
+        .exclude(status=PayrollAdjustment.Status.CANCELLED)
+        .order_by("pk")
+    )
 
 
 @transaction.atomic

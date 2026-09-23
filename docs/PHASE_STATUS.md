@@ -4405,3 +4405,47 @@ an unknown id is ignored rather than refused.
 7 tests in `base_template/tests_setup_filter.py`. Checked in the running app
 against D Company: Head Office 94, Branch 2 zero, counts and download link
 following the choice. Full suite 1417 OK.
+### Putting right a month already finalised — 2026-09-23
+
+A finalised month never changes. What was paid stays paid, and an employee's
+payslip does not move under them weeks later. So a mistake found afterwards is
+paid **in the next month still open**, as a line that says which month it is
+for: "August overtime was missed (correction for August 2026)".
+
+`PayrollAdjustment` gained `source_payroll_period` (migration
+`payroll/0008_correction_source.py`). It is empty on an ordinary bonus or
+deduction; when it is set, the line's code is `CORRECTION` instead of
+`BONUS`/`DEDUCTION`. `open_period_after()` finds the target: the next month
+whose salary is not posted, creating the period row if nobody has generated
+that month yet, and skipping on if that one is finalised too. If the target
+month is already a draft, the payslip is regenerated at once so the money
+shows immediately.
+
+On a finalised payslip the page offers **Put this month right**; on a draft it
+does not, because a draft is corrected by an ordinary bonus or deduction line.
+The finalised payslip also lists the corrections raised from it and which
+month each is paid in. Who may: whoever may prepare that branch's salary —
+a branch manager for their own branch, not another's. Employees never see the
+form.
+
+14 tests in `payroll/tests_corrections.py`.
+
+### Undoing a waived penalty — 2026-09-23
+
+A waiver given by mistake had no way back. **Undo waiver** beside the waived
+line puts the penalty back to proposed and regenerates the month, so it is
+charged again like any other penalty.
+
+Only while the month is still a draft. Once it is waiting for approval or
+finalised, undoing would change a figure somebody has approved, so it refuses
+and points at the correction above instead. Audited as
+`penalty.waiver_undone` with the status either side.
+
+One thing worth knowing for anything built on this later: regenerating
+**rebuilds the proposed penalty rows**, so the row that comes back is a new
+one with a new id, not the row that was waived. Code holding an id across a
+regeneration will not find it.
+
+8 tests in `payroll/tests_unwaive.py`.
+
+**Server:** `migrate` after pulling. Full suite 1432 OK.
