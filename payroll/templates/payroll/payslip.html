@@ -49,6 +49,27 @@
             </p>
         </div>
         <div class="page__actions">
+            {# Same view with ?format=pdf: this page's own permissions. #}
+            <a class="btn btn--ghost" href="?format=pdf">
+                Download PDF
+            </a>
+            {% if can_email and not for_employee %}
+                {% if email_blocked %}
+                    <span class="btn btn--ghost" aria-disabled="true" title="{{ email_blocked }}">
+                        Email to employee
+                    </span>
+                {% else %}
+                    <form method="post" action="{% url 'payroll:payslip_email' record.pk %}"
+                          data-confirm-title="Email this payslip to {{ record.employee.full_name }}?"
+                          data-confirm="The PDF is sent to their address on file. They can also see it under My payslips."
+                          data-confirm-button="Send it">
+                        {% csrf_token %}
+                        <button class="btn btn--ghost" type="submit">
+                            Email to employee
+                        </button>
+                    </form>
+                {% endif %}
+            {% endif %}
             <button class="btn btn--ghost" type="button" onclick="window.print()"
                     title="Opens the print window. Choose Save as PDF as the printer to download a PDF.">
                 Print or save as PDF

@@ -307,3 +307,77 @@ def grid_pdf(*, title, lines, blocks):
         story.append(KeepTogether(part))
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()
+
+
+def document_pdf(*, title, lines, sections, summary=(), note=""):
+    """A portrait document: title, its lines, then headed tables.
+
+    For one person's paper - a payslip today - rather than a list of rows:
+    ``sections`` is ``(heading, headers, rows, numeric)`` and headers may be
+    empty for a plain label/value block; ``summary`` is the ``(label, value)``
+    pairs of the box at the end. Same fonts, page furniture and footer as
+    every other PDF here, so Bangla works the same way.
+    """
+    from reportlab.lib import colors
+    from reportlab.platypus import KeepTogether, Paragraph, Spacer, Table, TableStyle
+
+    styles = _styles()
+    buffer = io.BytesIO()
+    doc, footer = _document(buffer, title, landscape_page=False)
+    story = [Paragraph(_escape(title), styles["title"])]
+    story += [Paragraph(_escape(line), styles["sub"]) for line in lines]
+    story.append(Spacer(1, 8))
+
+    right = styles["cell"].clone("r", alignment=2)
+    head_right = styles["head"].clone("hr", alignment=2)
+
+    def cells(values, numeric, bold=False):
+        style = styles["head"] if bold else styles["cell"]
+        style_right = head_right if bold else right
+        return [Paragraph(_escape(_cell_text(value)),
+                          style_right if index in numeric else style)
+                for index, value in enumerate(values)]
+
+    for heading, headers, rows, numeric in sections:
+        if not rows:
+            continue
+        part = []
+        if heading:
+            part.append(Paragraph(f"<b>{_escape(heading)}</b>", styles["sub"]))
+            part.append(Spacer(1, 3))
+        data = [cells(headers, numeric, bold=True)] if headers else []
+        data += [cells(row, numeric) for row in rows]
+        table = Table(data, colWidths=[doc.width / len(data[0])] * len(data[0]),
+                      repeatRows=1 if headers else 0)
+        style = [
+            ("FONTNAME", (0, 0), (-1, -1), FONT),   # not the table default, Helvetica
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.3, colors.HexColor("#dfe4ea")),
+        ]
+        if headers:
+            style += [("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8ecf1")),
+                      ("LINEBELOW", (0, 0), (-1, 0), 0.6, colors.HexColor("#9aa7b5"))]
+        table.setStyle(TableStyle(style))
+        part += [table, Spacer(1, 10)]
+        story.append(KeepTogether(part))
+
+    if summary:
+        data = [[Paragraph(f"<b>{_escape(str(label))}</b>", styles["cell"]),
+                 Paragraph(f"<b>{_escape(_cell_text(value))}</b>", right)]
+                for label, value in summary]
+        box = Table(data, colWidths=[doc.width * 0.7, doc.width * 0.3])
+        box.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), FONT),
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#f6f8fa")),
+            ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#9aa7b5")),
+            ("LINEBELOW", (0, 0), (-1, -2), 0.3, colors.HexColor("#dfe4ea")),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        story.append(box)
+    if note:
+        story += [Spacer(1, 8), Paragraph(_escape(note), styles["sub"])]
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    return buffer.getvalue()

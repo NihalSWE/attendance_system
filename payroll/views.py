@@ -309,6 +309,33 @@ def payroll_reopen(request):
 
 
 @login_required
+@require_http_methods(["POST"])
+def payslip_email(request, pk):
+    """Send one finalised payslip to its employee (payroll/payslip_email.py)."""
+    from payroll.payslip_email import email_payslip
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    _, prepare = salary_branches(request.user, company_id, "salary.prepare")
+    if not prepare:
+        raise PermissionDenied("Emailing a payslip needs access to prepare salary.")
+    with use_company(company_id):
+        record = payslip_records().filter(pk=pk).first()
+        if record is None or record_branch_id(record) not in prepare:
+            raise PermissionDenied("Payslip not found in your branches.")
+        context = payslip_context(record)
+        try:
+            address = email_payslip(actor=request.user, company_id=company_id,
+                                    context=context, sent_by=request.user.get_username())
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+        else:
+            messages.success(request, f"Payslip emailed to {address}.")
+    return redirect(reverse("payroll:payslip", args=[pk]))
+
+
+@login_required
 @require_http_methods(["GET", "POST"])
 def salary_settings(request):
     """Company salary settings: dated calculation rules, plus currency and pay day.
@@ -798,6 +825,17 @@ def payslip(request, pk):
         context["can_waive"] = context["can_waive"] and company_wide
         context["calendar_link"] = _calendar_link(request, company_id, company_wide)
         context["adjustment_form"] = AdjustmentForm()
+        # Emailing it: the owner/admin, or whoever may prepare salary in this
+        # payslip's branch - the same people who may change its lines.
+        from payroll.payslip_email import why_not
+
+        context["can_email"] = prepare is ALL_BRANCHES or record_branch_id(record) in prepare
+        context["email_blocked"] = why_not(record, record.employee)
+        if request.GET.get("format") == "pdf":
+            # The payslip's own view, so the download obeys the same rules.
+            from payroll.payslip_export import export_payslip
+
+            return export_payslip(request, context)
     return render(request, "payroll/payslip.html", context)
 
 
