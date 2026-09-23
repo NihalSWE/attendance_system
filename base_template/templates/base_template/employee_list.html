@@ -80,6 +80,21 @@
                     <input class="input" id="q" name="q" value="{{ search }}" placeholder="Name, email or Employee ID">
                 </div>
             </div>
+            {% if branches|length > 1 %}
+                <label class="sr-only" for="branch">
+                    Branch
+                </label>
+                <select class="input select js-select" id="branch" name="branch" style="width:auto">
+                    <option value="">
+                        All branches
+                    </option>
+                    {% for option in branches %}
+                        <option value="{{ option.pk }}" {% if branch == option.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ option.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            {% endif %}
             <label class="sr-only" for="status">
                 Status
             </label>
@@ -99,7 +114,7 @@
             <button class="btn btn--ghost" type="submit">
                 Apply
             </button>
-            {% if search or status or setup %}
+            {% if search or status or setup or branch %}
                 <a class="btn btn--quiet" href="{% url 'employee_list' %}">
                     Clear
                 </a>
@@ -126,7 +141,7 @@
                     No employees match
                 </div>
                 <div class="empty__text">
-                    {% if search or status or setup %}
+                    {% if search or status or setup or branch %}
                         Try clearing the filters.
                     {% else %}
                         Add your first employee to get started.
@@ -355,7 +370,7 @@
                     No employees match
                 </div>
                 <div class="empty__text">
-                    {% if search or status or setup %}
+                    {% if search or status or setup or branch %}
                         Try clearing the filters.
                     {% else %}
                         Add your first employee to get started.

@@ -20,6 +20,7 @@ from base_template.tables import paginate, render
 from django.views.decorators.http import require_POST
 
 from access_control.page_access import may_open
+from organization.access_services import branch_choices
 from accounts.services import ACTIVE_COMPANY_SESSION_KEY, get_active_memberships
 from attendance import live_status
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
@@ -144,7 +145,10 @@ class EmployeeListQuery:
     search_fields: tuple
     search: str
     status: str
+    branch: str
     setup: str
+    branches: list = field(default_factory=list)
+    chosen_branch: object = None
     setup_counts: dict = field(default_factory=dict)
     scope_name: str = ""
 
@@ -204,6 +208,17 @@ def employee_list_query(request):
     if status:
         qs = qs.filter(employment_status=status)
 
+    # One branch at a time, for a company that has several. The choices are
+    # the branches this viewer may see anyway, and the scoping above still
+    # applies - asking for another branch shows nobody rather than somebody.
+    branches = branch_choices(request.company_id, view_branches)
+    branch = request.GET.get("branch", "").strip()
+    chosen_branch = next((b for b in branches if str(b.pk) == branch), None)
+    if chosen_branch is not None:
+        qs = qs.filter(table_branch_id=chosen_branch.pk)
+    else:
+        branch = ""
+
     # A12 part 4: the pay column only exists for someone who may see pay
     # somewhere (Ajay, 2026-09-20).
     salary_branches = ALL_BRANCHES if company_wide else branches_for(
@@ -244,8 +259,8 @@ def employee_list_query(request):
 
     # What a download is named after: the one branch this viewer sees, or the
     # company when they see more than one.
-    scope_name = ""
-    if not view_branches.is_all and len(view_branches.branches) == 1 and not view_branches.departments:
+    scope_name = chosen_branch.name if chosen_branch is not None else ""
+    if not scope_name and not view_branches.is_all and len(view_branches.branches) == 1             and not view_branches.departments:
         scope_name = Branch.objects.filter(pk__in=view_branches.branches).values_list(
             "name", flat=True).first() or ""
 
@@ -254,7 +269,8 @@ def employee_list_query(request):
         show_rate_column=show_rate_column, columns=tuple(columns),
         search_fields=("first_name", "last_name", "work_email", "table_code", "table_branch",
                        "table_department", "table_designation", "employment_status"),
-        search=search, status=status, setup=setup, setup_counts=setup_counts,
+        search=search, status=status, branch=branch, setup=setup,
+        setup_counts=setup_counts, branches=branches, chosen_branch=chosen_branch,
         scope_name=scope_name,
     )
 
@@ -367,6 +383,8 @@ def employee_list(request):
         "paginator": paginator,
         "search": listing.search,
         "status": listing.status,
+        "branches": listing.branches,
+        "branch": listing.branch,
         "setup": listing.setup,
         "setup_links": setup_links,
         "export_query": export_params.urlencode(),

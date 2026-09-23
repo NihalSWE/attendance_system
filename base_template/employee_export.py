@@ -93,7 +93,8 @@ def export_employees(request, listing, fmt):
     scope = listing.scope_name or ("All branches" if listing.company_wide else "Your branches")
     setup_label = dict(SETUP_FILTERS).get(listing.setup, "All")
     filters = {
-        "scope": scope, "search": listing.search, "status": listing.status,
+        "scope": scope, "branch": listing.branch,
+        "search": listing.search, "status": listing.status,
         "setup": listing.setup, "table_search": table_search,
         "sort": _sort_text(listing, sorted_by),
     }

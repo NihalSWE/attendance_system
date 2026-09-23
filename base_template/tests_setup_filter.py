@@ -134,3 +134,57 @@ class PayVisibilityTests(SetupCase):
         counts = self.counts(self.page(self.clerk_user))
         self.assertEqual(counts["salary"], 0)
         self.assertEqual(counts["department"], 2)
+
+
+class BranchFilterTests(SetupCase):
+    """One branch at a time on the Employees list (Nihal, 2026-09-23)."""
+
+    def test_the_company_can_pick_one_branch(self):
+        response = self.page()
+        self.assertEqual({b.pk for b in response.context["branches"]},
+                         {self.branch.pk, self.unit.pk})
+        self.assertEqual(self.names(self.page(branch=str(self.unit.pk))), {"Karim"})
+        self.assertEqual(
+            self.names(self.page(branch=str(self.branch.pk))),
+            {"Rahim", "Clerk", "Imported One", "Imported Two"},
+        )
+
+    def test_the_counts_follow_the_branch(self):
+        counts = self.counts(self.page(branch=str(self.unit.pk)))
+        self.assertEqual(counts, {"all": 1, "department": 0, "salary": 0,
+                                  "both": 0, "complete": 1})
+
+    def test_it_keeps_the_other_filters(self):
+        response = self.page(branch=str(self.branch.pk), setup="both")
+        self.assertEqual(self.names(response), {"Imported One", "Imported Two"})
+        link = next(link for link in response.context["setup_links"] if link["key"] == "salary")
+        self.assertIn(f"branch={self.branch.pk}", link["url"])
+
+    def test_an_unknown_or_out_of_reach_branch_is_ignored(self):
+        self.assertEqual(len(self.names(self.page(branch="999999"))), 5)
+        self.assertEqual(self.page(branch="999999").context["branch"], "")
+
+    def test_a_branch_manager_is_offered_their_own_branch_only(self):
+        response = self.page(self.manager)
+        self.assertEqual([b.pk for b in response.context["branches"]], [self.branch.pk])
+        # Asking for the branch they cannot see shows nobody, not everybody.
+        self.assertEqual(self.names(self.page(self.manager, branch=str(self.unit.pk))),
+                         {"Rahim", "Clerk", "Imported One", "Imported Two"})
+
+    def test_the_download_follows_it_and_is_named_for_it(self):
+        from common import exports
+        from common.tests_exports import xlsx_table
+
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse("employee_list"),
+                                   {"branch": self.unit.pk, "format": "xlsx"})
+        lines, headers, rows = xlsx_table(response.content)
+        self.assertEqual([dict(zip(headers, row))["Name"] for row in rows], ["Karim"])
+        self.assertIn("Scope: Chittagong", lines[1])
+        self.assertIn(f"employees-{exports.slug(self.unit.name)}-", response["Content-Disposition"])
+
+    def test_the_page_offers_the_filter_only_when_there_is_a_choice(self):
+        response = self.page()
+        self.assertContains(response, "All branches")
+        # A branch manager sees one branch, so no picker is drawn.
+        self.assertNotContains(self.page(self.manager), "All branches")
