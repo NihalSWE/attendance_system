@@ -4413,7 +4413,7 @@ paid **in the next month still open**, as a line that says which month it is
 for: "August overtime was missed (correction for August 2026)".
 
 `PayrollAdjustment` gained `source_payroll_period` (migration
-`payroll/0008_correction_source.py`). It is empty on an ordinary bonus or
+`payroll/0009_correction_source.py`). It is empty on an ordinary bonus or
 deduction; when it is set, the line's code is `CORRECTION` instead of
 `BONUS`/`DEDUCTION`. `open_period_after()` finds the target: the next month
 whose salary is not posted, creating the period row if nobody has generated

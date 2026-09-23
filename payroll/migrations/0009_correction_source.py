@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('payroll', '0007_payroll_run_approval'),
+        ('payroll', '0008_salary_components'),
     ]
 
     operations = [
