@@ -4271,3 +4271,35 @@ equally specific headings the left-hand column still wins. The client's
 `ID | Name` file still imports, because nothing more specific is present.
 
 4 tests in `organization/tests_employee_import.py::VagueHeadingsTests`.
+
+## Approving refuses when attendance changed since the month was prepared (2026-09-23)
+
+Ajay's answer to the question left open by the approval work: a day fixed
+between generating and approving left the run's figures no longer matching
+the attendance they came from, and approving finalised stale numbers.
+`approve_payroll` now refuses — "Attendance changed for N people since this
+was prepared" — in the same shape as the overtime-decided-after-generation
+check beside it. Fixing a day while a month waits is still allowed; the
+approval is what refuses. The Salary page says it too, while the month can
+still be regenerated.
+
+**Why a fingerprint and not a timestamp.** `_write_day` uses
+`update_or_create`, so every recalculation rewrites the row and bumps
+`updated_at`, and `refresh` recalculates an *open* month on every page view —
+so "attendance rows touched since the run" would have blocked approval just
+because somebody opened the Attendance page in the month being paid. Instead
+each payslip carries a digest of what it was calculated from
+(`FINGERPRINT_FIELDS`: status, worked/total/late/early-out minutes, payable
+fraction, approved overtime, leave day), stored in `calculation_snapshot`;
+approving compares it with the same digest taken now. A day rewritten with the
+same values is not a change; a fixed day is. A payslip with no digest (any
+draft generated before this shipped) never blocks.
+
+6 tests in `payroll/tests_approval.py`. One is the false positive:
+`recalculate` + `refresh` over the month, then approve — still fine. Another
+is the real one, and writing it found that a single added scan changes
+nothing the pay is built from (an unfinished visit: one scan in, none out),
+so the test fixes the day with the pair it takes to matter — 540 minutes
+becomes 690.
+
+Full suite 1415 OK.

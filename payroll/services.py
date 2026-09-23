@@ -668,6 +668,11 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
         ).order_by("pk"):
             adjustments_by_employee.setdefault(adjustment.employee_id, []).append(adjustment)
 
+        # What each payslip is being calculated from, kept on the payslip so
+        # a day fixed afterwards is caught before the month is approved.
+        fingerprints = attendance_fingerprints(
+            company_id, period, [employee.pk for employee in records_by_employee])
+
         skipped = dict(previous_skipped)
         skipped_now = []
         for employee, records in records_by_employee.items():
@@ -710,6 +715,9 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
                         [str(rate), first_day.isoformat(), last_day.isoformat()]
                         for rate, first_day, last_day in (basic_segments or [])
                     ],
+                    # What this payslip was calculated from, so a day fixed
+                    # afterwards is caught before the month is approved.
+                    "attendance": fingerprints.get(employee.pk, ""),
                     "counts": result["counts"],
                     "rules": result["rules"],
                     "overtime": result["overtime"],
@@ -775,6 +783,58 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
     # Who this pass skipped (for the message); the snapshot keeps the month's list.
     run.skipped_now = skipped_now
     return run
+
+
+#: The fields of an attendance day that a payslip is calculated from. A day
+#: rewritten with the same values (the screens recalculate an open month on
+#: every view) must not count as a change; a real fix must.
+FINGERPRINT_FIELDS = (
+    "work_date", "attendance_status", "worked_minutes", "total_minutes",
+    "late_minutes", "early_out_minutes", "payable_fraction",
+    "approved_overtime_minutes", "leave_day_id",
+)
+
+
+def attendance_fingerprints(company_id, period, employee_ids=None):
+    """``{employee_id: digest}`` of the attendance a month's pay comes from."""
+    import hashlib
+
+    rows = {}
+    with use_company(company_id):
+        days = AttendanceRecord.objects.filter(
+            work_date__gte=period.start_date, work_date__lte=period.end_date,
+        ).order_by("employee_id", "work_date")
+        if employee_ids is not None:
+            days = days.filter(employee_id__in=list(employee_ids))
+        for values in days.values_list("employee_id", *FINGERPRINT_FIELDS):
+            rows.setdefault(values[0], []).append(
+                "|".join(str(value) for value in values[1:]))
+    return {
+        employee_id: hashlib.sha256("\n".join(lines).encode()).hexdigest()
+        for employee_id, lines in rows.items()
+    }
+
+
+def attendance_changed_since(company_id, run):
+    """How many payslips were calculated from attendance that has since changed.
+
+    Compares what each payslip was built from with what is stored now, by
+    value - so recalculating a day without changing it (which the attendance
+    screens do for an open month on every view) is not a change, and a fixed
+    day is.
+    """
+    if run is None:
+        return 0
+    with use_company(company_id):
+        stored = dict(run.records.values_list("employee_id", "calculation_snapshot"))
+    if not stored:
+        return 0
+    now = attendance_fingerprints(company_id, run.payroll_period, list(stored))
+    return sum(
+        1 for employee_id, snapshot in stored.items()
+        if (snapshot or {}).get("attendance")
+        and (snapshot or {}).get("attendance") != now.get(employee_id)
+    )
 
 
 def _run_for_month(company_id, year, month, status):
@@ -874,6 +934,15 @@ def approve_payroll(*, actor, company_id, year, month):
             raise ValidationError(
                 "Overtime was decided after this salary was generated. "
                 "Send it back, generate the month again, then submit it."
+            )
+        changed = attendance_changed_since(company_id, run)
+        if changed:
+            # Approving here would finalise figures that no longer match the
+            # attendance they came from (Ajay, 2026-09-23).
+            raise ValidationError(
+                f"Attendance changed for {changed} "
+                f"{'person' if changed == 1 else 'people'} since this was prepared "
+                "— generate it again. Send it back, generate the month, then submit it."
             )
         run.status = PayrollRun.Status.POSTED
         run.posted_by = actor

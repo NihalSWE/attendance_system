@@ -92,6 +92,14 @@
             on {{ run.returned_at|date:"d M Y, H:i" }}: {{ run.return_reason }}
         </div>
     {% endif %}
+    {% if attendance_since_run %}
+        <div class="alert alert--warning">
+            Attendance changed for {{ attendance_since_run }}
+            {{ attendance_since_run|pluralize:"person,people" }} since this salary was
+            generated. Generate {{ month_name }} again{% if run.status == 'submitted' %} — it
+            cannot be approved until you do{% endif %}.
+        </div>
+    {% endif %}
     {% if overtime_since_run %}
         <div class="alert alert--warning">
             Overtime was decided for {{ overtime_since_run }} day{{ overtime_since_run|pluralize }} after this

@@ -51,6 +51,7 @@ from payroll.models import (
 from payroll.services import (
     add_adjustment,
     approval_blocker,
+    attendance_changed_since,
     approve_payroll,
     record_branch_id,
     remove_adjustment,
@@ -126,6 +127,13 @@ def payroll_home(request):
         "approval_blocked": (
             approval_blocker(request.user, company_id, run)
             if run and run.status == PayrollRun.Status.SUBMITTED else None
+        ),
+        # A day fixed since the payslips were built: approving would finalise
+        # figures the attendance no longer matches, so approve refuses - said
+        # here first, while it can still be regenerated.
+        "attendance_since_run": (
+            attendance_changed_since(company_id, run)
+            if run and run.status != PayrollRun.Status.POSTED else 0
         ),
         # Decisions made since the draft was generated are not in it yet.
         "overtime_since_run": (

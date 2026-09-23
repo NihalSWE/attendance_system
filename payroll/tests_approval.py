@@ -24,6 +24,7 @@ from payroll.models import PayrollRecord, PayrollRun
 from payroll.services import (
     add_adjustment,
     approval_blocker,
+    attendance_changed_since,
     approve_payroll,
     generate_payroll,
     remove_adjustment,
@@ -31,6 +32,7 @@ from payroll.services import (
     submit_payroll,
 )
 from payroll.tests_overtime import OvertimeBase
+from attendance.tests_live import DHAKA
 
 AUGUST = (datetime.date(2026, 8, 1), datetime.date(2026, 8, 31))
 AUGUST_QUERY = {"month": 8, "year": 2026}
@@ -236,3 +238,74 @@ class PageTests(ApprovalCase):
         self.assertContains(page, "Sent back by")
         self.assertContains(page, "Check Rahim&#x27;s overtime")
         self.assertContains(page, "Regenerate August")
+
+
+class AttendanceChangedTests(ApprovalCase):
+    """Approving must not finalise figures the attendance no longer matches
+    (Ajay, 2026-09-23). A day can still be fixed while a month waits; the
+    approval is what refuses."""
+
+    WORKED = datetime.date(2026, 8, 10)
+
+    def fix_the_day(self):
+        """A real fix through the real service: scans the device never got.
+
+        Both halves of the pair - one scan alone leaves an unfinished visit,
+        which changes nothing the pay is worked out from.
+        """
+        from attendance.correction_services import add_scan
+
+        for hour, minute in ((19, 30), (20, 30)):
+            add_scan(actor=self.admin, company_id=self.company.pk,
+                     employee_id=self.employee.pk, work_date=self.WORKED,
+                     at=datetime.datetime(2026, 8, 10, hour, minute, tzinfo=DHAKA),
+                     reason="Stayed late; the terminal missed it")
+
+    def test_a_day_fixed_while_it_waits_blocks_approval(self):
+        self.month(submit_payroll)
+        self.fix_the_day()
+        with self.assertRaisesMessage(ValidationError, "Attendance changed for 1 person"):
+            self.month(approve_payroll)
+        self.assertEqual(self.latest_run().status, PayrollRun.Status.SUBMITTED)
+
+    def test_send_back_generate_submit_approve_clears_it(self):
+        self.month(submit_payroll)
+        self.fix_the_day()
+        self.month(return_payroll, reason="Attendance changed")
+        self.month(generate_payroll)
+        self.month(submit_payroll)
+        self.assertEqual(self.month(approve_payroll).status, PayrollRun.Status.POSTED)
+
+    def test_recalculating_without_changing_anything_does_not_block(self):
+        """The screens rebuild an open month on every view; that is not a change."""
+        from attendance.services import recalculate, refresh
+
+        self.month(submit_payroll)
+        recalculate(self.company.pk, start=self.WORKED, end=self.WORKED)
+        refresh(self.company.pk, start=self.WORKED, end=self.WORKED)
+        self.assertEqual(attendance_changed_since(self.company.pk, self.latest_run()), 0)
+        self.assertEqual(self.month(approve_payroll).status, PayrollRun.Status.POSTED)
+
+    def test_a_payslip_generated_before_this_check_existed_does_not_block(self):
+        """Drafts already waiting when this shipped carry no fingerprint."""
+        with use_company(self.company):
+            run = self.latest_run()
+            for record in run.records.all():
+                record.calculation_snapshot.pop("attendance", None)
+                record.save(update_fields=["calculation_snapshot"])
+        self.month(submit_payroll)
+        self.fix_the_day()
+        self.assertEqual(attendance_changed_since(self.company.pk, self.latest_run()), 0)
+        self.assertEqual(self.month(approve_payroll).status, PayrollRun.Status.POSTED)
+
+    def test_the_salary_page_says_so_before_anyone_clicks_approve(self):
+        self.month(submit_payroll)
+        self.fix_the_day()
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("payroll:payroll_home"), AUGUST_QUERY)
+        body = " ".join(page.content.decode().split())
+        self.assertIn("Attendance changed for 1 person since this salary was generated", body)
+        self.assertIn("cannot be approved until you do", body)
+        # And the approve page refuses rather than offering a button that fails.
+        self.client.post(reverse("payroll:payroll_finalise"), AUGUST_QUERY)
+        self.assertEqual(self.latest_run().status, PayrollRun.Status.SUBMITTED)
