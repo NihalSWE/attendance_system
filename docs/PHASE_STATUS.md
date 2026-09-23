@@ -498,10 +498,18 @@ All five fit the current design:
 - **1** — `Employee.user` (nullable FK) and `CompanyMembership` roles
   `employee` and `manager` with `allowed_branches` already exist.
 - **2** — `PayrollSettings` (§54), `PayrollPolicyVersion` (§55) and
-  `AttendancePenaltyRule` (§36) are in the dictionary, not built yet.
+  `AttendancePenaltyRule` (§36) were in the dictionary and not built **when this
+  was written**; A3 and A4 built all three on 2026-09-13.
 - **3** — `AttendanceSession` / `PunchAllocation` and the attendance record's
-  break and outside minutes are in the dictionary, not built yet; the calendar
-  is a new screen.
+  break and outside minutes were in the dictionary and not built **when this was
+  written**; N1 built them on 2026-09-13 (092901e). `break_minutes` and
+  `outside_minutes` are deliberately the same measurement under two names.
+
+> **These bullets describe the plan as it stood on the day they were written.**
+> They are not a statement of what exists now, and reading them as one has sent
+> two later sessions hunting for features that had been finished for days
+> (2026-09-22 and 2026-09-23). Check the code before repeating anything here as
+> "not built".
 - **4** — attendance already merges authorised punches from every company
   device. `device_attendance_scope` exists (company / branch / department /
   assigned devices) but has no screen, and already-excluded punches have no
@@ -560,8 +568,8 @@ salary, shifts, holidays, logins and leave. ⬆ marks items Ajay moved up.
 | A6 | **Logins** — ✅ done 2026-09-14 | "Give login" on the Edit employee page: admin types email and password, picks Employee or Branch manager (with branches); disable / enable; reset password | 1 | Access: employee logins; branch-administrator decision (= branch manager) |
 | A7 | **Employee panel** — ✅ done 2026-09-14 | Own sidebar: My attendance (Nihal's N2 calendar), My leave, My payslips, My profile | 1 | (new) |
 | A8 | **Done 2026-09-15 — leave requests, branch-manager approval**, branch `feature/a8-leave-requests` | Employee requests leave → Pending; branch manager approves or rejects from an inbox; approval creates the same `LeaveDay` rows as today, so attendance and salary need no change. Branch manager panel: leave inbox, branch attendance, in-office badges | 1 | Full leave: employee requests, approval step; salary and attendance pages for managers (branch manager part) |
-| A10 | **Full leave** | Half-day and hourly leave, partial pay, policies and versions, balances / entitlements / ledger, attachments, withdraw, amend; default leave types at onboarding; HR records leave; employee code in the picker | — | Full leave (rest); leave fields not built; HR role recording leave; default leave types; employee code in picker |
-| A11 | **Salary completeness** | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
+| A10 | **Full leave — DONE and DELIBERATELY NARROWED 2026-09-15.** This cell is the *original* scope; see "A10 split into sub-steps" for what was built and what Ajay dropped. Built: half-day leave, default leave types, HR records leave, employee code in the picker, days per year per leave type, withdraw. Dropped on purpose (Ajay, "keep leave simple"): hourly leave, partly paid leave, morning/afternoon choice, attachments, policies and versions, accrual/carry-forward ledger, amendment, partial cancellation. **Do not put the dropped items back on a to-do list.** | — | Full leave (rest); leave fields not built; HR role recording leave; default leave types; employee code in picker |
+| A11 | **Salary completeness — mostly DONE.** This cell is the *original* scope and is not a to-do list; see the A11 plan and the 2026-09-22/23 sections. Built: finalise/lock with undo, submit-and-approve, mid-month salary change, joining/leaving proration, manual bonus and deduction lines, salary history, payslip PDF and email, allowances and components, corrections after finalising, undo a waived penalty | Mid-month salary change and joining / leaving (segments, proration); allowances and components; manual bonus / deduction lines; finalise / lock with approval; corrections after finalising; payslip PDF and email; salary history | — | Mid-month change; joining / leaving; salary structure; finalise / lock; manual lines; payslip PDF / history |
 | A12 | **Access** | Department heads, permissions, HR and payroll-manager pages | — | Department heads, permissions; salary and attendance pages for HR |
 | A13 | **Later** | Payments, advances, loans (P5) | — | Payments (P5) |
 | A14 | **Sidebar menus with submenus — done 2026-09-15**, branch `feature/a14-sidebar-menus` | Every important page reachable from the sidebar: a menu per area with its pages as submenus, e.g. Employees (All employees, Create employee); Attendance (Daily list, Calendar); Leave (Leave list, Record leave, Leave types); Salary (Salary by month, Salary settings, Penalty rules); Shifts (Overview, Shifts, Department shifts, Weekly offs, Holidays, Holiday calendar, Attendance settings); Organisation (Branches, Departments); Devices (Devices, Enrollments, Punches, Messages, Unresolved). Ajay: pages he could not find were only reachable through buttons inside other pages. Every later step adds its pages to these menus | — | (new) |
