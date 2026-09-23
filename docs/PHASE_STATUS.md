@@ -4387,3 +4387,21 @@ Migration 0008 adds the two tables. 19 tests in `payroll/tests_components.py`.
 Writing them found that this fixture's employee is absent for much of August,
 so his net is already capped at zero - the deduction test gives a large
 allowance first, otherwise it would have proved nothing. Full suite 1429 OK.
+## A branch filter on the Employees list (2026-09-23)
+
+Nihal: the company could not look at one branch's people on their own. The
+Employees list gains a Branch box beside Status, drawn only when the viewer
+has more than one branch to choose from (a branch manager sees one, so there
+is nothing to pick).
+
+It sits in `employee_list_query`, so everything downstream follows without
+its own code: the "Needs setup" counts are of the chosen branch, the setup
+links and the download links carry it, and the Excel/PDF downloads hold that
+branch's people, say "Scope: Chittagong" in the file, and are named
+`employees-chittagong-…`. The branch scoping still applies underneath -
+asking for a branch the viewer may not see shows nobody, not everybody - and
+an unknown id is ignored rather than refused.
+
+7 tests in `base_template/tests_setup_filter.py`. Checked in the running app
+against D Company: Head Office 94, Branch 2 zero, counts and download link
+following the choice. Full suite 1417 OK.
