@@ -1,4 +1,7 @@
-"""Bulk employee import from a CSV (or Excel) file: Employee ID and Name only.
+"""Bulk employee import from a CSV or Excel file: Employee ID and Name only.
+
+Reads .csv, .xlsx and the old .xls (Excel 97-2003) - by what the file *is*,
+not what it is named - because a client's employee list arrives in all three.
 
 The file carries two columns and nothing else - **Employee ID** and **Name**, the
 same two things the attendance terminals know a person by. The upload also
@@ -60,10 +63,13 @@ from organization.services import require_company_membership
 HEADINGS = ["Employee ID", "Name"]
 
 #: Headings accepted for each column, compared with spaces, dashes and case
-#: ignored - so "Employee ID", "EMP-ID", "Emp Id" and "EMPID" all work.
+#: ignored - so "Employee ID", "EMP-ID", "Emp Id", "EMPID" and a bare "ID" all
+#: work. Real files from a client call the column "ID" as often as anything
+#: else; any other column (a serial number, say) is ignored.
 _HEADING_WORDS = {
-    "employee_id": {"empid", "employeeid", "empno", "employeeno"},
-    "name": {"name", "employeename", "fullname"},
+    "employee_id": {"empid", "employeeid", "empno", "employeeno", "id",
+                    "idno", "employeecode", "code"},
+    "name": {"name", "employeename", "fullname", "employee"},
 }
 
 #: One upload. Comfortably above the 400-600 a new company brings, and low
@@ -123,6 +129,55 @@ def _rows_from_csv(data):
     return [list(row) for row in csv.reader(io.StringIO(text), dialect)]
 
 
+#: How an old Excel file starts. Excel writes BIFF inside an OLE container
+#: (d0cf11e0); a bare BIFF stream - what some exporters and our own test
+#: fixture produce - starts with its BOF record instead.
+BIFF_SIGNATURES = (b"\xd0\xcf\x11\xe0", b"\x09\x00", b"\x09\x02",
+                   b"\x09\x04", b"\x09\x08")
+
+
+def _looks_like_html(data):
+    """True for an HTML table saved with a spreadsheet name."""
+    head = data[:4096].lstrip().lower()
+    return head.startswith((b"<!doctype", b"<html", b"<table", b"<?xml")) or b"<table" in head
+
+
+def _rows_from_xls(data):
+    """The old Excel 97-2003 format (BIFF), which openpyxl cannot read at all."""
+    try:
+        import xlrd
+    except ModuleNotFoundError:  # pragma: no cover - listed in requirements.txt
+        raise ValidationError({
+            "upload": "Old Excel (.xls) files cannot be read on this server. Save "
+                      "the file as .xlsx or CSV and upload that instead."
+        })
+    try:
+        book = xlrd.open_workbook(file_contents=data)
+    except Exception:
+        # Also lands here for another OLE document (a .doc renamed .xls) and
+        # for a password-protected workbook.
+        raise ValidationError({
+            "upload": "That file could not be opened as an Excel workbook. If it "
+                      "is password-protected, remove the password; otherwise save "
+                      "it as .xlsx or CSV and upload that."
+        })
+    sheet = book.sheet_by_index(0)
+    rows = []
+    for index in range(sheet.nrows):
+        row = []
+        for cell in sheet.row(index):
+            value = cell.value
+            if cell.ctype == xlrd.XL_CELL_DATE:
+                value = xlrd.xldate_as_datetime(value, book.datemode)
+            elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
+                value = bool(value)
+            elif cell.ctype == xlrd.XL_CELL_ERROR:
+                value = ""
+            row.append(value)
+        rows.append(row)
+    return rows
+
+
 def _rows_from_xlsx(data):
     try:
         from openpyxl import load_workbook
@@ -147,6 +202,9 @@ def _rows_from_xlsx(data):
 def read_file(upload):
     """``list[dict]`` of ``{"line", "employee_id", "name"}``, one per person.
 
+    Reads CSV, .xlsx (openpyxl) and the old .xls (xlrd) - a client's list
+    arrives in any of the three.
+
     Raises ValidationError with a reader-facing message when the file itself is
     wrong: empty, unreadable, missing a heading, or too long.
     """
@@ -154,14 +212,26 @@ def read_file(upload):
     data = upload.read()
     if not data:
         raise ValidationError({"upload": "That file is empty."})
-    if name.endswith((".xlsx", ".xlsm")):
+    # What the file *is*, not what it is called: people rename spreadsheets,
+    # and "Save as .xls" in some tools writes .xlsx (and the other way round).
+    if data.startswith(b"PK\x03\x04"):
         table = _rows_from_xlsx(data)
-    elif name.endswith((".csv", ".txt")):
+    elif data.startswith(BIFF_SIGNATURES):
+        table = _rows_from_xls(data)
+    elif name.endswith((".csv", ".txt", ".xls", ".xlsx", ".xlsm")):
+        # Named like a spreadsheet but holding text: several systems "export to
+        # Excel" by writing a CSV, or an HTML table, and naming it .xls.
+        if _looks_like_html(data):
+            raise ValidationError({
+                "upload": "That file is a web page saved with a spreadsheet name, "
+                          "not a spreadsheet. Open it in Excel and use Save As to "
+                          "make a .xlsx or CSV file, then upload that."
+            })
         table = _rows_from_csv(data)
     else:
         raise ValidationError({
             "upload": "Upload a .csv file in the demo file's format "
-                      "(an Excel .xlsx file also works)."
+                      "(Excel .xlsx and .xls files also work)."
         })
 
     table = [row for row in table if any(_text(cell) for cell in row)]
@@ -170,8 +240,9 @@ def read_file(upload):
 
     heading_row, *body = table
     columns = {}
-    for index, cell in enumerate(heading_row):
-        key = _heading_key(_text(cell))
+    headings = [_text(cell) for cell in heading_row]
+    for index, heading in enumerate(headings):
+        key = _heading_key(heading)
         if key and key not in columns:
             columns[key] = index
     missing = [heading for key, heading in zip(("employee_id", "name"), HEADINGS)
@@ -179,7 +250,8 @@ def read_file(upload):
     if missing:
         raise ValidationError({
             "upload": "The first row must be the headings Employee ID and Name, as in "
-                      f"the demo file. Missing: {', '.join(missing)}."
+                      f"the demo file. Missing: {', '.join(missing)}. "
+                      f"Found: {', '.join(h for h in headings if h) or 'nothing'}."
         })
     if not body:
         raise ValidationError({"upload": "That file has the headings but no people."})

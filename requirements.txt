@@ -9,6 +9,9 @@ psycopg==3.3.5
 sqlparse==0.6.0
 # Bulk employee import reads and writes .xlsx (CSV needs nothing extra).
 openpyxl==3.1.5
+# The old Excel 97-2003 .xls, which openpyxl cannot read: a client's employee
+# list arrives in it. xlrd 2.x reads .xls only, which is all this is for.
+xlrd==2.0.2
 et-xmlfile==2.0.0
 # PDF downloads (Employees, Attendance, the monthly calendar). Pure Python and
 # prebuilt wheels - no system packages on the server, unlike WeasyPrint.

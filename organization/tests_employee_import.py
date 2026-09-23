@@ -393,3 +393,86 @@ class WhoMayImportTests(ImportCase):
         self.assertContains(page, "Employee ID")
         self.assertContains(page, "Download demo file (CSV)")
         self.assertIsNone(page.context["preview"])
+
+
+# --- old Excel (.xls), and files that are not what they are named -----------
+
+def biff2(rows):
+    """A real Excel 97-2003 (BIFF) workbook, built here so no binary fixture
+    and no customer file has to live in the repo. xlrd reads BIFF 2 onwards."""
+    import struct
+
+    def record(code, payload):
+        return struct.pack("<HH", code, len(payload)) + payload
+
+    out = [record(0x0009, struct.pack("<HH", 2, 0x0010))]      # BOF, worksheet
+    for r, row in enumerate(rows):
+        for c, value in enumerate(row):
+            if isinstance(value, (int, float)):
+                out.append(record(0x0003, struct.pack("<HH3sd", r, c, b"\0\0\0", float(value))))
+            else:
+                text = str(value).encode("latin-1")
+                out.append(record(0x0004, struct.pack("<HH3sB", r, c, b"\0\0\0", len(text)) + text))
+    out.append(record(0x000A, b""))
+    return b"".join(out)
+
+
+class OldExcelTests(ImportCase):
+    """A client's list arrived as Excel 97-2003 with an "ID" column (2026-09-23)."""
+
+    def xls(self, rows, name="File_01.xls"):
+        return SimpleUploadedFile(name, biff2(rows), content_type="application/vnd.ms-excel")
+
+    def test_an_old_xls_is_read(self):
+        rows = import_services.read_file(self.xls([
+            ["SL", "ID", "Name"],
+            [1, 830011, "Md. Hafizul Islam"],
+            [2, 830032.0, "Biplob Baidya"],
+        ]))
+        # "ID" is the Employee ID; the serial column is ignored; a number
+        # stays a number, not "830011.0".
+        self.assertEqual([(r["employee_id"], r["name"]) for r in rows],
+                         [("830011", "Md. Hafizul Islam"), ("830032", "Biplob Baidya")])
+
+    def test_it_imports_through_the_page(self):
+        self.client.force_login(self.admin)
+        page = self.client.post(self.url, {
+            "branch": self.branch.pk,
+            "upload": self.xls([["ID", "Name"], [830011, "Md. Hafizul Islam"]]),
+        })
+        self.assertEqual(page.context["preview"]["counts"], {"total": 1, "bad": 0, "good": 1})
+        self.confirm()
+        self.assertEqual(self.placement("830011").employee.full_name, "Md. Hafizul Islam")
+
+    def test_a_missing_heading_says_what_it_found(self):
+        page = self.upload([], headings=("Serial", "Person"))
+        message = self.upload_error(page)
+        self.assertIn("Missing: Employee ID, Name", message)
+        self.assertIn("Found: Serial, Person", message)
+
+    def test_a_workbook_is_read_by_what_it_is_not_by_its_name(self):
+        from openpyxl import Workbook
+
+        book = Workbook()
+        book.active.append(["ID", "Name"])
+        book.active.append([830011, "Md. Hafizul Islam"])
+        buffer = io.BytesIO()
+        book.save(buffer)
+        # A .xlsx named .xls (some tools do this), and a CSV named .xls.
+        rows = import_services.read_file(
+            SimpleUploadedFile("people.xls", buffer.getvalue()))
+        self.assertEqual(rows[0]["employee_id"], "830011")
+        rows = import_services.read_file(SimpleUploadedFile(
+            "people.xls", b"ID,Name\r\n830011,Md. Hafizul Islam\r\n"))
+        self.assertEqual(rows[0]["name"], "Md. Hafizul Islam")
+
+    def test_a_web_page_saved_as_xls_says_so(self):
+        upload = SimpleUploadedFile(
+            "report.xls", b"<html><body><table><tr><td>ID</td></tr></table></body></html>")
+        with self.assertRaisesMessage(ValidationError, "web page saved with a spreadsheet name"):
+            import_services.read_file(upload)
+
+    def test_another_ole_document_or_a_locked_workbook_is_refused(self):
+        upload = SimpleUploadedFile("letter.xls", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 600)
+        with self.assertRaisesMessage(ValidationError, "password-protected"):
+            import_services.read_file(upload)

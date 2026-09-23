@@ -18,8 +18,10 @@ class EmployeeImportForm(StyledFormMixin, forms.Form):
         queryset=Branch.all_objects.none(), label="Branch", required=False)
     upload = forms.FileField(
         label="Employee file",
-        help_text="A .csv file with the headings Employee ID and Name, like the demo file.",
-        widget=forms.ClearableFileInput(attrs={"accept": ".csv,.xlsx,text/csv"}),
+        help_text=("A .csv or Excel (.xlsx, .xls) file with the headings Employee ID "
+                   "and Name, like the demo file."),
+        widget=forms.ClearableFileInput(
+            attrs={"accept": ".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel"}),
     )
 
     def __init__(self, *args, branches, default_branch, locked=False, **kwargs):

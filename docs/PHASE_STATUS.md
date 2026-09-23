@@ -4221,3 +4221,37 @@ and approving does not block approval (finalising never checked it either).
 adjustment tests now go through submit → approve. Checked in the running app
 as the admin and as a branch manager (no submit/approve pressed on real data).
 Full suite 1400 OK.
+
+## The import takes old .xls files, and an "ID" column (2026-09-23)
+
+A client's employee list (90 people) was refused. Two separate reasons, both
+fixed:
+
+1. **The file was a genuine Excel 97-2003 (.xls)** - an OLE container holding
+   BIFF, which openpyxl cannot read at all, so only .csv and .xlsx were
+   accepted. `xlrd==2.0.2` (94 KB, pure Python, BSD; 2.x reads .xls *only*)
+   now reads it, dates and all.
+2. **Its heading was `ID`, not `Employee ID`** - so the same list would have
+   been refused even saved as CSV. The accepted spellings now include `ID`,
+   `ID No`, `Code` and `Employee Code`, and `Employee` for the name column.
+   Other columns (a serial number, say) are ignored as before. A refusal now
+   also says what headings it *did* find, which is what makes this kind of
+   mismatch obvious.
+
+**Read by what the file is, not what it is named.** People rename
+spreadsheets, and "export to Excel" often writes something else. The reader
+picks by signature first - `PK..` (.xlsx), OLE or a bare BIFF stream (.xls) -
+and only then by extension. So a .xlsx named .xls works, a CSV named .xls
+works, and an HTML table saved as .xls (a common "export to Excel") gets its
+own message instead of a confusing parse: "That file is a web page saved with
+a spreadsheet name". Another OLE document (a .doc renamed .xls) or a
+password-protected workbook says so too.
+
+7 tests in `organization/tests_employee_import.py`. The .xls fixture is built
+in the test with `struct` (a real BIFF stream xlrd reads), so no binary
+fixture and no customer file lives in the repo. Verified against the client's
+own File_01.xls outside the repo: 90 people, IDs read as digits
+(830011, not 830011.0).
+
+**Server:** `pip install -r requirements.txt` before restart, or .xls uploads
+fail there while CSV and .xlsx keep working. Full suite 1406 OK.
