@@ -31,6 +31,7 @@ from access_control.branch_access import ALL_BRANCHES, branches_for_any, can
 from attendance.models import AttendanceRecord
 from attendance.services import calculate_attendance, month_bounds, recalculate
 from auditlog.services import record_company_event
+from common.choices import ActiveStatus
 from common.tenant import use_company
 from employees.models import EmployeeAssignment, EmployeeCompensation
 from organization.services import (
@@ -305,8 +306,12 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                   penalty_rules=(), waived=frozenset(), employee_key="", adjustments=(),
-                  employed_days=None, basic_segments=None):
+                  employed_days=None, basic_segments=None, components=()):
     """Lines and totals for one employee. Pure: no database writes.
+
+    ``components`` are this employee's allowances and recurring deductions
+    for the month (``component_lines``), already narrowed to the days each was
+    in force.
 
     ``penalty_rules`` add one deduction line per penalty found; the
     penalties themselves come back in ``result["penalties"]`` as
@@ -388,6 +393,15 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     overtime_lines, overtime = _overtime_lines(pay_basis, rate, rules, records, days_in_month)
     lines.extend(overtime_lines)
 
+    # Allowances and recurring deductions (A11). After basic, because a
+    # percentage one is a percentage of the basic actually earned this month.
+    basic_earned = sum(
+        (amount for kind, code, *_, amount in lines
+         if kind == "earning" and code in ("BASIC", "DAYS", "HOURS")),
+        Decimal("0"),
+    )
+    lines.extend(component_lines(components, basic_earned, days_in_month))
+
     # One-time bonus and deduction lines added on the draft (A11 part 2).
     adjustment_lines = []
     for adjustment in adjustments:
@@ -445,6 +459,77 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
         "overtime": overtime,
         "adjustments": adjustment_lines,
     }
+
+
+def employee_components(company_id, first, last, employee_ids):
+    """``{employee_id: [(kind, code, name, method, value, days)]}`` for a month.
+
+    ``days`` counts the days of the month the row was in force and the person
+    was employed, so somebody given an allowance mid-month, or who joined or
+    left, is paid for the part that applied. Call inside no particular
+    context; it opens the company's own.
+    """
+    from payroll.models import EmployeeSalaryComponent
+
+    month_days = (last - first).days + 1
+    found = {}
+    with use_company(company_id):
+        rows = (
+            EmployeeSalaryComponent.objects.select_related("component", "employee")
+            .filter(
+                employee_id__in=list(employee_ids),
+                status=EmployeeSalaryComponent.Status.ACTIVE,
+                component__status=ActiveStatus.ACTIVE,
+                effective_from__lte=last,
+            )
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=first))
+            .order_by("component__kind", "component__name", "effective_from")
+        )
+        for row in rows:
+            employee = row.employee
+            starts = max(first, row.effective_from, employee.joining_date or first)
+            ends = min(last, row.effective_to or last, employee.leaving_date or last)
+            days = (ends - starts).days + 1
+            if days <= 0:
+                continue
+            component = row.component
+            value = row.amount if component.method == component.Method.FIXED else row.percent
+            found.setdefault(row.employee_id, []).append((
+                component.kind, component.code, component.name,
+                component.method, value, min(days, month_days),
+            ))
+    return found
+
+
+def component_lines(components, basic_earned, days_in_month):
+    """Pay lines for one month's allowances and recurring deductions.
+
+    Each component arrives as ``(kind, code, name, method, value, days)``:
+    ``days`` is how many of the month's days it was in force *and* the person
+    was employed, so a component given mid-month, or a joiner, is paid for the
+    part of the month it applied to - the same shape as a prorated basic.
+
+    A percentage is a percentage of the basic actually earned this month, so a
+    month worked half is not given a whole month's house rent.
+    """
+    lines = []
+    for kind, code, name, method, value, days in components:
+        value = Decimal(value or 0)
+        if not value:
+            continue
+        if method == "percent_of_basic":
+            amount = money(basic_earned * value / Decimal("100"))
+            label = f"{name} ({plain(value)}% of basic)"
+            quantity, unit = value / Decimal("100"), basic_earned
+        else:
+            share = Decimal(days) / Decimal(days_in_month) if days < days_in_month else ONE
+            amount = money(value * share)
+            label = name if share == ONE else (
+                f"{name} ({days} of {days_in_month} days)")
+            quantity, unit = share, value
+        if amount:
+            lines.append((kind, code, label, quantity, unit, amount))
+    return lines
 
 
 def _store_penalty(company, employee, period, occurrence, currency):
@@ -672,6 +757,9 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
         # a day fixed afterwards is caught before the month is approved.
         fingerprints = attendance_fingerprints(
             company_id, period, [employee.pk for employee in records_by_employee])
+        # Allowances and recurring deductions in force this month, per person.
+        components_by_employee = employee_components(
+            company_id, first, last, [employee.pk for employee in records_by_employee])
 
         skipped = dict(previous_skipped)
         skipped_now = []
@@ -697,6 +785,7 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
                 rules=rules, days_in_month=last.day,
                 penalty_rules=penalty_rules, waived=waived, employee_key=f"{employee.pk}:",
                 adjustments=adjustments_by_employee.get(employee.pk, ()),
+                components=components_by_employee.get(employee.pk, ()),
                 employed_days=employed_days,
                 basic_segments=basic_segments,
             )

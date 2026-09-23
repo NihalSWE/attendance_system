@@ -1,0 +1,72 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    {{ component.name }} · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'base_template/js/dependent.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'payroll:component_list' %}">
+            Allowances and deductions
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ component.name }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ component.name }}
+            </h1>
+            <p class="page__sub">
+                Changing it here changes what someone is given by default. What people
+                already have stays as it is until it is changed on their own page.
+            </p>
+        </div>
+    </div>
+    <div class="form-page">
+        <form class="card" method="post" novalidate>
+            {% csrf_token %}
+            <div class="card__body">
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger" role="alert">
+                        {{ form.non_field_errors }}
+                    </div>
+                {% endif %}
+                <div class="grid grid--2">
+                    {% for field in form %}
+                        <div class="field {% if field.errors %}field-invalid{% endif %}">
+                            <label class="field__label" for="{{ field.id_for_label }}">
+                                {{ field.label }}
+                            </label>
+                            {{ field }}
+                            {% if field.help_text %}
+                                <div class="field__help">
+                                    {{ field.help_text }}
+                                </div>
+                            {% endif %}
+                            {% for error in field.errors %}
+                                <p class="field__error">
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="card__foot">
+                <a class="btn btn--ghost" href="{% url 'payroll:component_list' %}">
+                    Cancel
+                </a>
+                <button class="btn btn--primary" type="submit">
+                    Save
+                </button>
+            </div>
+        </form>
+    </div>
+{% endblock %}

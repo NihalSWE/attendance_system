@@ -293,6 +293,128 @@
             </div>
         </div>
 
+        <div class="card" id="allowances">
+            <div class="card__head">
+                <h2>
+                    Allowances and deductions
+                </h2>
+            </div>
+            <div class="card__body stack">
+                <p class="field__help">
+                    Paid on top of basic salary, or taken off it, every month — house rent,
+                    transport, provident fund. They appear on the payslip the next time
+                    salary is generated. A change is dated: a payslip already paid keeps
+                    what it was paid with.
+                </p>
+                {% if employee_components %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Allowance or deduction
+                                    </th>
+                                    <th class="numeric">
+                                        Amount
+                                    </th>
+                                    <th class="numeric">
+                                        From
+                                    </th>
+                                    <th class="numeric">
+                                        Until
+                                    </th>
+                                    {% if may.salary %}
+                                        <th class="no-sort">
+                                            Action
+                                        </th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in employee_components %}
+                                    <tr>
+                                        <td>
+                                            {{ row.component.name }}
+                                            {% if row.component.kind == 'deduction' %}
+                                                <span class="badge badge--warning">
+                                                    Deduction
+                                                </span>
+                                            {% endif %}
+                                            {% if row.reason %}
+                                                <div class="t-faint">
+                                                    {{ row.reason }}
+                                                </div>
+                                            {% endif %}
+                                        </td>
+                                        <td class="numeric">
+                                            {% if row.percent is not None %}{{ row.percent|floatformat:"-3" }}% of basic{% else %}{{ row.amount|money }}{% endif %}
+                                        </td>
+                                        <td class="numeric">
+                                            {{ row.effective_from|date:"d M Y" }}
+                                        </td>
+                                        <td class="numeric">
+                                            {% if row.effective_to %}{{ row.effective_to|date:"d M Y" }}{% else %}Until ended{% endif %}
+                                        </td>
+                                        {% if may.salary %}
+                                            <td>
+                                                {% if not row.effective_to %}
+                                                    <form method="post" class="row"
+                                                          data-confirm-title="End {{ row.component.name }}?"
+                                                          data-confirm="It is paid up to the last day you chose, and stops after it."
+                                                          data-confirm-button="End it">
+                                                        {% csrf_token %}
+                                                        <input type="hidden" name="section" value="component_end">
+                                                        <input type="hidden" name="row" value="{{ row.pk }}">
+                                                        <input class="input" type="date" name="last_day" value="{{ today|date:'Y-m-d' }}"
+                                                               data-datepicker aria-label="Last day">
+                                                        <button class="btn btn--quiet btn--sm" type="submit">
+                                                            End
+                                                        </button>
+                                                    </form>
+                                                {% endif %}
+                                            </td>
+                                        {% endif %}
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+                {% if may.salary %}
+                    {% if give_component_form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {{ give_component_form.non_field_errors }}
+                        </div>
+                    {% endif %}
+                    {% if give_component_form.fields.component.queryset %}
+                        <form method="post" class="stack" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="section" value="component_give">
+                            <div class="grid grid--2">
+                                {% for field in give_component_form %}
+                                    {% include "leaves/includes/field.html" %}
+                                {% endfor %}
+                            </div>
+                            <div class="row">
+                                <button class="btn btn--primary" type="submit">
+                                    Give it
+                                </button>
+                            </div>
+                        </form>
+                    {% else %}
+                        <p class="t-faint">
+                            The company has no allowances or deductions yet. The owner or company
+                            administrator adds them under Salary → Allowances.
+                        </p>
+                    {% endif %}
+                {% else %}
+                    <p class="t-faint">
+                        Allowances are given by whoever prepares this branch's salary.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+
         <div class="card" id="shift">
             <div class="card__head">
                 <h2>

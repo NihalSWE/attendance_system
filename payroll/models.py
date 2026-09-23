@@ -14,6 +14,7 @@ from django.contrib.postgres.fields import RangeBoundary, RangeOperators
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from common.choices import ActiveStatus
 from common.db import DateRange
 from common.models import ActorTracked, TenantOwned
 
@@ -777,3 +778,110 @@ class PayrollLine(TenantOwned):
 
     def __str__(self):
         return f"{self.code} {self.amount}"
+
+
+class SalaryComponent(TenantOwned, ActorTracked):
+    """One kind of recurring allowance or deduction the company pays or takes.
+
+    The catalogue only: House rent, Transport, Provident fund. What an
+    employee actually gets is an ``EmployeeSalaryComponent`` - a component on
+    its own pays nobody. Basic salary is not a component; it stays on
+    ``EmployeeCompensation`` so it is not kept in two places.
+    """
+
+    class Kind(models.TextChoices):
+        EARNING = "earning", "Allowance"
+        DEDUCTION = "deduction", "Deduction"
+
+    class Method(models.TextChoices):
+        FIXED = "fixed", "Fixed amount"
+        PERCENT_OF_BASIC = "percent_of_basic", "Percentage of basic"
+
+    code = models.CharField(max_length=32)
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.EARNING)
+    method = models.CharField(max_length=24, choices=Method.choices, default=Method.FIXED)
+    # What an employee is given by default; either may be changed per person.
+    default_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    default_percent = models.DecimalField(max_digits=7, decimal_places=3, null=True, blank=True)
+    description = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=16, choices=ActiveStatus.choices, default=ActiveStatus.ACTIVE
+    )
+
+    class Meta:
+        db_table = "payroll_salary_component"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "code"], name="uniq_salary_component_code_per_company"
+            ),
+            models.UniqueConstraint(
+                fields=["company", "name"], name="uniq_salary_component_name_per_company"
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(method="fixed", default_percent__isnull=True)
+                    | models.Q(method="percent_of_basic", default_amount__isnull=True)
+                ),
+                name="salary_component_amount_matches_method",
+            ),
+        ]
+        ordering = ("kind", "name")
+
+    def __str__(self):
+        return f"{self.code} {self.name}"
+
+
+class EmployeeSalaryComponent(TenantOwned, ActorTracked):
+    """One employee's allowance or deduction, from a date until it is ended.
+
+    Dated rather than edited in place: a payslip already finalised keeps the
+    amount it was paid with, and a raise is a new row, exactly as
+    ``EmployeeCompensation`` works for basic pay.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CANCELLED = "cancelled", "Cancelled"
+
+    employee = models.ForeignKey(
+        "employees.Employee", on_delete=models.PROTECT, related_name="salary_components"
+    )
+    component = models.ForeignKey(
+        SalaryComponent, on_delete=models.PROTECT, related_name="employees"
+    )
+    amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    percent = models.DecimalField(max_digits=7, decimal_places=3, null=True, blank=True)
+    effective_from = models.DateField()
+    effective_to = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.ACTIVE
+    )
+
+    class Meta:
+        db_table = "payroll_employee_salary_component"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(effective_to__isnull=True)
+                | models.Q(effective_to__gte=models.F("effective_from")),
+                name="employee_component_end_after_start",
+            ),
+            models.UniqueConstraint(
+                fields=["employee", "component", "effective_from"],
+                condition=~models.Q(status="cancelled"),
+                name="uniq_employee_component_start",
+            ),
+        ]
+        indexes = [models.Index(fields=["company", "employee", "effective_from"])]
+        ordering = ("component__name", "-effective_from")
+
+    def __str__(self):
+        return f"{self.employee_id} {self.component_id}"
+
+    def in_force_on(self, day):
+        return (
+            self.status == self.Status.ACTIVE
+            and self.effective_from <= day
+            and (self.effective_to is None or day <= self.effective_to)
+        )

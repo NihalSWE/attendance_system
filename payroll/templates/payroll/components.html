@@ -1,0 +1,189 @@
+{% extends "base_template/base.html" %}
+{% load money %}
+{% load static %}
+{% block title %}
+    Allowances and deductions · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'base_template/js/dependent.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'payroll:payroll_home' %}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Allowances and deductions
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Allowances and deductions
+            </h1>
+            <p class="page__sub">
+                What the company can pay on top of basic salary, or take off it every
+                month. Naming one here pays nobody — give it to people on their
+                Edit employee page.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}">
+                Salary settings
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                The company's list
+            </h2>
+        </div>
+        {% if components %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>
+                                Code
+                            </th>
+                            <th>
+                                Name
+                            </th>
+                            <th>
+                                Kind
+                            </th>
+                            <th>
+                                How it is worked out
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for component in components %}
+                            <tr>
+                                <td class="mono">
+                                    {{ component.code }}
+                                </td>
+                                <td>
+                                    {{ component.name }}
+                                    {% if component.description %}
+                                        <div class="t-faint">
+                                            {{ component.description }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if component.kind == 'earning' %}
+                                        <span class="badge badge--success">
+                                            Allowance
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--warning">
+                                            Deduction
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if component.method == 'percent_of_basic' %}
+                                        {{ component.default_percent|floatformat:"-3" }}% of basic
+                                    {% else %}
+                                        {{ component.default_amount|money }} a month
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if component.status == 'active' %}
+                                        <span class="badge badge--neutral">
+                                            Offered
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--danger">
+                                            Not offered
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="row-actions">
+                                        <a class="btn btn--quiet btn--sm" href="{% url 'payroll:component_edit' component.pk %}">
+                                            Edit
+                                        </a>
+                                        <form method="post" action="{% url 'payroll:component_status' component.pk %}"
+                                              {% if component.status == 'active' %}data-confirm-title="Stop offering {{ component.name }}?" data-confirm="People who have it keep it on payslips already paid. It stops counting the next time salary is generated, and cannot be given to anybody new." data-confirm-button="Stop offering it" data-confirm-tone="danger"{% endif %}>
+                                            {% csrf_token %}
+                                            <input type="hidden" name="status" value="{% if component.status == 'active' %}inactive{% else %}active{% endif %}">
+                                            <button class="btn btn--quiet btn--sm" type="submit">
+                                                {% if component.status == 'active' %}Stop offering{% else %}Offer again{% endif %}
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="card__body">
+                <p class="t-faint">
+                    Nothing yet. A company that pays only basic salary needs none of this.
+                </p>
+            </div>
+        {% endif %}
+    </div>
+
+    <form class="card" method="post" novalidate>
+        {% csrf_token %}
+        <div class="card__head">
+            <h2>
+                Add one
+            </h2>
+        </div>
+        <div class="card__body">
+            {% if form.non_field_errors %}
+                <div class="alert alert--danger" role="alert">
+                    {{ form.non_field_errors }}
+                </div>
+            {% endif %}
+            <div class="grid grid--2">
+                {% for field in form %}
+                    <div class="field {% if field.errors %}field-invalid{% endif %}">
+                        <label class="field__label" for="{{ field.id_for_label }}">
+                            {{ field.label }}
+                        </label>
+                        {{ field }}
+                        {% if field.help_text %}
+                            <div class="field__help">
+                                {{ field.help_text }}
+                            </div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                            <p class="field__error">
+                                {{ error }}
+                            </p>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+        <div class="card__foot">
+            <button class="btn btn--primary" type="submit">
+                Add it
+            </button>
+        </div>
+    </form>
+{% endblock %}

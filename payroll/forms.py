@@ -8,9 +8,9 @@ from django import forms
 from django.utils import timezone
 
 from attendance.views import MONTHS
-from common.forms import TIME_INPUT_FORMATS, StyledFormMixin, time_widget
+from common.forms import StyledFormMixin, TIME_INPUT_FORMATS, date_widget, time_widget
 from payroll import penalties
-from payroll.models import AttendancePenaltyRule, PayrollPolicyVersion
+from payroll.models import AttendancePenaltyRule, PayrollPolicyVersion, SalaryComponent
 from payroll.policy import plain
 
 Version = PayrollPolicyVersion
@@ -305,3 +305,55 @@ class GeneralSettingsForm(StyledFormMixin, forms.Form):
         label="Pay day", required=False, min_value=1, max_value=31,
         help_text="Day of the month salary is usually paid. Optional.",
     )
+
+
+class SalaryComponentForm(StyledFormMixin, forms.ModelForm):
+    """One catalogue entry: an allowance or a recurring deduction."""
+
+    class Meta:
+        model = SalaryComponent
+        fields = ("code", "name", "kind", "method", "default_amount",
+                  "default_percent", "description")
+        labels = {"default_amount": "Amount", "default_percent": "Percentage of basic"}
+        help_texts = {
+            "code": "Short and unchanging, e.g. HOUSE_RENT. It appears on the payslip line.",
+            "default_amount": "What someone gets by default; it can be changed per person.",
+            "default_percent": "For example 40 for 40% of that month's basic.",
+        }
+        widgets = {"description": forms.Textarea(attrs={"rows": 2})}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["default_amount"].required = False
+        self.fields["default_percent"].required = False
+        # Only one of the two applies; the other is hidden as the method changes.
+        self.fields["default_amount"].widget.attrs["data-show-when"] = "method:fixed"
+        self.fields["default_percent"].widget.attrs["data-show-when"] = "method:percent_of_basic"
+
+
+class GiveComponentForm(StyledFormMixin, forms.Form):
+    """Give one employee an allowance or deduction from a date."""
+
+    component = forms.ModelChoiceField(
+        queryset=SalaryComponent.all_objects.none(), label="Allowance or deduction"
+    )
+    amount = forms.DecimalField(
+        label="Amount", required=False, max_digits=14, decimal_places=2, min_value=0,
+        help_text="Leave empty to use the company's default for it.",
+    )
+    percent = forms.DecimalField(
+        label="Percentage of basic", required=False, max_digits=7, decimal_places=3,
+        min_value=0, help_text="Leave empty to use the company's default.",
+    )
+    effective_from = forms.DateField(label="From", widget=date_widget("Choose a date"))
+    reason = forms.CharField(label="Note", max_length=255, required=False)
+
+    def __init__(self, *args, components=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if components is not None:
+            self.fields["component"].queryset = components
+        self.fields["component"].empty_label = "Select one"
+
+
+class EndComponentForm(StyledFormMixin, forms.Form):
+    last_day = forms.DateField(label="Last day", widget=date_widget("Choose a date"))
