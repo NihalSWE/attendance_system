@@ -3,8 +3,7 @@
 The payroll manager views salary, prepares it and submits it for approval,
 across every branch. Not approve: there is exactly one owner-or-admin per
 company, and approving, finalising, waiving penalties and the salary settings
-stay theirs. HR has no salary access at all. The auditor is left exactly as
-before (Salary by month, not payslips) until Ajay decides otherwise.
+stay theirs. HR and the auditor have no salary access at all.
 """
 
 from decimal import Decimal
@@ -178,16 +177,19 @@ class HrHasNoSalaryTests(PayrollManagerCase):
         self.assertIn("Overtime", labels)
 
 
-class AuditorUnchangedTests(PayrollManagerCase):
-    def test_the_auditor_keeps_salary_by_month_but_not_payslips(self):
+class AuditorHasNoSalaryTests(PayrollManagerCase):
+    # It used to see Salary by month - every total - but no payslip: the
+    # aggregate leaked while the detail was withheld. Now nothing (Ajay,
+    # 2026-09-23); an auditor is designed when one is actually needed.
+    def test_the_auditor_sees_no_salary(self):
         self.generate()
-        page = self.home(self.auditor)
-        self.assertEqual(page.status_code, 200)
-        self.assertNotContains(page, "Generate August")
+        self.assertEqual(self.home(self.auditor).status_code, 403)
         self.client.force_login(self.auditor)
         page = self.client.get(self.payslip_url(self.records()["Rahim"]))
         self.assertEqual(page.status_code, 403)
-        self.assertIn("Salary by month", self.sidebar_labels(self.auditor))
+        self.assertNotIn("Salary by month", self.sidebar_labels(self.auditor))
+        for code in ("salary.view", "salary.prepare"):
+            self.assertEqual(branches_for(self.auditor, self.company.pk, code), set())
 
 
 class WaivingStaysWithTheAdminTests(TestCase):

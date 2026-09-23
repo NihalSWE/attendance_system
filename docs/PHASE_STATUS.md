@@ -4498,3 +4498,19 @@ Also changed so the payroll manager is not offered what it cannot do:
   refuses. Nothing else in the menus changes; HR keeps Record leave and Overtime.
 
 19 tests in `payroll/tests_payroll_manager.py`; Ajay's `test_the_owner_and_hr_are_unchanged` now pins the new HR rule (renamed `test_the_owner_is_unchanged_and_hr_sees_no_salary`). No migration. Full suite 1497 OK.
+
+### The auditor sees no salary — 2026-09-23
+
+Ajay's decision: `MONTH_READERS` is gone and the auditor gets nothing on
+salary. It saw Salary by month (every total) but no payslip: the aggregate
+leaked while the detail was withheld, which is backwards for auditing. Salary
+by month now follows `salary.view` / `salary.prepare` and nothing else, so no
+role sees pay just by being a company login. An auditor is designed when one
+is actually needed.
+
+Not changed, and still open: `attendance/access.py` gives the auditor (with
+owner, admin, HR and payroll manager) attendance in every branch, pinned by
+`attendance/tests_branch_attendance.py`. That is the same "company logins see
+it" shape, left for Ajay to decide.
+
+`payroll/tests_payroll_manager.py::AuditorHasNoSalaryTests`. No migration. Full suite 1497 OK.

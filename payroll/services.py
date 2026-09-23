@@ -670,23 +670,15 @@ def salary_branches(actor, company_id, *codes):
     return membership, branches_for_any(actor, company_id, *codes)
 
 
-# Kept exactly as it was before the payroll-manager decision (A12 rule 4:
-# "other company roles keep today's behaviour"): the auditor sees Salary by
-# month, company-wide, but not the payslips. Ajay decides whether that changes.
-MONTH_READERS = ("auditor",)
-
-
 def salary_month_branches(actor, company_id):
     """``(membership, branches)`` where ``actor`` sees Salary by month.
 
-    Whoever holds salary view or prepare there: the owner/admin and the
-    payroll manager everywhere, a branch manager or a person given access in
-    their branches. HR holds neither code, so sees no pay (Ajay, 2026-09-23).
+    Whoever holds salary view or prepare there, and nobody else: the
+    owner/admin and the payroll manager everywhere, a branch manager or a
+    person given access in their branches. No role sees pay by being a company
+    login - HR and the auditor hold neither code, so see none (Ajay, 2026-09-23).
     """
-    membership, view = salary_branches(actor, company_id, "salary.view", "salary.prepare")
-    if membership.role in MONTH_READERS:
-        return membership, ALL_BRANCHES
-    return membership, view
+    return salary_branches(actor, company_id, "salary.view", "salary.prepare")
 
 
 def record_branch_id(record):
