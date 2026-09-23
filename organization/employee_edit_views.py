@@ -77,6 +77,7 @@ def employee_edit(request, pk):
     # A12 part 4: which cards this person may use for this employee.
     may = services.card_permissions(request.user, company_id, membership, assignment)
     needs = {"salary": "salary", "shift": "shift", "shift_end": "shift",
+             "component_give": "salary", "component_end": "salary",
              "login_give": "logins", "login_password": "logins", "login_disable": "logins",
              "login_enable": "logins", "login_role": "role"}
     if section in needs and not may[needs[section]]:
@@ -122,6 +123,44 @@ def employee_edit(request, pk):
             salary.fields["salary_from"].help_text = (
                 "The salary counts from this date. It starts, by default, when they were placed."
             )
+
+        # Allowances and recurring deductions (A11): the company's list, and
+        # what this person has. Same permission as their salary.
+        from payroll import component_services
+        from payroll.forms import EndComponentForm, GiveComponentForm
+
+        give_component_form = GiveComponentForm(
+            request.POST if section == "component_give" else None,
+            components=component_services.components(company_id, active_only=True),
+            initial={"effective_from": today},
+        )
+        end_component_form = EndComponentForm(
+            request.POST if section == "component_end" else None,
+            initial={"last_day": today},
+        )
+        if section in ("component_give", "component_end"):
+            chosen = give_component_form if section == "component_give" else end_component_form
+            if chosen.is_valid():
+                try:
+                    if section == "component_give":
+                        component_services.give_component(
+                            actor=request.user, company_id=company_id,
+                            employee_id=employee.pk, values=chosen.cleaned_data,
+                        )
+                        message = ("Saved. It is on their payslip the next time salary "
+                                   "is generated.")
+                    else:
+                        component_services.end_component(
+                            actor=request.user, company_id=company_id,
+                            row_id=request.POST.get("row"),
+                            last_day=chosen.cleaned_data["last_day"],
+                        )
+                        message = "Ended. It is paid up to that day."
+                except ValidationError as exc:
+                    apply_service_errors(chosen, exc)
+                else:
+                    messages.success(request, message)
+                    return redirect(f"{reverse('organization:employee_edit', args=[employee.pk])}#allowances")
 
         shifts = Shift.objects.filter(status=ActiveStatus.ACTIVE).order_by("name")
         shift_form = EmployeeShiftForm(
@@ -247,6 +286,7 @@ def employee_edit(request, pk):
 
         tz = ZoneInfo(company.timezone or "UTC")
         own_shifts = schedule.employee_shift_history(company_id, employee, tz)
+        employee_components = list(component_services.employee_rows(company_id, employee))
         calendar = WorkCalendar(company_id, today, today)
         own = calendar.employee_shift(employee.pk, today)
         department_id = assignment.department_id if assignment else None
@@ -272,6 +312,9 @@ def employee_edit(request, pk):
             "works_shift": works,
             "works_from": works_from,
             "own_shifts": own_shifts,
+            "give_component_form": give_component_form,
+            "end_component_form": end_component_form,
+            "employee_components": employee_components,
             # The one "End" acts on: the own shift in force today, else the next one.
             "endable": next(
                 (row for row in reversed(own_shifts)

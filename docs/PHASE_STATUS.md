@@ -4271,3 +4271,51 @@ equally specific headings the left-hand column still wins. The client's
 `ID | Name` file still imports, because nothing more specific is present.
 
 4 tests in `organization/tests_employee_import.py::VagueHeadingsTests`.
+
+## Allowances and recurring deductions (A11, 2026-09-23)
+
+House rent, transport, provident fund: paid on top of basic salary or taken
+off it every month, on the payslip beside basic and the one-off bonus lines.
+
+**Two steps, and the smaller half of the documented design.** The docs plan
+four tables (component catalogue, reusable structures, structure lines,
+per-employee structure assignment). This builds the two that deliver the
+feature - `SalaryComponent` (the company's catalogue) and
+`EmployeeSalaryComponent` (who has what, dated) - and leaves reusable
+structures for when a company needs to hand the same bundle to many people at
+once. Naming a component pays nobody; it has to be given to someone.
+
+**Dated, like basic pay.** A change is a new row: giving the same component
+again from a later date ends the old row the day before, so a month split
+between two amounts pays each for its own days, and a payslip already paid
+keeps what it was paid with. Ending one sets its last day.
+
+**How the money is worked out** (`component_lines`, beside `calculate_pay` so
+it is pure and testable):
+- **Fixed amount** - paid for the days of the month it was in force *and* the
+  person was employed, so one given mid-month, or a joiner, is paid the part
+  that applied: the same shape as a prorated basic.
+- **Percentage of basic** - of the basic *actually earned* that month, not of
+  the full rate, so a month worked half does not pay a whole month's house
+  rent.
+An allowance adds to gross; a deduction is taken off, still inside the
+existing "a salary never goes negative" cap.
+
+**Who may do what.** The catalogue is the company's, like salary settings:
+owner/company admin. Giving one to an employee, or ending it, follows that
+employee's branch - whoever may prepare salary there, which is who may already
+add a bonus line to their payslip. A component no longer offered stops
+counting on the next generation and cannot be given to anybody new; nothing is
+deleted, because paid payslips refer to it.
+
+Screens: Salary → Allowances (list, add, edit, stop offering) and an
+"Allowances and deductions" card on Edit employee (what they have, give one,
+end one). The payslip and its PDF show the lines with no change - they render
+whatever lines a payslip holds. **Sidebar:** the new page is reachable from
+the Salary page's actions; adding it to the Salary menu is Ajay's
+(navigation.py).
+
+Migration 0008 adds the two tables. 19 tests in `payroll/tests_components.py`.
+Writing them found that this fixture's employee is absent for much of August,
+so his net is already capped at zero - the deduction test gives a large
+allowance first, otherwise it would have proved nothing. Full suite 1429 OK.

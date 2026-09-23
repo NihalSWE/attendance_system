@@ -37,6 +37,9 @@
                 </a>
             {% endif %}
             {% if can_manage %}
+                <a class="btn btn--ghost" href="{% url 'payroll:component_list' %}">
+                    Allowances
+                </a>
                 <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}">
                     Salary settings
                 </a>

@@ -310,6 +310,87 @@ def payroll_reopen(request):
 
 @login_required
 @require_http_methods(["GET", "POST"])
+def component_list(request):
+    """The company's allowances and recurring deductions, and adding one."""
+    from payroll import component_services
+    from payroll.forms import SalaryComponentForm
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    require_structure_manager(request.user, company_id)
+    with use_company(company_id):
+        form = SalaryComponentForm(request.POST or None)
+        if request.method == "POST" and form.is_valid():
+            try:
+                component = component_services.create_component(
+                    actor=request.user, company_id=company_id, values=form.cleaned_data)
+            except ValidationError as exc:
+                apply_service_errors(form, exc)
+            else:
+                messages.success(
+                    request,
+                    f"{component.name} added. Give it to people on their Edit employee page.")
+                return redirect("payroll:component_list")
+        return render(request, "payroll/components.html", {
+            "form": form,
+            "components": list(component_services.components(company_id)),
+        })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def component_edit(request, pk):
+    from payroll import component_services
+    from payroll.forms import SalaryComponentForm
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    require_structure_manager(request.user, company_id)
+    with use_company(company_id):
+        component = component_services.components(company_id).filter(pk=pk).first()
+        if component is None:
+            raise PermissionDenied("Component not found in this company.")
+        form = SalaryComponentForm(request.POST or None, instance=component)
+        if request.method == "POST" and form.is_valid():
+            try:
+                component_services.update_component(
+                    actor=request.user, company_id=company_id, component_id=pk,
+                    values=form.cleaned_data)
+            except ValidationError as exc:
+                apply_service_errors(form, exc)
+            else:
+                messages.success(request, "Saved. It applies from the next time salary is generated.")
+                return redirect("payroll:component_list")
+        return render(request, "payroll/component_form.html", {
+            "form": form, "component": component,
+        })
+
+
+@login_required
+@require_http_methods(["POST"])
+def component_status(request, pk):
+    from payroll import component_services
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    status = "inactive" if request.POST.get("status") == "inactive" else "active"
+    try:
+        component = component_services.set_component_status(
+            actor=request.user, company_id=company_id, component_id=pk, status=status)
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+    else:
+        messages.success(request, (
+            f"{component.name} is no longer offered; it stops counting the next time salary "
+            "is generated." if status == "inactive" else f"{component.name} is offered again."))
+    return redirect("payroll:component_list")
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
 def salary_settings(request):
     """Company salary settings: dated calculation rules, plus currency and pay day.
 
