@@ -279,6 +279,18 @@
                 {% if penalty.status == "waived" %}
                     <p class="slip-waived">
                         Waived, not deducted: {{ penalty.penalty_rule.name }} ({% for day in penalty.days.all %}{{ day.attendance_record.work_date|date:"d M" }}{% if not forloop.last %}, {% endif %}{% endfor %}), {{ penalty.deduction_amount|money }}{% if penalty.approved_by %} — by {{ penalty.approved_by.email }}{% endif %}
+                        {% if can_waive %}
+                            <form class="slip-line__action no-print" method="post"
+                                  action="{% url 'payroll:penalty_unwaive' penalty.pk %}"
+                                  data-confirm-title="Undo this waiver?"
+                                  data-confirm="The penalty is charged again when the month's salary is regenerated, which happens straight away."
+                                  data-confirm-button="Undo the waiver">
+                                {% csrf_token %}
+                                <button class="btn btn--quiet btn--sm" type="submit">
+                                    Undo waiver
+                                </button>
+                            </form>
+                        {% endif %}
                     </p>
                 {% endif %}
             {% endfor %}
@@ -335,6 +347,76 @@
                 {% endif %}
             </div>
         </div>
+
+        {% if can_correct or corrections %}
+            <div class="card no-print" id="corrections">
+                <div class="card__head">
+                    <h2>
+                        Put this month right
+                    </h2>
+                </div>
+                <div class="card__body stack">
+                    <p class="field__help">
+                        {{ period.name }} is finalised, so what was paid stays as it was paid —
+                        the employee's payslip does not change under them. A correction is paid
+                        with the next month still open, saying which month it is for.
+                    </p>
+                    {% if corrections %}
+                        <div class="table-wrap">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>
+                                            Correction
+                                        </th>
+                                        <th class="numeric">
+                                            Amount
+                                        </th>
+                                        <th>
+                                            Paid with
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for correction in corrections %}
+                                        <tr>
+                                            <td>
+                                                {{ correction.get_adjustment_type_display }} · {{ correction.reason }}
+                                            </td>
+                                            <td class="numeric">
+                                                {{ correction.amount|money }}
+                                            </td>
+                                            <td>
+                                                {{ correction.target_payroll_period.name }}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    {% endif %}
+                    {% if can_correct %}
+                        <form method="post" action="{% url 'payroll:payslip_correction_add' record.pk %}"
+                              class="stack" novalidate
+                              data-confirm-title="Correct {{ period.name }} in a later month?"
+                              data-confirm="{{ period.name }} is not changed. The amount is added to the next month still open, marked as a correction for {{ period.name }}."
+                              data-confirm-button="Save the correction">
+                            {% csrf_token %}
+                            <div class="grid grid--2">
+                                {% include "leaves/includes/field.html" with field=correction_form.adjustment_type %}
+                                {% include "leaves/includes/field.html" with field=correction_form.amount %}
+                            </div>
+                            {% include "leaves/includes/field.html" with field=correction_form.reason %}
+                            <div class="row">
+                                <button class="btn btn--primary" type="submit">
+                                    Save the correction
+                                </button>
+                            </div>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
     {% endif %}
 
     <div class="card">

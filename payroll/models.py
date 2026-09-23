@@ -709,6 +709,11 @@ class PayrollAdjustment(TenantOwned, ActorTracked):
     Kept simple: amount and reason, added on a draft salary. Generation turns
     each active one into a manual payslip line, so it survives regenerating.
     Removing it marks it removed; nothing is deleted.
+
+    It is also how a **finalised** month is put right: a correction is one of
+    these, raised from the finalised payslip and paid in the first month still
+    open, with ``source_payroll_period`` saying which month it is for. The
+    finalised month itself never changes, so what was paid stays what was paid.
     """
 
     class AdjustmentType(models.TextChoices):
@@ -724,6 +729,12 @@ class PayrollAdjustment(TenantOwned, ActorTracked):
     )
     target_payroll_period = models.ForeignKey(
         PayrollPeriod, on_delete=models.PROTECT, related_name="adjustments"
+    )
+    # Set when this is putting right a month already finalised (A11): the
+    # money is paid in ``target_payroll_period``, and this says what it is for.
+    source_payroll_period = models.ForeignKey(
+        PayrollPeriod, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="corrections",
     )
     adjustment_type = models.CharField(max_length=16, choices=AdjustmentType.choices)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
