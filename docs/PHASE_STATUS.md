@@ -4255,3 +4255,19 @@ own File_01.xls outside the repo: 90 people, IDs read as digits
 
 **Server:** `pip install -r requirements.txt` before restart, or .xls uploads
 fail there while CSV and .xlsx keep working. Full suite 1406 OK.
+
+### A vague heading must not beat the real one — 2026-09-23
+
+Accepting a bare `ID` and `Code` as the employee-number column (so a client's
+`ID | Name` file would import) made the **first** matching column win. A file
+headed `ID | Employee ID | Name`, where `ID` is a row number, therefore
+imported the row numbers: digits, so every check passed, and ninety people
+would have arrived numbered 1 to 90 — becoming their device user numbers.
+
+`_HEADING_WORDS` is now two tiers per column. A specific heading
+(`Employee ID`, `Emp No`, `Employee Code`; `Name`, `Full Name`) beats a vague
+one (`ID`, `Code`; `Employee`) **wherever each sits in the row**; between two
+equally specific headings the left-hand column still wins. The client's
+`ID | Name` file still imports, because nothing more specific is present.
+
+4 tests in `organization/tests_employee_import.py::VagueHeadingsTests`.

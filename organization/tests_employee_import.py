@@ -476,3 +476,34 @@ class OldExcelTests(ImportCase):
         upload = SimpleUploadedFile("letter.xls", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 600)
         with self.assertRaisesMessage(ValidationError, "password-protected"):
             import_services.read_file(upload)
+
+
+class VagueHeadingsTests(ImportCase):
+    """A bare "ID" is often something else, sitting left of the real column.
+
+    Accepting "ID" and "Code" made the first matching column win, so a row
+    number called ID was imported as the employee ID - digits, so the preview
+    accepted it, and ninety people arrived numbered 1 to 90 (found 2026-09-23).
+    """
+
+    def read(self, text):
+        return import_services.read_file(
+            SimpleUploadedFile("list.csv", text.encode("utf-8"), content_type="text/csv"))
+
+    def test_a_row_number_called_id_does_not_beat_employee_id(self):
+        rows = self.read("ID,Employee ID,Name\n1,445962,Ajay Ghosh\n2,445963,Dia Rahman\n")
+        self.assertEqual([r["employee_id"] for r in rows], ["445962", "445963"])
+        self.assertEqual([r["name"] for r in rows], ["Ajay Ghosh", "Dia Rahman"])
+
+    def test_a_department_code_does_not_beat_employee_id(self):
+        rows = self.read("Code,Employee ID,Name\n7,445962,Ajay Ghosh\n")
+        self.assertEqual(rows[0]["employee_id"], "445962")
+
+    def test_a_bare_id_is_still_used_when_it_is_the_only_one(self):
+        """The client's own file: ID and Name, nothing else."""
+        rows = self.read("ID,Name\n445962,Ajay Ghosh\n")
+        self.assertEqual((rows[0]["employee_id"], rows[0]["name"]), ("445962", "Ajay Ghosh"))
+
+    def test_employee_as_a_name_column_loses_to_name(self):
+        rows = self.read("Employee ID,Employee,Name\n445962,Wrong,Ajay Ghosh\n")
+        self.assertEqual(rows[0]["name"], "Ajay Ghosh")

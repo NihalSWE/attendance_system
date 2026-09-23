@@ -66,10 +66,22 @@ HEADINGS = ["Employee ID", "Name"]
 #: ignored - so "Employee ID", "EMP-ID", "Emp Id", "EMPID" and a bare "ID" all
 #: work. Real files from a client call the column "ID" as often as anything
 #: else; any other column (a serial number, say) is ignored.
+#:
+#: Two tiers, and the reason matters: a bare "ID" or "Code" is often something
+#: else entirely - a row number, a department code - sitting to the LEFT of the
+#: real column. Taking the first heading that matched imported those row
+#: numbers as employee IDs, digits and all, so the preview accepted them and
+#: ninety people arrived numbered 1 to 90. A specific heading anywhere in the
+#: row therefore beats a vague one, wherever each sits.
 _HEADING_WORDS = {
-    "employee_id": {"empid", "employeeid", "empno", "employeeno", "id",
-                    "idno", "employeecode", "code"},
-    "name": {"name", "employeename", "fullname", "employee"},
+    "employee_id": [
+        {"empid", "employeeid", "empno", "employeeno", "employeecode"},
+        {"id", "idno", "code"},
+    ],
+    "name": [
+        {"name", "employeename", "fullname"},
+        {"employee"},
+    ],
 }
 
 #: One upload. Comfortably above the 400-600 a new company brings, and low
@@ -108,11 +120,13 @@ def _text(value):
 
 
 def _heading_key(text):
+    """``(column, tier)`` for one heading; tier 0 is a specific name."""
     word = re.sub(r"[^a-z0-9]", "", text.casefold())
-    for key, words in _HEADING_WORDS.items():
-        if word in words:
-            return key
-    return None
+    for key, tiers in _HEADING_WORDS.items():
+        for tier, words in enumerate(tiers):
+            if word in words:
+                return key, tier
+    return None, None
 
 
 def _rows_from_csv(data):
@@ -242,9 +256,12 @@ def read_file(upload):
     columns = {}
     headings = [_text(cell) for cell in heading_row]
     for index, heading in enumerate(headings):
-        key = _heading_key(heading)
-        if key and key not in columns:
-            columns[key] = index
+        key, tier = _heading_key(heading)
+        # A specific heading wins over a vague one wherever each sits; between
+        # two equally specific ones the left-hand column wins.
+        if key and (key not in columns or tier < columns[key][0]):
+            columns[key] = (tier, index)
+    columns = {key: index for key, (_tier, index) in columns.items()}
     missing = [heading for key, heading in zip(("employee_id", "name"), HEADINGS)
                if key not in columns]
     if missing:
