@@ -4303,3 +4303,40 @@ so the test fixes the day with the pair it takes to matter — 540 minutes
 becomes 690.
 
 Full suite 1415 OK.
+## Payslip PDF, and emailing it (A11, 2026-09-23)
+
+**PDF.** A payslip downloads as a PDF from `?format=pdf` on its own page -
+the company's payslip page and the employee's own - so it carries that page's
+rules by construction: a branch manager gets their branches, an employee only
+their own finalised months, and neither needs a new URL or access entry. It
+holds the details block, the earning and deduction lines with quantity, rate
+and amount, the attendance counts, any penalties, and the gross/deductions/net
+box; a draft says on it that it can still change.
+
+One PDF path, as Ajay asked: `common.exports.document_pdf` was added beside
+`table_pdf` and `grid_pdf` - portrait, headed tables, a summary box - so a
+payslip gets the bundled Hind Siliguri font, the shared page furniture and the
+`export.downloaded` audit line. A Bangla name prints as letters here for the
+same reason it does everywhere else. Both new tables set FONTNAME explicitly:
+reportlab's table default is Helvetica, which crept back into the file and a
+test caught it.
+
+**Email.** "Email to employee" on the company's payslip page sends that PDF to
+the address on the employee's record, audited as `payslip.emailed`.
+
+- **Off until configured.** Mail settings come from .env; Django 6 refuses the
+  old `EMAIL_*` names beside `MAILERS`, so they are private to settings.py and
+  the project asks `settings.MAIL_CONFIGURED`. With nothing set the button is
+  shown disabled with the reason, the service refuses, and mail goes to the
+  console - no success message for a message nobody receives. `.env.example`
+  documents the keys.
+- **Only a finalised payslip**, and only to that employee: a draft can still
+  change and is not theirs to see. Whoever may prepare salary in the payslip's
+  branch may send it (the same people who may change its lines); the
+  employee's own page never offers it.
+- The reason it cannot be sent - not configured, not finalised, no address -
+  is on the page beside the button, not discovered after a click.
+
+15 tests in `payroll/tests_payslip_pdf.py`, including a Bangla name through
+the real download and an email with the PDF attached (locmem backend). Full
+suite 1425 OK.

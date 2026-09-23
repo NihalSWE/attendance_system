@@ -18,6 +18,7 @@ urlpatterns = [
     path("settings/penalties/<int:pk>/stop/", views.penalty_rule_stop, name="penalty_rule_stop"),
     path("penalties/<int:pk>/waive/", views.penalty_waive, name="penalty_waive"),
     path("payslips/<int:pk>/", views.payslip, name="payslip"),
+    path("payslips/<int:pk>/email/", views.payslip_email, name="payslip_email"),
     path("payslips/<int:pk>/adjustments/add/", views.payslip_adjustment_add, name="payslip_adjustment_add"),
     path("adjustments/<int:pk>/remove/", views.payslip_adjustment_remove, name="payslip_adjustment_remove"),
     path("overtime/", views.overtime_list, name="overtime_list"),

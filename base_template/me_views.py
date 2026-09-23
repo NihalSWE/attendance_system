@@ -321,6 +321,10 @@ def my_payslip(request, pk):
             # Somebody else's, or a draft: either way not this person's to see.
             raise Http404("Payslip not found.")
         context = payslip_context(record, for_employee=True)
+        if request.GET.get("format") == "pdf":
+            from payroll.payslip_export import export_payslip
+
+            return export_payslip(request, context)
     return render(request, "payroll/payslip.html", context)
 
 

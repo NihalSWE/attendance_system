@@ -228,8 +228,27 @@ STORAGES = {
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
+# Nothing is sent until a mail server is set in .env. Until then mail goes to
+# the console and the pages that send it say email is not set up, rather than
+# reporting success for a message nobody receives (payroll/payslip_email.py).
+# Django 6 refuses the old EMAIL_* settings beside MAILERS, so these stay
+# private to this module; MAIL_CONFIGURED is what the project asks.
+_email_host = env('EMAIL_HOST', default='')
+DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='')
+MAIL_CONFIGURED = bool(_email_host and DEFAULT_FROM_EMAIL)
+
 MAILERS = {
     'default': {
+        'BACKEND': 'django.core.mail.backends.smtp.EmailBackend',
+        'OPTIONS': {
+            'host': _email_host,
+            'port': env.int('EMAIL_PORT', default=587),
+            'username': env('EMAIL_HOST_USER', default=''),
+            'password': env('EMAIL_HOST_PASSWORD', default=''),
+            'use_tls': env.bool('EMAIL_USE_TLS', default=True),
+            'timeout': 20,
+        },
+    } if _email_host else {
         'BACKEND': 'django.core.mail.backends.console.EmailBackend',
     },
 }
