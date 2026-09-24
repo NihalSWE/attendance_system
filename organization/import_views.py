@@ -84,8 +84,10 @@ def employee_import(request):
                         "bad": [row for row in rows if row["errors"]],
                         "good": new[:GOOD_ROWS_SHOWN],
                         "good_hidden": max(0, counts["good"] - GOOD_ROWS_SHOWN),
-                        # Already employees: skipped, left as they are.
+                        # Already employees: skipped, left as they are...
                         "existing": import_services.already_here(rows),
+                        # ...or, when the file names them differently, renamed.
+                        "renames": import_services.renames(rows),
                     }
         else:
             _forget(request)
@@ -125,13 +127,17 @@ def employee_import_confirm(request):
 
     _forget(request)
     count = len(created)
-    skipped = sum(1 for row in stored["rows"] if row.get("existing"))
+    skipped = sum(1 for row in stored["rows"] if row.get("existing") and not row.get("rename"))
+    renamed = sum(1 for row in stored["rows"] if row.get("existing") and row.get("rename"))
+    file_name = stored.get("file_name") or "the file"
     messages.success(
         request,
-        f"{count} employee{'s' if count != 1 else ''} imported from "
-        f"{stored.get('file_name') or 'the file'}. Set each one's department, "
-        "designation and salary on Edit employee — until then they are in "
-        "Unassigned and salary skips them."
+        (f"{count} employee{'s' if count != 1 else ''} imported from {file_name}. "
+         "Set each one's department, designation and salary on Edit employee — "
+         "until then they are in Unassigned and salary skips them."
+         if count else f"Nobody new in {file_name}.")
+        + (f" {renamed} name{'s' if renamed != 1 else ''} updated from the file."
+           if renamed else "")
         + (f" {skipped} already in the software {'was' if skipped == 1 else 'were'} "
            "skipped and left unchanged." if skipped else ""),
     )

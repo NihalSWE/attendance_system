@@ -14,9 +14,25 @@ independently. An unnamed table keeps table=1 and page / per_page / table_q.
 from html.parser import HTMLParser
 
 from django.core.paginator import Page, Paginator
-from django.db.models import Q
+from django.db.models import Case, CharField, F, Q, Value, When
+from django.db.models.functions import LPad
 from django.http import JsonResponse
 from django.shortcuts import render as django_render
+
+
+def code_sort_key(field):
+    """An Employee ID sort key that orders by number: 9, 10, 100 - not 10, 100, 9.
+
+    Employee IDs are text (an older record can hold letters), so plain ordering
+    puts "100" before "99". An all-digit ID is padded with zeros to the
+    column's 64 characters, which sorts exactly as the number; anything else
+    sorts as written, after the numbers. Annotate it and name the annotation
+    in a table's ``order``.
+    """
+    return Case(
+        When(**{f"{field}__regex": r"^[0-9]+$"}, then=LPad(field, 64, Value("0"))),
+        default=F(field), output_field=CharField(),
+    )
 
 
 def integer(value, default, low=0, high=2_147_483_647):

@@ -38,9 +38,13 @@ line, and re-checks everything first, because the rows come back through the
 reader's own session.
 
 **Someone already in the software** (their Employee ID belongs to a current
-employee) is skipped and left exactly as they are - not an error. So when the
-list grows, the whole file can be uploaded again and only the new people are
-added. Nothing about an existing employee is ever changed from a file.
+employee) is not an error. So when the list grows, the whole file can be
+uploaded again and only the new people are added. If the file gives them a
+different name, **their name is updated to the file's** (Nihal, 2026-09-24) -
+the preview lists every such change, old name and new, before anything is
+written. Nothing else about an existing employee is ever changed from a file.
+Only for people the importer may edit: an Employee ID belonging to someone
+outside their branches is refused, and that person's name is never shown.
 
 Who may import into a branch: ``employees.edit`` there - the same permission
 Create employee asks for. No pay is set, so nothing about salary is needed.
@@ -442,21 +446,22 @@ def check_branch(user, company_id, branch_id=None):
 
 
 def check(user, company_id, rows):
-    """Fill in each row's ``first_name`` / ``last_name``, ``errors`` and
-    ``existing``. Writes nothing.
+    """Fill in each row's ``first_name`` / ``last_name``, ``errors``,
+    ``existing`` and ``rename``. Writes nothing.
 
     ``existing`` is the name the software already has for that Employee ID, or
-    "". Such a row is not an error: the person is skipped and left exactly as
-    they are, so a list that has grown can be uploaded again for its new
-    people. Nothing about an existing employee is ever changed from a file.
+    "". Such a row is not an error. ``rename`` is True when the file gives
+    that person a different name: importing updates it to the file's. When it
+    is the same, the person is skipped and left exactly as they are.
     """
-    import_scope(user, company_id)
+    _membership, branch_ids = import_scope(user, company_id)
     with use_company(company_id):
         current = {
-            code: " ".join(part for part in (first, last) if part)
-            for code, first, last in EmployeeAssignment.objects.filter(
+            code: (" ".join(part for part in names if part), branch_id)
+            for code, branch_id, *names in EmployeeAssignment.objects.filter(
                 status=EmployeeAssignment.Status.ACTIVE, effective_to__isnull=True,
-            ).values_list("employee_code", "employee__first_name", "employee__last_name")
+            ).values_list("employee_code", "branch_id", "employee__first_name",
+                          "employee__middle_name", "employee__last_name")
         }
 
     seen = {}
@@ -464,6 +469,7 @@ def check(user, company_id, rows):
         errors = []
         row["errors"] = errors
         row["existing"] = ""
+        row["rename"] = False
 
         code = str(row.get("employee_id", "")).strip()
         if not code:
@@ -474,12 +480,18 @@ def check(user, company_id, rows):
                 "accept digits.")
         elif len(code) > MAX_ID_LENGTH:
             errors.append(f"Employee ID “{code}” is too long.")
-        elif code in current:
-            row["existing"] = current[code] or code
         elif code in seen:
             errors.append(f"Employee ID {code} is also on row {seen[code]} of this file.")
         else:
             seen[code] = row["line"]
+            if code in current:
+                existing_name, branch_id = current[code]
+                if branch_ids is ALL_BRANCHES or branch_id in branch_ids:
+                    row["existing"] = existing_name or code
+                else:
+                    # Not theirs to change - and not theirs to see, so no name.
+                    errors.append(f"Employee ID {code} already belongs to someone "
+                                  "outside your branches.")
         row["employee_id"] = code
 
         name = " ".join(str(row.get("name", "")).split())
@@ -494,24 +506,33 @@ def check(user, company_id, rows):
         row["first_name"], row["last_name"] = (first, last) if first else (name, "")
         row["name"] = name
         if row["existing"]:
-            # Skipped, so nothing else about the row matters; a different
-            # name is pointed out (it may be the wrong ID) but is not an error.
-            errors.clear()
-            row["name_differs"] = bool(name) and name.casefold() != row["existing"].casefold()
+            if not name:
+                # No name to change to: they are simply left as they are.
+                errors.clear()
+            # Any difference at all - spelling, spacing inside, capitals - is
+            # the file's to decide; the preview shows old and new side by side.
+            row["rename"] = bool(name) and not errors and name != " ".join(row["existing"].split())
     return rows
 
 
 def summarise(rows):
     """``total`` read, ``bad`` refused, ``good`` new people to import. Those
-    already in the software are neither: see ``already_here``."""
+    already in the software are neither: see ``already_here`` and ``renames``."""
     bad = sum(1 for row in rows if row["errors"])
-    here = len(already_here(rows))
+    here = sum(1 for row in rows if row.get("existing") and not row["errors"])
     return {"total": len(rows), "bad": bad, "good": len(rows) - bad - here}
 
 
 def already_here(rows):
-    """The rows skipped because that Employee ID is already an employee."""
-    return [row for row in rows if row.get("existing") and not row["errors"]]
+    """Already employees with the same name: skipped and left unchanged."""
+    return [row for row in rows
+            if row.get("existing") and not row.get("rename") and not row["errors"]]
+
+
+def renames(rows):
+    """Already employees the file names differently: their name is updated."""
+    return [row for row in rows
+            if row.get("existing") and row.get("rename") and not row["errors"]]
 
 
 # --- writing ---------------------------------------------------------------
@@ -526,23 +547,28 @@ def commit(*, actor, company_id, rows, branch_id):
     through the reader's session, and a branch they may no longer import into
     (or an Employee ID taken in between) must be caught now, not written. The
     import keeps to what the preview showed - a person it listed as new who is
-    no longer new refuses the lot, and one it listed as skipped stays skipped.
+    no longer new refuses the lot, one it listed as skipped stays skipped, and
+    a name it said would change is changed (or the lot is refused if that
+    Employee ID no longer belongs to anyone).
     """
     from devices.services.mapping import unassigned_placement
 
     membership, _branch_ids = import_scope(actor, company_id)
     branch = check_branch(actor, company_id, branch_id)
-    shown_new = [not row.get("existing") for row in rows]
+    shown = [("rename" if row.get("rename") else "skip") if row.get("existing") else "new"
+             for row in rows]
     rows = check(actor, company_id, rows)
-    skipped = [row for row, new in zip(rows, shown_new) if not new]
-    rows = [row for row, new in zip(rows, shown_new) if new]
-    bad = [row for row in rows if row["errors"] or row["existing"]]
+    skipped = [row for row, what in zip(rows, shown) if what == "skip"]
+    to_rename = [row for row, what in zip(rows, shown) if what == "rename"]
+    rows = [row for row, what in zip(rows, shown) if what == "new"]
+    bad = ([row for row in rows if row["errors"] or row["existing"]]
+           + [row for row in to_rename if row["errors"] or not row["existing"]])
     if bad:
         raise ValidationError(
             f"{len(bad)} row{'s' if len(bad) != 1 else ''} can no longer be "
             "imported. Upload the file again to see why."
         )
-    if not rows:
+    if not rows and not to_rename:
         raise ValidationError(
             "Everyone in that file is already in the software, so nothing was imported."
         )
@@ -587,6 +613,8 @@ def commit(*, actor, company_id, rows, branch_id):
                 ) from exc
             created.append(employee)
 
+        renamed = _rename(actor, to_rename)
+
         record_company_event(
             actor=actor, membership=membership, company=company,
             action="employees.imported", obj=branch,
@@ -597,9 +625,45 @@ def commit(*, actor, company_id, rows, branch_id):
                 "employee_ids": [employee.pk for employee in created],
                 # Already employees: skipped and left as they are.
                 "skipped_codes": [row["employee_id"] for row in skipped],
+                # Already employees whose name the file changed, before and after.
+                "renamed": renamed,
             },
         )
     return created
+
+
+def _rename(actor, rows):
+    """Give each row's current employee the file's name. Call in the company.
+
+    The whole name is replaced, the same way an import creates one: the last
+    word is the last name, the rest the first name, and no middle name - so the
+    full name reads exactly as the file wrote it.
+    """
+    renamed = []
+    name_fields = {"first_name", "middle_name", "last_name"}
+    skip = [f.name for f in Employee._meta.fields if f.name not in name_fields]
+    for row in rows:
+        assignment = EmployeeAssignment.objects.select_related("employee").filter(
+            employee_code=row["employee_id"], status=EmployeeAssignment.Status.ACTIVE,
+            effective_to__isnull=True,
+        ).first()
+        employee = assignment.employee
+        before = employee.full_name
+        employee.first_name = row["first_name"]
+        employee.middle_name = ""
+        employee.last_name = row["last_name"]
+        employee.updated_by = actor
+        try:
+            employee.clean_fields(exclude=skip)
+        except ValidationError as exc:
+            raise ValidationError(
+                f"Row {row['line']} ({row['name']}): the name could not be changed, "
+                f"so nothing was imported: {' '.join(exc.messages)}"
+            ) from exc
+        employee.save(update_fields=[*name_fields, "updated_by", "updated_at"])
+        renamed.append({"employee_id": employee.pk, "code": row["employee_id"],
+                        "from": before, "to": employee.full_name})
+    return renamed
 
 
 # --- the demo file ---------------------------------------------------------

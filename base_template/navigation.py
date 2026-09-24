@@ -24,6 +24,7 @@ COMPANY_MENUS = (
     )),
     ("attendance", "Attendance", (
         item("Daily list", "attendance:attendance_list"),
+        item("Late entries", "attendance:attendance_late"),
         item("Calendar", "attendance:attendance_calendar", "attendance:attendance_day"),
         item("Days to review", "attendance:attendance_review", "attendance:attendance_day_fix",
              "attendance:attendance_correction_withdraw"),

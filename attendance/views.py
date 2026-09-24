@@ -29,7 +29,7 @@ from attendance.forms import (
 )
 from attendance.models import AttendanceCorrection, AttendanceRecord
 from attendance.services import _is_locked, locked_ranges, month_bounds, refresh
-from base_template.tables import paginate, render
+from base_template.tables import code_sort_key, paginate, render
 from common.forms import apply_service_errors
 from common.tenant import use_company
 from employees.models import Employee
@@ -82,16 +82,23 @@ DAILY_ORDER = (
     "late_minutes",
     "payable_fraction",
     "note",
+    # Hidden: the Employee ID, sorted as a number, for the "Sort by" box; one
+    # person's days then run in date order.
+    ("table_code_sort", "work_date"),
 )
 
 
-def daily_list_query(request, company_id):
+def daily_list_query(request, company_id, late_only=False):
     """The Daily list's rows before the table's own search and sort.
 
     Branch scoping (A12 part 7, department heads), then the page's filters:
     the month or a date window, branch, employee and status. The page pages
     through this; a download (``?format=``) writes all of it. Returns a dict
     so the page and the download read the same values.
+
+    ``late_only``: the Late entries page - only days someone came in late
+    (``late_minutes`` above zero, already net of the shift's grace minutes,
+    so exactly the days whose Late column on the Daily list is not 0).
     """
     membership, visible = access.view_scope(request.user, company_id)
     year, month = read_month(request.GET)
@@ -113,9 +120,13 @@ def daily_list_query(request, company_id):
         queryset = access.scope(
             AttendanceRecord.objects.select_related(
                 "employee", "branch", "employee_assignment",
-            ).filter(work_date__gte=first, work_date__lte=last),
+            ).filter(work_date__gte=first, work_date__lte=last).annotate(
+                table_code_sort=code_sort_key("employee_assignment__employee_code"),
+            ),
             visible,
         )
+        if late_only:
+            queryset = queryset.filter(late_minutes__gt=0)
         month_total = queryset.count()
         if branch_id.isdigit():
             queryset = queryset.filter(branch_id=int(branch_id))
@@ -130,6 +141,7 @@ def daily_list_query(request, company_id):
         "branch_id": branch_id, "employee_id": employee_id, "status": status,
         "date_filter": date_filter, "date_window": date_window,
         "first": first, "last": last, "queryset": queryset, "month_total": month_total,
+        "late_only": late_only,
     }
 
 
@@ -150,10 +162,23 @@ def attendance_list(request):
     ``?format=xlsx|pdf`` downloads exactly this list (attendance/exports.py):
     the same view, so the same permissions, filters, search and sort.
     """
+    return _daily_page(request, late_only=False)
+
+
+@login_required
+@require_http_methods(["GET"])
+def attendance_late(request):
+    """Attendance → Late entries: the Daily list, only the days someone came
+    in late. Everything else - filters, search, sort, downloads, branch
+    limits - is the Daily list's own."""
+    return _daily_page(request, late_only=True)
+
+
+def _daily_page(request, *, late_only):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    daily = daily_list_query(request, company_id)
+    daily = daily_list_query(request, company_id, late_only=late_only)
     if request.GET.get("format") in ("xlsx", "pdf"):
         from attendance.exports import export_daily_list
 
@@ -188,6 +213,8 @@ def attendance_list(request):
         "export_query": export_params.urlencode(),
         # Punch times are stored in UTC; people read them in company time.
         "company_tz": membership.company.timezone or "UTC",
+        "late_only": late_only,
+        "list_url": "attendance:attendance_late" if late_only else "attendance:attendance_list",
     })
 
 

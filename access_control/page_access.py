@@ -75,6 +75,7 @@ BRANCH_PAGES = {
     # an Employee login, and for yourself. Devices are not listed: they stay
     # with the owner and company admin.
     "attendance:attendance_list": "attendance.view",
+    "attendance:attendance_late": "attendance.view",
     "attendance:attendance_calendar": "attendance.view",
     "attendance:attendance_day": "attendance.view",
     "attendance:attendance_now": ("employees.view", "attendance.view"),

@@ -4589,3 +4589,58 @@ Checked against the real File_02.xls and D Company's data (read-only `check`):
 90 read, 3 new (Nihal, Ajay, Sajal), 87 skipped, 0 errors. Checked the page in
 the running app (temporary server on :8001, session deleted after, Import not
 pressed). No migration. Full suite 1513 OK.
+
+### Sorting, Late entries, and names updated from an import — 2026-09-24
+
+Four requests from Nihal (Ajay on leave, pushing to main):
+
+**1. Employees list: sort by name and by Employee ID.** The headers already
+sorted, but Employee ID sorted as *text* - 100 before 99. `code_sort_key` in
+`base_template/tables.py` pads an all-digit ID with zeros to the column's 64
+characters, so it sorts as the number; an ID with letters sorts after the
+numbers. A **"Sort by" box** in the filter row (Name A–Z / Z–A, Employee ID
+lowest / highest first) does exactly what a header click does and follows the
+headers ("another column" after, say, Branch). It has no form name, so Apply
+is untouched. Generic in `tables.js`: `<select data-table-sort="TABLE">`.
+
+**2. Daily list: the same.** Its Employee cell already shows the ID, so rather
+than reshape the page and its downloads, a hidden column (`<th data-hidden>`,
+DataTables `visible: false`) carries the ID to sort by: `DAILY_ORDER[10]`,
+each person's days then in date order. Downloads sort the same way and say
+"Sorted by: Employee ID ...".
+Found in the browser, not by tests: `createdRow` copied cell attributes onto
+`row.cells[index]`, which holds only *drawn* cells - a hidden column made it
+throw and the table showed "No results" over 16 real rows. It now uses the
+`cells` argument DataTables passes (every column, hidden too).
+
+**3. Late entries** (Attendance → Late entries, `attendance:attendance_late`,
+`/attendance/late/`): the Daily list with one more condition,
+`late_minutes > 0` - already net of the shift's grace minutes, so exactly the
+days whose Late column is not 0. Same template, filters, search, sort, branch
+limits (`attendance.view` in `BRANCH_PAGES`), downloads titled "Late entries"
+and named `late-entries-...`, plus a "Most minutes late first" sort. Sidebar:
+under Attendance, after Daily list.
+
+**4. Import: a different name for an existing Employee ID updates it.**
+Ajay had said no update mode; Nihal asked for this one thing with Ajay's
+work delegated to him. Only the name, nothing else. The preview lists every
+change under "Names to update", old name and new, before anything is written;
+the button says "Import 3 employees and update 1 name" (or "Update 1 name").
+The whole name is replaced the way an import writes one (no middle name left
+behind). Any difference counts, capitals included; extra spaces alone do not.
+Audited in `employees.imported` as `renamed: [{employee_id, code, from, to}]`.
+A blank name leaves the person as they are; the same ID twice in a file is a
+mistake. Confirm keeps to the preview: a rename whose ID nobody holds any
+more refuses the lot.
+
+Fixed on the way (from the skip-existing change earlier today): a branch
+manager's preview showed the name of an existing employee in *another* branch.
+Now an ID held by someone outside the importer's branches is an error ("already
+belongs to someone outside your branches"), with no name shown and no rename.
+
+Tests: `attendance/tests_late_and_sort.py` (17), `organization/tests_employee_import.py::RenameFromFileTests` (10);
+two tests that pinned "an existing name is never changed" were replaced.
+Checked in the running app (temporary server on :8001, session deleted):
+Employees sorted by ID both ways matched the database's lowest and highest;
+the box and headers stay in step; Late entries for August showed 16 days, the
+Daily list 124; renames not exercised on real data. No migration. Full suite 1539 OK.

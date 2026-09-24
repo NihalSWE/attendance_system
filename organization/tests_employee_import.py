@@ -637,22 +637,15 @@ class ExistingPeopleTests(ImportCase):
         self.assertContains(page, "1 already in the software was skipped and left unchanged.")
         self.assertEqual(self.placement("7726978").employee.full_name, "Nihal")
 
-    def test_an_existing_employee_is_not_changed(self):
+    def test_the_same_name_leaves_them_unchanged(self):
         self.rahim.refresh_from_db()
         before = (self.rahim.first_name, self.rahim.last_name, self.rahim.updated_at)
-        self.upload([["770015", "Somebody Else Entirely"], ["7726978", "Nihal"]])
+        self.upload([["770015", self.rahim.full_name], ["7726978", "Nihal"]])
         self.confirm()
         self.rahim.refresh_from_db()
         self.assertEqual((self.rahim.first_name, self.rahim.last_name, self.rahim.updated_at), before)
         with use_company(self.company):
             self.assertEqual(EmployeeAssignment.objects.filter(employee_code="770015").count(), 1)
-
-    def test_a_different_name_is_pointed_out_but_not_refused(self):
-        page = self.upload([["770015", "Somebody Else Entirely"], ["7726978", "Nihal"]])
-        row = page.context["preview"]["existing"][0]
-        self.assertTrue(row["name_differs"])
-        self.assertContains(page, "A different name — check this is the right Employee ID.")
-        self.assertContains(page, "Import 1 employee")
 
     def test_everyone_already_here_offers_nothing_to_import(self):
         page = self.upload([["770015", "Rahim"]])
@@ -700,3 +693,110 @@ class ExistingPeopleTests(ImportCase):
     def test_the_same_new_id_twice_in_the_file_is_still_a_mistake(self):
         page = self.upload([["7726978", "Nihal"], ["7726978", "Nihal Again"]])
         self.assertIn("also on row 2", page.context["preview"]["bad"][0]["errors"][0])
+
+
+class RenameFromFileTests(ImportCase):
+    """The same Employee ID with a different name in the file: the file's name
+    replaces the old one (Nihal, 2026-09-24). Shown old and new before
+    anything is written; audited; only for people the importer may edit."""
+
+    def setUp(self):
+        super().setUp()
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(employee_code="E1").update(employee_code="770015")
+            self.rahim = self.employee
+            self.rahim.middle_name = "Old"
+            self.rahim.save(update_fields=["middle_name"])
+        self.old_name = self.rahim.full_name
+
+    def test_the_preview_shows_old_and_new_and_writes_nothing(self):
+        page = self.upload([["770015", "Rahim Uddin Ahmed"], ["7726978", "Nihal"]])
+        preview = page.context["preview"]
+        self.assertEqual([(r["employee_id"], r["existing"], r["name"]) for r in preview["renames"]],
+                         [("770015", self.old_name, "Rahim Uddin Ahmed")])
+        self.assertEqual(preview["existing"], [])
+        self.assertEqual(preview["counts"]["good"], 1)
+        self.assertContains(page, "1 name will be updated to the file's.")
+        self.assertContains(page, "Names to update (1)")
+        self.assertContains(page, "Import 1 employee and update 1 name")
+        self.rahim.refresh_from_db()
+        self.assertEqual(self.rahim.full_name, self.old_name)
+
+    def test_importing_replaces_the_whole_name(self):
+        self.upload([["770015", "Rahim Uddin Ahmed"], ["7726978", "Nihal"]])
+        page = self.confirm()
+        self.rahim.refresh_from_db()
+        self.assertEqual((self.rahim.first_name, self.rahim.middle_name, self.rahim.last_name),
+                         ("Rahim Uddin", "", "Ahmed"))
+        self.assertEqual(self.rahim.full_name, "Rahim Uddin Ahmed")
+        self.assertEqual(self.rahim.updated_by, self.admin)
+        self.assertContains(page, "1 employee imported")
+        self.assertContains(page, "1 name updated from the file.")
+        # Nothing but the name: same person, same placement, same Employee ID.
+        placement = self.placement("770015")
+        self.assertEqual(placement.employee_id, self.rahim.pk)
+        self.assertEqual(placement.branch, self.branch)
+
+    def test_a_file_that_only_renames_can_be_imported(self):
+        page = self.upload([["770015", "Rahim Ahmed"]])
+        self.assertContains(page, "Update 1 name")
+        before = self.count()
+        page = self.confirm()
+        self.assertEqual(self.count(), before)
+        self.assertContains(page, "Nobody new in people.csv. 1 name updated from the file.")
+        self.rahim.refresh_from_db()
+        self.assertEqual(self.rahim.full_name, "Rahim Ahmed")
+
+    def test_a_change_of_capitals_or_spacing_counts_too(self):
+        page = self.upload([["770015", self.old_name.upper()]])
+        self.assertEqual(len(page.context["preview"]["renames"]), 1)
+        page = self.upload([["770015", "  " + self.old_name.replace(" ", "   ") + " "]])
+        # Only extra spaces: the same name once spaces are tidied, so skipped.
+        self.assertEqual(page.context["preview"]["renames"], [])
+        self.assertEqual(len(page.context["preview"]["existing"]), 1)
+
+    def test_it_is_audited_with_the_old_and_new_name(self):
+        self.upload([["770015", "Rahim Ahmed"], ["7726978", "Nihal"]])
+        self.confirm()
+        entry = AuditLog.objects.get(action="employees.imported")
+        self.assertEqual(entry.after_data["renamed"], [{
+            "employee_id": self.rahim.pk, "code": "770015",
+            "from": self.old_name, "to": "Rahim Ahmed"}])
+
+    def test_a_blank_name_leaves_them_as_they_are(self):
+        page = self.upload([["770015", ""], ["7726978", "Nihal"]])
+        preview = page.context["preview"]
+        self.assertEqual(preview["bad"], [])
+        self.assertEqual(preview["renames"], [])
+        self.assertEqual([r["employee_id"] for r in preview["existing"]], ["770015"])
+
+    def test_the_same_id_twice_with_two_names_is_a_mistake(self):
+        page = self.upload([["770015", "Rahim Ahmed"], ["770015", "Rahim Khan"]])
+        self.assertIn("also on row 2", page.context["preview"]["bad"][0]["errors"][0])
+        self.assertNotContains(page, "Update 1 name")
+
+    def test_a_rename_whose_id_is_gone_by_confirm_refuses_the_lot(self):
+        self.upload([["770015", "Rahim Ahmed"], ["7726978", "Nihal"]])
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(employee_code="770015").update(employee_code="E1")
+        before = self.count()
+        self.assertContains(self.confirm(), "can no longer be imported")
+        self.assertEqual(self.count(), before)
+        self.rahim.refresh_from_db()
+        self.assertEqual(self.rahim.full_name, self.old_name)
+
+    def test_a_branch_manager_cannot_rename_or_see_someone_elsewhere(self):
+        # Karim is in Chittagong; the manager runs Head Office only.
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(employee=self.far).update(employee_code="880001")
+        page = self.upload([["880001", "Renamed By Manager"]], user=self.manager)
+        row = page.context["preview"]["bad"][0]
+        self.assertIn("outside your branches", row["errors"][0])
+        self.assertNotContains(page, "Karim")
+        self.assertEqual(page.context["preview"]["renames"], [])
+
+    def test_a_branch_manager_renames_in_their_own_branch(self):
+        self.upload([["770015", "Rahim Ahmed"]], user=self.manager)
+        self.confirm()
+        self.rahim.refresh_from_db()
+        self.assertEqual(self.rahim.full_name, "Rahim Ahmed")

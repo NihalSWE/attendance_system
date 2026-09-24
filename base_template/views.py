@@ -16,7 +16,7 @@ from django.contrib.auth.views import LogoutView
 from django.db.models import CharField, Count, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.shortcuts import redirect
-from base_template.tables import paginate, render
+from base_template.tables import code_sort_key, paginate, render
 from django.views.decorators.http import require_POST
 
 from access_control.page_access import may_open
@@ -188,6 +188,9 @@ def employee_list_query(request):
             output_field=IntegerField()),
         table_designation=Subquery(assignment.values("designation__name")[:1]),
         table_rate=Subquery(compensation.values("base_rate")[:1]),
+    ).annotate(
+        # Employee ID sorts as a number: 99 before 100.
+        table_code_sort=code_sort_key("table_code"),
     ).order_by("first_name", "last_name")
     if not view_branches.is_all:
         reachable = Q(table_branch_id__in=view_branches.branches)
@@ -249,7 +252,7 @@ def employee_list_query(request):
     else:
         setup = ""
 
-    columns = [None, "table_code", ("first_name", "last_name"), "table_branch",
+    columns = [None, "table_code_sort", ("first_name", "last_name"), "table_branch",
                "table_department", "table_designation", None, "employment_status"]
     if show_rate_column:
         # Sorting by pay would reveal pay order to someone who may not see pay,

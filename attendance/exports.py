@@ -27,7 +27,8 @@ HEADERS = ["Date", "Employee ID", "Employee", "Branch", "Status", "In", "Out",
            "Worked (min)", "Late (min)", "Payable", "Note"]
 #: The on-screen columns, by the index the table's sort uses.
 SCREEN_HEADERS = ["Date", "Employee", "Branch", "Status", "In", "Out",
-                  "Worked (min)", "Late (min)", "Payable", "Note"]
+                  "Worked (min)", "Late (min)", "Payable", "Note",
+                  "Employee ID"]  # hidden on screen; sorts the Employee ID as a number
 
 
 def _period(first, last, window):
@@ -115,6 +116,7 @@ def export_daily_list(request, company_id, daily, fmt):
         f"{SCREEN_HEADERS[column]} {'descending' if descending else 'ascending'}"
         for column, descending in sorted_by if column < len(SCREEN_HEADERS)
     ) or "Date, then employee"
+    late_only = daily.get("late_only", False)
     shown = [f"Period: {_period_text(first, last, window)}",
              f"Branch: {branch.name if branch else (scope_name or 'All branches')}"]
     if employee is not None:
@@ -123,12 +125,14 @@ def export_daily_list(request, company_id, daily, fmt):
         shown.append(f"Status: {statuses[daily['status']]}")
     if table_search:
         shown.append(f'Table search: "{table_search}"')
+    if late_only:
+        shown.append("Late entries only")
     shown.append(f"Sorted by: {sort}")
     now = timezone.localtime()
     lines = [" · ".join(shown),
              f"{count} row{'s' if count != 1 else ''} · downloaded {now:%d %b %Y %H:%M} "
              f"by {request.user.get_username()} · times in {company.timezone or 'UTC'}"]
-    title = f"{company.name} — Attendance"
+    title = f"{company.name} — {'Late entries' if late_only else 'Attendance'}"
     numeric = (7, 8, 9)
 
     if fmt == exports.XLSX:
@@ -141,10 +145,12 @@ def export_daily_list(request, company_id, daily, fmt):
 
     filters = {"period": [first.isoformat(), last.isoformat()],
                "branch": daily["branch_id"], "employee": daily["employee_id"],
-               "status": daily["status"], "table_search": table_search, "sort": sort}
+               "status": daily["status"], "table_search": table_search, "sort": sort,
+               "late_only": late_only}
     exports.record(actor=request.user, membership=membership, page="attendance",
                    fmt=fmt, filters=filters, count=count)
-    name = exports.filename("attendance", scope_name or company.name,
+    name = exports.filename("late-entries" if late_only else "attendance",
+                            scope_name or company.name,
                             _period(first, last, window), fmt)
     return exports.response(content, fmt, name)
 

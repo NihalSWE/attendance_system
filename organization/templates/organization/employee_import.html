@@ -217,11 +217,18 @@
                             </tbody>
                         </table>
                     </div>
-                {% elif preview.counts.good %}
+                {% elif preview.counts.good or preview.renames %}
                     <div class="alert alert--success" role="status">
-                        {% if preview.existing %}
-                            {{ preview.counts.good }} new {{ preview.counts.good|pluralize:"person,people" }} can be imported into {{ preview.branch.name }}.
-                            {{ preview.existing|length }} already in the software {{ preview.existing|length|pluralize:"is,are" }} skipped and left unchanged.
+                        {% if preview.existing or preview.renames %}
+                            {% if preview.counts.good %}
+                                {{ preview.counts.good }} new {{ preview.counts.good|pluralize:"person,people" }} can be imported into {{ preview.branch.name }}.
+                            {% endif %}
+                            {% if preview.renames %}
+                                {{ preview.renames|length }} {{ preview.renames|length|pluralize:"name,names" }} will be updated to the file's.
+                            {% endif %}
+                            {% if preview.existing %}
+                                {{ preview.existing|length }} already in the software {{ preview.existing|length|pluralize:"is,are" }} skipped and left unchanged.
+                            {% endif %}
                         {% else %}
                             All {{ preview.counts.total }} can be imported into {{ preview.branch.name }}.
                         {% endif %}
@@ -282,6 +289,54 @@
                     {% endif %}
                 {% endif %}
 
+                {% if preview.renames %}
+                    <h3>
+                        Names to update ({{ preview.renames|length }})
+                    </h3>
+                    <p class="t-faint">
+                        These Employee IDs are already in the software under another name. Importing
+                        changes the name to the one in the file. Check each is the right Employee ID.
+                    </p>
+                    <div class="table-wrap" data-renames>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        Row
+                                    </th>
+                                    <th>
+                                        Employee ID
+                                    </th>
+                                    <th>
+                                        Name now
+                                    </th>
+                                    <th>
+                                        New name, from the file
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in preview.renames %}
+                                    <tr>
+                                        <td>
+                                            {{ row.line }}
+                                        </td>
+                                        <td class="mono">
+                                            {{ row.employee_id }}
+                                        </td>
+                                        <td>
+                                            {{ row.existing }}
+                                        </td>
+                                        <td>
+                                            <strong>{{ row.name }}</strong>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+
                 {% if preview.existing %}
                     <details class="import-existing" data-existing>
                         <summary>
@@ -320,11 +375,6 @@
                                             </td>
                                             <td>
                                                 {{ row.existing }}
-                                                {% if row.name_differs %}
-                                                    <div class="field__help">
-                                                        A different name — check this is the right Employee ID.
-                                                    </div>
-                                                {% endif %}
                                             </td>
                                         </tr>
                                     {% endfor %}
@@ -334,15 +384,15 @@
                     </details>
                 {% endif %}
             </div>
-            {% if not preview.bad and preview.counts.good %}
+            {% if not preview.bad and preview.counts.good or not preview.bad and preview.renames %}
                 <div class="card__foot">
                     <form method="post" action="{% url 'organization:employee_import_confirm' %}"
-                          data-confirm-title="Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:'employee,employees' }} into {{ preview.branch.name }}?"
-                          data-confirm="They are created with their Employee ID and name, in the branch's Unassigned department. Set each one's department, designation and salary on Edit employee afterwards.{% if preview.existing %} The {{ preview.existing|length }} already in the software are skipped and not changed.{% endif %}"
+                          data-confirm-title="{% if preview.counts.good %}Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:'employee,employees' }} into {{ preview.branch.name }}{% if preview.renames %} and update {{ preview.renames|length }} {{ preview.renames|length|pluralize:'name,names' }}{% endif %}{% else %}Update {{ preview.renames|length }} {{ preview.renames|length|pluralize:'name,names' }}{% endif %}?"
+                          data-confirm="{% if preview.counts.good %}They are created with their Employee ID and name, in the branch's Unassigned department. Set each one's department, designation and salary on Edit employee afterwards.{% endif %}{% if preview.renames %} {{ preview.renames|length }} existing {{ preview.renames|length|pluralize:'employee is,employees are' }} renamed to the name in the file.{% endif %}{% if preview.existing %} The {{ preview.existing|length }} already in the software with the same name are skipped and not changed.{% endif %}"
                           data-confirm-button="Import">
                         {% csrf_token %}
                         <button class="btn btn--primary" type="submit">
-                            Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:"employee,employees" }}
+                            {% if preview.counts.good %}Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:"employee,employees" }}{% if preview.renames %} and update {{ preview.renames|length }} {{ preview.renames|length|pluralize:"name,names" }}{% endif %}{% else %}Update {{ preview.renames|length }} {{ preview.renames|length|pluralize:"name,names" }}{% endif %}
                         </button>
                     </form>
                 </div>

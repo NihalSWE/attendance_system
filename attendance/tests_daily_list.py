@@ -22,7 +22,9 @@ from organization.models import Branch
 from tenants.services import onboard_company
 
 UTC = datetime.timezone.utc
-COLUMNS = 10
+# Ten on screen, plus the hidden Employee ID the "Sort by" box sorts by
+# (2026-09-24) - so the every-column sort test covers it too.
+COLUMNS = 11
 
 
 class DailyListTests(TestCase):

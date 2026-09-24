@@ -2,7 +2,7 @@
 {% load tz %}
 {% load static %}
 {% block title %}
-    Attendance · Attendance
+    {% if late_only %}Late entries{% else %}Attendance{% endif %} · Attendance
 {% endblock %}
 {% block extra_js %}
     {{ block.super }}
@@ -17,16 +17,31 @@
         <span class="crumbs__sep" aria-hidden="true">
             /
         </span>
-        Attendance
+        {% if late_only %}
+            <a href="{% url 'attendance:attendance_list' %}?month={{ month }}&year={{ year }}">
+                Attendance
+            </a>
+            <span class="crumbs__sep" aria-hidden="true">
+                /
+            </span>
+            Late entries
+        {% else %}
+            Attendance
+        {% endif %}
     </div>
     <div class="page__head">
         <div>
             <h1 class="page__title">
-                Attendance
+                {% if late_only %}Late entries{% else %}Attendance{% endif %}
             </h1>
             <p class="page__sub">
-                Daily attendance calculated from device punches, leave, weekly off
-                days and holidays. Salary is worked out from this.
+                {% if late_only %}
+                    Only the days someone came in late: after their shift's start and
+                    its grace minutes. Everything else is as on the Daily list.
+                {% else %}
+                    Daily attendance calculated from device punches, leave, weekly off
+                    days and holidays. Salary is worked out from this.
+                {% endif %}
             </p>
         </div>
         <div class="page__actions">
@@ -35,11 +50,11 @@
             </a>
             {# The same view with ?format=: same permissions, filters, search and sort. #}
             <a class="btn btn--ghost" data-export
-               href="{% url 'attendance:attendance_list' %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=xlsx">
+               href="{% url list_url %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=xlsx">
                 Download Excel
             </a>
             <a class="btn btn--ghost" data-export
-               href="{% url 'attendance:attendance_list' %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=pdf">
+               href="{% url list_url %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=pdf">
                 Download PDF
             </a>
         </div>
@@ -51,7 +66,7 @@
                 {% if date_window %}{{ window_start|date:"j M Y" }}{% if window_start != window_end %} – {{ window_end|date:"j M Y" }}{% endif %}{% else %}{{ month_name }} {{ year }}{% endif %}
             </h2>
             <span class="badge badge--neutral">
-                {% if filtered %}{{ server_table.total }} of {% endif %}{{ month_total }} days
+                {% if filtered %}{{ server_table.total }} of {% endif %}{{ month_total }} {% if late_only %}late {{ month_total|pluralize:"day,days" }}{% else %}days{% endif %}
             </span>
         </div>
         <form method="get" class="toolbar toolbar--fit">
@@ -126,11 +141,40 @@
                 To
             </label>
             {{ date_filter.date_to }}
+            {# Sorts the table as its headers do; no name, so Apply ignores it. #}
+            <label class="sr-only" for="daily-sort">
+                Sort by
+            </label>
+            <select class="input select js-select" id="daily-sort" data-table-sort="" style="width:auto">
+                <option value="" selected>
+                    Sort: Date, then name
+                </option>
+                <option value="1:asc">
+                    Sort: Name A–Z
+                </option>
+                <option value="1:desc">
+                    Sort: Name Z–A
+                </option>
+                <option value="10:asc">
+                    Sort: Employee ID, lowest first
+                </option>
+                <option value="10:desc">
+                    Sort: Employee ID, highest first
+                </option>
+                {% if late_only %}
+                    <option value="7:desc">
+                        Sort: Most minutes late first
+                    </option>
+                {% endif %}
+                <option value="other" hidden disabled>
+                    Sort: another column
+                </option>
+            </select>
             <button class="btn btn--ghost" type="submit">
                 Apply
             </button>
             {% if filtered %}
-                <a class="btn btn--quiet" href="{% url 'attendance:attendance_list' %}?month={{ month }}&year={{ year }}">
+                <a class="btn btn--quiet" href="{% url list_url %}?month={{ month }}&year={{ year }}">
                     Clear
                 </a>
             {% endif %}
@@ -155,13 +199,18 @@
                     </div>
                 {% else %}
                     <div class="empty__title">
-                        No attendance for {{ month_name }} {{ year }}
+                        {% if late_only %}Nobody was late in {{ month_name }} {{ year }}{% else %}No attendance for {{ month_name }} {{ year }}{% endif %}
                     </div>
                     <div class="empty__text">
-                        Attendance is built from the month's scans, leave and working
-                        calendar as they arrive — there is nothing to press. Nothing here
-                        means no scans and no working days yet, or no shift set up under
-                        Shifts.
+                        {% if late_only %}
+                            Nobody came in after their shift's start and grace minutes this
+                            month, or there are no scans yet. The Daily list shows every day.
+                        {% else %}
+                            Attendance is built from the month's scans, leave and working
+                            calendar as they arrive — there is nothing to press. Nothing here
+                            means no scans and no working days yet, or no shift set up under
+                            Shifts.
+                        {% endif %}
                     </div>
                 {% endif %}
             </div>
@@ -200,6 +249,9 @@
                             </th>
                             <th>
                                 Note
+                            </th>
+                            <th data-hidden hidden>
+                                Employee ID
                             </th>
                         </tr>
                     </thead>
@@ -260,6 +312,9 @@
                                 </td>
                                 <td>
                                     {{ record.note|default:"—" }}
+                                </td>
+                                <td hidden>
+                                    {{ record.employee_assignment.employee_code }}
                                 </td>
                             </tr>
                         {% endfor %}

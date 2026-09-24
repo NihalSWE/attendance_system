@@ -108,6 +108,27 @@
                     </option>
                 {% endfor %}
             </select>
+            {# Sorts the table as its headers do; no name, so Apply ignores it. #}
+            <label class="sr-only" for="employee-sort">
+                Sort by
+            </label>
+            <select class="input select js-select" id="employee-sort" data-table-sort="" style="width:auto">
+                <option value="2:asc" selected>
+                    Sort: Name A–Z
+                </option>
+                <option value="2:desc">
+                    Sort: Name Z–A
+                </option>
+                <option value="1:asc">
+                    Sort: Employee ID, lowest first
+                </option>
+                <option value="1:desc">
+                    Sort: Employee ID, highest first
+                </option>
+                <option value="other" hidden disabled>
+                    Sort: another column
+                </option>
+            </select>
             {% if setup %}
                 <input type="hidden" name="setup" value="{{ setup }}">
             {% endif %}
