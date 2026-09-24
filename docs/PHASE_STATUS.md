@@ -4644,3 +4644,49 @@ Checked in the running app (temporary server on :8001, session deleted):
 Employees sorted by ID both ways matched the database's lowest and highest;
 the box and headers stay in step; Late entries for August showed 16 days, the
 Daily list 124; renames not exercised on real data. No migration. Full suite 1539 OK.
+
+### Email settings per company, and a compose page for payslips — 2026-09-24
+
+Nihal found "Email to employee" did nothing: with no mail server in .env the
+button was a greyed `<span>` whose reason lived only in a hover tooltip. He
+asked for it to work like Gmail - a compose page with the payslip attached -
+and for each company to set its own sending account ("like an SMS provider
+gives an email, sender id, API...").
+
+**Organisation → Email settings** (`organization:mail_settings`, owner/admin
+only, sidebar under Organisation): `CompanyMailSettings` (migration
+`organization/0007_company_mail_settings.py`), one per company - SMTP server,
+port, security (STARTTLS / SSL / none), username, password or API key, sender
+email and name, on/off - plus **Send test email**, whose result is kept and
+shown. Every common provider gives SMTP details; for API-key providers
+(SendGrid, Mailgun, Brevo, SES) the key is the password; the page lists the
+usual servers. Service: `organization/mail_settings.py`.
+- The password is encrypted (Fernet, key derived from `SECRET_KEY` - nothing
+  new in .env; not the biometric key) and never shown again; an empty field
+  keeps it. A changed SECRET_KEY makes it unreadable, and the page says to
+  enter it again. Audited as `mail_settings.saved` / `mail_settings.tested`,
+  never with the password.
+- The server is the company's choice, so it is reached only on 25/465/587/2525
+  and never at a private or local address (resolved and checked each time) -
+  a company cannot use it to probe this server's network.
+- None saved, or switched off: the server's .env account as before
+  (`MAIL_CONFIGURED`). Neither: nothing is sent, and the pages say so.
+- Django 6.1 deprecates `get_connection()` and bare backend construction; the
+  SMTP backend is built with an `alias` so it takes exactly these values.
+
+**Email to employee** now opens `payroll:payslip_email` (GET: compose; POST:
+send): **From** (the sender's name, editable; the address is the account's -
+a server can only send as an account it can log in to), **To** (the address on
+file, or any typed), **Subject** and **Message** already written and editable,
+the **PDF attached** (same file as Download PDF). Mail-server refusals are
+said in plain words on the compose page, which keeps what was typed. A POST
+without the compose fields still sends the old way (own address, standard
+wording) - the existing tests pass unchanged. Only a finalised payslip goes
+out. When it cannot, the payslip page now says why in words beside the
+button (with "Set up email" for the owner/admin), and the button is shown
+disabled.
+
+Tests: `organization/tests_mail_settings.py` (15), `payroll/tests_payslip_compose.py` (12);
+`payroll/tests_payslip_pdf.py` unchanged and passing. Checked in the running
+app (temporary server on :8001, session deleted, nothing saved or sent).
+**Server:** `migrate` after pulling. Full suite 1566 OK.

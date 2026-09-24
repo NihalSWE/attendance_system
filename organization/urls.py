@@ -69,6 +69,7 @@ urlpatterns = [
         name="employee_import_demo",
     ),
     path("company/", company_views.company_profile, name="company_profile"),
+    path("email/", company_views.mail_settings, name="mail_settings"),
     path("employees/<int:pk>/", employee_detail_views.employee_detail, name="employee_detail"),
     path("employees/<int:pk>/edit/", employee_edit_views.employee_edit, name="employee_edit"),
     path("employees/<int:pk>/end/", employee_detail_views.employee_end, name="employee_end"),

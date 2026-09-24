@@ -181,3 +181,43 @@ class Designation(TenantOwned, ActorTracked):
     def save(self, *args, **kwargs):
         self.hierarchy_level = (self.parent.hierarchy_level + 1) if self.parent_id else 0
         super().save(*args, **kwargs)
+
+
+class CompanyMailSettings(TenantOwned, ActorTracked):
+    """The company's own mail account: payslips and other emails go out through
+    it (Organisation → Email settings). One per company.
+
+    Any provider that gives SMTP details works - Gmail, Outlook, SendGrid,
+    Mailgun, Brevo, Amazon SES; for an API-key provider the key is the
+    password. The password is kept encrypted (``organization.mail_settings``)
+    and never shown again once saved. With none saved, or switched off, the
+    server's own mail account in .env is used as before.
+    """
+
+    class Security(models.TextChoices):
+        STARTTLS = "starttls", "STARTTLS (usually port 587)"
+        SSL = "ssl", "SSL/TLS (usually port 465)"
+        NONE = "none", "None (not recommended)"
+
+    host = models.CharField(max_length=255)
+    port = models.PositiveIntegerField(default=587)
+    security = models.CharField(max_length=16, choices=Security.choices,
+                                default=Security.STARTTLS)
+    username = models.CharField(max_length=255, blank=True)
+    password_encrypted = models.TextField(blank=True)
+    from_email = models.EmailField()
+    from_name = models.CharField(max_length=120, blank=True)
+    is_active = models.BooleanField(default=True)
+    last_tested_at = models.DateTimeField(null=True, blank=True)
+    last_test_ok = models.BooleanField(null=True, blank=True)
+    last_test_message = models.CharField(max_length=500, blank=True)
+
+    class Meta:
+        db_table = "organization_company_mail_settings"
+        verbose_name_plural = "company mail settings"
+        constraints = [
+            models.UniqueConstraint(fields=["company"], name="uniq_mail_settings_per_company"),
+        ]
+
+    def __str__(self):
+        return f"{self.from_email} via {self.host}"

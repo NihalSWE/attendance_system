@@ -96,9 +96,13 @@ def build_payslip_pdf(context, *, company, by=""):
                f"Prepared {now:%d %b %Y %H:%M}" + (f" by {by}" if by else "")],
         sections=sections, summary=summary, note=note,
     )
-    name = exports.filename("payslip", record.employee.full_name,
+    return content, payslip_filename(record, period)
+
+
+def payslip_filename(record, period):
+    """What a payslip PDF is called - the download and the email attachment."""
+    return exports.filename("payslip", record.employee.full_name,
                             f"{period.start_date:%Y-%m}", exports.PDF)
-    return content, name
 
 
 def export_payslip(request, context):

@@ -70,6 +70,7 @@ COMPANY_MENUS = (
         item("Designations", "organization:designation_list", "organization:designation_create",
              "organization:designation_edit", "organization:designation_status"),
         item("Company profile", "organization:company_profile", manage=True),
+        item("Email settings", "organization:mail_settings", manage=True),
         item("Access", "organization:access", "organization:access_person", manage=True),
     )),
     ("devices", "Devices", (

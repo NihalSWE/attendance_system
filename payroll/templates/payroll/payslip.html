@@ -55,19 +55,14 @@
             </a>
             {% if can_email and not for_employee %}
                 {% if email_blocked %}
-                    <span class="btn btn--ghost" aria-disabled="true" title="{{ email_blocked }}">
+                    <span class="btn btn--ghost is-disabled" aria-disabled="true" aria-describedby="email-blocked">
                         Email to employee
                     </span>
                 {% else %}
-                    <form method="post" action="{% url 'payroll:payslip_email' record.pk %}"
-                          data-confirm-title="Email this payslip to {{ record.employee.full_name }}?"
-                          data-confirm="The PDF is sent to their address on file. They can also see it under My payslips."
-                          data-confirm-button="Send it">
-                        {% csrf_token %}
-                        <button class="btn btn--ghost" type="submit">
-                            Email to employee
-                        </button>
-                    </form>
+                    {# Opens the compose page: From, To, Subject, Message, the PDF attached. #}
+                    <a class="btn btn--ghost" href="{% url 'payroll:payslip_email' record.pk %}">
+                        Email to employee
+                    </a>
                 {% endif %}
             {% endif %}
             <button class="btn btn--ghost" type="button" onclick="window.print()"
@@ -76,6 +71,15 @@
             </button>
         </div>
     </div>
+    {% if can_email and not for_employee and email_blocked %}
+        {# Said on the page, not in a tooltip: why the email button is greyed. #}
+        <p class="t-faint" id="email-blocked" data-email-blocked>
+            Email to employee: {{ email_blocked }}
+            {% if can_manage_mail and "not set up" in email_blocked %}
+                <a href="{% url 'organization:mail_settings' %}">Set up email</a>
+            {% endif %}
+        </p>
+    {% endif %}
 
     <div class="card">
         <div class="card__body slip-head">

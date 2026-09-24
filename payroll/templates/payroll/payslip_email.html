@@ -1,0 +1,113 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Email payslip · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'payroll:payroll_home' %}?month={{ period.start_date.month }}&year={{ period.start_date.year }}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{{ payslip_url }}">
+            {{ record.employee.full_name }} · {{ period.name }}
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Email
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Email payslip
+            </h1>
+            <p class="page__sub">
+                {{ record.employee.full_name }}'s payslip for {{ period.name }}, attached as a PDF.
+                Change anything below before sending.
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page">
+        {% if blocked %}
+            <div class="alert alert--warning" role="alert" data-email-blocked>
+                <div>
+                    <strong>This payslip cannot be emailed yet.</strong>
+                    <p>
+                        {{ blocked }}
+                    </p>
+                    {% if how is None and can_set_up_mail %}
+                        <p>
+                            <a href="{% url 'organization:mail_settings' %}">Set up the company's email</a>
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+        <form method="post" novalidate class="card" data-compose>
+            {% csrf_token %}
+            {% if form.non_field_errors %}
+                <div class="alert alert--danger" role="alert">
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <div class="card__body stack">
+                <div class="field">
+                    <span class="field__label">
+                        From
+                    </span>
+                    <div class="grid grid--2">
+                        <div>
+                            {{ form.from_name }}
+                            {% for error in form.from_name.errors %}
+                                <span class="field__error">
+                                    {{ error }}
+                                </span>
+                            {% endfor %}
+                        </div>
+                        <div class="mono" data-from-address>
+                            {% if from_email %}&lt;{{ from_email }}&gt;{% else %}No sender set up{% endif %}
+                        </div>
+                    </div>
+                    <span class="field__help">
+                        {% if how == "company" %}
+                            Sent from the company's own account. The address is set under
+                            Organisation → Email settings; the name can be changed here.
+                        {% elif how == "server" %}
+                            Sent from the server's account. The company can use its own address
+                            under Organisation → Email settings.
+                        {% else %}
+                            The company's mail account is not set up yet.
+                        {% endif %}
+                    </span>
+                </div>
+                {% include "leaves/includes/field.html" with field=form.to %}
+                {% include "leaves/includes/field.html" with field=form.subject %}
+                {% include "leaves/includes/field.html" with field=form.body %}
+                <div class="field">
+                    <span class="field__label">
+                        Attachment
+                    </span>
+                    <a class="btn btn--ghost btn--sm" href="{{ payslip_url }}?format=pdf" data-attachment>
+                        PDF · {{ attachment }}
+                    </a>
+                    <span class="field__help">
+                        The payslip as a PDF - the same file as Download PDF. Click to open it.
+                    </span>
+                </div>
+            </div>
+            <div class="card__foot row">
+                <a class="btn btn--ghost" href="{{ payslip_url }}">
+                    Cancel
+                </a>
+                <button class="btn btn--primary" type="submit" {% if blocked %}disabled{% endif %}>
+                    Send email
+                </button>
+            </div>
+        </form>
+    </div>
+{% endblock %}

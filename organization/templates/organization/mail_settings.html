@@ -1,0 +1,205 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Email settings · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Email settings
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Email settings
+            </h1>
+            <p class="page__sub">
+                The mail account the company's emails - payslips and the rest - are sent from.
+                Enter the details your mail provider gives you.
+            </p>
+        </div>
+    </div>
+
+    <div class="form-page stack">
+        <div class="card" data-mail-status>
+            <div class="card__head">
+                <h2>
+                    Emails go out through
+                </h2>
+                {% if how == "company" %}
+                    <span class="badge badge--success">
+                        Your account
+                    </span>
+                {% elif how == "server" %}
+                    <span class="badge badge--info">
+                        The server's account
+                    </span>
+                {% else %}
+                    <span class="badge badge--danger">
+                        Not set up
+                    </span>
+                {% endif %}
+            </div>
+            <div class="card__body">
+                {% if how == "company" %}
+                    <p>
+                        Your account: <strong>{{ saved.from_email }}</strong>, through {{ saved.host }}.
+                    </p>
+                {% elif how == "server" %}
+                    <p>
+                        The server's own account (<strong>{{ from_email }}</strong>).
+                        {% if saved %}Your account below is switched off.{% else %}Save your own below to send from your address.{% endif %}
+                    </p>
+                {% else %}
+                    <p>
+                        Nothing can be sent yet. Save the company's mail account below.
+                    </p>
+                {% endif %}
+                {% if saved.last_tested_at %}
+                    <p>
+                        {% if saved.last_test_ok %}
+                            <span class="badge badge--success">Last test worked</span>
+                        {% else %}
+                            <span class="badge badge--danger">Last test failed</span>
+                        {% endif %}
+                        {{ saved.last_tested_at|date:"j M Y, H:i" }} - {{ saved.last_test_message }}
+                    </p>
+                {% elif saved %}
+                    <p class="t-faint">
+                        Not tested yet. Send a test below.
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+
+        <form method="post" novalidate class="stack">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save">
+            {% if form.non_field_errors %}
+                <div class="alert alert--danger">
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>
+                        The company's mail account
+                    </h2>
+                </div>
+                <div class="card__body">
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=form.from_email %}
+                        {% include "leaves/includes/field.html" with field=form.from_name %}
+                        {% include "leaves/includes/field.html" with field=form.host %}
+                        {% include "leaves/includes/field.html" with field=form.port %}
+                        {% include "leaves/includes/field.html" with field=form.security %}
+                        {% include "leaves/includes/field.html" with field=form.username %}
+                        {% include "leaves/includes/field.html" with field=form.password %}
+                    </div>
+                    <label class="check" for="{{ form.is_active.id_for_label }}">
+                        {{ form.is_active }}
+                        <span>
+                            {{ form.is_active.label }}
+                        </span>
+                    </label>
+                    <div class="field__help">
+                        {{ form.is_active.help_text }}
+                    </div>
+                </div>
+                <div class="card__foot row">
+                    <button class="btn btn--primary" type="submit">
+                        Save email settings
+                    </button>
+                </div>
+            </div>
+        </form>
+
+        {% if saved %}
+            <form method="post" class="card">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="test">
+                <div class="card__head">
+                    <h2>
+                        Send a test email
+                    </h2>
+                </div>
+                <div class="card__body">
+                    <div class="field">
+                        <label class="field__label" for="test-to">
+                            Send it to
+                        </label>
+                        <input class="input" type="email" id="test-to" name="test_to" value="{{ test_to }}" required>
+                        <span class="field__help">
+                            Sent through the account above, saved or not switched on - so you can
+                            check it before using it.
+                        </span>
+                    </div>
+                </div>
+                <div class="card__foot row">
+                    <button class="btn btn--ghost" type="submit">
+                        Send test email
+                    </button>
+                </div>
+            </form>
+        {% endif %}
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Where to find these details
+                </h2>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    Every common provider gives SMTP details. Port 587 with STARTTLS works for all
+                    of these. For a provider that gives you an API key, the key goes in
+                    "Password or API key".
+                </p>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>
+                                    Provider
+                                </th>
+                                <th>
+                                    Mail server
+                                </th>
+                                <th>
+                                    Username
+                                </th>
+                                <th>
+                                    Password or API key
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for name, host, username, password in providers %}
+                                <tr>
+                                    <td>
+                                        {{ name }}
+                                    </td>
+                                    <td class="mono">
+                                        {{ host }}
+                                    </td>
+                                    <td>
+                                        {{ username }}
+                                    </td>
+                                    <td>
+                                        {{ password }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

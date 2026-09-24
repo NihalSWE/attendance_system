@@ -316,15 +316,22 @@ def payroll_reopen(request):
 
 
 @login_required
-@require_http_methods(["POST"])
+@require_http_methods(["GET", "POST"])
 def payslip_email(request, pk):
-    """Send one finalised payslip to its employee (payroll/payslip_email.py)."""
-    from payroll.payslip_email import email_payslip
+    """Email one finalised payslip: a compose page (From, To, Subject, Message,
+    the PDF attached), then send it through the company's mail account
+    (payroll/payslip_email.py).
+
+    A POST without the compose fields sends to the employee's own address with
+    the standard wording, as the button did before the compose page."""
+    from payroll.payslip_email import PayslipEmailForm, compose_initial, email_payslip, why_not
+    from payroll.payslip_export import payslip_filename
+    from organization import mail_settings
 
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    _, prepare = salary_branches(request.user, company_id, "salary.prepare")
+    membership, prepare = salary_branches(request.user, company_id, "salary.prepare")
     if not prepare:
         raise PermissionDenied("Emailing a payslip needs access to prepare salary.")
     with use_company(company_id):
@@ -332,14 +339,40 @@ def payslip_email(request, pk):
         if record is None or record_branch_id(record) not in prepare:
             raise PermissionDenied("Payslip not found in your branches.")
         context = payslip_context(record)
+    company = membership.company
+    payslip_url = reverse("payroll:payslip", args=[pk])
+    composed = request.method == "POST" and "to" in request.POST
+    form = PayslipEmailForm(request.POST if composed else None,
+                            initial=compose_initial(context, company))
+
+    if request.method == "POST" and (not composed or form.is_valid()):
+        fields = form.cleaned_data if composed else {}
         try:
-            address = email_payslip(actor=request.user, company_id=company_id,
-                                    context=context, sent_by=request.user.get_username())
+            with use_company(company_id):
+                address = email_payslip(actor=request.user, company_id=company_id,
+                                        context=context, sent_by=request.user.get_username(),
+                                        **fields)
         except ValidationError as exc:
-            messages.error(request, " ".join(exc.messages))
+            if not composed:
+                messages.error(request, " ".join(exc.messages))
+                return redirect(payslip_url)
+            form.add_error(None, " ".join(exc.messages))
         else:
             messages.success(request, f"Payslip emailed to {address}.")
-    return redirect(reverse("payroll:payslip", args=[pk]))
+            return redirect(payslip_url)
+
+    how, from_email, _name = mail_settings.sender(company_id)
+    return render(request, "payroll/payslip_email.html", {
+        "form": form,
+        "record": record,
+        "period": context["period"],
+        "blocked": why_not(record, record.employee),
+        "how": how,
+        "from_email": from_email,
+        "attachment": payslip_filename(record, context["period"]),
+        "payslip_url": payslip_url,
+        "can_set_up_mail": membership.role in STRUCTURE_ROLES,
+    })
 
 
 @login_required
@@ -976,6 +1009,8 @@ def payslip(request, pk):
 
         context["can_email"] = prepare is ALL_BRANCHES or record_branch_id(record) in prepare
         context["email_blocked"] = why_not(record, record.employee)
+        # Who can fix "email is not set up": Organisation → Email settings.
+        context["can_manage_mail"] = membership.role in STRUCTURE_ROLES
         if request.GET.get("format") == "pdf":
             # The payslip's own view, so the download obeys the same rules.
             from payroll.payslip_export import export_payslip
