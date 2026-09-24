@@ -507,3 +507,105 @@ class VagueHeadingsTests(ImportCase):
     def test_employee_as_a_name_column_loses_to_name(self):
         rows = self.read("Employee ID,Employee,Name\n445962,Wrong,Ajay Ghosh\n")
         self.assertEqual(rows[0]["name"], "Ajay Ghosh")
+
+
+def xlsx(*sheets, dimension=None):
+    """An .xlsx with ``(title, rows)`` sheets. ``dimension`` overwrites the
+    size each sheet claims, as some "export to Excel" programs get it wrong."""
+    import re
+    import zipfile
+
+    from openpyxl import Workbook
+
+    book = Workbook()
+    book.remove(book.active)
+    for title, rows in sheets:
+        sheet = book.create_sheet(title)
+        for row in rows:
+            sheet.append(row)
+    buffer = io.BytesIO()
+    book.save(buffer)
+    if dimension is None:
+        return buffer.getvalue()
+    source, out = zipfile.ZipFile(buffer), io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as target:
+        for item in source.infolist():
+            data = source.read(item.filename)
+            if item.filename.startswith("xl/worksheets/sheet"):
+                data = re.sub(rb'<dimension ref="[^"]*"', b'<dimension ref="%s"' % dimension.encode(), data)
+            target.writestr(item, data)
+    return out.getvalue()
+
+
+class RealFilesTests(ImportCase):
+    """Files as clients actually send them (Ajay's upload refused on the live
+    server, 2026-09-24): a title above the headings, a cover sheet, a size the
+    file misreports, and a refusal nobody could misread."""
+
+    def read(self, data, name="people.xlsx"):
+        return import_services.read_file(SimpleUploadedFile(name, data))
+
+    def test_a_title_above_the_headings_is_stepped_over(self):
+        rows = self.read(xlsx(("Sheet1", [
+            ["D Company Limited"],
+            ["Employee list, September 2026"],
+            [],
+            ["SL", "Employee ID", "Name"],
+            [1, 445962, "Ajay Kumar"],
+            [2, 445963, "Dia Rahman"],
+        ])))
+        self.assertEqual([(r["line"], r["employee_id"], r["name"]) for r in rows],
+                         [(5, "445962", "Ajay Kumar"), (6, "445963", "Dia Rahman")])
+
+    def test_a_title_in_a_csv_is_stepped_over_too(self):
+        data = "Employee list\n\nEmployee ID,Name\n445962,Ajay Kumar\n".encode()
+        rows = import_services.read_file(SimpleUploadedFile("p.csv", data))
+        self.assertEqual((rows[0]["line"], rows[0]["employee_id"]), (4, "445962"))
+
+    def test_the_list_on_a_later_sheet_is_found(self):
+        rows = self.read(xlsx(("Cover", [["Prepared by HR"]]),
+                              ("Staff", [["ID", "Name"], [830011, "Md. Hafizul Islam"]])))
+        self.assertEqual(rows[0]["employee_id"], "830011")
+
+    def test_a_file_that_misreports_its_size_is_read_whole(self):
+        # Without reset_dimensions, read-only openpyxl reads one cell of this.
+        rows = self.read(xlsx(("Sheet1", [["Employee ID", "Name"], [445962, "Ajay Kumar"],
+                                          [445963, "Dia Rahman"]]), dimension="A1:A1"))
+        self.assertEqual([r["name"] for r in rows], ["Ajay Kumar", "Dia Rahman"])
+
+    def test_more_spellings_and_bangla_headings(self):
+        for headings in (("Emp. ID", "Employee's Name"), ("Staff ID", "Staff Name"),
+                         ("ID No.", "Name of Employee"), ("কর্মচারী আইডি", "নাম")):
+            with self.subTest(headings=headings):
+                rows = import_services.read_file(
+                    self.csv_file([["445962", "Ajay Kumar"]], headings=headings))
+                self.assertEqual((rows[0]["employee_id"], rows[0]["name"]),
+                                 ("445962", "Ajay Kumar"))
+
+    def test_headings_too_far_down_are_not_guessed_at(self):
+        filler = [[f"note {n}"] for n in range(import_services.HEADING_SEARCH_ROWS)]
+        with self.assertRaisesMessage(ValidationError, "headings were not found"):
+            self.read(xlsx(("Sheet1", filler + [["Employee ID", "Name"], [1, "A"]])))
+
+    def test_the_refusal_says_what_it_wanted_where_it_looked_and_what_it_found(self):
+        with self.assertRaises(ValidationError) as caught:
+            self.read(xlsx(("Cover", [["Prepared by HR"]]),
+                           ("Staff", [["Staff list"], ["SL", "Card No", "Staff Name"], [1, 7, "A"]])))
+        message = " ".join(caught.exception.messages)
+        self.assertIn("Wanted: a column headed Employee ID", message)
+        self.assertIn("2 sheets (Cover, Staff)", message)
+        self.assertIn('Closest was sheet "Staff", row 2. Found: SL, Card No, Staff Name.', message)
+        self.assertIn("Missing: Employee ID.", message)
+
+    def test_the_page_puts_the_refusal_at_the_top_whole(self):
+        self.client.force_login(self.admin)
+        page = self.client.post(self.url, {
+            "branch": self.branch.pk,
+            "upload": SimpleUploadedFile("staff.xlsx", xlsx(("Sheet1", [["SL", "Person"], [1, "A"]]))),
+        })
+        self.assertContains(page, "data-refusal")
+        self.assertContains(page, "staff.xlsx was not imported.")
+        self.assertContains(page, "Copy this whole box.")
+        # Each part on its own line, and said once, not again under the field.
+        self.assertContains(page, "<br>Looked in:")
+        self.assertContains(page, "Wanted: a column headed Employee ID", count=1)

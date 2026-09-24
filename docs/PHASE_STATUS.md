@@ -4514,3 +4514,41 @@ owner, admin, HR and payroll manager) attendance in every branch, pinned by
 it" shape, left for Ajay to decide.
 
 `payroll/tests_payroll_manager.py::AuditorHasNoSalaryTests`. No migration. Full suite 1497 OK.
+
+### Employee import: real files, and a refusal nobody can misread — 2026-09-24
+
+Ajay's upload was refused on the live server with no error. His file is not
+in hand yet; these are the causes found in the reader itself, each fixed and
+tested, so most real files now import without anyone editing them:
+
+- **A title above the headings.** The first filled row had to be the headings.
+  `_find_headings` now looks down the first `HEADING_SEARCH_ROWS` (20) filled
+  rows for a row naming both columns, so "D Company Limited / Employee list,
+  September 2026 / (blank)" above the headings is stepped over. `line` is now
+  the row number the spreadsheet shows, not a count from the headings.
+- **The list on another sheet.** Only the first sheet was read. Every sheet is
+  now looked at in turn (a cover sheet before the list is common).
+- **An .xlsx that misreports its size.** openpyxl's read-only mode trusts the
+  `<dimension>` a file declares; some "export to Excel" programs write `A1:A1`
+  there, and the reader then saw one cell - "Employee ID" - and reported Name
+  missing. `reset_dimensions()` on each sheet; the test builds such a file and
+  was checked to fail without it. A file saved by Excel itself never shows
+  this, which fits "works on my PC".
+- **More spellings.** Emp. ID, Employee Number, Emp Code, Staff ID/No/Code,
+  ID Number, Employee's Name, Name of Employee, Staff Name, and Bangla
+  (কর্মচারী আইডি, আইডি, নাম, কর্মচারীর নাম). Headings are compared by
+  letters and digits in any script; before, a Bangla heading reduced to
+  nothing. "User ID" is accepted as a vague heading, below Employee ID.
+
+**The refusal.** A refused file is a red box at the top of the Upload card,
+headed "<file name> was not imported.", said once (no longer small print under
+the field). When the headings are not found it says what it wanted (with the
+accepted alternatives), where it looked (the first 20 rows of each sheet, by
+name), the closest row with every heading on it and which column is missing,
+and what to change - ending "Sending this to someone? Copy this whole box."
+
+Checked in the running app (temporary server on :8001, temporary session
+deleted after): a titled CSV with "Emp. ID / Employee's Name" previews two
+people (not confirmed, nothing written); a "Card No / Staff Name" file shows
+the box. 8 tests in `organization/tests_employee_import.py::RealFilesTests`.
+No migration, no new dependency. Full suite 1505 OK.

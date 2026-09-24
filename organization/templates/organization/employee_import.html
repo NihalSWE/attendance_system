@@ -101,6 +101,23 @@
                     {{ form.non_field_errors }}
                 </div>
             {% endif %}
+            {% if form.upload.errors %}
+                {# The file was refused: said at the top, whole, so it is read and #}
+                {# can be forwarded as it stands - not small print under the field. #}
+                <div class="alert alert--danger" role="alert" data-refusal>
+                    <div>
+                        <strong>{{ request.FILES.upload.name|default:"The file" }} was not imported.</strong>
+                        {% for error in form.upload.errors %}
+                            <p>
+                                {{ error|linebreaksbr }}
+                            </p>
+                        {% endfor %}
+                        <p>
+                            Sending this to someone? Copy this whole box.
+                        </p>
+                    </div>
+                </div>
+            {% endif %}
             <div class="grid grid--2">
                 {% for field in form %}
                     <div class="field {% if field.errors %}field-invalid{% endif %}">
@@ -118,11 +135,13 @@
                                 {{ field.help_text }}
                             </div>
                         {% endif %}
-                        {% for error in field.errors %}
-                            <p class="field__error">
-                                {{ error }}
-                            </p>
-                        {% endfor %}
+                        {% if field.name != "upload" %}
+                            {% for error in field.errors %}
+                                <p class="field__error">
+                                    {{ error }}
+                                </p>
+                            {% endfor %}
+                        {% endif %}
                     </div>
                 {% endfor %}
             </div>

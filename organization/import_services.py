@@ -73,16 +73,28 @@ HEADINGS = ["Employee ID", "Name"]
 #: numbers as employee IDs, digits and all, so the preview accepted them and
 #: ninety people arrived numbered 1 to 90. A specific heading anywhere in the
 #: row therefore beats a vague one, wherever each sits.
+#:
+#: Written as people write them; ``_heading_word`` reduces both these and the
+#: file's headings the same way, so "Emp. ID", "ID No." and "Employee's Name"
+#: all match. Bangla headings work too.
 _HEADING_WORDS = {
     "employee_id": [
-        {"empid", "employeeid", "empno", "employeeno", "employeecode"},
-        {"id", "idno", "code"},
+        {"Emp ID", "Employee ID", "Emp No", "Employee No", "Employee Number",
+         "Employee Code", "Emp Code", "Employee ID No", "Emp ID No", "ID Number",
+         "Staff ID", "Staff No", "Staff Code", "Staff Number",
+         "কর্মচারী আইডি", "আইডি নং"},
+        {"ID", "ID No", "Code", "User ID", "আইডি"},
     ],
     "name": [
-        {"name", "employeename", "fullname"},
-        {"employee"},
+        {"Name", "Employee Name", "Employee's Name", "Name of Employee", "Full Name",
+         "Emp Name", "Staff Name", "নাম", "কর্মচারীর নাম"},
+        {"Employee", "Staff"},
     ],
 }
+
+#: How far down each sheet to look for the headings. A company name, a title,
+#: a date and a blank line or two often sit above them in a real file.
+HEADING_SEARCH_ROWS = 20
 
 #: One upload. Comfortably above the 400-600 a new company brings, and low
 #: enough that a wrong file is refused instead of tying up a worker.
@@ -119,14 +131,37 @@ def _text(value):
     return str(value).strip()
 
 
+def _heading_word(text):
+    """A heading reduced to its letters and digits, case ignored - in any
+    script, so a Bangla heading is not reduced to nothing."""
+    return re.sub(r"[\W_]+", "", str(text).casefold())
+
+
+_HEADING_INDEX = {
+    _heading_word(spelling): (key, tier)
+    for key, tiers in _HEADING_WORDS.items()
+    for tier, spellings in enumerate(tiers)
+    for spelling in spellings
+}
+
+
 def _heading_key(text):
     """``(column, tier)`` for one heading; tier 0 is a specific name."""
-    word = re.sub(r"[^a-z0-9]", "", text.casefold())
-    for key, tiers in _HEADING_WORDS.items():
-        for tier, words in enumerate(tiers):
-            if word in words:
-                return key, tier
-    return None, None
+    return _HEADING_INDEX.get(_heading_word(text), (None, None))
+
+
+def _columns(headings):
+    """``{column: index}`` for one row read as headings.
+
+    A specific heading wins over a vague one wherever each sits; between two
+    equally specific ones the left-hand column wins.
+    """
+    columns = {}
+    for index, heading in enumerate(headings):
+        key, tier = _heading_key(heading)
+        if key and (key not in columns or tier < columns[key][0]):
+            columns[key] = (tier, index)
+    return {key: index for key, (_tier, index) in columns.items()}
 
 
 def _rows_from_csv(data):
@@ -175,21 +210,23 @@ def _rows_from_xls(data):
                       "is password-protected, remove the password; otherwise save "
                       "it as .xlsx or CSV and upload that."
         })
-    sheet = book.sheet_by_index(0)
-    rows = []
-    for index in range(sheet.nrows):
-        row = []
-        for cell in sheet.row(index):
-            value = cell.value
-            if cell.ctype == xlrd.XL_CELL_DATE:
-                value = xlrd.xldate_as_datetime(value, book.datemode)
-            elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
-                value = bool(value)
-            elif cell.ctype == xlrd.XL_CELL_ERROR:
-                value = ""
-            row.append(value)
-        rows.append(row)
-    return rows
+    sheets = []
+    for sheet in book.sheets():
+        rows = []
+        for index in range(sheet.nrows):
+            row = []
+            for cell in sheet.row(index):
+                value = cell.value
+                if cell.ctype == xlrd.XL_CELL_DATE:
+                    value = xlrd.xldate_as_datetime(value, book.datemode)
+                elif cell.ctype == xlrd.XL_CELL_BOOLEAN:
+                    value = bool(value)
+                elif cell.ctype == xlrd.XL_CELL_ERROR:
+                    value = ""
+                row.append(value)
+            rows.append(row)
+        sheets.append((sheet.name, rows))
+    return sheets
 
 
 def _rows_from_xlsx(data):
@@ -208,7 +245,14 @@ def _rows_from_xlsx(data):
                       "it as CSV and upload that instead."
         })
     try:
-        return [list(row) for row in book.worksheets[0].iter_rows(values_only=True)]
+        sheets = []
+        for sheet in book.worksheets:
+            # Read-only mode trusts the size the file says it has, and some
+            # programs that "export to Excel" write A1:A1 there - which reads
+            # one cell and reports the Name heading missing. Ignore it.
+            sheet.reset_dimensions()
+            sheets.append((sheet.title, [list(row) for row in sheet.iter_rows(values_only=True)]))
+        return sheets
     finally:
         book.close()
 
@@ -229,9 +273,9 @@ def read_file(upload):
     # What the file *is*, not what it is called: people rename spreadsheets,
     # and "Save as .xls" in some tools writes .xlsx (and the other way round).
     if data.startswith(b"PK\x03\x04"):
-        table = _rows_from_xlsx(data)
+        sheets = _rows_from_xlsx(data)
     elif data.startswith(BIFF_SIGNATURES):
-        table = _rows_from_xls(data)
+        sheets = _rows_from_xls(data)
     elif name.endswith((".csv", ".txt", ".xls", ".xlsx", ".xlsm")):
         # Named like a spreadsheet but holding text: several systems "export to
         # Excel" by writing a CSV, or an HTML table, and naming it .xls.
@@ -241,35 +285,14 @@ def read_file(upload):
                           "not a spreadsheet. Open it in Excel and use Save As to "
                           "make a .xlsx or CSV file, then upload that."
             })
-        table = _rows_from_csv(data)
+        sheets = [("", _rows_from_csv(data))]
     else:
         raise ValidationError({
             "upload": "Upload a .csv file in the demo file's format "
                       "(Excel .xlsx and .xls files also work)."
         })
 
-    table = [row for row in table if any(_text(cell) for cell in row)]
-    if not table:
-        raise ValidationError({"upload": "That file has no rows in it."})
-
-    heading_row, *body = table
-    columns = {}
-    headings = [_text(cell) for cell in heading_row]
-    for index, heading in enumerate(headings):
-        key, tier = _heading_key(heading)
-        # A specific heading wins over a vague one wherever each sits; between
-        # two equally specific ones the left-hand column wins.
-        if key and (key not in columns or tier < columns[key][0]):
-            columns[key] = (tier, index)
-    columns = {key: index for key, (_tier, index) in columns.items()}
-    missing = [heading for key, heading in zip(("employee_id", "name"), HEADINGS)
-               if key not in columns]
-    if missing:
-        raise ValidationError({
-            "upload": "The first row must be the headings Employee ID and Name, as in "
-                      f"the demo file. Missing: {', '.join(missing)}. "
-                      f"Found: {', '.join(h for h in headings if h) or 'nothing'}."
-        })
+    columns, body = _find_headings(sheets)
     if not body:
         raise ValidationError({"upload": "That file has the headings but no people."})
     if len(body) > MAX_ROWS:
@@ -279,12 +302,74 @@ def read_file(upload):
         })
 
     rows = []
-    for offset, cells in enumerate(body):
-        row = {"line": offset + 2}
+    for line, cells in body:
+        row = {"line": line}
         for key, index in columns.items():
             row[key] = _text(cells[index]) if index < len(cells) else ""
         rows.append(row)
     return rows
+
+
+def _filled(cells):
+    return any(_text(cell) for cell in cells)
+
+
+def _find_headings(sheets):
+    """``(columns, body)`` from the first row that names both columns.
+
+    Looks down the first ``HEADING_SEARCH_ROWS`` filled rows of every sheet in
+    turn, so a title above the headings, or a cover sheet before the list, is
+    stepped over. ``body`` is ``(line, cells)`` for each filled row below the
+    headings; ``line`` is the row number as the spreadsheet shows it.
+    """
+    closest = None     # (columns found, sheet name, row number, headings)
+    for sheet_name, rows in sheets:
+        looked = 0
+        for number, cells in enumerate(rows, start=1):
+            if not _filled(cells):
+                continue
+            looked += 1
+            if looked > HEADING_SEARCH_ROWS:
+                break
+            headings = [_text(cell) for cell in cells]
+            columns = _columns(headings)
+            if len(columns) == len(HEADINGS):
+                body = [(line, row) for line, row in enumerate(rows[number:], start=number + 1)
+                        if _filled(row)]
+                return columns, body
+            if closest is None or len(columns) > len(closest[0]):
+                closest = (columns, sheet_name, number, headings)
+    if closest is None:
+        raise ValidationError({"upload": "That file has no rows in it."})
+    raise ValidationError({"upload": _headings_not_found(sheets, *closest)})
+
+
+def _headings_not_found(sheets, columns, sheet_name, number, headings):
+    """The refusal a person can forward as it is: what was wanted, where we
+    looked, what was there, and what to change."""
+    missing = [heading for key, heading in zip(("employee_id", "name"), HEADINGS)
+               if key not in columns]
+    names = [name for name, _rows in sheets]
+    if names == [""]:
+        where_looked = f"the first {HEADING_SEARCH_ROWS} rows of the file"
+    elif len(names) == 1:
+        where_looked = f'the first {HEADING_SEARCH_ROWS} rows of its sheet "{names[0]}"'
+    else:
+        where_looked = (f"the first {HEADING_SEARCH_ROWS} rows of each of its "
+                        f"{len(names)} sheets ({', '.join(names)})")
+    place = f'sheet "{sheet_name}", row {number}' if sheet_name else f"row {number}"
+    found = ", ".join(h for h in headings if h) or "nothing"
+    return (
+        "The Employee ID and Name headings were not found in this file.\n"
+        "Wanted: a column headed Employee ID (Emp ID, Employee No, Employee Code, "
+        "Staff ID or just ID also work) and a column headed Name (Employee Name, "
+        "Full Name or Staff Name also work).\n"
+        f"Looked in: {where_looked}.\n"
+        f"Closest was {place}. Found: {found}. "
+        f"Missing: {', '.join(missing)}.\n"
+        "To fix it: rename those headings in the file, or copy the list into the "
+        "demo file, and upload it again."
+    )
 
 
 # --- who may import, and where ---------------------------------------------
