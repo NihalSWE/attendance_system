@@ -76,13 +76,16 @@ def employee_import(request):
                         "branch_id": branch.pk,
                         "rows": rows,
                     }
+                    new = [row for row in rows if not row["errors"] and not row["existing"]]
                     preview = {
                         "counts": counts,
                         "file_name": data["upload"].name,
                         "branch": branch,
                         "bad": [row for row in rows if row["errors"]],
-                        "good": [row for row in rows if not row["errors"]][:GOOD_ROWS_SHOWN],
+                        "good": new[:GOOD_ROWS_SHOWN],
                         "good_hidden": max(0, counts["good"] - GOOD_ROWS_SHOWN),
+                        # Already employees: skipped, left as they are.
+                        "existing": import_services.already_here(rows),
                     }
         else:
             _forget(request)
@@ -122,12 +125,15 @@ def employee_import_confirm(request):
 
     _forget(request)
     count = len(created)
+    skipped = sum(1 for row in stored["rows"] if row.get("existing"))
     messages.success(
         request,
         f"{count} employee{'s' if count != 1 else ''} imported from "
         f"{stored.get('file_name') or 'the file'}. Set each one's department, "
         "designation and salary on Edit employee — until then they are in "
-        "Unassigned and salary skips them.",
+        "Unassigned and salary skips them."
+        + (f" {skipped} already in the software {'was' if skipped == 1 else 'were'} "
+           "skipped and left unchanged." if skipped else ""),
     )
     return redirect("employee_list")
 

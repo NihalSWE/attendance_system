@@ -173,7 +173,7 @@
                         {{ preview.counts.bad }} row{{ preview.counts.bad|pluralize }}
                         cannot be imported. Fix {{ preview.counts.bad|pluralize:"it,them" }}
                         in the file and upload it again — the import is all or nothing,
-                        so the other {{ preview.counts.good }} are waiting too.
+                        so the {{ preview.counts.good }} new {{ preview.counts.good|pluralize:"person is,people are" }} waiting too.
                     </div>
                     <div class="table-wrap">
                         <table class="table">
@@ -217,9 +217,19 @@
                             </tbody>
                         </table>
                     </div>
-                {% else %}
+                {% elif preview.counts.good %}
                     <div class="alert alert--success" role="status">
-                        All {{ preview.counts.total }} can be imported into {{ preview.branch.name }}.
+                        {% if preview.existing %}
+                            {{ preview.counts.good }} new {{ preview.counts.good|pluralize:"person,people" }} can be imported into {{ preview.branch.name }}.
+                            {{ preview.existing|length }} already in the software {{ preview.existing|length|pluralize:"is,are" }} skipped and left unchanged.
+                        {% else %}
+                            All {{ preview.counts.total }} can be imported into {{ preview.branch.name }}.
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="alert alert--info" role="status">
+                        Everyone in this file is already in the software, so there is
+                        nobody new to import. Add the new people to the file and upload it again.
                     </div>
                 {% endif %}
 
@@ -271,12 +281,64 @@
                         </p>
                     {% endif %}
                 {% endif %}
+
+                {% if preview.existing %}
+                    <details class="import-existing" data-existing>
+                        <summary>
+                            Already in the software — skipped, left unchanged
+                            ({{ preview.existing|length }})
+                        </summary>
+                        <div class="table-wrap">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>
+                                            Row
+                                        </th>
+                                        <th>
+                                            Employee ID
+                                        </th>
+                                        <th>
+                                            Name in the file
+                                        </th>
+                                        <th>
+                                            In the software as
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in preview.existing %}
+                                        <tr>
+                                            <td>
+                                                {{ row.line }}
+                                            </td>
+                                            <td class="mono">
+                                                {{ row.employee_id }}
+                                            </td>
+                                            <td>
+                                                {{ row.name|default:"—" }}
+                                            </td>
+                                            <td>
+                                                {{ row.existing }}
+                                                {% if row.name_differs %}
+                                                    <div class="field__help">
+                                                        A different name — check this is the right Employee ID.
+                                                    </div>
+                                                {% endif %}
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </details>
+                {% endif %}
             </div>
-            {% if not preview.bad %}
+            {% if not preview.bad and preview.counts.good %}
                 <div class="card__foot">
                     <form method="post" action="{% url 'organization:employee_import_confirm' %}"
                           data-confirm-title="Import {{ preview.counts.good }} {{ preview.counts.good|pluralize:'employee,employees' }} into {{ preview.branch.name }}?"
-                          data-confirm="They are created with their Employee ID and name, in the branch's Unassigned department. Set each one's department, designation and salary on Edit employee afterwards."
+                          data-confirm="They are created with their Employee ID and name, in the branch's Unassigned department. Set each one's department, designation and salary on Edit employee afterwards.{% if preview.existing %} The {{ preview.existing|length }} already in the software are skipped and not changed.{% endif %}"
                           data-confirm-button="Import">
                         {% csrf_token %}
                         <button class="btn btn--primary" type="submit">

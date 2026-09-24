@@ -33,9 +33,14 @@ again either way.
 
 **The steps:** download the demo file, upload, look at the preview (nothing is
 written; every bad row is named with its line and the reason), then confirm.
-Confirm writes every row or none, in one transaction with one audit line, and
-re-checks everything first, because the rows come back through the reader's
-own session.
+Confirm writes every new person or none, in one transaction with one audit
+line, and re-checks everything first, because the rows come back through the
+reader's own session.
+
+**Someone already in the software** (their Employee ID belongs to a current
+employee) is skipped and left exactly as they are - not an error. So when the
+list grows, the whole file can be uploaded again and only the new people are
+added. Nothing about an existing employee is ever changed from a file.
 
 Who may import into a branch: ``employees.edit`` there - the same permission
 Create employee asks for. No pay is set, so nothing about salary is needed.
@@ -437,19 +442,28 @@ def check_branch(user, company_id, branch_id=None):
 
 
 def check(user, company_id, rows):
-    """Fill in each row's ``first_name`` / ``last_name`` and ``errors``. Writes nothing."""
+    """Fill in each row's ``first_name`` / ``last_name``, ``errors`` and
+    ``existing``. Writes nothing.
+
+    ``existing`` is the name the software already has for that Employee ID, or
+    "". Such a row is not an error: the person is skipped and left exactly as
+    they are, so a list that has grown can be uploaded again for its new
+    people. Nothing about an existing employee is ever changed from a file.
+    """
     import_scope(user, company_id)
     with use_company(company_id):
-        taken = set(
-            EmployeeAssignment.objects.filter(
+        current = {
+            code: " ".join(part for part in (first, last) if part)
+            for code, first, last in EmployeeAssignment.objects.filter(
                 status=EmployeeAssignment.Status.ACTIVE, effective_to__isnull=True,
-            ).values_list("employee_code", flat=True)
-        )
+            ).values_list("employee_code", "employee__first_name", "employee__last_name")
+        }
 
     seen = {}
     for row in rows:
         errors = []
         row["errors"] = errors
+        row["existing"] = ""
 
         code = str(row.get("employee_id", "")).strip()
         if not code:
@@ -460,8 +474,8 @@ def check(user, company_id, rows):
                 "accept digits.")
         elif len(code) > MAX_ID_LENGTH:
             errors.append(f"Employee ID “{code}” is too long.")
-        elif code in taken:
-            errors.append(f"Employee ID {code} already belongs to an employee in this company.")
+        elif code in current:
+            row["existing"] = current[code] or code
         elif code in seen:
             errors.append(f"Employee ID {code} is also on row {seen[code]} of this file.")
         else:
@@ -479,12 +493,25 @@ def check(user, company_id, rows):
         first, _sep, last = name.rpartition(" ")
         row["first_name"], row["last_name"] = (first, last) if first else (name, "")
         row["name"] = name
+        if row["existing"]:
+            # Skipped, so nothing else about the row matters; a different
+            # name is pointed out (it may be the wrong ID) but is not an error.
+            errors.clear()
+            row["name_differs"] = bool(name) and name.casefold() != row["existing"].casefold()
     return rows
 
 
 def summarise(rows):
+    """``total`` read, ``bad`` refused, ``good`` new people to import. Those
+    already in the software are neither: see ``already_here``."""
     bad = sum(1 for row in rows if row["errors"])
-    return {"total": len(rows), "bad": bad, "good": len(rows) - bad}
+    here = len(already_here(rows))
+    return {"total": len(rows), "bad": bad, "good": len(rows) - bad - here}
+
+
+def already_here(rows):
+    """The rows skipped because that Employee ID is already an employee."""
+    return [row for row in rows if row.get("existing") and not row["errors"]]
 
 
 # --- writing ---------------------------------------------------------------
@@ -492,22 +519,32 @@ def summarise(rows):
 
 @transaction.atomic
 def commit(*, actor, company_id, rows, branch_id):
-    """Create every row's employee in ``branch_id``, or none of them.
+    """Create the employee of every new row in ``branch_id``, or none of them.
 
-    The branch and the rows are re-checked here: they come back through the
-    reader's session, and a branch they may no longer import into (or an
-    Employee ID taken in between) must be caught now, not written.
+    Rows the preview showed as already in the software are skipped and left as
+    they are. The branch and the rows are re-checked here: they come back
+    through the reader's session, and a branch they may no longer import into
+    (or an Employee ID taken in between) must be caught now, not written. The
+    import keeps to what the preview showed - a person it listed as new who is
+    no longer new refuses the lot, and one it listed as skipped stays skipped.
     """
     from devices.services.mapping import unassigned_placement
 
     membership, _branch_ids = import_scope(actor, company_id)
     branch = check_branch(actor, company_id, branch_id)
+    shown_new = [not row.get("existing") for row in rows]
     rows = check(actor, company_id, rows)
-    bad = [row for row in rows if row["errors"]]
+    skipped = [row for row, new in zip(rows, shown_new) if not new]
+    rows = [row for row, new in zip(rows, shown_new) if new]
+    bad = [row for row in rows if row["errors"] or row["existing"]]
     if bad:
         raise ValidationError(
             f"{len(bad)} row{'s' if len(bad) != 1 else ''} can no longer be "
             "imported. Upload the file again to see why."
+        )
+    if not rows:
+        raise ValidationError(
+            "Everyone in that file is already in the software, so nothing was imported."
         )
 
     company = membership.company
@@ -558,6 +595,8 @@ def commit(*, actor, company_id, rows, branch_id):
                 "branch_id": branch.pk,
                 "employee_codes": [row["employee_id"] for row in rows],
                 "employee_ids": [employee.pk for employee in created],
+                # Already employees: skipped and left as they are.
+                "skipped_codes": [row["employee_id"] for row in skipped],
             },
         )
     return created

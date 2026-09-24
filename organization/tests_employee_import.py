@@ -186,12 +186,9 @@ class PreviewTests(ImportCase):
             self.assertIn(phrase, said)
         self.assertNotContains(page, "Import 1 employee")
 
-    def test_an_emp_id_already_in_the_company_is_refused(self):
-        with use_company(self.company):
-            EmployeeAssignment.objects.filter(employee_code="E1").update(employee_code="445962")
-        page = self.upload([["445962", "Clash"]])
-        self.assertIn("already belongs to an employee",
-                      page.context["preview"]["bad"][0]["errors"][0])
+    # Someone already in the software used to refuse the whole file, so a list
+    # that had grown could never be uploaded again for its new people (Nihal,
+    # 2026-09-24). They are now skipped and left unchanged: see ExistingPeopleTests.
 
 
 class CompanyBranchTests(ImportCase):
@@ -609,3 +606,97 @@ class RealFilesTests(ImportCase):
         # Each part on its own line, and said once, not again under the field.
         self.assertContains(page, "<br>Looked in:")
         self.assertContains(page, "Wanted: a column headed Employee ID", count=1)
+
+
+class ExistingPeopleTests(ImportCase):
+    """A list already imported, with a few new people added, uploaded again
+    (Nihal, 2026-09-24: 87 already in the software refused the 3 new ones).
+    The people already here are skipped and left unchanged; the new ones import."""
+
+    def setUp(self):
+        super().setUp()
+        with use_company(self.company):
+            # Rahim, already an employee, under an Employee ID a file can carry.
+            EmployeeAssignment.objects.filter(employee_code="E1").update(employee_code="770015")
+        self.rahim = self.employee
+
+    def test_the_new_people_import_and_the_existing_ones_are_skipped(self):
+        page = self.upload([["770015", "Rahim"], ["7726978", "Nihal"], ["7726888", "Ajay"]])
+        preview = page.context["preview"]
+        self.assertEqual(preview["bad"], [])
+        self.assertEqual(preview["counts"], {"total": 3, "bad": 0, "good": 2})
+        self.assertEqual([r["employee_id"] for r in preview["existing"]], ["770015"])
+        self.assertContains(page, "2 new people can be imported")
+        self.assertContains(page, "1 already in the software is skipped and left unchanged.")
+        self.assertContains(page, "Import 2 employees")
+
+        before = self.count()
+        page = self.confirm()
+        self.assertEqual(self.count(), before + 2)
+        self.assertContains(page, "2 employees imported")
+        self.assertContains(page, "1 already in the software was skipped and left unchanged.")
+        self.assertEqual(self.placement("7726978").employee.full_name, "Nihal")
+
+    def test_an_existing_employee_is_not_changed(self):
+        self.rahim.refresh_from_db()
+        before = (self.rahim.first_name, self.rahim.last_name, self.rahim.updated_at)
+        self.upload([["770015", "Somebody Else Entirely"], ["7726978", "Nihal"]])
+        self.confirm()
+        self.rahim.refresh_from_db()
+        self.assertEqual((self.rahim.first_name, self.rahim.last_name, self.rahim.updated_at), before)
+        with use_company(self.company):
+            self.assertEqual(EmployeeAssignment.objects.filter(employee_code="770015").count(), 1)
+
+    def test_a_different_name_is_pointed_out_but_not_refused(self):
+        page = self.upload([["770015", "Somebody Else Entirely"], ["7726978", "Nihal"]])
+        row = page.context["preview"]["existing"][0]
+        self.assertTrue(row["name_differs"])
+        self.assertContains(page, "A different name — check this is the right Employee ID.")
+        self.assertContains(page, "Import 1 employee")
+
+    def test_everyone_already_here_offers_nothing_to_import(self):
+        page = self.upload([["770015", "Rahim"]])
+        self.assertContains(page, "nobody new to import")
+        self.assertNotContains(page, reverse("organization:employee_import_confirm"))
+        with self.assertRaisesMessage(ValidationError, "already in the software"):
+            import_services.commit(actor=self.admin, company_id=self.company.pk,
+                                   rows=page.context["preview"]["existing"],
+                                   branch_id=self.branch.pk)
+
+    def test_a_real_mistake_still_stops_the_whole_file(self):
+        page = self.upload([["770015", "Rahim"], ["7726978", "Nihal"], ["77A", "Bad Id"]])
+        preview = page.context["preview"]
+        self.assertEqual([r["line"] for r in preview["bad"]], [4])
+        self.assertContains(page, "so the 1 new person is waiting too.")
+        self.assertNotContains(page, "Import 1 employee")
+
+    def test_a_person_new_at_the_preview_but_taken_by_confirm_refuses_the_lot(self):
+        self.upload([["770015", "Rahim"], ["7726978", "Nihal"]])
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(employee=self.far).update(employee_code="7726978")
+        before = self.count()
+        self.assertContains(self.confirm(), "can no longer be imported")
+        self.assertEqual(self.count(), before)
+
+    def test_skipped_at_the_preview_stays_skipped(self):
+        # The preview promised to leave 770015 alone; freeing that ID before
+        # confirming must not turn it into a new employee nobody was shown.
+        self.upload([["770015", "Rahim"], ["7726978", "Nihal"]])
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(employee_code="770015").update(employee_code="E1")
+        before = self.count()
+        self.confirm()
+        self.assertEqual(self.count(), before + 1)
+        with use_company(self.company):
+            self.assertFalse(EmployeeAssignment.objects.filter(employee_code="770015").exists())
+
+    def test_the_audit_names_who_was_skipped(self):
+        self.upload([["770015", "Rahim"], ["7726978", "Nihal"]])
+        self.confirm()
+        entry = AuditLog.objects.get(action="employees.imported")
+        self.assertEqual(entry.after_data["employee_codes"], ["7726978"])
+        self.assertEqual(entry.after_data["skipped_codes"], ["770015"])
+
+    def test_the_same_new_id_twice_in_the_file_is_still_a_mistake(self):
+        page = self.upload([["7726978", "Nihal"], ["7726978", "Nihal Again"]])
+        self.assertIn("also on row 2", page.context["preview"]["bad"][0]["errors"][0])

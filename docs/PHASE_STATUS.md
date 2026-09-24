@@ -4552,3 +4552,40 @@ deleted after): a titled CSV with "Emp. ID / Employee's Name" previews two
 people (not confirmed, nothing written); a "Card No / Staff Name" file shows
 the box. 8 tests in `organization/tests_employee_import.py::RealFilesTests`.
 No migration, no new dependency. Full suite 1505 OK.
+
+### Employee import: people already in the software are skipped, not refused — 2026-09-24
+
+Nihal re-uploaded a list already imported with three new people added
+(File_02.xls: 90 rows). The 87 already in the software were each an error
+("already belongs to an employee"), and the import is all or nothing, so the
+three new people could never be imported - the page even said they were
+"waiting", with no way to import them.
+
+Someone whose Employee ID belongs to a current employee is now **skipped and
+left unchanged** - not an error. `check` sets `row["existing"]` to the name the
+software has; `already_here(rows)` lists them; `summarise`'s `good` counts only
+the new people (the `{total, bad, good}` shape is unchanged). Nothing about an
+existing employee is ever changed from a file - this is not an update mode.
+
+- The preview says "3 new people can be imported into Head Office. 87 already
+  in the software are skipped and left unchanged." and lists the skipped ones
+  in a collapsed table: row, Employee ID, name in the file, name in the
+  software. A different name is pointed out ("check this is the right Employee
+  ID") but does not refuse.
+- Real mistakes (not a number, missing name, the same new ID twice) still stop
+  the whole file, as before.
+- Everyone already here: "nobody new to import", no Import button; `commit`
+  refuses it too.
+- Confirm keeps to what the preview showed: a person shown as new who has been
+  taken by then refuses the lot (unchanged); one shown as skipped stays
+  skipped even if the ID was freed in between.
+- The success message adds "87 already in the software were skipped and left
+  unchanged."; the audit line gains `skipped_codes`.
+
+The old `test_an_emp_id_already_in_the_company_is_refused` pinned the refusal;
+it is removed with a comment pointing at the replacement,
+`organization/tests_employee_import.py::ExistingPeopleTests` (9 tests).
+Checked against the real File_02.xls and D Company's data (read-only `check`):
+90 read, 3 new (Nihal, Ajay, Sajal), 87 skipped, 0 errors. Checked the page in
+the running app (temporary server on :8001, session deleted after, Import not
+pressed). No migration. Full suite 1513 OK.
