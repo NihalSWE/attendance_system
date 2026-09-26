@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Max, Sum, Exists, Min, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.shortcuts import redirect
 from base_template.tables import paginate, render
 from django.utils import timezone
@@ -16,8 +17,10 @@ from common.forms import apply_service_errors
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
 from leaves import services
-from leaves.forms import CancelLeaveForm, LeaveTypeForm, LeaveTypeStatusForm, RecordLeaveForm
-from leaves.models import LeaveRequest, LeaveRequestSegment, LeaveType
+from leaves.forms import (
+    AmendLeaveForm, CancelLeaveForm, LeaveTypeForm, LeaveTypeStatusForm, RecordLeaveForm,
+)
+from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType
 from organization.services import (
     STRUCTURE_ROLES,
     require_company_membership,
@@ -126,11 +129,31 @@ def leave_list(request):
                     submission_assignment__department_id__in=view_branches.departments
                 )
             queryset = queryset.filter(reachable)
+        # A changed leave keeps its old part, cancelled: show the current one -
+        # or, for a leave cancelled whole, what it was. Days are the days that
+        # still count once some were cancelled.
+        current = ~Q(segments__status=LeaveRequestSegment.Status.CANCELLED)
+        live_units = (
+            LeaveDay.objects.filter(request_segment__leave_request=OuterRef("pk"),
+                                    status__in=services.LIVE_LEAVE_DAYS)
+            .values("request_segment__leave_request")
+            .annotate(total=Sum("balance_units")).values("total")
+        )
         queryset = (
             queryset.select_related("submission_assignment")
-            .annotate(first_day=Min("segments__start_date"), last_day=Max("segments__end_date"),
-                      table_type=Min("segments__leave_type__name"), table_pay=Min("segments__requested_pay_type"),
-                      table_units=Sum("segments__requested_units"))
+            .annotate(
+                first_day=Coalesce(Min("segments__start_date", filter=current),
+                                   Min("segments__start_date")),
+                last_day=Coalesce(Max("segments__end_date", filter=current),
+                                  Max("segments__end_date")),
+                table_type=Coalesce(Min("segments__leave_type__name", filter=current),
+                                    Min("segments__leave_type__name")),
+                table_pay=Coalesce(Min("segments__requested_pay_type", filter=current),
+                                   Min("segments__requested_pay_type")),
+                table_units=Coalesce(Subquery(live_units),
+                                     Sum("segments__requested_units", filter=current),
+                                     Sum("segments__requested_units")),
+            )
         )
         total = queryset.count()
         if status in dict(LeaveRequest.Status.choices):
@@ -244,24 +267,80 @@ def leave_cancel(request, pk):
         actor=request.user, company_id=company_id, request_id=pk
     )
     with use_company(company_id):
-        segment = leave.segments.select_related("leave_type").first()
-    form = CancelLeaveForm(request.POST or None)
+        segment = _current_segment(leave)
+        days = [day.work_date for day in services.live_days(leave)]
+    form = CancelLeaveForm(request.POST or None, days=days)
+
+    def cancel(data):
+        if data.get("what") == "some":
+            return services.cancel_days(
+                actor=request.user, company_id=company_id, request_id=leave.pk,
+                work_dates=data["work_dates"], reason=data.get("reason", ""))
+        return services.cancel_leave(actor=request.user, company_id=company_id,
+                                     request_id=leave.pk, reason=data.get("reason", ""))
+
     return _form_page(
         request,
         form=form,
         title=f"Cancel leave for {leave.employee.full_name}",
-        submit_label="Cancel leave",
+        submit_label="Cancel",
         redirect_to="leaves:leave_list",
         explanation=(
             f"{segment.leave_type.name}, {segment.start_date:%d %b %Y} to "
-            f"{segment.end_date:%d %b %Y}. It is kept on record as cancelled; its "
-            "days stop counting once attendance is recalculated."
+            f"{segment.end_date:%d %b %Y}, {len(days)} day{'s' if len(days) != 1 else ''} "
+            "still counting. Cancelled days are kept on record and stop counting at once; "
+            "attendance is worked out again for them."
         ),
-        success="Leave cancelled.",
-        action=lambda data: services.cancel_leave(
-            actor=request.user, company_id=company_id, request_id=leave.pk,
-            reason=data.get("reason", ""),
-        ),
+        success=lambda result: (
+            "Some days cancelled; the rest of the leave stays."
+            if result.status == "partially_cancelled" else "Leave cancelled."),
+        action=cancel,
+    )
+
+
+def _current_segment(leave):
+    """The leave's current part: the latest not cancelled, else the latest."""
+    parts = leave.segments.select_related("leave_type").order_by("-sequence_number", "-pk")
+    return parts.exclude(status=LeaveRequestSegment.Status.CANCELLED).first() or parts.first()
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def leave_amend(request, pk):
+    """Change an approved leave: its type, dates, half or full day, or pay."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    _, leave = services.get_leave_for_edit(
+        actor=request.user, company_id=company_id, request_id=pk
+    )
+    with use_company(company_id):
+        segment = _current_segment(leave)
+        form = AmendLeaveForm(
+            request.POST or None,
+            employees=Employee.objects.filter(pk=leave.employee_id),
+            leave_types=LeaveType.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
+            initial={
+                "leave_type": segment.leave_type_id, "start_date": segment.start_date,
+                "end_date": segment.end_date, "pay_type": segment.requested_pay_type,
+                "duration": ("half_day" if segment.duration_type == "half_day" else "full_day"),
+                "reason": leave.reason,
+            },
+        )
+    return _form_page(
+        request,
+        form=form,
+        title=f"Change leave for {leave.employee.full_name}",
+        submit_label="Save the change",
+        redirect_to="leaves:leave_list",
+        template="leaves/record_form.html",
+        explanation=(
+            "The old days stop counting and the new ones are recorded on the same leave, "
+            "with the same checks as recording it: no clash with other leave, the yearly "
+            "allowance, and no day in a finalised salary month."),
+        success="Leave changed.",
+        action=lambda data: services.amend_leave(
+            actor=request.user, company_id=company_id, request_id=leave.pk, values=data),
     )
 
 

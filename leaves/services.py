@@ -374,8 +374,15 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
 
 @transaction.atomic
 def record_leave(*, actor, company_id, values):
-    """Record approved, full-day leave for one employee."""
+    """Record approved leave for one employee."""
     membership, branches = recorder_branches(actor, company_id)
+    return _write_leave(actor=actor, membership=membership, branches=branches,
+                        company_id=company_id, values=values)
+
+
+def _write_leave(*, actor, membership, branches, company_id, values, request=None):
+    """Record approved leave - a new request, or (``request``) the new dates of
+    an amended one, whose old days are already cancelled."""
     values = _writable(values, RECORD_FIELDS)
     employee = values["employee"]
     leave_type = values["leave_type"]
@@ -426,6 +433,11 @@ def record_leave(*, actor, company_id, values):
         now = timezone.now()
         first_assignment = days[0][1]
         percentage = Decimal("100") if pay_type == PayType.PAID else Decimal("0")
+        if request is not None:
+            return _amend_request(actor=actor, membership=membership, request=request,
+                                  values=values, days=days, skipped=skipped, half=half,
+                                  leave_type=leave_type, pay_type=pay_type,
+                                  percentage=percentage, first_assignment=first_assignment)
         request = create_validated(
             LeaveRequest,
             company=membership.company,
@@ -444,22 +456,9 @@ def record_leave(*, actor, company_id, values):
             created_by=actor,
             updated_by=actor,
         )
-        segment = create_validated(
-            LeaveRequestSegment,
-            company=membership.company,
-            leave_request=request,
-            leave_type=leave_type,
-            duration_type=(LeaveRequestSegment.DurationType.HALF_DAY if half
-                           else LeaveRequestSegment.DurationType.FULL_DAY),
-            start_date=values["start_date"],
-            end_date=values["end_date"],
-            timezone=str(_tz(first_assignment)),
-            requested_units=Decimal("0.5") if half else Decimal(len(days)),
-            requested_minutes=(days[0][4].scheduled_minutes // 2 if half
-                               else sum(shift.scheduled_minutes for *_, shift in days)),
-            requested_pay_type=pay_type,
-            requested_pay_percentage=percentage,
-        )
+        segment = _new_segment(membership=membership, request=request, leave_type=leave_type,
+                               values=values, days=days, half=half, pay_type=pay_type,
+                               percentage=percentage, first_assignment=first_assignment)
         write_approved_days(company=membership.company, employee=employee,
                             segment=segment, days=days, pay_type=pay_type)
         record_company_event(
@@ -475,6 +474,162 @@ def record_leave(*, actor, company_id, values):
                 "working_days": len(days),
             },
         )
+    _refresh_attendance(company_id, employee.pk, [on for on, *_ in days])
+    return request
+
+
+def _new_segment(*, membership, request, leave_type, values, days, half, pay_type,
+                 percentage, first_assignment):
+    return create_validated(
+        LeaveRequestSegment,
+        company=membership.company,
+        leave_request=request,
+        leave_type=leave_type,
+        duration_type=(LeaveRequestSegment.DurationType.HALF_DAY if half
+                       else LeaveRequestSegment.DurationType.FULL_DAY),
+        start_date=values["start_date"],
+        end_date=values["end_date"],
+        timezone=str(_tz(first_assignment)),
+        requested_units=Decimal("0.5") if half else Decimal(len(days)),
+        requested_minutes=(days[0][4].scheduled_minutes // 2 if half
+                           else sum(shift.scheduled_minutes for *_, shift in days)),
+        requested_pay_type=pay_type,
+        requested_pay_percentage=percentage,
+        sequence_number=(request.segments.count() + 1),
+    )
+
+
+def _amend_request(*, actor, membership, request, values, days, skipped, half, leave_type,
+                   pay_type, percentage, first_assignment):
+    segment = _new_segment(membership=membership, request=request, leave_type=leave_type,
+                           values=values, days=days, half=half, pay_type=pay_type,
+                           percentage=percentage, first_assignment=first_assignment)
+    write_approved_days(company=membership.company, employee=request.employee,
+                        segment=segment, days=days, pay_type=pay_type)
+    request.status = LeaveRequest.Status.APPROVED
+    request.reason = values.get("reason", "") or request.reason
+    request.decision_snapshot = {
+        **request.decision_snapshot, "pay_type": pay_type,
+        "skipped": [[on.isoformat(), reason] for on, reason in skipped],
+    }
+    request.updated_by = actor
+    request.full_clean()
+    request.save()
+    return request
+
+
+def _refresh_attendance(company_id, employee_id, dates):
+    """Work the days out again now, not at the next refresh: a leave recorded,
+    changed or cancelled shows on the Daily list and the calendar at once."""
+    from attendance.services import recalculate
+
+    dates = sorted(set(dates))
+    if dates:
+        recalculate(company_id, employee_ids=[employee_id], start=dates[0], end=dates[-1])
+
+
+def live_days(request):
+    """The request's days that still count as leave. Call in the company."""
+    return list(LeaveDay.objects.filter(
+        request_segment__leave_request=request, status__in=LIVE_LEAVE_DAYS,
+    ).order_by("work_date"))
+
+
+def _changeable(actor, company_id, request_id):
+    """An approved (or partly cancelled) leave ``actor`` may change."""
+    membership, request = get_leave_for_edit(
+        actor=actor, company_id=company_id, request_id=request_id)
+    if request.status not in (LeaveRequest.Status.APPROVED,
+                              LeaveRequest.Status.PARTIALLY_CANCELLED):
+        raise ValidationError("Only approved leave can be changed or cancelled.")
+    _refuse_own_leave(actor, request.employee)
+    return membership, request
+
+
+@transaction.atomic
+def cancel_days(*, actor, company_id, request_id, work_dates, reason=""):
+    """Cancel some days of an approved leave (someone came back early): those
+    days stop counting, the rest stay. All of them is the whole leave."""
+    membership, request = _changeable(actor, company_id, request_id)
+    reason = (reason or "").strip()
+    if not reason:
+        raise ValidationError({"reason": "Say why, so the history is clear."})
+    with use_company(company_id):
+        live = {day.work_date: day for day in live_days(request)}
+        chosen = sorted(set(work_dates))
+        if not chosen:
+            raise ValidationError({"work_dates": "Choose the days to cancel."})
+        unknown = [d for d in chosen if d not in live]
+        if unknown:
+            raise ValidationError({"work_dates": "Those days are not part of this leave: "
+                                   + ", ".join(f"{d:%d %b}" for d in unknown)})
+        if len(chosen) == len(live):
+            return cancel_leave(actor=actor, company_id=company_id, request_id=request_id,
+                                reason=reason)
+        for day in chosen:
+            _refuse_finalised_month(company_id, day, day)
+        LeaveDay.objects.filter(pk__in=[live[d].pk for d in chosen]).update(
+            status=LeaveDay.Status.CANCELLED)
+        before = {"status": request.status}
+        request.status = LeaveRequest.Status.PARTIALLY_CANCELLED
+        request.decision_snapshot = {
+            **request.decision_snapshot,
+            "days_cancelled": request.decision_snapshot.get("days_cancelled", [])
+            + [{"dates": [d.isoformat() for d in chosen], "by": actor.pk, "reason": reason}],
+        }
+        request.updated_by = actor
+        request.full_clean()
+        request.save()
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="leave.days_cancelled", obj=request, before=before,
+            after={"status": request.status, "dates": [d.isoformat() for d in chosen],
+                   "reason": reason, "days_left": len(live) - len(chosen)},
+        )
+    _refresh_attendance(company_id, request.employee_id, chosen)
+    return request
+
+
+@transaction.atomic
+def amend_leave(*, actor, company_id, request_id, values):
+    """Change an approved leave's type, dates, half or full day, or pay. The old
+    days stop counting and the new ones are written, on the same leave, with
+    every check recording makes - clashes, the allowance, finalised months."""
+    membership, request = _changeable(actor, company_id, request_id)
+    _membership, branches = recorder_branches(actor, company_id)
+    with use_company(company_id):
+        old = live_days(request)
+        before = {
+            "segments": [
+                {"leave_type": seg.leave_type.code, "start_date": seg.start_date.isoformat(),
+                 "end_date": seg.end_date.isoformat(), "pay_type": seg.requested_pay_type,
+                 "duration": seg.duration_type}
+                for seg in request.segments.select_related("leave_type")
+                .exclude(status=LeaveRequestSegment.Status.CANCELLED)
+            ],
+            "days": [day.work_date.isoformat() for day in old],
+        }
+        for day in old:
+            _refuse_finalised_month(company_id, day.work_date, day.work_date)
+        LeaveDay.objects.filter(pk__in=[day.pk for day in old]).update(
+            status=LeaveDay.Status.CANCELLED)
+        request.segments.update(status=LeaveRequestSegment.Status.CANCELLED)
+    values = {**values, "employee": request.employee}
+    request = _write_leave(actor=actor, membership=membership, branches=branches,
+                           company_id=company_id, values=values, request=request)
+    with use_company(company_id):
+        new = live_days(request)
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="leave.amended", obj=request, before=before,
+            after={"leave_type": values["leave_type"].code,
+                   "start_date": values["start_date"].isoformat(),
+                   "end_date": values["end_date"].isoformat(),
+                   "pay_type": values["pay_type"], "reason": values.get("reason", ""),
+                   "days": [day.work_date.isoformat() for day in new]},
+        )
+    _refresh_attendance(company_id, request.employee_id,
+                        [day.work_date for day in old] + [day.work_date for day in new])
     return request
 
 
@@ -511,6 +666,7 @@ def cancel_leave(*, actor, company_id, request_id, reason=""):
     )
     if request.status == LeaveRequest.Status.CANCELLED:
         raise ValidationError("This leave is already cancelled.")
+    # (A partly cancelled leave is cancelled whole here too.)
     _refuse_own_leave(actor, request.employee)
     with use_company(company_id):
         for start, end in request.segments.values_list("start_date", "end_date"):
@@ -533,6 +689,9 @@ def cancel_leave(*, actor, company_id, request_id, reason=""):
             action="leave.cancelled", obj=request,
             before=before, after={"status": request.status, "reason": reason},
         )
+        dates = list(LeaveDay.objects.filter(request_segment__leave_request=request)
+                     .values_list("work_date", flat=True))
+    _refresh_attendance(company_id, request.employee_id, dates)
     return request
 
 

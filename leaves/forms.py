@@ -1,5 +1,7 @@
 """Leave forms. Convenience only — ``leaves.services`` re-validates everything."""
 
+import datetime
+
 from django import forms
 
 from common.choices import ActiveStatus
@@ -95,10 +97,46 @@ def _employee_label(employee):
 
 
 class CancelLeaveForm(StyledFormMixin, forms.Form):
+    """Cancel the whole leave, or some of its days (someone came back early)."""
+
+    what = forms.ChoiceField(
+        label="Cancel", initial="all", required=False,
+        choices=(("all", "The whole leave"), ("some", "Some days")),
+        widget=forms.RadioSelect,
+    )
+    work_dates = forms.TypedMultipleChoiceField(
+        label="Which days", required=False, coerce=lambda value: datetime.date.fromisoformat(value),
+        widget=forms.CheckboxSelectMultiple,
+        help_text="The days that stop counting as leave. The rest stay.",
+    )
     reason = forms.CharField(
         label="Why is it being cancelled?", required=False, widget=forms.Textarea,
-        help_text="Recorded in the audit trail.",
+        help_text="Recorded in the audit trail. Needed when cancelling some days.",
     )
+
+    def __init__(self, *args, days=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["work_dates"].choices = [
+            (day.isoformat(), f"{day:%a %d %b %Y}") for day in days]
+        if len(days) < 2:
+            # One day left: there is nothing to cancel but all of it.
+            del self.fields["what"]
+            del self.fields["work_dates"]
+
+    def clean(self):
+        data = super().clean()
+        if data.get("what") == "some" and not data.get("work_dates"):
+            self.add_error("work_dates", "Choose the days to cancel.")
+        return data
+
+
+class AmendLeaveForm(RecordLeaveForm):
+    """Change an approved leave: its type, dates, half or full day, or pay."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        del self.fields["employee"]
+        self.fields["reason"].help_text = "Recorded with the change."
 
 
 class RequestLeaveForm(RecordLeaveForm):

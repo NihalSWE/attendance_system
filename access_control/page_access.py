@@ -48,6 +48,7 @@ BRANCH_PAGES = {
     "leaves:leave_list": ("leave.view", "leave.record"),
     "leaves:leave_record": "leave.record",
     "leaves:leave_cancel": "leave.record",
+    "leaves:leave_amend": "leave.record",
     "payroll:overtime_list": ("overtime.view", "overtime.decide"),
     "payroll:overtime_decide": ("overtime.view", "overtime.decide"),
     "payroll:overtime_undo": "overtime.decide",

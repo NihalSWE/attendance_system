@@ -9,6 +9,7 @@ urlpatterns = [
     path("", views.leave_list, name="leave_list"),
     path("record/", views.leave_record, name="leave_record"),
     path("<int:pk>/cancel/", views.leave_cancel, name="leave_cancel"),
+    path("<int:pk>/change/", views.leave_amend, name="leave_amend"),
 
     path("types/", views.leave_type_list, name="leave_type_list"),
     path("types/add/", views.leave_type_create, name="leave_type_create"),

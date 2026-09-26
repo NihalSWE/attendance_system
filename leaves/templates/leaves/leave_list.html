@@ -170,7 +170,7 @@
                                         {{ leave.table_units|floatformat:"-2" }}
                                     </td>
                                     <td>
-                                        {% for part in leave.segments.all %}{{ part.get_requested_pay_type_display }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                                        {% if leave.table_pay == "paid" %}Paid{% elif leave.table_pay == "unpaid" %}Unpaid{% else %}—{% endif %}
                                     </td>
                                     <td>
                                         {% if leave.status == 'approved' %}
@@ -184,7 +184,10 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if leave.may_cancel and leave.status == 'approved' %}
+                                        {% if leave.may_cancel and leave.status == 'approved' or leave.may_cancel and leave.status == 'partially_cancelled' %}
+                                            <a class="btn btn--quiet btn--sm" href="{% url 'leaves:leave_amend' leave.pk %}">
+                                                Change
+                                            </a>
                                             <a class="btn btn--quiet btn--sm" href="{% url 'leaves:leave_cancel' leave.pk %}">
                                                 Cancel
                                             </a>
