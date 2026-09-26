@@ -90,6 +90,12 @@ BRANCH_PAGES = {
     "attendance:missed_scan_decide": "attendance.fix",
     "organization:employee_detail": "employees.view",
     "organization:employee_end": "employees.edit",
+    # The profile (2026-09-26): the photo to whoever may see the person; the
+    # changes to whoever may edit them, as Edit employee.
+    "organization:employee_photo": "employees.view",
+    "organization:employee_photo_change": "employees.edit",
+    "organization:employee_personal": "employees.edit",
+    "organization:employee_report_visibility": "employees.edit",
 }
 
 

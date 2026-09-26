@@ -7,6 +7,11 @@
     <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
     <link rel="stylesheet" href="{% static 'organization/css/employee_detail.css' %}">
 {% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
+{% endblock %}
 {% block page %}
     <div class="crumbs">
         <a href="{% url 'dashboard' %}">
@@ -23,31 +28,84 @@
         </span>
         {{ employee.full_name }}
     </div>
-    <div class="page__head">
-        <div>
-            <h1 class="page__title">
-                {{ employee.full_name }}
-            </h1>
-            <p class="page__sub">
-                {% if assignment %}
-                    {{ assignment.employee_code }} · {{ assignment.designation.name }} · {{ assignment.department.name }} · {{ assignment.branch.name }}
+
+    {# The profile: who they are, then what can be done for them. #}
+    <div class="card profile-head" data-profile{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div class="profile-head__who">
+            <div class="profile-photo">
+                {% if employee.photo %}
+                    <img src="{% url 'organization:employee_photo' employee.pk %}?v={{ employee.updated_at|date:'U' }}" alt="{{ employee.full_name }}">
                 {% else %}
-                    No current placement
+                    <span class="profile-photo__initials" aria-hidden="true">{{ employee.first_name|slice:":1"|upper }}{{ employee.last_name|slice:":1"|upper }}</span>
                 {% endif %}
-            </p>
+                {% if may.edit %}
+                    <button class="profile-photo__change" type="button" data-open-dialog="photo-dialog">
+                        {% if employee.photo %}Change{% else %}Add photo{% endif %}
+                    </button>
+                {% endif %}
+            </div>
+            <div>
+                <h1 class="page__title">
+                    {{ employee.full_name }}
+                </h1>
+                <p class="page__sub">
+                    {% if assignment %}
+                        {{ assignment.employee_code }} · {{ assignment.designation.name }} · {{ assignment.department.name }} · {{ assignment.branch.name }}
+                    {% else %}
+                        No current placement
+                    {% endif %}
+                </p>
+                <div class="row profile-head__badges">
+                    {% if employee.employment_status == "active" %}
+                        <span class="badge badge--success">Active</span>
+                    {% else %}
+                        <span class="badge badge--neutral">{{ employee.get_employment_status_display }}</span>
+                    {% endif %}
+                    {% if employee.hide_from_reports %}
+                        <span class="badge badge--warning">Left out of reports</span>
+                    {% endif %}
+                    {% if employee.phone %}<span class="t-muted">{{ employee.phone }}</span>{% endif %}
+                    {% if employee.work_email %}<span class="t-muted">{{ employee.work_email }}</span>{% endif %}
+                </div>
+            </div>
         </div>
-        {% if may.edit %}
-            <div class="page__actions">
-                {% if not is_ended and may.end %}
-                    <a class="btn btn--ghost" href="{% url 'organization:employee_end' employee.pk %}">
-                        End employment
-                    </a>
-                {% endif %}
+        <div class="profile-actions">
+            {% if may.edit %}
                 <a class="btn btn--primary" href="{% url 'organization:employee_edit' employee.pk %}">
                     Edit
                 </a>
-            </div>
-        {% endif %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="personal-dialog">
+                    Personal info
+                </button>
+            {% endif %}
+            {% if may_record_leave and not is_ended %}
+                <a class="btn btn--ghost" href="{% url 'leaves:leave_record' %}?employee={{ employee.pk }}">
+                    Record leave
+                </a>
+            {% endif %}
+            {% if calendar_url %}
+                <a class="btn btn--ghost" href="{{ calendar_url }}">
+                    Calendar
+                </a>
+            {% endif %}
+            {% if may.edit %}
+                <form method="post" action="{% url 'organization:employee_report_visibility' employee.pk %}"
+                      data-confirm-title="{% if employee.hide_from_reports %}Show {{ employee.full_name }} in the reports again?{% else %}Leave {{ employee.full_name }} out of the reports?{% endif %}"
+                      data-confirm="{% if employee.hide_from_reports %}They appear in every report and its downloads again.{% else %}They are left out of every report and its downloads. Their attendance still counts - their days, salary and the Daily list do not change. You can show them again here.{% endif %}"
+                      data-confirm-button="{% if employee.hide_from_reports %}Show in reports{% else %}Leave out{% endif %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="hidden" value="{% if employee.hide_from_reports %}0{% else %}1{% endif %}">
+                    <button class="btn btn--ghost" type="submit">
+                        {% if employee.hide_from_reports %}Show in reports{% else %}Remove from reports{% endif %}
+                    </button>
+                </form>
+                {% if not is_ended and may.end %}
+                    <a class="btn btn--ghost btn--danger-text" href="{% url 'organization:employee_end' employee.pk %}">
+                        End employment
+                    </a>
+                {% endif %}
+            {% endif %}
+        </div>
     </div>
 
     {% if is_ended %}
@@ -56,6 +114,21 @@
         </div>
     {% endif %}
 
+    <nav class="profile-tabs" role="tablist" aria-label="Profile sections" data-profile-tabs>
+        <a class="profile-tabs__tab" href="#overview" role="tab" data-tab="overview">Overview</a>
+        <a class="profile-tabs__tab" href="#personal" role="tab" data-tab="personal">Personal</a>
+        {% if summary %}
+            <a class="profile-tabs__tab" href="#attendance" role="tab" data-tab="attendance">Attendance</a>
+        {% endif %}
+        {% if leave is not None %}
+            <a class="profile-tabs__tab" href="#leave" role="tab" data-tab="leave">Leave</a>
+        {% endif %}
+        <a class="profile-tabs__tab" href="#employment" role="tab" data-tab="employment">Employment</a>
+        <a class="profile-tabs__tab" href="#devices" role="tab" data-tab="devices">Devices &amp; shift</a>
+        <a class="profile-tabs__tab" href="#activity" role="tab" data-tab="activity">Activity</a>
+    </nav>
+
+    <section class="profile-panel" id="overview" role="tabpanel" data-panel="overview">
     <div class="emp-summary">
         <div class="card">
             <div class="card__head">
@@ -153,6 +226,155 @@
         </div>
     </div>
 
+    </section>
+
+    <section class="profile-panel" id="personal" role="tabpanel" data-panel="personal">
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Personal information
+                </h2>
+                {% if may.edit %}
+                    <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="personal-dialog">
+                        Edit
+                    </button>
+                {% endif %}
+            </div>
+            <div class="card__body">
+                <dl class="facts profile-facts">
+                    {% for label, value in personal_rows %}
+                        <dt>
+                            {{ label }}
+                        </dt>
+                        <dd>
+                            {% if value %}{% if value.year %}{{ value|date:"j M Y" }}{% else %}{{ value|linebreaksbr }}{% endif %}{% else %}<span class="t-faint">—</span>{% endif %}
+                        </dd>
+                    {% endfor %}
+                </dl>
+            </div>
+        </div>
+    </section>
+
+    {% if summary %}
+        <section class="profile-panel" id="attendance" role="tabpanel" data-panel="attendance">
+            <div class="card" data-profile-summary>
+                <div class="card__head">
+                    <h2>
+                        Attendance · {{ summary.label }}
+                    </h2>
+                    <div class="row">
+                        <a class="btn btn--ghost btn--sm" href="?year={{ summary_earlier.0 }}&month={{ summary_earlier.1 }}#attendance">‹ Earlier</a>
+                        <a class="btn btn--ghost btn--sm" href="?year={{ summary_later.0 }}&month={{ summary_later.1 }}#attendance">Later ›</a>
+                    </div>
+                </div>
+                <div class="report-summary">
+                    {% for label, value in summary.totals.items %}
+                        <div class="report-summary__item{% if label == 'Absent' and value %} report-summary__item--alert{% endif %}">
+                            <span class="report-summary__value">{{ value }}</span>
+                            <span class="report-summary__label">{{ label }}</span>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="card__body">
+                    <div class="day-strip" aria-label="Each day of the month">
+                        {% for day, code in summary.days %}
+                            <span class="day-strip__day day-strip__day--{{ code|default:'none'|lower }}" title="{{ day|date:'D j M' }}{% if code %}: {{ code }}{% endif %}">
+                                <span class="day-strip__num">{{ day.day }}</span>
+                                <span class="day-strip__code">{{ code|default:"·" }}</span>
+                            </span>
+                        {% endfor %}
+                    </div>
+                    <p class="t-faint">
+                        {{ summary.legend }}
+                    </p>
+                    <dl class="facts profile-facts">
+                        <dt>
+                            Absent on
+                        </dt>
+                        <dd>
+                            {{ summary.absent_dates|default:"No absent days" }}
+                        </dd>
+                        <dt>
+                            Late on
+                        </dt>
+                        <dd>
+                            {% if summary.late_dates %}{{ summary.late_dates }} <span class="t-muted">· {{ summary.late_minutes }} minutes in all</span>{% else %}Never late{% endif %}
+                        </dd>
+                    </dl>
+                    <div class="row">
+                        <a class="btn btn--ghost btn--sm" href="{% url 'reports:monthly_attendance' %}?year={{ summary.year }}&month={{ summary.month }}&employee={{ employee.pk }}">Monthly attendance report</a>
+                        <a class="btn btn--ghost btn--sm" href="{% url 'reports:monthly_absent' %}?year={{ summary.year }}&month={{ summary.month }}&employee={{ employee.pk }}">Absent report</a>
+                        <a class="btn btn--ghost btn--sm" href="{% url 'reports:monthly_late' %}?year={{ summary.year }}&month={{ summary.month }}&employee={{ employee.pk }}">Late report</a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    {% endif %}
+
+    {% if leave is not None %}
+        <section class="profile-panel" id="leave" role="tabpanel" data-panel="leave">
+            <div class="card" data-profile-leave>
+                <div class="card__head">
+                    <h2>
+                        Leave in {{ leave_year }}
+                    </h2>
+                    {% if may_record_leave and not is_ended %}
+                        <a class="btn btn--ghost btn--sm" href="{% url 'leaves:leave_record' %}?employee={{ employee.pk }}">
+                            Record leave
+                        </a>
+                    {% endif %}
+                </div>
+                {% if leave.summary %}
+                    <div class="report-summary">
+                        {% for label, value in leave.summary %}
+                            <div class="report-summary__item">
+                                <span class="report-summary__value">{{ value }}</span>
+                                <span class="report-summary__label">{{ label }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                {% if leave.rows %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Leave type</th>
+                                    <th>From</th>
+                                    <th>To</th>
+                                    <th class="numeric">Days</th>
+                                    <th>Pay</th>
+                                    <th>Status</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in leave.rows %}
+                                    <tr>
+                                        <td>{{ row.3 }}</td>
+                                        <td>{{ row.4 }}</td>
+                                        <td>{{ row.5 }}</td>
+                                        <td class="numeric">{{ row.6 }}</td>
+                                        <td>{{ row.7 }}</td>
+                                        <td>{{ row.8 }}</td>
+                                        <td class="t-muted">{{ row.9|default:"—" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty">
+                        <div class="empty__title">
+                            No leave in {{ leave_year }}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+    {% endif %}
+
+    <section class="profile-panel" id="employment" role="tabpanel" data-panel="employment">
     <div class="card">
         <div class="card__head">
             <h2>
@@ -311,6 +533,9 @@
     </div>
     {% endif %}
 
+    </section>
+
+    <section class="profile-panel" id="devices" role="tabpanel" data-panel="devices">
     <div class="emp-pair">
         <div class="card">
             <div class="card__head">
@@ -398,6 +623,9 @@
         </div>
     </div>
 
+    </section>
+
+    <section class="profile-panel" id="activity" role="tabpanel" data-panel="activity">
     <div class="card">
         <div class="card__head">
             <h2>
@@ -427,4 +655,65 @@
             </div>
         {% endif %}
     </div>
+    </section>
+
+    {% if may.edit %}
+        <dialog class="modal" id="photo-dialog" aria-labelledby="photo-dialog-title">
+            <form class="modal__card" method="post" enctype="multipart/form-data" action="{% url 'organization:employee_photo_change' employee.pk %}">
+                {% csrf_token %}
+                <div class="modal__head">
+                    <h2 id="photo-dialog-title">
+                        {% if employee.photo %}Change the photo{% else %}Add a photo{% endif %}
+                    </h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <div class="modal__body stack">
+                    {% if photo_form.non_field_errors %}
+                        <div class="alert alert--danger">{{ photo_form.non_field_errors }}</div>
+                    {% endif %}
+                    <div class="field">
+                        <label class="field__label" for="{{ photo_form.photo.id_for_label }}">Picture</label>
+                        <input class="input input--file" type="file" name="{{ photo_form.photo.html_name }}" id="{{ photo_form.photo.id_for_label }}" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp">
+                        <span class="field__help">PNG, JPG or WEBP, up to 3 MB. Only people who may see this employee can see it.</span>
+                        {% for error in photo_form.photo.errors %}<span class="field__error">{{ error }}</span>{% endfor %}
+                    </div>
+                    {% if employee.photo %}
+                        <label class="check" for="{{ photo_form.remove.id_for_label }}">
+                            <input class="check__input" type="checkbox" name="{{ photo_form.remove.html_name }}" id="{{ photo_form.remove.id_for_label }}">
+                            <span>Remove the photo</span>
+                        </label>
+                    {% endif %}
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn--primary" type="submit">Save</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog class="modal modal--wide" id="personal-dialog" aria-labelledby="personal-dialog-title">
+            <form class="modal__card" method="post" action="{% url 'organization:employee_personal' employee.pk %}" novalidate>
+                {% csrf_token %}
+                <div class="modal__head">
+                    <h2 id="personal-dialog-title">Personal information</h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <div class="modal__body stack">
+                    {% if personal_form.non_field_errors %}
+                        <div class="alert alert--danger">{{ personal_form.non_field_errors }}</div>
+                    {% endif %}
+                    <p class="t-faint">The name, work email, phone and joining date are on Edit employee.</p>
+                    <div class="grid grid--2">
+                        {% for field in personal_form %}
+                            {% include "leaves/includes/field.html" with field=field %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn--primary" type="submit">Save</button>
+                </div>
+            </form>
+        </dialog>
+    {% endif %}
 {% endblock %}

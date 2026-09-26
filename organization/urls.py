@@ -73,6 +73,13 @@ urlpatterns = [
     path("employees/<int:pk>/", employee_detail_views.employee_detail, name="employee_detail"),
     path("employees/<int:pk>/edit/", employee_edit_views.employee_edit, name="employee_edit"),
     path("employees/<int:pk>/end/", employee_detail_views.employee_end, name="employee_end"),
+    path("employees/<int:pk>/photo/", employee_detail_views.employee_photo, name="employee_photo"),
+    path("employees/<int:pk>/photo/change/", employee_detail_views.employee_photo_change,
+         name="employee_photo_change"),
+    path("employees/<int:pk>/personal/", employee_detail_views.employee_personal,
+         name="employee_personal"),
+    path("employees/<int:pk>/reports/", employee_detail_views.employee_report_visibility,
+         name="employee_report_visibility"),
     # Feed the dependent branch -> department -> designation selects.
     path(
         "employees/new/departments/",

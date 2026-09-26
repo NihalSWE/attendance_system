@@ -201,11 +201,17 @@ def leave_record(request):
         if branches is not ALL_BRANCHES:
             # A12 part 5: people placed in their branches (the service re-checks each day).
             employees = employees.filter(table_branch_id__in=branches)
+        initial = {"pay_type": "paid", "duration": "full_day"}
+        # "Record leave" from someone's profile opens with them chosen - only
+        # someone this login may record leave for anyway.
+        chosen = request.GET.get("employee", "")
+        if chosen.isdigit() and employees.filter(pk=int(chosen)).exists():
+            initial["employee"] = int(chosen)
         form = RecordLeaveForm(
             request.POST or None,
             employees=employees.order_by("first_name", "last_name"),
             leave_types=LeaveType.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
-            initial={"pay_type": "paid", "duration": "full_day"},
+            initial=initial,
         )
         return _form_page(
             request,

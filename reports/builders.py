@@ -55,6 +55,7 @@ class Context:
     zone: object
     scope: object
     filters: object
+    include_hidden: bool = False   # the profile: a hidden person's own summary
 
 
 # --- small helpers ----------------------------------------------------------
@@ -126,6 +127,10 @@ def records(ctx, **where):
         ).filter(work_date__gte=f.first, work_date__lte=f.last, **where),
         ctx.scope,
     )
+    if not ctx.include_hidden:
+        # "Hide from reports" on the profile: their days still count, just not
+        # in the reports. Their own profile calls these builders with it on.
+        queryset = queryset.exclude(employee__hide_from_reports=True)
     if f.branch:
         queryset = queryset.filter(branch_id=int(f.branch))
     if f.department:
@@ -425,6 +430,8 @@ def leave(ctx):
         "leave_request__submission_assignment__branch",
         "leave_request__submission_assignment__department",
     ).filter(start_date__lte=f.last, end_date__gte=f.first)
+    if not ctx.include_hidden:
+        segments = segments.exclude(leave_request__employee__hide_from_reports=True)
     if status != "all":
         segments = segments.filter(leave_request__status=status)
     segments = access.scope(
@@ -480,6 +487,8 @@ def entry_logs(ctx):
                                     tzinfo=ctx.zone)
     punches = PunchEvent.objects.select_related("employee", "device", "branch").filter(
         punched_at_utc__gte=begin, punched_at_utc__lt=end)
+    if not ctx.include_hidden:
+        punches = punches.exclude(employee__hide_from_reports=True)
     if not ctx.scope.is_all:
         # A branch login: scans in its branches; a department head: its people's.
         mine = Q(branch_id__in=ctx.scope.branches) if ctx.scope.branches else Q(pk__in=[])

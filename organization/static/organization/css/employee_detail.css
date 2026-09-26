@@ -117,3 +117,149 @@ Tokens only.
         display: none;
     }
 }
+
+/* --- The profile (2026-09-26): header, tabs, day strip ------------------ */
+.profile-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s4);
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: var(--s5);
+    margin-bottom: var(--s4);
+}
+.profile-head__who {
+    display: flex;
+    gap: var(--s4);
+    align-items: center;
+    min-width: 0;
+}
+.profile-head__badges {
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin-top: var(--s2);
+}
+.profile-photo {
+    position: relative;
+    flex: none;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--surface-2, #eef1f5);
+    display: grid;
+    place-items: center;
+}
+.profile-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.profile-photo__initials {
+    font-size: 32px;
+    font-weight: 700;
+    opacity: .7;
+}
+.profile-photo__change {
+    position: absolute;
+    inset: auto 0 0 0;
+    border: 0;
+    padding: 4px 0;
+    font-size: 11px;
+    color: #fff;
+    background: rgba(17, 17, 19, .55);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity .15s;
+}
+.profile-photo:hover .profile-photo__change,
+.profile-photo__change:focus-visible {
+    opacity: 1;
+}
+.profile-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    align-items: center;
+}
+.profile-actions form {
+    margin: 0;
+}
+.btn--danger-text {
+    color: var(--danger, #b42318);
+}
+.profile-tabs {
+    display: flex;
+    gap: var(--s1);
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--s4);
+    scrollbar-width: none;
+}
+.profile-tabs__tab {
+    padding: var(--s2) var(--s3);
+    font-size: 13.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: inherit;
+    opacity: .65;
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+}
+.profile-tabs__tab:hover {
+    opacity: 1;
+}
+.profile-tabs__tab.is-active {
+    opacity: 1;
+    border-bottom-color: currentColor;
+}
+/* Without the script every section shows, spaced apart. */
+.profile-panel + .profile-panel {
+    margin-top: var(--s5);
+}
+.profile-tabs-ready .profile-panel + .profile-panel {
+    margin-top: 0;
+}
+.profile-panel > .card + .card,
+.profile-panel > .card + .emp-pair,
+.profile-panel > .emp-pair + .card {
+    margin-top: var(--s4);
+}
+.profile-facts {
+    grid-template-columns: minmax(140px, max-content) 1fr;
+}
+.report-summary__item--alert .report-summary__value {
+    color: var(--danger, #b42318);
+}
+.day-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+    gap: 4px;
+    margin-bottom: var(--s3);
+}
+.day-strip__day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 0;
+    border-radius: 6px;
+    background: var(--surface-2, #f1f3f6);
+    font-size: 11px;
+}
+.day-strip__num {
+    opacity: .6;
+}
+.day-strip__code {
+    font-weight: 700;
+    font-size: 12px;
+}
+.day-strip__day--p { background: #e7f5ec; }
+.day-strip__day--lt { background: #fff4de; }
+.day-strip__day--hd { background: #fff4de; }
+.day-strip__day--a { background: #fde8e7; }
+.day-strip__day--lv { background: #e6f0fd; }
+.day-strip__day--in { background: #fff4de; }
+.modal--wide {
+    max-width: min(760px, calc(100vw - 32px));
+}

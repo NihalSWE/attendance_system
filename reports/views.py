@@ -33,7 +33,8 @@ def _choices(company_id, scope, report):
     choices = {
         "branches": branches,
         "departments": departments.order_by("branch__name", "name"),
-        "employees": people(scope).order_by("first_name", "last_name"),
+        "employees": people(scope).exclude(hide_from_reports=True)
+        .order_by("first_name", "last_name"),
     }
     if "leave_type" in report.extras:
         from leaves.models import LeaveType

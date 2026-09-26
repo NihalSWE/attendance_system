@@ -86,6 +86,10 @@ class Employee(TenantOwned, ActorTracked):
     # the dependency set since 2026-09-21, pulled in by reportlab for PDF
     # downloads; that is not a reason to start decoding uploads.)
     photo = models.FileField(upload_to="employee_photos/", null=True, blank=True)
+    # Left out of the Reports pages and their downloads (Nihal, 2026-09-26:
+    # "remove from attendance report"). Their attendance still counts - days,
+    # salary, the Daily list are unchanged; only the reports leave them out.
+    hide_from_reports = models.BooleanField(default=False)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:

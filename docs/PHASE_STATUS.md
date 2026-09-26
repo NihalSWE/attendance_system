@@ -4804,3 +4804,45 @@ check:** `_check_host` runs on every connection (each test and send, in
 `_smtp`), not at save; the one gap left is the moment between that lookup
 and smtplib's own. Closing it means connecting to the checked address, which
 breaks STARTTLS certificate checking against the host name - not done.
+
+### Employee profile — 2026-09-26 (Ajay's features 1, 4 and 5, first part)
+
+The employee page (N6) grew into the profile, as Ajay asked, rather than a
+new page. `organization/employee_profile.py` (services and forms), the views
+in `employee_detail_views.py`, `employee_detail.html` rebuilt around the
+existing sections (kept word for word), `organization/js/employee_profile.js`.
+
+- **Header**: photo (initials when none), name, ID and placement, status and
+  "Left out of reports" badges, contact; actions - Edit, Personal info
+  (modal), Record leave (opens with them chosen: `?employee=`), Calendar,
+  Remove from reports / Show in reports (the project's confirm modal), End
+  employment (its page, `end_employment` as before).
+- **Tabs**: Overview · Personal · Attendance · Leave · Employment · Devices &
+  shift · Activity; the address keeps the tab (#attendance); without script
+  every section shows.
+- **Photo** (`Employee.photo` was never used): PNG/JPG/WEBP up to 3 MB, checked
+  with Pillow (a renamed file or an SVG is refused), stored under a random
+  name, the old file deleted, served only by `organization:employee_photo` to
+  whoever may view the employee (`private` cache) - never a public media URL.
+- **Personal information**: the Employee fields no screen ever edited - date of
+  birth, gender, blood group, marital status, national ID, passport, personal
+  email, address, emergency contact, confirmation date, preferred name. In a
+  modal; a refused form reopens it with the reasons. Audited with only what
+  changed (`employee.personal_updated`).
+- **Summaries (feature 5)**: the Attendance tab calls the Monthly attendance,
+  absent and late report builders for this one person - a day strip, the
+  totals, absent dates, late dates and minutes - so the profile and the
+  reports agree. The Leave tab is the Leave report for them for the year.
+- **Remove from reports (feature 4, Nihal: "hide from reports only")**:
+  `Employee.hide_from_reports` (migration `employees/0004`); every report and
+  download, and the reports' employee picker, leave them out; their days,
+  salary and the Daily list are unchanged, and their own profile still shows
+  them (`Context.include_hidden`). Audited.
+- Who may: `employees.edit` in their branch for changes (as Edit employee);
+  `employees.view` to see the page and photo. `BRANCH_PAGES` has the new URLs.
+- Found on the way: the import's name update did not rename people on the
+  terminals, as Edit employee does. It now calls `resend_identity`.
+
+19 tests in `organization/tests_employee_profile.py`. Checked in the running
+app at desktop width: header, tabs, Attendance tab on D Company's August (26
+present, 4 late, 1 absent), the personal modal. **Server: `migrate`.** Full suite 1618 OK.

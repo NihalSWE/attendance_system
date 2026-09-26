@@ -669,6 +669,11 @@ def _rename(actor, rows):
                 f"so nothing was imported: {' '.join(exc.messages)}"
             ) from exc
         employee.save(update_fields=[*name_fields, "updated_by", "updated_at"])
+        # The terminals show the name they were given: send the new one, as
+        # Edit employee does when it renames someone.
+        from devices.services import mapping as device_mapping
+
+        device_mapping.resend_identity(actor=actor, employee=employee)
         renamed.append({"employee_id": employee.pk, "code": row["employee_id"],
                         "from": before, "to": employee.full_name})
     return renamed
