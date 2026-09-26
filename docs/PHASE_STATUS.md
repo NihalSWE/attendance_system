@@ -4754,3 +4754,11 @@ as a date ("Tue 11 Aug" after "Mon 10 Aug"), hours as minutes (10:00 after
 6 tests in `reports/tests.py::DataTableTests`. Checked in the running app:
 entry logs for August, 228 scans, "Show 50", searching "Dia" gives 56 of 228,
 sorting by time. Full suite 1599 OK.
+
+### Leave Report hidden from the sidebar — 2026-09-26
+
+Nihal: comment the Leave Report out of the sidebar - nothing removed. The
+Reports menu is now listed line by line in `base_template/navigation.py`
+(`report_item(slug)`), with `# report_item("leave"),` commented and a note
+above it. The page (`/reports/leave/`), the catalogue, the Reports page and
+`BRANCH_PAGES` keep it. To show it again, remove the `# `.

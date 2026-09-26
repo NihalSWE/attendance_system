@@ -18,13 +18,12 @@ def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, r
             "salary": salary, "group": group, "report_kind": report_kind}
 
 
-def _report_items():
-    """The Reports menu, straight from the report catalogue."""
-    from reports.catalogue import REPORTS
+def report_item(slug):
+    """A Reports menu entry, from the report catalogue (reports/catalogue.py)."""
+    from reports.catalogue import BY_SLUG
 
-    return (item("All reports", "reports:index"),) + tuple(
-        item(report.menu, report.url_name, group=report.group, report_kind=report.kind)
-        for report in REPORTS)
+    report = BY_SLUG[slug]
+    return item(report.menu, report.url_name, group=report.group, report_kind=report.kind)
 
 
 COMPANY_MENUS = (
@@ -72,7 +71,25 @@ COMPANY_MENUS = (
         item("Holiday calendar", "scheduling:holiday_year", manage=True),
         item("Attendance settings", "scheduling:attendance_settings_edit", manage=True),
     )),
-    ("reports", "Reports", _report_items()),
+    ("reports", "Reports", (
+        item("All reports", "reports:index"),
+        report_item("daily-attendance"),
+        report_item("weekly-attendance"),
+        report_item("monthly-attendance"),
+        report_item("custom-attendance"),
+        # Leave Report hidden from the sidebar for now (Nihal, 2026-09-26). Only
+        # this link: the page, its URL and the Reports page still work. Remove
+        # the "# " below to show it in the sidebar again.
+        # report_item("leave"),
+        report_item("daily-absent"),
+        report_item("monthly-absent"),
+        report_item("daily-late"),
+        report_item("monthly-late"),
+        report_item("working-hours"),
+        report_item("short-hours"),
+        report_item("overtime"),
+        report_item("entry-logs"),
+    )),
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",
              "organization:branch_edit", "organization:branch_status"),
