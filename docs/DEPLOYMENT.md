@@ -88,9 +88,15 @@ from `requirements.txt`.
 |---|---|
 | After code, `.env` or a migration | `systemctl restart attendance_web` |
 | After an Nginx config or certificate change | `nginx -t && systemctl reload nginx` |
-| Database (rarely) | `systemctl restart postgresql` |
-| Everything, in order | `systemctl restart postgresql && systemctl restart attendance_web && systemctl reload nginx` |
-| Are they up? | `systemctl status attendance_web nginx postgresql --no-pager` |
+| Database (rarely) | `systemctl restart postgresql@16-main` — **not** `postgresql`, see below |
+| Everything, in order | `systemctl restart postgresql@16-main && systemctl restart attendance_web && systemctl reload nginx` |
+| Are they up? | `systemctl status attendance_web nginx postgresql@16-main --no-pager` |
+
+**`systemctl restart postgresql` does nothing.** On Ubuntu that unit is an empty
+wrapper (`ExecStart=/bin/true`, and it reports `active (exited)`); the cluster
+itself is `postgresql@16-main`. Restarting the wrapper looks like it worked and
+leaves the database exactly as it was — which cost twenty minutes on 2026-09-26
+while the site was down. `pg_lsclusters` prints the version if it ever differs.
 
 ## Devices
 
@@ -113,7 +119,7 @@ journalctl -u attendance_web -b --no-pager
 journalctl -u attendance_web --since "1 hour ago" --no-pager
 tail -n 100 /var/log/nginx/error.log
 tail -n 100 /var/log/nginx/access.log
-journalctl -u postgresql -n 100 --no-pager
+journalctl -u postgresql@16-main -n 100 --no-pager
 ```
 
 Live (Ctrl+C stops):
@@ -158,3 +164,35 @@ systemctl restart attendance_web
 Then sign in, create the company and branch, register each terminal with its
 exact serial, and press Refresh user list, Fetch attendance history and Save
 fingerprints and faces on each.
+
+
+## "could not open shared memory segment" — every page 500s
+
+```
+FATAL: could not open shared memory segment "/PostgreSQL.160964730":
+No such file or directory
+```
+
+PostgreSQL is running and answering — that FATAL comes from it — but no backend
+can attach its shared memory, so every query dies and Django returns 500. The
+services are all up; they simply have no database.
+
+**Recover:**
+
+```bash
+systemctl restart postgresql@16-main && systemctl restart attendance_web
+```
+
+**Why it happened (2026-09-26).** systemd's `RemoveIPC` defaults to **yes**, and
+`/etc/systemd/logind.conf` had the line commented out, so the default applied.
+logind then deletes a user's IPC objects once their last session ends — so
+logging in as the `postgres` user (`su - postgres`, `sudo -iu postgres`) and
+logging out again wipes the running cluster's segments from under it. Set on the
+server so it cannot recur:
+
+```
+RemoveIPC=no
+```
+
+Check `/dev/shm` before believing anything else about size: this looks like a
+space problem and is not one. Here it was 63G with 1% used.
