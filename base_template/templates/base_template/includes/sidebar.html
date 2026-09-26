@@ -18,15 +18,35 @@
                     </svg>
                 </summary>
                 <ul class="sidebar__submenu">
-                    {% for link in menu.links %}
-                        {% ifchanged link.group %}{% if link.group %}
-                            <li class="sidebar__subhead">{{ link.group }}</li>
-                        {% endif %}{% endifchanged %}
-                        <li>
-                            <a class="sidebar__link sidebar__child{% if link.active %} is-active{% endif %}" href="{{ link.url }}" {% if link.active %}aria-current="page"{% endif %}>
-                                <span>{{ link.label }}</span>
-                            </a>
-                        </li>
+                    {% for node in menu.tree %}
+                        {% if node.group %}
+                            {# A dropdown inside the menu: Reports → Attendance Report → Daily... #}
+                            <li>
+                                <details class="sidebar__subgroup" {% if node.active %}open{% endif %}>
+                                    <summary class="sidebar__link sidebar__subgroup-toggle">
+                                        <span>{{ node.group }}</span>
+                                        <svg class="sidebar__chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                            <path d="m9 5 7 7-7 7"/>
+                                        </svg>
+                                    </summary>
+                                    <ul class="sidebar__submenu sidebar__submenu--nested">
+                                        {% for link in node.links %}
+                                            <li>
+                                                <a class="sidebar__link sidebar__child{% if link.active %} is-active{% endif %}" href="{{ link.url }}" {% if link.active %}aria-current="page"{% endif %}>
+                                                    <span>{{ link.label }}</span>
+                                                </a>
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                </details>
+                            </li>
+                        {% else %}
+                            <li>
+                                <a class="sidebar__link sidebar__child{% if node.link.active %} is-active{% endif %}" href="{{ node.link.url }}" {% if node.link.active %}aria-current="page"{% endif %}>
+                                    <span>{{ node.link.label }}</span>
+                                </a>
+                            </li>
+                        {% endif %}
                     {% endfor %}
                 </ul>
             </details>

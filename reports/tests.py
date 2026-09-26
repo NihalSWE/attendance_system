@@ -69,25 +69,30 @@ class EveryReportTests(ReportCase):
                     self.assertIn(kind, download["Content-Type"])
                     self.assertIn(report.slug, download["Content-Disposition"])
 
-    def test_the_index_lists_them_by_group(self):
+    def test_there_is_no_all_reports_page(self):
+        # Nihal, 2026-09-26: not needed - the menu opens every report.
         self.client.force_login(self.admin)
-        page = self.client.get(reverse("reports:index"))
-        for report in REPORTS:
-            self.assertContains(page, report.title)
-        self.assertContains(page, "Attendance Report")
+        self.assertEqual(self.client.get("/reports/").status_code, 404)
 
-    def test_the_menu_has_the_reports_under_their_headings(self):
-        self.client.force_login(self.admin)
-        page = self.client.get(reverse("reports:index"))
+    def test_the_menu_opens_into_dropdowns(self):
+        page = self.open("daily-late", **DAY)
         menu = next(m for m in page.context["company_menus"] if m["key"] == "reports")
-        labels = [(link["group"], link["label"]) for link in menu["links"]]
-        self.assertEqual(labels[:5], [("", "All reports"),
-                                      ("Attendance Report", "Daily"),
-                                      ("Attendance Report", "Weekly"),
-                                      ("Attendance Report", "Monthly"),
-                                      ("Attendance Report", "Customize")])
-        self.assertIn(("", "Entry Logs Report"), labels)
-        self.assertContains(page, 'class="sidebar__subhead"', count=3)
+        shape = [(node["group"], [link["label"] for link in node["links"]]) if "group" in node
+                 else node["link"]["label"] for node in menu["tree"]]
+        self.assertEqual(shape, [
+            ("Attendance Report", ["Daily", "Weekly", "Monthly", "Customize"]),
+            # The Leave Report's line is commented out of the menu for now.
+            ("Absent Report", ["Daily", "Monthly"]),
+            ("Late Report", ["Daily", "Monthly"]),
+            "Working Hour Report", "Less than Full Working Hour Report", "Overtime Report",
+            "Entry Logs Report",
+        ])
+        self.assertContains(page, 'class="sidebar__subgroup"', count=3)
+        # The dropdown holding the open page starts open; the others closed.
+        late = next(node for node in menu["tree"] if node.get("group") == "Late Report")
+        attendance = menu["tree"][0]
+        self.assertEqual((late["active"], attendance["active"]), (True, False))
+        self.assertContains(page, '<details class="sidebar__subgroup" open>', count=1)
 
     def test_a_download_is_audited(self):
         self.open("daily-attendance", format="xlsx", **DAY)
@@ -237,12 +242,13 @@ class AccessTests(ReportCase):
         # The attendance reports are open to them, as the Daily list is.
         self.assertEqual(self.open("daily-attendance", user=payroll, **DAY).status_code, 200)
 
-    def test_the_index_leaves_out_what_they_cannot_open(self):
+    def test_the_menu_leaves_out_what_they_cannot_open(self):
         payroll = self.member("pm2@rep.test", "payroll_manager")
-        self.client.force_login(payroll)
-        page = self.client.get(reverse("reports:index"))
-        self.assertNotContains(page, "Overtime Report")
-        self.assertContains(page, "Daily Attendance Report")
+        page = self.open("daily-attendance", user=payroll, **DAY)
+        menu = next(m for m in page.context["company_menus"] if m["key"] == "reports")
+        views = [link["view"] for link in menu["links"]]
+        self.assertNotIn(BY_SLUG["overtime"].url_name, views)
+        self.assertIn(BY_SLUG["daily-attendance"].url_name, views)
 
     def test_filters_narrow_it(self):
         rows = self.rows("daily-attendance", employee=str(self.far.pk), **DAY)

@@ -4762,3 +4762,18 @@ Reports menu is now listed line by line in `base_template/navigation.py`
 (`report_item(slug)`), with `# report_item("leave"),` commented and a note
 above it. The page (`/reports/leave/`), the catalogue, the Reports page and
 `BRANCH_PAGES` keep it. To show it again, remove the `# `.
+
+### Reports menu as dropdowns; no "All reports" page — 2026-09-26
+
+Nihal: the headings inside the Reports menu were not right - use dropdowns;
+and the All reports page is not needed. The sidebar now nests: Reports ▸
+Attendance Report ▸ Daily / Weekly / Monthly / Customize, Absent Report ▸
+Daily / Monthly, Late Report ▸ Daily / Monthly, then the other reports as
+links. `company_menus` gives each menu a `tree` beside its flat `links`
+(everything else still reads `links`); both sidebars render the tree as
+`<details class="sidebar__subgroup">`, open when it holds the current page,
+and `navigation.js` opens every dropdown around the current link. The
+`.sidebar__subhead` headings are gone. `reports:index`, its view, template,
+`BRANCH_PAGES` entry and styles are removed; a report's breadcrumb reads
+Dashboard / Reports / title. The Leave Report's line stays commented out.
+Checked at desktop width in the running app. Full suite 1599 OK.

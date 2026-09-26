@@ -122,15 +122,27 @@ Sidebar — the active item is a solid ink block. Never soften it to a tint.
     margin: var(--s1) 0 var(--s2) var(--s4);
     border-left: 1px solid var(--chrome-line);
 }
-/* A heading inside a menu (Reports: "Attendance Report", then its items). */
-.sidebar__subhead {
-    font-size: 10.5px;
-    font-weight: 600;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    opacity: .6;
-    margin: var(--s2) 0 0;
-    padding: 0 var(--s2);
+/* A dropdown inside a menu (Reports: "Attendance Report" opens to its reports). */
+.sidebar__subgroup-toggle {
+    cursor: pointer;
+    list-style: none;
+    font-size: 12px;
+    line-height: 1.45;
+    margin-block: 2px;
+}
+.sidebar__subgroup-toggle::-webkit-details-marker {
+    display: none;
+}
+.sidebar__subgroup-toggle .sidebar__chevron {
+    width: 11px;
+    height: 11px;
+    margin-left: auto;
+}
+.sidebar__subgroup[open] > summary .sidebar__chevron {
+    transform: rotate(90deg);
+}
+.sidebar__submenu--nested {
+    margin: 0 0 var(--s1) var(--s2);
 }
 .sidebar__child {
     font-size: 12px;

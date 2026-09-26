@@ -11,7 +11,8 @@ def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, r
          salary=False, group="", report_kind=""):
     # record: shown to people who may record leave (HR as well as administrators).
     # salary: shown to people who see pay (the payroll manager as well; not HR).
-    # group: a small heading the item sits under inside its menu (Reports).
+    # group: the dropdown inside its menu the item sits in (Reports: "Attendance
+    # Report" opens to Daily, Weekly, Monthly, Customize).
     # report_kind: whose rules decide who may open it (reports.access).
     return {"label": label, "view": view, "aliases": aliases, "fragment": fragment,
             "manage": manage, "unrestricted": unrestricted, "record": record,
@@ -72,7 +73,6 @@ COMPANY_MENUS = (
         item("Attendance settings", "scheduling:attendance_settings_edit", manage=True),
     )),
     ("reports", "Reports", (
-        item("All reports", "reports:index"),
         report_item("daily-attendance"),
         report_item("weekly-attendance"),
         report_item("monthly-attendance"),
@@ -153,6 +153,24 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
                 url += "#" + entry["fragment"]
             links.append({**entry, "url": url, "active": selected, "matches": matches})
         if links:
-            menus.append({"key": key, "label": label, "links": links,
+            menus.append({"key": key, "label": label, "links": links, "tree": _tree(links),
                           "active": any(link["matches"] for link in links)})
     return menus
+
+
+def _tree(links):
+    """The menu's links with each group gathered into a dropdown of its own:
+    ``[{"link": ...}, {"group": "Attendance Report", "links": [...], "active": ...}]``.
+    ``links`` stays flat for everything else that reads the menu."""
+    tree = []
+    for link in links:
+        if not link["group"]:
+            tree.append({"link": link})
+        elif tree and tree[-1].get("group") == link["group"]:
+            tree[-1]["links"].append(link)
+        else:
+            tree.append({"group": link["group"], "links": [link]})
+    for node in tree:
+        if "group" in node:
+            node["active"] = any(link["matches"] for link in node["links"])
+    return tree

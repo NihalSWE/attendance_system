@@ -5,7 +5,7 @@ from reports.catalogue import REPORTS
 
 app_name = "reports"
 
-urlpatterns = [path("", views.report_index, name="index")] + [
+urlpatterns = [
     # One name per report, so each opens by its own permission and menu entry.
     path(f"{report.slug}/", views.report, {"slug": report.slug},
          name=report.url_name.split(":", 1)[1])

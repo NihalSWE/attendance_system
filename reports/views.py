@@ -20,23 +20,9 @@ from organization.access_services import branch_choices, people
 from organization.models import Department
 from organization.views import _company_or_redirect
 from reports import filters as report_filters
-from reports.access import may_see, report_scope
+from reports.access import report_scope
 from reports.builders import Context
-from reports.catalogue import BY_SLUG, REPORTS
-
-@login_required
-@require_http_methods(["GET"])
-def report_index(request):
-    """Reports: every report this person may open, by group."""
-    company_id, bail = _company_or_redirect(request)
-    if bail:
-        return bail
-    kinds = {report.kind for report in REPORTS}
-    allowed = {kind for kind in kinds if may_see(request.user, company_id, kind)}
-    return render(request, "reports/index.html", {
-        "reports": [report for report in REPORTS if report.kind in allowed],
-    })
-
+from reports.catalogue import BY_SLUG
 
 def _choices(company_id, scope, report):
     """The branch, department and employee dropdowns, within ``scope``."""
@@ -118,7 +104,6 @@ def report(request, slug):
         steps.append(moved.urlencode())
     return render(request, "reports/report.html", {
         "report": report,
-        "reports": REPORTS,
         "result": result,
         "page": page,
         "f": f,

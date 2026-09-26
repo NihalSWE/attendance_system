@@ -15,7 +15,12 @@ document.addEventListener("DOMContentLoaded", function () {
             link.classList.toggle("is-active", link === selected);
             if (link === selected) {
                 link.setAttribute("aria-current", location.hash ? "location" : "page");
-                link.closest("details").open = true;
+                // Every dropdown around it: a report sits in "Attendance
+                // Report", which sits in "Reports".
+                for (let menu = link.closest("details"); menu;
+                     menu = menu.parentElement.closest("details")) {
+                    menu.open = true;
+                }
             } else {
                 link.removeAttribute("aria-current");
             }

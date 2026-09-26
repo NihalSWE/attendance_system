@@ -1547,24 +1547,3 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     padding-inline: 6px;
     white-space: nowrap;
 }
-.report-index {
-    display: grid;
-    gap: var(--s3);
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-}
-.report-index__group {
-    grid-column: 1 / -1;
-    margin: var(--s3) 0 0;
-    font-size: 14px;
-}
-.report-index__item {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: var(--s4);
-    color: inherit;
-    text-decoration: none;
-}
-.report-index__item:hover {
-    border-color: currentColor;
-}

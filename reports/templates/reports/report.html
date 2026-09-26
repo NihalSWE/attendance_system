@@ -11,9 +11,13 @@
 {% endblock %}
 {% block page %}
     <div class="crumbs">
-        <a href="{% url 'reports:index' %}">
-            Reports
+        <a href="{% url 'dashboard' %}">
+            Dashboard
         </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Reports
         <span class="crumbs__sep" aria-hidden="true">
             /
         </span>

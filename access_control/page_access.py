@@ -78,8 +78,6 @@ BRANCH_PAGES = {
     "attendance:attendance_list": "attendance.view",
     "attendance:attendance_late": "attendance.view",
     # Reports (2026-09-26): each opens by the rule of the page it reads from.
-    "reports:index": ("attendance.view", "leave.view", "leave.record",
-                      "overtime.view", "overtime.decide"),
     **{report.url_name: report.code for report in REPORTS},
     "attendance:attendance_calendar": "attendance.view",
     "attendance:attendance_day": "attendance.view",
