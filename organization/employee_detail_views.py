@@ -14,6 +14,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from attendance.models import AttendanceRecord
 from common.forms import apply_service_errors
 from organization import employee_detail_services as services
+from attendance.forms import EnterMissingForm
 from organization import employee_profile as profile
 from organization.employee_detail_forms import EndEmploymentForm
 from organization.employee_edit_services import is_company_wide
@@ -90,6 +91,12 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
             for name in profile.PERSONAL_FIELDS
         ],
         "may_record_leave": _may_record_leave(request.user, company_id, page["assignment"]),
+        # Entering a missing scan or day for them: whoever sees their attendance,
+        # not for oneself (that is Report a missed scan), and not after they left.
+        "may_enter_missing": bool(may["attendance"]) and not page["is_ended"]
+        and employee.user_id != request.user.pk,
+        "missing_form": EnterMissingForm(initial={"work_date": today, "at": today,
+                                                  "at_out": today}),
         "open_dialog": open_dialog,
     })
 

@@ -15,6 +15,9 @@ urlpatterns = [
         name="attendance_day",
     ),
     path("review/", views.attendance_review, name="attendance_review"),
+    path("missing/", scan_request_views.missed_scan_pick, name="missed_scan_pick"),
+    path("missing/<int:employee_pk>/", scan_request_views.missed_scan_enter,
+         name="missed_scan_enter"),
     path(
         "day/<int:employee_id>/<slug:on>/fix/",
         views.attendance_day_fix,

@@ -388,12 +388,25 @@ class MissedScanRequest(TenantOwned, ActorTracked):
         REJECTED = "rejected", "Rejected"
         WITHDRAWN = "withdrawn", "Withdrawn"
 
+    class Kind(models.TextChoices):
+        # What is missing (Ajay, 2026-09-26). SCAN is every request made
+        # before the cases were named: one scan, in or out.
+        SCAN = "scan", "A missed scan"
+        CHECK_IN = "check_in", "Missing check-in"
+        CHECK_OUT = "check_out", "Missing check-out"
+        BOTH = "both", "Missing check-in and check-out"
+        WHOLE_DAY = "whole_day", "A whole missing day"
+
     employee = models.ForeignKey(
         "employees.Employee", on_delete=models.PROTECT,
         related_name="missed_scan_requests",
     )
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.SCAN)
     work_date = models.DateField()
     scan_at = models.DateTimeField()
+    # The check-out, when both are missing or the whole day is (the day's
+    # shift end then, worked out when it was entered).
+    scan_out_at = models.DateTimeField(null=True, blank=True)
     reason = models.TextField()
     # The day's branch when it was asked: who sees it waiting. The decision
     # checks the branch again.
@@ -411,6 +424,10 @@ class MissedScanRequest(TenantOwned, ActorTracked):
     correction = models.ForeignKey(
         AttendanceCorrection, null=True, blank=True, on_delete=models.PROTECT,
         related_name="missed_scan_requests",
+    )
+    correction_out = models.ForeignKey(
+        AttendanceCorrection, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="missed_scan_requests_out",
     )
 
     class Meta:

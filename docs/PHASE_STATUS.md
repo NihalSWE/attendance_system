@@ -4846,3 +4846,37 @@ existing sections (kept word for word), `organization/js/employee_profile.js`.
 19 tests in `organization/tests_employee_profile.py`. Checked in the running
 app at desktop width: header, tabs, Attendance tab on D Company's August (26
 present, 4 late, 1 absent), the personal modal. **Server: `migrate`.** Full suite 1618 OK.
+
+### Manual attendance: named cases, entered for someone, approved stays reviewed — 2026-09-26 (Ajay's feature 2)
+
+Built on N11's `MissedScanRequest` + `AttendanceCorrection`, as Ajay said.
+
+- **The case is named** (`MissedScanRequest.kind`, migration
+  `attendance/0006_missed_scan_kinds.py`): missing check-in, missing
+  check-out, missing both (a second time, `scan_out_at`, and `correction_out`),
+  or a whole missing day (the day's `scheduled_start_at`/`scheduled_end_at`,
+  worked out when it is entered, so the approver sees exact times; a day with
+  no shift is refused). Earlier requests are the "A missed scan" case, and a
+  post without a case still is one. The employee's own form names the case too.
+- **Entered for someone** (`scan_requests.enter_for`): anyone who may see that
+  day's attendance - HR, the branch manager, the department head. From the
+  profile ("Add missing attendance", a modal), or, for HR (which holds no
+  "view employees", so has no profile), from Missed scans → "Enter missing
+  attendance" (pick the person). Not for oneself (that is Report a missed
+  scan). Both scans are tried together when entered (`check_scans_fit`, rolled
+  back), so a bad time is refused then, not at approval.
+- **Maker and checker**: whoever entered it does not approve it - unless they
+  are the owner or company admin, who has nobody above (as salary approval).
+  The approver sees the case, both times and "Entered by".
+- **Approved stays out of Days to review (the real gap)**: approving rebuilds
+  the day; if it still asks for a look for a reason a person can accept (left
+  early, long outside, the rule's check-out), approving now also records
+  `accept_review`. Acceptances are kept through every rebuild, so salary
+  generation (`calculate_attendance`, the whole month) does not bring it back.
+  Tested both ways: approved → stays reviewed after the month is recalculated;
+  the same scans added by hand → still asks. An open overtime session is not
+  accepted here: it is decided on the Overtime page, as before.
+
+17 tests in `attendance/tests_manual_attendance.py` (+2 for the HR entry
+point); N11's 21 unchanged. Checked in the running app: the case selector
+shows one time, two, or none. **Server: `migrate`.** Full suite 1637 OK.

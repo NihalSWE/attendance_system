@@ -60,16 +60,34 @@ class WithdrawForm(StyledFormMixin, forms.Form):
     )
 
 
-class MissedScanForm(StyledFormMixin, forms.Form):
-    """An employee reporting a scan the device missed (N11)."""
+#: The cases a form offers (the old one-scan "A missed scan" is not asked any more).
+MISSING_KINDS = [
+    ("check_in", "Missing check-in"),
+    ("check_out", "Missing check-out"),
+    ("both", "Missing check-in and check-out"),
+    ("whole_day", "A whole missing day (the shift's times)"),
+]
 
+
+class MissedScanForm(StyledFormMixin, forms.Form):
+    """A missing scan, or a missing day (N11; the cases named 2026-09-26).
+    The employee's own, or entered for them (``EnterMissingForm``)."""
+
+    kind = forms.ChoiceField(
+        label="What is missing", choices=MISSING_KINDS, initial="check_in", required=False,
+        widget=forms.Select(attrs={"data-missing-kind": ""}),
+    )
     work_date = forms.DateField(
         label="Attendance day", widget=date_widget("Choose a date"),
         help_text="The day whose attendance is missing the scan.",
     )
     at = CompanyDateTimeField(
-        label="When you scanned", placeholder="Choose a date",
+        label="When you scanned", placeholder="Choose a date", required=False,
         help_text="Usually the same date. On a night shift, a scan after midnight is on the next date.",
+    )
+    at_out = CompanyDateTimeField(
+        label="Check-out", placeholder="Choose a date", required=False,
+        help_text="When both are missing: the check-out.",
     )
     reason = forms.CharField(
         label="What happened",
@@ -79,10 +97,40 @@ class MissedScanForm(StyledFormMixin, forms.Form):
         }),
     )
 
-    def clean_at(self):
-        if not (self.data.get(self.add_prefix("at") + "_1") or "").strip():
-            raise forms.ValidationError("Enter the time of the scan.")
-        return self.cleaned_data["at"]
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Which times each case shows (missed_scan_kind.js hides the rest).
+        for name in ("at", "at_out"):
+            for part in self.fields[name].widget.widgets:
+                part.attrs["data-missing-time"] = name
+
+    def _time_given(self, name):
+        return bool((self.data.get(self.add_prefix(name) + "_1") or "").strip())
+
+    def clean(self):
+        data = super().clean()
+        # Sent without a case (as before the cases were named): one scan.
+        kind = data["kind"] = data.get("kind") or "scan"
+        if kind == "whole_day":
+            data["at"] = data["at_out"] = None     # the shift's times, worked out later
+            return data
+        if not self._time_given("at"):
+            self.add_error("at", "Enter the time of the scan.")
+        if kind == "both" and not self._time_given("at_out"):
+            self.add_error("at_out", "Enter the check-out time.")
+        if kind != "both":
+            data["at_out"] = None
+        return data
+
+
+class EnterMissingForm(MissedScanForm):
+    """The same, entered for someone by HR or their manager."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["at"].label = "Time of the scan (the check-in when both are missing)"
+        self.fields["reason"].widget.attrs["placeholder"] = (
+            "e.g. Came in with the visitors at the side gate; confirmed by the guard")
 
 
 class DecideMissedScanForm(StyledFormMixin, forms.Form):

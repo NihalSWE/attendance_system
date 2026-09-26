@@ -30,7 +30,7 @@
                 {{ item.employee.full_name }}
             </h1>
             <p class="page__sub">
-                Says they scanned at {{ item.scan_at|timezone:company_tz|date:"H:i" }} on {{ item.work_date|date:"l j F Y" }} · {{ item.branch.name }}
+                {{ item.get_kind_display }}: {{ item.scan_at|timezone:company_tz|date:"H:i" }}{% if item.scan_out_at %} – {{ item.scan_out_at|timezone:company_tz|date:"H:i" }}{% endif %} on {{ item.work_date|date:"l j F Y" }} · {{ item.branch.name }}
             </p>
         </div>
         <div class="page__actions">
@@ -67,11 +67,33 @@
             <div class="card__body">
                 <dl class="facts">
                     <dt>
-                        Scan
+                        What is missing
+                    </dt>
+                    <dd>
+                        {{ item.get_kind_display }}
+                    </dd>
+                    <dt>
+                        {% if item.scan_out_at %}Check-in{% else %}Scan{% endif %}
                     </dt>
                     <dd>
                         {{ item.scan_at|timezone:company_tz|date:"H:i, j M Y" }}
                     </dd>
+                    {% if item.scan_out_at %}
+                        <dt>
+                            Check-out
+                        </dt>
+                        <dd>
+                            {{ item.scan_out_at|timezone:company_tz|date:"H:i, j M Y" }}
+                        </dd>
+                    {% endif %}
+                    {% if entered_by %}
+                        <dt>
+                            Entered by
+                        </dt>
+                        <dd>
+                            {{ entered_by }}{% if entered_by_you %} (you - someone else approves it){% endif %}
+                        </dd>
+                    {% endif %}
                     <dt>
                         What happened
                     </dt>

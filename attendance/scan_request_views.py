@@ -17,7 +17,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from attendance import month_view, scan_requests
-from attendance.forms import DecideMissedScanForm, MissedScanForm
+from attendance.forms import DecideMissedScanForm, EnterMissingForm, MissedScanForm
 from attendance.models import AttendanceRecord, MissedScanRequest
 from base_template.tables import paginate, render
 from common.forms import apply_service_errors
@@ -79,6 +79,7 @@ def report_missed_scan(request):
             scan_requests.submit(
                 actor=request.user, company_id=request.company_id,
                 work_date=data["work_date"], at=data["at"], reason=data["reason"],
+                kind=data["kind"], at_out=data["at_out"],
             )
         except ValidationError as exc:
             apply_service_errors(form, exc)
@@ -126,7 +127,15 @@ def missed_scan_list(request):
                    "work_date", "scan_at", None, None),
         )
         waiting = queryset.filter(status="pending").count()
+    from attendance import access
+    from attendance.views import _pickable
+
+    _m, scope = access.view_scope(request.user, company_id)
+    with use_company(company_id):
+        people = list(_pickable(scope).exclude(user=request.user).filter(
+            employment_status__in=scan_requests.WORKING).order_by("first_name", "last_name"))
     return render(request, "attendance/missed_scan_list.html", {
+        "people": people,
         "page": page,
         "status": status,
         "waiting": waiting,
@@ -168,6 +177,12 @@ def missed_scan_decide(request, pk):
                 )
                 return redirect(reverse("attendance:missed_scan_list"))
 
+    entered_by = ""
+    if scan_requests.entered_by_someone_else(item) and item.created_by_id:
+        from django.contrib.auth import get_user_model
+
+        creator = get_user_model().objects.filter(pk=item.created_by_id).first()
+        entered_by = creator.get_username() if creator else ""
     company_tz = _company_tz(request)
     with use_company(company_id):
         record = (
@@ -179,6 +194,8 @@ def missed_scan_decide(request, pk):
             if record is not None else None
         )
     return render(request, "attendance/missed_scan_decide.html", {
+        "entered_by": entered_by,
+        "entered_by_you": bool(entered_by) and item.created_by_id == request.user.pk,
         "item": item,
         "form": form,
         "record": record,
@@ -189,3 +206,65 @@ def missed_scan_decide(request, pk):
         ),
         "today": timezone.localdate(),
     })
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def missed_scan_enter(request, employee_pk):
+    """Enter a missing scan or day for someone (2026-09-26): HR, their branch
+    manager, their department head. It waits for approval like their own
+    request; the profile opens this form in a modal."""
+    from employees.models import Employee
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    with use_company(company_id):
+        employee = get_object_or_404(Employee, pk=employee_pk)
+    initial = {}
+    try:
+        day = datetime.date.fromisoformat(request.GET.get("date", ""))
+    except ValueError:
+        day = None
+    if day is not None:
+        initial = {"work_date": day, "at": day, "at_out": day}
+    form = EnterMissingForm(request.POST or None, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        data = form.cleaned_data
+        try:
+            scan_requests.enter_for(
+                actor=request.user, company_id=company_id, employee_id=employee.pk,
+                work_date=data["work_date"], kind=data["kind"], at=data["at"],
+                at_out=data["at_out"], reason=data["reason"],
+            )
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, (
+                f"Sent for approval. {employee.full_name}'s attendance changes once someone "
+                "who may fix it approves - not you, if you entered it."))
+            return redirect(reverse("organization:employee_detail", args=[employee.pk])
+                            + "#attendance")
+    return render(request, "attendance/missed_scan_enter.html", {
+        "form": form, "employee": employee,
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def missed_scan_pick(request):
+    """Missed scans → Enter missing attendance: choose the person, then the
+    entry form. HR has no employee profile to start from, so it starts here."""
+    from attendance import access
+    from attendance.views import _pickable
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    _membership, scope = access.view_scope(request.user, company_id)
+    chosen = request.GET.get("employee", "")
+    with use_company(company_id):
+        if chosen.isdigit() and _pickable(scope).filter(pk=int(chosen)).exists():
+            return redirect("attendance:missed_scan_enter", employee_pk=int(chosen))
+    messages.error(request, "Choose someone whose attendance you look after.")
+    return redirect("attendance:missed_scan_list")

@@ -1,7 +1,13 @@
 {% extends "base_template/base.html" %}
+{% load static %}
 {% load tz %}
 {% block title %}
     Missed scans · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="crumbs">
@@ -26,8 +32,40 @@
             <a class="btn btn--ghost" href="{% url 'attendance:attendance_review' %}">
                 Days to review
             </a>
+            {% if people %}
+                <button class="btn btn--primary" type="button" data-open-dialog="pick-dialog">
+                    Enter missing attendance
+                </button>
+            {% endif %}
         </div>
     </div>
+    {% if people %}
+        {# For someone else: HR, a branch manager, a department head. #}
+        <dialog class="modal" id="pick-dialog" aria-labelledby="pick-dialog-title">
+            <form class="modal__card" method="get" action="{% url 'attendance:missed_scan_pick' %}">
+                <div class="modal__head">
+                    <h2 id="pick-dialog-title">Enter missing attendance</h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <div class="modal__body stack">
+                    <p class="t-faint">A missing check-in, check-out, both, or a whole day - for someone whose attendance you look after. It waits for approval.</p>
+                    <div class="field">
+                        <label class="field__label" for="pick-employee">Who</label>
+                        <select class="input select js-select2" id="pick-employee" name="employee" required>
+                            <option value="">Choose someone</option>
+                            {% for person in people %}
+                                <option value="{{ person.pk }}">{{ person.full_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn--primary" type="submit">Continue</button>
+                </div>
+            </form>
+        </dialog>
+    {% endif %}
 
     <div class="card">
         <div class="card__head">
@@ -95,10 +133,16 @@
                                     {{ item.work_date|date:"D j M Y" }}
                                 </td>
                                 <td class="numeric">
-                                    {{ item.scan_at|timezone:company_tz|date:"H:i" }}
+                                    {{ item.scan_at|timezone:company_tz|date:"H:i" }}{% if item.scan_out_at %} – {{ item.scan_out_at|timezone:company_tz|date:"H:i" }}{% endif %}
+                                    {% if item.kind != "scan" %}
+                                        <div class="t-faint">{{ item.get_kind_display }}</div>
+                                    {% endif %}
                                 </td>
                                 <td>
                                     {{ item.reason|truncatechars:90 }}
+                                    {% if item.created_by_id and item.created_by_id != item.employee.user_id %}
+                                        <div class="t-faint">Entered for them</div>
+                                    {% endif %}
                                 </td>
                                 <td class="numeric">
                                     <a class="btn {% if item.status == 'pending' %}btn--primary{% else %}btn--ghost{% endif %} btn--sm" href="{% url 'attendance:missed_scan_decide' item.pk %}">

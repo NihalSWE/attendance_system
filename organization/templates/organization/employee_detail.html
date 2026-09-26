@@ -11,6 +11,8 @@
     {{ block.super }}
     <script defer src="{% static 'organization/js/employee_profile.js' %}">
     </script>
+    <script defer src="{% static 'attendance/js/missed_scan_kind.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="crumbs">
@@ -82,6 +84,11 @@
                 <a class="btn btn--ghost" href="{% url 'leaves:leave_record' %}?employee={{ employee.pk }}">
                     Record leave
                 </a>
+            {% endif %}
+            {% if may_enter_missing %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="missing-dialog">
+                    Add missing attendance
+                </button>
             {% endif %}
             {% if calendar_url %}
                 <a class="btn btn--ghost" href="{{ calendar_url }}">
@@ -656,6 +663,26 @@
         {% endif %}
     </div>
     </section>
+
+    {% if may_enter_missing %}
+        <dialog class="modal modal--wide" id="missing-dialog" aria-labelledby="missing-dialog-title">
+            <form class="modal__card" method="post" action="{% url 'attendance:missed_scan_enter' employee.pk %}">
+                {% csrf_token %}
+                <div class="modal__head">
+                    <h2 id="missing-dialog-title">Missing attendance for {{ employee.full_name }}</h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <div class="modal__body stack">
+                    <p class="t-faint">It waits for approval by someone who may fix attendance in their branch - not you, if you enter it.</p>
+                    {% include "attendance/includes/fix_fields.html" with form=missing_form %}
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn--primary" type="submit">Send for approval</button>
+                </div>
+            </form>
+        </dialog>
+    {% endif %}
 
     {% if may.edit %}
         <dialog class="modal" id="photo-dialog" aria-labelledby="photo-dialog-title">

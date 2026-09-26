@@ -77,6 +77,10 @@ BRANCH_PAGES = {
     # with the owner and company admin.
     "attendance:attendance_list": "attendance.view",
     "attendance:attendance_late": "attendance.view",
+    # Entering a missing scan or day for someone (2026-09-26): whoever may
+    # see their attendance; the service checks that day's branch.
+    "attendance:missed_scan_enter": "attendance.view",
+    "attendance:missed_scan_pick": "attendance.view",
     # Reports (2026-09-26): each opens by the rule of the page it reads from.
     **{report.url_name: report.code for report in REPORTS},
     "attendance:attendance_calendar": "attendance.view",

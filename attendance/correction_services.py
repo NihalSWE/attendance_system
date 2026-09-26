@@ -188,13 +188,21 @@ def check_scan_fits(*, actor, membership, company_id, employee_id, work_date, at
     when an employee reports a missed scan (N11); the permission to fix is
     checked when somebody approves it, not here.
     """
+    check_scans_fit(actor=actor, membership=membership, company_id=company_id,
+                    employee_id=employee_id, work_date=work_date, scans=[at])
+
+
+def check_scans_fit(*, actor, membership, company_id, employee_id, work_date, scans):
+    """``check_scan_fits`` for several scans added together (a missing check-in
+    and check-out): each must count on the day with the others there too."""
     try:
         with transaction.atomic():
-            _add_scan(
-                actor=actor, membership=membership, company_id=company_id,
-                employee_id=employee_id, work_date=work_date, at=at,
-                reason="Checking a missed-scan request",
-            )
+            for at in scans:
+                _add_scan(
+                    actor=actor, membership=membership, company_id=company_id,
+                    employee_id=employee_id, work_date=work_date, at=at,
+                    reason="Checking a missed-scan request",
+                )
             raise _TryOnly
     except _TryOnly:
         pass

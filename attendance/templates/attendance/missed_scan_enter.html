@@ -1,47 +1,47 @@
 {% extends "base_template/base.html" %}
 {% load static %}
+{% block title %}
+    Missing attendance · {{ employee.full_name }}
+{% endblock %}
 {% block extra_js %}
     {{ block.super }}
     <script defer src="{% static 'attendance/js/missed_scan_kind.js' %}">
     </script>
 {% endblock %}
-{% block title %}
-    Report a missed scan · My account
-{% endblock %}
 {% block page %}
     <div class="form-page">
     <div class="crumbs">
-        <a href="{% url 'me:home' %}">
-            My account
+        <a href="{% url 'employee_list' %}">
+            Employees
         </a>
         <span class="crumbs__sep" aria-hidden="true">
             /
         </span>
-        <a href="{% url 'me:missed_scans' %}">
-            Missed scans
+        <a href="{% url 'organization:employee_detail' employee.pk %}">
+            {{ employee.full_name }}
         </a>
         <span class="crumbs__sep" aria-hidden="true">
             /
         </span>
-        Report
+        Missing attendance
     </div>
     <div class="page__head">
         <div>
             <h1 class="page__title">
-                Report a missed scan
+                Missing attendance for {{ employee.full_name }}
             </h1>
             <p class="page__sub">
-                The time you scanned, or should have. Your branch manager or HR approves it, and the day is worked out again with it.
+                It waits for approval by someone who may fix attendance in their branch, then the day is worked out again with it.
             </p>
         </div>
     </div>
-    <form class="card" method="post" action="">
+    <form class="card" method="post" action="{% url 'attendance:missed_scan_enter' employee.pk %}">
         {% csrf_token %}
         <div class="card__body stack">
             {% include "attendance/includes/fix_fields.html" %}
         </div>
         <div class="card__foot">
-            <a class="btn btn--ghost" href="{% url 'me:missed_scans' %}">
+            <a class="btn btn--ghost" href="{% url 'organization:employee_detail' employee.pk %}">
                 Cancel
             </a>
             <button class="btn btn--primary" type="submit">
