@@ -4777,3 +4777,9 @@ and `navigation.js` opens every dropdown around the current link. The
 `BRANCH_PAGES` entry and styles are removed; a report's breadcrumb reads
 Dashboard / Reports / title. The Leave Report's line stays commented out.
 Checked at desktop width in the running app. Full suite 1599 OK.
+
+### Leave Report back in the sidebar — 2026-09-26
+
+Nihal: show it again. `report_item("leave"),` is uncommented in
+`base_template/navigation.py` (and the "hidden for now" note removed); it sits
+after the Attendance Report dropdown. Nothing else changed.

@@ -81,7 +81,7 @@ class EveryReportTests(ReportCase):
                  else node["link"]["label"] for node in menu["tree"]]
         self.assertEqual(shape, [
             ("Attendance Report", ["Daily", "Weekly", "Monthly", "Customize"]),
-            # The Leave Report's line is commented out of the menu for now.
+            "Leave Report",
             ("Absent Report", ["Daily", "Monthly"]),
             ("Late Report", ["Daily", "Monthly"]),
             "Working Hour Report", "Less than Full Working Hour Report", "Overtime Report",

@@ -77,10 +77,7 @@ COMPANY_MENUS = (
         report_item("weekly-attendance"),
         report_item("monthly-attendance"),
         report_item("custom-attendance"),
-        # Leave Report hidden from the sidebar for now (Nihal, 2026-09-26). Only
-        # this link: the page, its URL and the Reports page still work. Remove
-        # the "# " below to show it in the sidebar again.
-        # report_item("leave"),
+        report_item("leave"),
         report_item("daily-absent"),
         report_item("monthly-absent"),
         report_item("daily-late"),
