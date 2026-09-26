@@ -43,8 +43,12 @@ class TenantMiddleware:
             clear_current_company_id(token)
 
 
-# Roles whose people use their own pages, not the company's.
-SELF_SERVICE_ROLES = ("employee", "manager")
+# Roles whose people use their own pages, not the company's. The auditor is
+# here too (2026-09-26): it opened every page that trusted "any company
+# login" - attendance, leave, shifts, the organisation lists, reports - and
+# nobody ever designed what an auditor may see. Like an employee, it now
+# opens only what it is given a permission for. Design it when one is needed.
+SELF_SERVICE_ROLES = ("employee", "manager", "auditor")
 # Their pages, plus signing in and out.
 SELF_SERVICE_NAMESPACES = ("me",)
 ALWAYS_OPEN_URL_NAMES = ("login", "logout", "switch_company")

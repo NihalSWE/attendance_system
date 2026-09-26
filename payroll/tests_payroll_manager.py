@@ -183,10 +183,12 @@ class AuditorHasNoSalaryTests(PayrollManagerCase):
     # 2026-09-23); an auditor is designed when one is actually needed.
     def test_the_auditor_sees_no_salary(self):
         self.generate()
-        self.assertEqual(self.home(self.auditor).status_code, 403)
+        # Since 2026-09-26 the auditor opens no company page at all: the gate
+        # sends it to My account before the salary page is reached.
+        self.assertRedirects(self.home(self.auditor), reverse("me:home"))
         self.client.force_login(self.auditor)
         page = self.client.get(self.payslip_url(self.records()["Rahim"]))
-        self.assertEqual(page.status_code, 403)
+        self.assertRedirects(page, reverse("me:home"))
         self.assertNotIn("Salary by month", self.sidebar_labels(self.auditor))
         for code in ("salary.view", "salary.prepare"):
             self.assertEqual(branches_for(self.auditor, self.company.pk, code), set())

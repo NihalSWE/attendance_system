@@ -84,12 +84,17 @@ class DailyListTests(BranchAttendanceCase):
         self.client.force_login(self.clerk_user)
         self.assertRedirects(self.client.get(self.url, AUGUST), reverse("me:home"))
 
-    def test_owner_hr_and_other_company_roles_are_unchanged(self):
-        for user in (self.admin, self.hr, self.auditor):
+    def test_owner_and_hr_are_unchanged_and_the_auditor_sees_nothing(self):
+        for user in (self.admin, self.hr):
             self.client.force_login(user)
             page = self.client.get(self.url, AUGUST)
             self.assertContains(page, "Rahim")
             self.assertContains(page, "Karim")
+        # The auditor used to see every branch's attendance just by being a
+        # company login; it now opens no company page at all (Ajay, 2026-09-26:
+        # a role that does nothing is safer than one nobody designed).
+        self.client.force_login(self.auditor)
+        self.assertRedirects(self.client.get(self.url, AUGUST), reverse("me:home"))
 
 
 class CalendarTests(BranchAttendanceCase):
@@ -236,7 +241,8 @@ class ReviewAndFixTests(BranchAttendanceCase):
             self.assertContains(page, "Karim")
         self.accept(self.far, self.hr)
         self.client.force_login(self.auditor)
-        self.assertEqual(self.client.get(self.url).status_code, 403)
+        # Kept out at the door now (the page gate), not refused by the page.
+        self.assertRedirects(self.client.get(self.url), reverse("me:home"))
         with self.assertRaises(PermissionDenied):
             self.accept(self.employee, self.auditor)
 

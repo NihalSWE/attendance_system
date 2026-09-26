@@ -4783,3 +4783,24 @@ Checked at desktop width in the running app. Full suite 1599 OK.
 Nihal: show it again. `report_item("leave"),` is uncommented in
 `base_template/navigation.py` (and the "hidden for now" note removed); it sits
 after the Attendance Report dropdown. Nothing else changed.
+
+### The auditor opens nothing; review notes — 2026-09-26
+
+**Auditor.** Ajay: strip its attendance, as salary was. Checked first: it did
+not do "one thing" - opening every sidebar page as an auditor, it reached the
+Daily list, Calendar, Late entries, Leave list, Leave types, Shifts overview,
+Holidays, Branches, Departments, Designations and every report but Overtime,
+all through "any company login may". Rather than strip page by page, it
+joins `SELF_SERVICE_ROLES` (`common/middleware.py`): like an employee it opens
+only its own pages and whatever it is given a permission for - none today,
+and a company page added later is closed to it by default. Probe after: no
+company page opens; My account shows "Auditor". Three tests that pinned the
+old access now pin this (each with the reason).
+
+**Import:** the NAME ONLY boundary is in `import_services`' docstring and on
+`_rename`. **Deployment:** DEPLOYMENT.md says rotating `SECRET_KEY` makes every
+saved company mail password unreadable (and signs everyone out). **Mail host
+check:** `_check_host` runs on every connection (each test and send, in
+`_smtp`), not at save; the one gap left is the moment between that lookup
+and smtplib's own. Closing it means connecting to the checked address, which
+breaks STARTTLS certificate checking against the host name - not done.

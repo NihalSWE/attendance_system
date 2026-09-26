@@ -42,7 +42,12 @@ employee) is not an error. So when the list grows, the whole file can be
 uploaded again and only the new people are added. If the file gives them a
 different name, **their name is updated to the file's** (Nihal, 2026-09-24) -
 the preview lists every such change, old name and new, before anything is
-written. Nothing else about an existing employee is ever changed from a file.
+written. **NAME ONLY** (accepted by Ajay, 2026-09-26): people brought in from
+a terminal arrive in its spelling (MD RABBI), and the file is the sensible place
+to put that right. Nothing else about an existing employee is ever changed from
+a file - if a re-upload ever reached department, designation or salary, "no
+update mode" would be gone and uploading a list would silently rewrite
+placements.
 Only for people the importer may edit: an Employee ID belonging to someone
 outside their branches is refused, and that person's name is never shown.
 
@@ -634,6 +639,9 @@ def commit(*, actor, company_id, rows, branch_id):
 
 def _rename(actor, rows):
     """Give each row's current employee the file's name. Call in the company.
+
+    NAME ONLY - see the module docstring. Do not add other fields here: this is
+    the one thing an upload may change about someone already in the software.
 
     The whole name is replaced, the same way an import creates one: the last
     word is the last name, the rest the first name, and no middle name - so the

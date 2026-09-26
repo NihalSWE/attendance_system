@@ -82,6 +82,13 @@ venv/bin/pip install -r requirements.txt && venv/bin/python manage.py migrate &&
 be saved (its own key per server; see `.env.example`), and `cryptography` comes
 from `requirements.txt`.
 
+**Changing `SECRET_KEY` makes every company's saved mail password unreadable.**
+Organisation → Email settings encrypts the password with a key derived from
+`SECRET_KEY` (`organization/mail_settings.py`), so after a rotation no company
+can send email until its owner or admin types the password again. It fails
+loudly - sending and the test say "Enter the password again" - but tell the
+companies before you rotate. (Rotating `SECRET_KEY` also signs everyone out.)
+
 ## Restarting the services
 
 | When | Command |
