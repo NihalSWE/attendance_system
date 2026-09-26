@@ -84,6 +84,7 @@ INSTALLED_APPS = [
     'attendance',
     'leaves',
     'payroll',
+    'reports',
     'subscriptions',
     'auditlog',
     # Shared presentation app (no domain models/tables).

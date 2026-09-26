@@ -13,6 +13,7 @@ page follow this list, so a page appears the moment it is added.
 """
 
 from access_control.branch_access import CODES, can
+from reports.catalogue import REPORTS
 
 # view name -> the branch permission it needs, or a tuple: any one of them.
 BRANCH_PAGES = {
@@ -76,6 +77,10 @@ BRANCH_PAGES = {
     # with the owner and company admin.
     "attendance:attendance_list": "attendance.view",
     "attendance:attendance_late": "attendance.view",
+    # Reports (2026-09-26): each opens by the rule of the page it reads from.
+    "reports:index": ("attendance.view", "leave.view", "leave.record",
+                      "overtime.view", "overtime.decide"),
+    **{report.url_name: report.code for report in REPORTS},
     "attendance:attendance_calendar": "attendance.view",
     "attendance:attendance_day": "attendance.view",
     "attendance:attendance_now": ("employees.view", "attendance.view"),

@@ -4690,3 +4690,50 @@ Tests: `organization/tests_mail_settings.py` (15), `payroll/tests_payslip_compos
 `payroll/tests_payslip_pdf.py` unchanged and passing. Checked in the running
 app (temporary server on :8001, session deleted, nothing saved or sent).
 **Server:** `migrate` after pulling. Full suite 1566 OK.
+
+### Reports — 2026-09-26
+
+Nihal asked for a **Reports** menu with thirteen reports. New app `reports`
+(`/reports/`), in the sidebar between Salary and Organisation, with small
+group headings (`item(..., group=...)`, `.sidebar__subhead`) - the first menu
+to need them:
+
+| Menu | Report | Period | Reads |
+|---|---|---|---|
+| All reports | the list, by group | | |
+| Attendance Report | Daily / Weekly / Monthly / Customize | a day / a week from Saturday / a month / any dates (92 days) | attendance days |
+| | Leave Report | any dates (a year) | leave requests, by type and status |
+| Absent Report | Daily / Monthly | | absent days |
+| Late Report | Daily / Monthly | | late days (net of grace, as the Daily list) |
+| | Working Hour Report | any dates | worked against shift hours |
+| | Less than Full Working Hour Report | any dates | worked < shift hours, leave days left out |
+| | Overtime Report | any dates | the Overtime page's own days and states |
+| | Entry Logs Report | any dates (31 days) | every scan, counted or not, and why |
+
+- **One page and one set of filters for all** (`reports/catalogue.py` lists
+  them; the menu, the index, the URLs and `BRANCH_PAGES` are read from it):
+  the period, branch, department, employee, plus a report's own (Customize:
+  totals or every day, one status; Leave: status and type). Earlier / Later
+  step a day, week or month. 100 rows a page on screen; **Excel and PDF** hold
+  every row (`common.exports`, audited as `export.downloaded`,
+  `page="report:<slug>"`). `table_pdf` gained `compact=True` for the
+  forty-column month grid; everything else prints as before.
+- **Nothing new is counted**: every figure comes from what the system already
+  records, so a report agrees with its page - checked on D Company's August:
+  124 days (Daily list 124), 16 late of 15 minutes (Late entries 16 × 15),
+  2 leave days (the grid's two LV). The Overtime report calls
+  `payroll.overtime` itself (`CANDIDATES`, `claim_for`, `state_of`,
+  `payable_overtime`), so day-off work, open sessions, "approved
+  automatically" and paid minutes are the Overtime page's.
+- **Access is the source page's**, no new permissions (`reports/access.py`):
+  attendance reports as the Daily list, Leave as the Leave list, Overtime as
+  the Overtime page (owner/admin/HR, or overtime access in a branch). A
+  branch login sees its branches; a filter outside the viewer's reach is
+  dropped, not trusted. The menu and the index show only what the viewer may
+  open (`company_menus(report_kinds=...)`).
+- Weekly grids start on **Saturday** (no company setting exists; Friday is
+  the usual weekly off). Grid codes: P, LT (late), HD, A, LV, H, W, IN.
+
+Tests: `reports/tests.py` (27). Checked in the running app (temporary server
+on :8001, session deleted): every report 200 in 72–130 ms on D Company, the
+menu's headings, the grid scrolling sideways on a phone. No migration. Full suite 1593 OK.

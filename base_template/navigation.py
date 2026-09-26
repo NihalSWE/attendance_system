@@ -8,12 +8,23 @@ from django.urls import reverse
 
 
 def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False,
-         salary=False):
+         salary=False, group="", report_kind=""):
     # record: shown to people who may record leave (HR as well as administrators).
     # salary: shown to people who see pay (the payroll manager as well; not HR).
+    # group: a small heading the item sits under inside its menu (Reports).
+    # report_kind: whose rules decide who may open it (reports.access).
     return {"label": label, "view": view, "aliases": aliases, "fragment": fragment,
             "manage": manage, "unrestricted": unrestricted, "record": record,
-            "salary": salary}
+            "salary": salary, "group": group, "report_kind": report_kind}
+
+
+def _report_items():
+    """The Reports menu, straight from the report catalogue."""
+    from reports.catalogue import REPORTS
+
+    return (item("All reports", "reports:index"),) + tuple(
+        item(report.menu, report.url_name, group=report.group, report_kind=report.kind)
+        for report in REPORTS)
 
 
 COMPANY_MENUS = (
@@ -61,6 +72,7 @@ COMPANY_MENUS = (
         item("Holiday calendar", "scheduling:holiday_year", manage=True),
         item("Attendance settings", "scheduling:attendance_settings_edit", manage=True),
     )),
+    ("reports", "Reports", _report_items()),
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",
              "organization:branch_edit", "organization:branch_status"),
@@ -87,7 +99,7 @@ COMPANY_MENUS = (
 
 
 def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=None,
-                  can_see_salary=None, allowed=None):
+                  can_see_salary=None, report_kinds=None, allowed=None):
     """The company menus for this request.
 
     ``allowed`` (A12): for a branch manager or a person given access, a check
@@ -111,6 +123,9 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
             elif entry["record"] and not can_record_leave:
                 continue
             elif entry["salary"] and not can_see_salary:
+                continue
+            elif (entry["report_kind"] and report_kinds is not None
+                  and entry["report_kind"] not in report_kinds):
                 continue
             elif entry["unrestricted"] and not can_manage_devices:
                 continue

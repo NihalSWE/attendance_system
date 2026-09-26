@@ -87,6 +87,9 @@
                 </summary>
                 <ul class="sidebar__submenu">
                     {% for link in menu.links %}
+                        {% ifchanged link.group %}{% if link.group %}
+                            <li class="sidebar__subhead">{{ link.group }}</li>
+                        {% endif %}{% endifchanged %}
                         <li>
                             <a class="sidebar__link sidebar__child{% if link.active %} is-active{% endif %}" href="{{ link.url }}" {% if link.active %}aria-current="page"{% endif %}>
                                 <span>{{ link.label }}</span>

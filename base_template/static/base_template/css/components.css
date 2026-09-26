@@ -1508,3 +1508,63 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     gap: 4px;
     margin-top: 3px;
 }
+
+/* Reports (2026-09-26): the summary figures above a report, and the
+   day-by-day grid of the weekly and monthly registers. */
+.report-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    padding: var(--s3) var(--s4) 0;
+}
+.report-summary__item {
+    display: flex;
+    flex-direction: column;
+    min-width: 88px;
+    padding: var(--s2) var(--s3);
+    border: 1px solid var(--line, #e3e7ec);
+    border-radius: 10px;
+}
+.report-summary__value {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.report-summary__label {
+    font-size: 11.5px;
+    opacity: .7;
+}
+.report-notes {
+    padding: var(--s2) var(--s4) 0;
+    margin: 0;
+}
+.report-pages {
+    align-items: center;
+    padding: var(--s3) var(--s4);
+}
+.table--grid th,
+.table--grid td {
+    padding-inline: 6px;
+    white-space: nowrap;
+}
+.report-index {
+    display: grid;
+    gap: var(--s3);
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.report-index__group {
+    grid-column: 1 / -1;
+    margin: var(--s3) 0 0;
+    font-size: 14px;
+}
+.report-index__item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--s4);
+    color: inherit;
+    text-decoration: none;
+}
+.report-index__item:hover {
+    border-color: currentColor;
+}

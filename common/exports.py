@@ -225,16 +225,21 @@ def _escape(text):
     return (text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
-def table_pdf(*, title, lines, headers, rows, numeric=(), widths=None):
+def table_pdf(*, title, lines, headers, rows, numeric=(), widths=None, compact=False):
     """A landscape A4 table: title, filter lines, then the rows.
 
     The header repeats on every page and long cells wrap. ``widths`` are
-    relative column weights; the table fills the page width.
+    relative column weights; the table fills the page width. ``compact``: a
+    wide grid (a month of days, reports) - smaller type and tighter cells, so
+    forty columns fit across the page.
     """
     from reportlab.lib import colors
     from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
     styles = _styles()
+    if compact:
+        styles["cell"] = styles["cell"].clone("cc", fontSize=6, leading=7.5)
+        styles["head"] = styles["head"].clone("hc", fontSize=6, leading=7.5)
     buffer = io.BytesIO()
     doc, footer = _document(buffer, title)
     story = [Paragraph(_escape(title), styles["title"])]
@@ -261,6 +266,8 @@ def table_pdf(*, title, lines, headers, rows, numeric=(), widths=None):
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        *([("LEFTPADDING", (0, 0), (-1, -1), 1.5),
+           ("RIGHTPADDING", (0, 0), (-1, -1), 1.5)] if compact else []),
     ]))
     story.append(table)
     doc.build(story, onFirstPage=footer, onLaterPages=footer)

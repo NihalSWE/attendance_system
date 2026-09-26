@@ -1,0 +1,276 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ report.title }} · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'reports:index' %}">
+            Reports
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ report.title }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ report.title }}
+            </h1>
+            <p class="page__sub">
+                {{ report.description }}
+            </p>
+        </div>
+        <div class="page__actions">
+            {# The same view with ?format=: same permissions, period and filters. #}
+            <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=xlsx" data-report-download>
+                Download Excel
+            </a>
+            <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=pdf" data-report-download>
+                Download PDF
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                {{ f.label }}
+            </h2>
+            {% if earlier or later %}
+                <div class="row">
+                    <a class="btn btn--ghost btn--sm" href="?{{ earlier }}" aria-label="The period before">
+                        ‹ Earlier
+                    </a>
+                    <a class="btn btn--ghost btn--sm" href="?{{ later }}" aria-label="The period after">
+                        Later ›
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+        <form method="get" class="toolbar toolbar--fit" data-report-filters>
+            {% if f.period == "day" %}
+                <label class="sr-only" for="{{ f.dates.on.id_for_label }}">
+                    Date
+                </label>
+                {{ f.dates.on }}
+            {% elif f.period == "week" %}
+                <label class="sr-only" for="{{ f.dates.week_start.id_for_label }}">
+                    Week starting
+                </label>
+                {{ f.dates.week_start }}
+            {% elif f.period == "month" %}
+                <label class="sr-only" for="report-month">
+                    Month
+                </label>
+                <select class="input select js-select" id="report-month" name="month">
+                    {% for value, label in months %}
+                        <option value="{{ value }}" {% if value == f.month %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <label class="sr-only" for="report-year">
+                    Year
+                </label>
+                <select class="input select js-select" id="report-year" name="year">
+                    {% for option in years %}
+                        <option value="{{ option }}" {% if option == f.year %}selected{% endif %}>
+                            {{ option }}
+                        </option>
+                    {% endfor %}
+                </select>
+            {% else %}
+                <label class="sr-only" for="{{ f.dates.date_from.id_for_label }}">
+                    From
+                </label>
+                {{ f.dates.date_from }}
+                <label class="sr-only" for="{{ f.dates.date_to.id_for_label }}">
+                    To
+                </label>
+                {{ f.dates.date_to }}
+            {% endif %}
+            {% if branches|length > 1 %}
+                <label class="sr-only" for="report-branch">
+                    Branch
+                </label>
+                <select class="input select js-select" id="report-branch" name="branch">
+                    <option value="">
+                        All branches
+                    </option>
+                    {% for branch in branches %}
+                        <option value="{{ branch.pk }}" {% if f.branch == branch.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ branch.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            <label class="sr-only" for="report-department">
+                Department
+            </label>
+            <select class="input select js-select2" id="report-department" name="department">
+                <option value="">
+                    All departments
+                </option>
+                {% for department in departments %}
+                    <option value="{{ department.pk }}" {% if f.department == department.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ department.name }}{% if branches|length > 1 %} · {{ department.branch.name }}{% endif %}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="report-employee">
+                Employee
+            </label>
+            <select class="input select js-select2" id="report-employee" name="employee">
+                <option value="">
+                    All employees
+                </option>
+                {% for employee in employees %}
+                    <option value="{{ employee.pk }}" {% if f.employee == employee.pk|stringformat:"s" %}selected{% endif %}>
+                        {% if employee.table_code %}{{ employee.table_code }} · {% endif %}{{ employee.full_name }}
+                    </option>
+                {% endfor %}
+            </select>
+            {% if "view" in report.extras %}
+                <label class="sr-only" for="report-view">
+                    Show
+                </label>
+                <select class="input select js-select" id="report-view" name="view">
+                    <option value="summary" {% if f.extra.view != "detail" %}selected{% endif %}>
+                        Totals per person
+                    </option>
+                    <option value="detail" {% if f.extra.view == "detail" %}selected{% endif %}>
+                        Every day
+                    </option>
+                </select>
+            {% endif %}
+            {% if "status" in report.extras %}
+                <label class="sr-only" for="report-status">
+                    Status
+                </label>
+                <select class="input select js-select" id="report-status" name="status">
+                    <option value="">
+                        Every status
+                    </option>
+                    {% for value, label in statuses %}
+                        <option value="{{ value }}" {% if f.extra.status == value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            {% if "leave_status" in report.extras %}
+                <label class="sr-only" for="report-leave-status">
+                    Leave status
+                </label>
+                <select class="input select js-select" id="report-leave-status" name="leave_status">
+                    {% for value, label in leave_statuses %}
+                        <option value="{{ value }}" {% if f.extra.leave_status == value or not f.extra.leave_status and value == "approved" %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                    <option value="all" {% if f.extra.leave_status == "all" %}selected{% endif %}>
+                        Every status
+                    </option>
+                </select>
+            {% endif %}
+            {% if "leave_type" in report.extras %}
+                <label class="sr-only" for="report-leave-type">
+                    Leave type
+                </label>
+                <select class="input select js-select" id="report-leave-type" name="leave_type">
+                    <option value="">
+                        Every leave type
+                    </option>
+                    {% for leave_type in leave_types %}
+                        <option value="{{ leave_type.pk }}" {% if f.extra.leave_type == leave_type.pk|stringformat:"s" %}selected{% endif %}>
+                            {{ leave_type.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            <button class="btn btn--ghost" type="submit">
+                Show
+            </button>
+            <a class="btn btn--quiet" href="{% url report.url_name %}">
+                Clear
+            </a>
+        </form>
+        {% if f.errors %}
+            <div class="alert alert--warning" role="alert">
+                {% for error in f.errors %}
+                    {{ error }}
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% if result.summary %}
+            <div class="report-summary" data-report-summary>
+                {% for label, value in result.summary %}
+                    <div class="report-summary__item">
+                        <span class="report-summary__value">{{ value }}</span>
+                        <span class="report-summary__label">{{ label }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% if result.legend or result.note %}
+            <p class="t-faint report-notes">
+                {% if result.legend %}{{ result.legend }}{% endif %}
+                {% if result.legend and result.note %}<br>{% endif %}
+                {% if result.note %}{{ result.note }}{% endif %}
+            </p>
+        {% endif %}
+        {% if page.object_list %}
+            <div class="table-wrap">
+                <table class="table{% if result.grid %} table--grid{% endif %}" data-report-table>
+                    <thead>
+                        <tr>
+                            {% for column in result.columns %}
+                                <th{% if column.numeric %} class="numeric"{% endif %}>
+                                    {{ column.label }}
+                                </th>
+                            {% endfor %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in page.object_list %}
+                            <tr>
+                                {% for value in row %}
+                                    <td{% if result.grid and forloop.counter > 2 %} class="numeric mono"{% endif %}>
+                                        {{ value }}
+                                    </td>
+                                {% endfor %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if page.has_other_pages %}
+                <nav class="row report-pages" aria-label="Pages">
+                    {% if page.has_previous %}
+                        <a class="btn btn--ghost btn--sm" href="?{% if query %}{{ query }}&amp;{% endif %}page={{ page.previous_page_number }}">
+                            ‹ Previous
+                        </a>
+                    {% endif %}
+                    <span class="t-faint">
+                        Rows {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
+                    </span>
+                    {% if page.has_next %}
+                        <a class="btn btn--ghost btn--sm" href="?{% if query %}{{ query }}&amp;{% endif %}page={{ page.next_page_number }}">
+                            Next ›
+                        </a>
+                    {% endif %}
+                </nav>
+            {% endif %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    {{ result.empty }}
+                </div>
+                <div class="empty__text">
+                    Try another period, or clear the filters.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

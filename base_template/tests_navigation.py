@@ -38,8 +38,10 @@ class CompanyNavigationTests(CalendarBase):
     def test_every_destination_loads_and_every_fragment_exists(self):
         home = self.client.get(reverse("dashboard"))
         menus = home.context["company_menus"]
+        # Reports added 2026-09-26; every report link is loaded below too.
         self.assertEqual([m["label"] for m in menus],
-                         ["Employees", "Attendance", "Leave", "Salary", "Shifts", "Organisation", "Devices"])
+                         ["Employees", "Attendance", "Leave", "Salary", "Shifts", "Reports",
+                          "Organisation", "Devices"])
         responses = {}
         for menu in menus:
             for link in menu["links"]:
