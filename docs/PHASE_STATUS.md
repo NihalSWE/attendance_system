@@ -4737,3 +4737,20 @@ to need them:
 Tests: `reports/tests.py` (27). Checked in the running app (temporary server
 on :8001, session deleted): every report 200 in 72–130 ms on D Company, the
 menu's headings, the grid scrolling sideways on a phone. No migration. Full suite 1593 OK.
+
+### Report tables are the project's DataTables — 2026-09-26
+
+Nihal: the report tables had no entries-per-page, search or DataTables
+paging. They now use the same server-side table as every list:
+`base_template.tables.paginate_rows` is `paginate` for rows worked out in
+Python - entries per page, search across every row (the cells' text), any
+column sorted, numbered pages, page jump, the no-script fallback - and
+`table_rows` is `table_queryset`'s twin, so a download holds what the table
+showed ("Table search", "Sorted by" in its header; `export_links.js`).
+`paginate`'s paging part moved into a shared `_serve`, unchanged.
+Sorting is by value, not text: `Sortable` cells carry a key - a date sorts
+as a date ("Tue 11 Aug" after "Mon 10 Aug"), hours as minutes (10:00 after
+9:59), leave days as numbers; digit-only IDs sort as numbers (9, 20, 100).
+6 tests in `reports/tests.py::DataTableTests`. Checked in the running app:
+entry logs for August, 228 scans, "Show 50", searching "Dia" gives 56 of 228,
+sorting by time. Full suite 1599 OK.

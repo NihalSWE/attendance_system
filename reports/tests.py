@@ -249,3 +249,60 @@ class AccessTests(ReportCase):
         self.assertEqual(self.names(rows), ["Karim"])
         rows = self.rows("daily-attendance", branch=str(self.unit.pk), **DAY)
         self.assertEqual(self.names(rows), ["Karim"])
+
+
+class DataTableTests(ReportCase):
+    """The report table is the project's server-side DataTable: entries per
+    page, search across every row, any column sorted, numbered pages."""
+
+    def draw(self, slug, **params):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse(BY_SLUG[slug].url_name), {
+            **params, "table": "1", "draw": "3", "start": "0", "length": "10"})
+        self.assertEqual(response.status_code, 200)
+        return response.json()
+
+    def test_the_page_carries_the_server_table(self):
+        page = self.open("daily-attendance", **DAY)
+        self.assertContains(page, "data-server-table")
+        self.assertEqual(page.context["server_table"]["orderable"],
+                         ",".join(str(i) for i in range(11)))
+
+    def test_a_draw_answers_as_datatables_asks(self):
+        data = self.draw("daily-attendance", **DAY)
+        self.assertEqual((data["draw"], data["recordsTotal"], data["recordsFiltered"]), (3, 3, 3))
+        self.assertEqual(len(data["data"]), 3)
+
+    def test_search_runs_across_every_row(self):
+        data = self.draw("daily-attendance", **DAY, **{"search[value]": "karim"})
+        self.assertEqual((data["recordsTotal"], data["recordsFiltered"]), (3, 1))
+        self.assertIn("Karim", data["data"][0]["1"])
+
+    def test_ids_and_hours_sort_as_numbers(self):
+        by_id = self.draw("daily-attendance", **DAY, **{"order[0][column]": "0",
+                                                         "order[0][dir]": "asc"})
+        self.assertEqual([row["0"].strip() for row in by_id["data"]], ["9", "20", "100"])
+        by_worked = self.draw("daily-attendance", **DAY, **{"order[0][column]": "7",
+                                                             "order[0][dir]": "desc"})
+        self.assertIn("Rahim", by_worked["data"][0]["1"])     # 8:20 before 7:55
+
+    def test_dates_sort_as_dates(self):
+        tuesday = MONDAY + datetime.timedelta(days=1)
+        self.punch(tuesday, 9)
+        self.punch(tuesday, 18)
+        recalculate(self.company.pk, start=tuesday, end=tuesday)
+        rows = self.draw("custom-attendance", view="detail", date_from="2026-08-10",
+                         date_to="2026-08-11", **{"order[0][column]": "0",
+                                                  "order[0][dir]": "desc"})["data"]
+        self.assertIn("Tue 11 Aug", rows[0]["0"])            # not "Mon" first, as text would
+
+    def test_a_download_follows_the_table_search_and_sort(self):
+        self.client.force_login(self.admin)
+        response = self.client.get(reverse(BY_SLUG["daily-attendance"].url_name), {
+            **DAY, "format": "xlsx", "search[value]": "office",
+            "order[0][column]": "1", "order[0][dir]": "desc"})
+        lines, _headers, rows = xlsx_table(response.content)
+        # Head Office's two people (Karim is in Chittagong), names Z to A.
+        self.assertEqual([row[1] for row in rows], ["Rahim", "Clerk"])
+        self.assertIn('Table search: "office"', " ".join(lines))
+        self.assertIn("Sorted by: Name descending", " ".join(lines))

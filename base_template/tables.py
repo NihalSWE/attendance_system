@@ -11,6 +11,7 @@ uses shifts_page / shifts_per_page / shifts_table_q, so the lists page
 independently. An unnamed table keeps table=1 and page / per_page / table_q.
 """
 
+from decimal import Decimal
 from html.parser import HTMLParser
 
 from django.core.paginator import Page, Paginator
@@ -112,11 +113,20 @@ def paginate(request, queryset, *, search=(), order=(), total=None, name=""):
         # Another list's draw on the same page must not reorder this one.
         use_order=ajax,
     )
-    paginator = Paginator(queryset, length)
+    return _serve(request, queryset, name=name, params=params, ajax=ajax, length=length,
+                  total=total, query=query,
+                  orderable=",".join(str(i) for i, field in enumerate(order) if field),
+                  columns=len(order))
+
+
+def _serve(request, sequence, *, name, params, ajax, length, total, query, orderable, columns):
+    """Page ``sequence`` (a queryset or a list) and register the table on the
+    request, for the page's markup and for render()'s DataTables reply."""
+    paginator = Paginator(sequence, length)
     if ajax:
         # Respect DataTables' offset, including an offset beyond the last row.
         start = integer(request.GET.get("start"), 0)
-        page = Page(queryset[start:start + length], start // length + 1, paginator)
+        page = Page(sequence[start:start + length], start // length + 1, paginator)
     else:
         page = paginator.get_page(request.GET.get(params["page"]))
 
@@ -135,8 +145,8 @@ def paginate(request, queryset, *, search=(), order=(), total=None, name=""):
     table = {
         "ajax": ajax, "draw": integer(request.GET.get("draw"), 0), "name": name,
         "total": total, "page": page, "query": query, "params": params,
-        "orderable": ",".join(str(i) for i, field in enumerate(order) if field),
-        "columns": len(order), "start": max(0, page.start_index() - 1), "numbers": numbers,
+        "orderable": orderable,
+        "columns": columns, "start": max(0, page.start_index() - 1), "numbers": numbers,
         "previous": link(page.previous_page_number()) if not ajax and page.has_previous() else None,
         "next": link(page.next_page_number()) if not ajax and page.has_next() else None,
     }
@@ -146,6 +156,80 @@ def paginate(request, queryset, *, search=(), order=(), total=None, name=""):
     if not name:
         request.server_table = table
     return page
+
+
+# --- lists: rows worked out in Python (the reports) ---------------------------
+
+
+class Sortable(str):
+    """A cell shown as its text and sorted by ``sort_key``: "Mon 10 Aug" by its
+    date, "8:05" by its minutes. Anything else sorts by what it is."""
+
+    def __new__(cls, text, sort_key):
+        cell = super().__new__(cls, text)
+        cell.sort_key = sort_key
+        return cell
+
+
+def sort_key(value):
+    """Numbers (and digit-only text, like an Employee ID) before words;
+    numbers by value, words ignoring case."""
+    key = getattr(value, "sort_key", None)
+    if key is not None:
+        return (0, key)
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        return (0, value)
+    text = str(value if value is not None else "").strip()
+    if text.isdigit():
+        return (0, int(text))
+    return (1, text.casefold())
+
+
+def _search_and_order_rows(request, rows, *, columns, query_param, use_order):
+    """``_search_and_order`` for a list of rows: the same parameters, applied
+    to the cells' text. Returns ``(rows, query, sorted_by)``."""
+    query = request.GET.get(query_param, "").strip()[:200]
+    if query:
+        needle = query.casefold()
+        rows = [row for row in rows
+                if needle in " ".join(str(cell) for cell in row).casefold()]
+    sorted_by = []
+    if use_order:
+        for index in range(min(columns, 8)):
+            column = integer(request.GET.get(f"order[{index}][column]"), -1)
+            if 0 <= column < columns:
+                sorted_by.append((column, request.GET.get(f"order[{index}][dir]") == "desc"))
+        rows = list(rows)
+        # A stable sort, last key first, gives the first key the last word.
+        for column, descending in reversed(sorted_by):
+            rows.sort(key=lambda row, c=column: sort_key(row[c]), reverse=descending)
+    return rows, query, sorted_by
+
+
+def paginate_rows(request, rows, *, columns, name=""):
+    """``paginate`` for rows worked out in Python rather than a queryset: the
+    same DataTables contract - entries per page, search across every page,
+    any column sorted, numbered pages - and the same no-script fallback."""
+    prefix = f"{name}_" if name else ""
+    params = {"page": f"{prefix}page", "per_page": f"{prefix}per_page", "query": f"{prefix}table_q"}
+    ajax = request.method == "GET" and request.GET.get("table") == (name or "1")
+    length = integer(request.GET.get("length" if ajax else params["per_page"]), 25, 10, 100)
+    total = len(rows)
+    rows, query, _sorted = _search_and_order_rows(
+        request, rows, columns=columns,
+        query_param="search[value]" if ajax else params["query"], use_order=ajax)
+    return _serve(request, rows, name=name, params=params, ajax=ajax, length=length,
+                  total=total, query=query, orderable=",".join(map(str, range(columns))),
+                  columns=columns)
+
+
+def table_rows(request, rows, *, columns, name=""):
+    """``table_queryset`` for a list: the rows a download holds, searched and
+    sorted as the table on screen was. Returns ``(rows, query, sorted_by)``."""
+    prefix = f"{name}_" if name else ""
+    param = "search[value]" if "search[value]" in request.GET else f"{prefix}table_q"
+    return _search_and_order_rows(request, rows, columns=columns, query_param=param,
+                                  use_order=True)
 
 
 class TableRows(HTMLParser):

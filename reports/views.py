@@ -8,13 +8,12 @@ import zoneinfo
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import redirect
 from django.views.decorators.http import require_http_methods
 
 from attendance.models import AttendanceRecord
-from base_template.tables import render
+from base_template.tables import paginate_rows, render, table_rows
 from common import exports
 from common.tenant import use_company
 from organization.access_services import branch_choices, people
@@ -24,9 +23,6 @@ from reports import filters as report_filters
 from reports.access import may_see, report_scope
 from reports.builders import Context
 from reports.catalogue import BY_SLUG, REPORTS
-
-ROWS_PER_PAGE = 100
-
 
 @login_required
 @require_http_methods(["GET"])
@@ -101,10 +97,15 @@ def report(request, slug):
     if fmt in exports.FORMATS:
         return _download(request, report, result, f, described, membership, fmt)
 
-    page = Paginator(result.rows, ROWS_PER_PAGE).get_page(request.GET.get("page"))
+    # The project's server-side table: entries per page, search, any column
+    # sorted, numbered pages - over the report's rows (base_template.tables).
+    page = paginate_rows(request, result.rows, columns=len(result.columns))
     query = request.GET.copy()
-    for drop in ("page", "format"):
+    for drop in ("page", "per_page", "table_q", "table", "draw", "start", "length",
+                 "format", "search[value]"):
         query.pop(drop, None)
+    for key in [key for key in query if key.startswith(("order[", "columns["))]:
+        query.pop(key)
     # The period before and after, keeping every other filter.
     steps = []
     for values in report_filters.neighbours(f):
@@ -162,8 +163,17 @@ def _described(f, choices):
 def _download(request, report, result, f, described, membership, fmt):
     from django.utils import timezone
 
+    # What the table showed: its search and its sort (export_links.js).
+    rows, table_search, sorted_by = table_rows(request, result.rows,
+                                               columns=len(result.columns))
+    if table_search:
+        described = described + [f'Table search: "{table_search}"']
+    if sorted_by:
+        described = described + ["Sorted by: " + ", ".join(
+            f"{result.columns[column].label} {'descending' if descending else 'ascending'}"
+            for column, descending in sorted_by)]
     try:
-        exports.check_size(len(result.rows), fmt, noun="report rows")
+        exports.check_size(len(rows), fmt, noun="report rows")
     except exports.TooManyRows as refusal:
         messages.error(request, str(refusal))
         params = request.GET.copy()
@@ -173,7 +183,7 @@ def _download(request, report, result, f, described, membership, fmt):
     now = timezone.localtime()
     lines = [" · ".join(described),
              " · ".join(f"{label}: {value}" for label, value in result.summary),
-             f"{len(result.rows)} row{'s' if len(result.rows) != 1 else ''} · downloaded "
+             f"{len(rows)} row{'s' if len(rows) != 1 else ''} · downloaded "
              f"{now:%d %b %Y %H:%M} by {request.user.get_username()}"]
     if result.legend:
         lines.append(result.legend)
@@ -185,13 +195,13 @@ def _download(request, report, result, f, described, membership, fmt):
     widths = {i: column.weight for i, column in enumerate(result.columns)}
     if fmt == exports.XLSX:
         content = exports.table_xlsx(title=title, lines=lines, headers=headers,
-                                     rows=result.rows, numeric=numeric,
+                                     rows=rows, numeric=numeric,
                                      widths={i: max(6, int(w * 12)) for i, w in widths.items()})
     else:
         content = exports.table_pdf(title=title, lines=lines, headers=headers,
-                                    rows=result.rows, numeric=numeric, widths=widths,
+                                    rows=rows, numeric=numeric, widths=widths,
                                     compact=result.grid)
     exports.record(actor=request.user, membership=membership, page=f"report:{report.slug}",
-                   fmt=fmt, filters={"described": described}, count=len(result.rows))
+                   fmt=fmt, filters={"described": described}, count=len(rows))
     name = exports.filename(report.slug, company.name, f.slug(), fmt)
     return exports.response(content, fmt, name)

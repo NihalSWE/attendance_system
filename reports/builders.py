@@ -18,6 +18,7 @@ from django.utils import timezone
 from attendance import access
 from attendance.models import AttendanceRecord
 from attendance.services import refresh
+from base_template.tables import Sortable
 
 S = AttendanceRecord.AttendanceStatus
 WORKING = (S.PRESENT, S.HALF_DAY, S.INCOMPLETE)
@@ -63,14 +64,20 @@ def hm(minutes):
     """``485`` -> ``"8:05"``: hours and minutes, as a timesheet shows them."""
     minutes = int(minutes or 0)
     sign = "-" if minutes < 0 else ""
-    minutes = abs(minutes)
-    return f"{sign}{minutes // 60}:{minutes % 60:02d}"
+    whole = abs(minutes)
+    # Sorted by the minutes, not the text: 10:00 after 9:59.
+    return Sortable(f"{sign}{whole // 60}:{whole % 60:02d}", minutes)
+
+
+def when(day, pattern="%a %d %b"):
+    """A date as the reports print it, sorted as a date."""
+    return Sortable(f"{day:{pattern}}", day.toordinal())
 
 
 def _days(number):
     """``Decimal("1.00")`` -> ``"1"``, ``Decimal("0.50")`` -> ``"0.5"``."""
     text = format(number.normalize(), "f") if hasattr(number, "normalize") else str(number)
-    return text
+    return Sortable(text, float(number))
 
 
 def clock(moment, zone):
@@ -177,7 +184,7 @@ def person(record):
 
 
 def _day_row(ctx, record, with_date=False):
-    return ([f"{record.work_date:%a %d %b}"] if with_date else []) + person(record) + [
+    return ([when(record.work_date)] if with_date else []) + person(record) + [
         _branch(record), department(record), record.get_attendance_status_display(),
         clock(record.first_in_at, ctx.zone), clock(record.last_out_at, ctx.zone),
         hm(record.worked_minutes), record.late_minutes or 0,
@@ -337,7 +344,7 @@ def short_hours(ctx):
         expected = expected_minutes(r)
         if expected and r.worked_minutes < expected:
             short += expected - r.worked_minutes
-            rows.append([f"{r.work_date:%a %d %b}"] + person(r) + [
+            rows.append([when(r.work_date)] + person(r) + [
                 _branch(r), r.get_attendance_status_display(), clock(r.first_in_at, ctx.zone),
                 clock(r.last_out_at, ctx.zone), hm(expected), hm(r.worked_minutes),
                 hm(expected - r.worked_minutes)])
@@ -386,7 +393,7 @@ def overtime(ctx):
         totals_.update(minutes=claim.minutes, approved=row.approved_minutes, paid=paid)
         if row.state == ot.WAITING:
             totals_["waiting"] += 1
-        rows.append([f"{r.work_date:%a %d %b}"] + person(r) + [
+        rows.append([when(r.work_date)] + person(r) + [
             _branch(r), r.get_attendance_status_display(),
             clock(r.scheduled_end_at, ctx.zone) if claim.overtime_from else "Day off",
             clock(r.last_out_at, ctx.zone) if claim.open_from is None else "Not scanned out",
@@ -443,7 +450,7 @@ def leave(ctx):
         rows.append([
             placed.employee_code if placed else "", request.employee.full_name,
             placed.branch.name if placed else "", s.leave_type.name,
-            f"{s.start_date:%d %b %Y}", f"{s.end_date:%d %b %Y}",
+            when(s.start_date, "%d %b %Y"), when(s.end_date, "%d %b %Y"),
             _days(units), "Paid" if s.requested_pay_type == "paid" else "Unpaid",
             request.get_status_display(), request.reason or "",
         ])
@@ -495,7 +502,7 @@ def entry_logs(ctx):
             state, counted = "Counted", counted + 1
         else:
             state = f"Not counted: {p.get_authorization_status_display()}"
-        rows.append([f"{local:%a %d %b}", f"{local:%H:%M:%S}", p.device_user_id,
+        rows.append([when(local.date()), f"{local:%H:%M:%S}", p.device_user_id,
                      p.employee.full_name if p.employee_id else "Not linked to anyone",
                      p.device.name if p.device_id else "", p.branch.name if p.branch_id else "",
                      p.get_verification_method_display(), state])

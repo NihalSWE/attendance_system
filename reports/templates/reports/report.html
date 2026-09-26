@@ -1,6 +1,13 @@
 {% extends "base_template/base.html" %}
+{% load static %}
 {% block title %}
     {{ report.title }} · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    {# Downloads carry the table's search and sort, as on the other lists. #}
+    <script defer src="{% static 'base_template/js/export_links.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="crumbs">
@@ -23,10 +30,10 @@
         </div>
         <div class="page__actions">
             {# The same view with ?format=: same permissions, period and filters. #}
-            <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=xlsx" data-report-download>
+            <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=xlsx" data-export data-report-download>
                 Download Excel
             </a>
-            <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=pdf" data-report-download>
+            <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=pdf" data-export data-report-download>
                 Download PDF
             </a>
         </div>
@@ -220,9 +227,11 @@
                 {% if result.note %}{{ result.note }}{% endif %}
             </p>
         {% endif %}
-        {% if page.object_list %}
+        {% if server_table.total %}
+            {# The project's server-side table: entries per page, search across #}
+            {# every row, any column sorted, numbered pages (tables.js). #}
             <div class="table-wrap">
-                <table class="table{% if result.grid %} table--grid{% endif %}" data-report-table>
+                <table class="table{% if result.grid %} table--grid{% endif %}" data-server-table data-report-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
                     <thead>
                         <tr>
                             {% for column in result.columns %}
@@ -245,23 +254,7 @@
                     </tbody>
                 </table>
             </div>
-            {% if page.has_other_pages %}
-                <nav class="row report-pages" aria-label="Pages">
-                    {% if page.has_previous %}
-                        <a class="btn btn--ghost btn--sm" href="?{% if query %}{{ query }}&amp;{% endif %}page={{ page.previous_page_number }}">
-                            ‹ Previous
-                        </a>
-                    {% endif %}
-                    <span class="t-faint">
-                        Rows {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }}
-                    </span>
-                    {% if page.has_next %}
-                        <a class="btn btn--ghost btn--sm" href="?{% if query %}{{ query }}&amp;{% endif %}page={{ page.next_page_number }}">
-                            Next ›
-                        </a>
-                    {% endif %}
-                </nav>
-            {% endif %}
+            {% include "base_template/includes/table_pagination.html" %}
         {% else %}
             <div class="empty">
                 <div class="empty__title">
