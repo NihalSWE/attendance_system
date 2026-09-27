@@ -21,8 +21,9 @@
                 <div class="alert alert--danger">{{ form.non_field_errors }}</div>
             {% endif %}
             {% if form %}
+                {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                 <div class="grid grid--2">
-                    {% for field in form %}
+                    {% for field in form.visible_fields %}
                         {% include "leaves/includes/field.html" %}
                     {% endfor %}
                 </div>

@@ -51,6 +51,7 @@ class InForce:
     scans: dict          # employee_id -> [(at, CorrectionRef)]
     statuses: dict       # (employee_id, date) -> AttendanceCorrection
     accepted: dict       # (employee_id, date) -> accepted review reason
+    excused: dict = None  # (employee_id, date) -> late approval (AttendanceCorrection)
 
 
 def in_force(employee_ids, *, since, until, start, end):
@@ -61,7 +62,7 @@ def in_force(employee_ids, *, since, until, start, end):
     Status changes and acceptances belong to their date.
     """
     scans = defaultdict(list)
-    statuses, accepted = {}, {}
+    statuses, accepted, excused = {}, {}, {}
     rows = AttendanceCorrection.objects.filter(
         employee_id__in=list(employee_ids),
         status=AttendanceCorrection.Status.APPLIED,
@@ -74,15 +75,18 @@ def in_force(employee_ids, *, since, until, start, end):
             (correction.proposed_event_at, CorrectionRef(correction.pk))
         )
     for correction in rows.filter(
-        correction_type__in=(Type.CHANGE_STATUS, Type.ACCEPT_REVIEW),
+        correction_type__in=(Type.CHANGE_STATUS, Type.ACCEPT_REVIEW, Type.EXCUSE_LATE),
         work_date__gte=start, work_date__lte=end,
     ):
         key = (correction.employee_id, correction.work_date)
         if correction.correction_type == Type.CHANGE_STATUS:
             statuses[key] = correction
+        elif correction.correction_type == Type.EXCUSE_LATE:
+            excused[key] = correction
         else:
             accepted[key] = correction.accepted_review_reason
-    return InForce(scans=dict(scans), statuses=statuses, accepted=accepted)
+    return InForce(scans=dict(scans), statuses=statuses, accepted=accepted,
+                   excused=excused)
 
 
 def manual_scans(employee_ids, *, since, until):

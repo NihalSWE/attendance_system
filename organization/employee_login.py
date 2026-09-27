@@ -32,8 +32,10 @@ from organization.services import assert_branch_in_scope, require_structure_mana
 
 User = get_user_model()
 Role = CompanyMembership.Role
-LOGIN_ROLES = (Role.EMPLOYEE, Role.MANAGER)
-ROLE_LABELS = {Role.EMPLOYEE: "Employee", Role.MANAGER: "Branch manager"}
+# HR (Ajay, 2026-09-27: "Set as HR manager") - given only by the owner or
+# company admin, like a branch manager (``_login_giver``, ``_existing``).
+LOGIN_ROLES = (Role.EMPLOYEE, Role.MANAGER, Role.HR)
+ROLE_LABELS = {Role.EMPLOYEE: "Employee", Role.MANAGER: "Branch manager", Role.HR: "HR"}
 
 
 def _employee(membership, company_id, employee_id):
@@ -56,11 +58,12 @@ def login_for(company_id, employee):
 
 def _check_role(membership, role, branches):
     if role not in LOGIN_ROLES:
-        raise ValidationError({"role": "Choose Employee or Branch manager."})
+        raise ValidationError({"role": "Choose Employee, Branch manager or HR."})
     branches = list(branches or [])
     if role == Role.MANAGER and not branches:
         raise ValidationError({"branches": "Choose the branch or branches they manage."})
-    if role == Role.EMPLOYEE:
+    if role in (Role.EMPLOYEE, Role.HR):
+        # HR works in every branch; an employee login has none of its own.
         branches = []
     with use_company(membership.company_id):
         for branch in branches:
@@ -123,7 +126,8 @@ def _login_giver(actor, company_id, employee_id, role):
     if placement is None or not can(actor, company_id, "employees.logins", placement.branch_id):
         raise PermissionDenied("You cannot create logins for people in that branch.")
     if role != Role.EMPLOYEE:
-        raise PermissionDenied("Only the owner or company administrator can make someone a branch manager.")
+        raise PermissionDenied("Only the owner or company administrator can make someone a "
+                               "branch manager or HR.")
     return membership
 
 

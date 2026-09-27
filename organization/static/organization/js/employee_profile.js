@@ -40,8 +40,24 @@ document.addEventListener("DOMContentLoaded", function () {
     };
     document.querySelectorAll("[data-open-dialog]").forEach(function (button) {
         button.addEventListener("click", function () {
+            // The Actions menu closes, and a modal opened from another modal
+            // (Set as HR manager -> Give a login) takes its place.
+            const menu = button.closest("[data-action-menu]");
+            if (menu) menu.open = false;
+            const from = button.closest("dialog.modal");
+            if (from && from.open) from.close();
             open(document.getElementById(button.dataset.openDialog));
         });
+    });
+    // A click outside the Actions menu, or Escape, closes it.
+    document.addEventListener("click", function (event) {
+        document.querySelectorAll("[data-action-menu][open]").forEach(function (menu) {
+            if (!menu.contains(event.target)) menu.open = false;
+        });
+    });
+    document.addEventListener("keydown", function (event) {
+        if (event.key !== "Escape") return;
+        document.querySelectorAll("[data-action-menu][open]").forEach(menu => { menu.open = false; });
     });
     document.querySelectorAll("dialog.modal").forEach(function (dialog) {
         dialog.querySelectorAll("[data-close-dialog]").forEach(function (button) {

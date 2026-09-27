@@ -276,3 +276,66 @@ Tokens only.
     flex-wrap: wrap;
     gap: var(--s2, 8px);
 }
+
+/* The profile's Actions menu (2026-09-27): a list under the button. */
+.action-menu {
+    position: relative;
+}
+.action-menu > summary {
+    list-style: none;
+    cursor: pointer;
+}
+.action-menu > summary::-webkit-details-marker {
+    display: none;
+}
+.action-menu > summary::after {
+    content: "";
+    display: inline-block;
+    margin-left: 8px;
+    border: 4px solid transparent;
+    border-top-color: currentColor;
+    transform: translateY(2px);
+}
+.action-menu__list {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 50;
+    min-width: 240px;
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg, 12px);
+    box-shadow: var(--shadow-lg);
+}
+.action-menu__list form {
+    margin: 0;
+}
+.action-menu__item {
+    display: block;
+    width: 100%;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.action-menu__item:hover,
+.action-menu__item:focus-visible {
+    background: var(--surface-sunken);
+    outline: none;
+}
+.action-menu__item--danger {
+    color: var(--danger, #b42318);
+}
+@media (max-width: 640px) {
+    .action-menu__list {
+        left: 0;
+        right: auto;
+    }
+}

@@ -143,13 +143,15 @@ class SalaryForm(StyledFormMixin, forms.Form):
 # placement form's branch field on the same page.
 # --------------------------------------------------------------------------
 
-LOGIN_ROLE_CHOICES = (("employee", "Employee"), ("manager", "Branch manager"))
+LOGIN_ROLE_CHOICES = (("employee", "Employee"), ("manager", "Branch manager"), ("hr", "HR"))
 
 
 class _LoginRoleFields(forms.Form):
     login_role = forms.ChoiceField(
         label="Access", choices=LOGIN_ROLE_CHOICES,
-        help_text="Employee: their own pages. Branch manager: also their branch's people (coming with leave approval).",
+        help_text=("Employee: their own pages. Branch manager: also their branch's people. "
+                   "HR: employees, leave and attendance in every branch; salary only where "
+                   "given on the Access page."),
     )
     login_branches = forms.ModelMultipleChoiceField(
         queryset=Branch.all_objects.none(), required=False, label="Branches they manage",
