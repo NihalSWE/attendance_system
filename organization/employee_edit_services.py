@@ -94,7 +94,9 @@ def card_permissions(actor, company_id, membership, assignment):
         # Making someone a branch manager and own shifts stay with the company
         # (shifts are the company's Shifts area).
         "role": False,
-        "salary": branch is not None and can(actor, company_id, "salary.prepare", branch),
+        # Changing pay shows the current pay, so it needs seeing it too.
+        "salary": branch is not None and can(actor, company_id, "salary.prepare", branch)
+        and can(actor, company_id, "salary.view", branch),
         "salary_view": branch is not None and can(actor, company_id, "salary.view", branch),
         "shift": False,
         "company": False,

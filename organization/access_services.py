@@ -124,7 +124,8 @@ def role_note(company_id, membership):
             names = ", ".join(b.name for b in membership.allowed_branches.order_by("name"))
         return f"Branch manager: every permission in {names or 'no branch yet'}, automatically."
     if membership.role == Role.HR:
-        return "HR: views and records leave and decides overtime in every branch."
+        return ("HR: views and edits employees, views and records leave, fixes attendance "
+                "and decides overtime in every branch. Salary only where given here.")
     return ""
 
 

@@ -286,7 +286,9 @@ def employee_edit(request, pk):
 
         tz = ZoneInfo(company.timezone or "UTC")
         own_shifts = schedule.employee_shift_history(company_id, employee, tz)
-        employee_components = list(component_services.employee_rows(company_id, employee))
+        # Allowances are pay: listed only for whoever may see this person's salary.
+        employee_components = (list(component_services.employee_rows(company_id, employee))
+                               if may["salary_view"] else [])
         calendar = WorkCalendar(company_id, today, today)
         own = calendar.employee_shift(employee.pk, today)
         department_id = assignment.department_id if assignment else None

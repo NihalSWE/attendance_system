@@ -50,6 +50,11 @@ def create_employee(
     All three rows are written together: an employee without compensation or an
     organization placement cannot enter payroll, so a partial record is invalid.
 
+    ``base_rate=None`` adds them without pay - somebody who may not set pay
+    (HR without salary access) adds the person, and whoever prepares that
+    branch's salary sets it; until then they are "Needs salary" and left out
+    of a generated month.
+
     Not idempotent by key — re-running is instead *blocked* by the database:
     the exclusion constraint rejects a second assignment overlapping the same
     (company, employee_code) period. An explicit idempotency key can be added
@@ -78,17 +83,19 @@ def create_employee(
             change_reason="Initial placement",
             created_by=created_by,
         )
-        compensation = create_validated(
-            EmployeeCompensation,
-            company=company,
-            employee=employee,
-            pay_basis=pay_basis,
-            base_rate=base_rate,
-            currency=currency or company.currency,
-            effective_from=effective_from,
-            reason="Initial compensation",
-            created_by=created_by,
-        )
+        compensation = None
+        if base_rate is not None:
+            compensation = create_validated(
+                EmployeeCompensation,
+                company=company,
+                employee=employee,
+                pay_basis=pay_basis,
+                base_rate=base_rate,
+                currency=currency or company.currency,
+                effective_from=effective_from,
+                reason="Initial compensation",
+                created_by=created_by,
+            )
         shift_assignment = None
         if shift is not None:
             shift_assignment = create_validated(

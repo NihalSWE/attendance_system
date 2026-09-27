@@ -62,9 +62,10 @@ class EmployeeListTests(BranchEmployeesBase):
             self.assertContains(page, name)
         self.assertContains(page, reverse("organization:employee_detail", args=[self.remote.pk]))
 
-    def test_hr_and_plain_employees_are_kept_out(self):
+    def test_hr_sees_everyone_and_plain_employees_are_kept_out(self):
+        # HR views and edits employees in every branch (Ajay, 2026-09-27).
         self.login_as(self.hr)
-        self.assertEqual(self.client.get(reverse("employee_list")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("employee_list")).status_code, 200)
         self.login_as(self.clerk_user)
         self.assertRedirects(self.client.get(reverse("employee_list")), reverse("me:home"))
 
@@ -217,7 +218,13 @@ class CreateEmployeeTests(BranchEmployeesBase):
             self.client.get(designations, {"department": unit_department.pk}).json()["results"], []
         )
 
-    def test_edit_only_access_cannot_create_because_pay_needs_salary_access(self):
+    def test_edit_only_access_adds_people_without_pay(self):
+        # Pay still needs salary access for the branch (Ajay, 2026-09-27): the
+        # form leaves it out, and pay sent anyway is refused, not kept.
         self.grant(self.owner, self.clerk, "employees.edit", self.hq)
         self.login_as(self.clerk_user)
-        self.assertEqual(self.post(self.hq).status_code, 403)
+        page = self.client.get(reverse("organization:employee_create"))
+        self.assertNotIn("base_rate", page.context["form"].fields)
+        self.assertEqual(self.post(self.hq).status_code, 302)
+        nadia = Employee.all_objects.get(first_name="Nadia")
+        self.assertFalse(EmployeeCompensation.all_objects.filter(employee=nadia).exists())

@@ -8,15 +8,17 @@ from django.urls import reverse
 
 
 def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False,
-         salary=False, group="", report_kind=""):
+         salary=False, group="", report_kind="", people=""):
     # record: shown to people who may record leave (HR as well as administrators).
     # salary: shown to people who see pay (the payroll manager as well; not HR).
     # group: the dropdown inside its menu the item sits in (Reports: "Attendance
     # Report" opens to Daily, Weekly, Monthly, Customize).
     # report_kind: whose rules decide who may open it (reports.access).
+    # people: the employees permission that also opens it for HR, who views and
+    # edits employees in every branch (Ajay, 2026-09-27).
     return {"label": label, "view": view, "aliases": aliases, "fragment": fragment,
             "manage": manage, "unrestricted": unrestricted, "record": record,
-            "salary": salary, "group": group, "report_kind": report_kind}
+            "salary": salary, "group": group, "report_kind": report_kind, "people": people}
 
 
 def report_item(slug):
@@ -30,8 +32,10 @@ def report_item(slug):
 COMPANY_MENUS = (
     ("employees", "Employees", (
         item("All employees", "employee_list", "organization:employee_edit",
-             "organization:employee_detail", "organization:employee_end", unrestricted=True),
-        item("Create employee", "organization:employee_create", manage=True),
+             "organization:employee_detail", "organization:employee_end", unrestricted=True,
+             people="employees.view"),
+        item("Create employee", "organization:employee_create", manage=True,
+             people="employees.edit"),
     )),
     ("attendance", "Attendance", (
         item("Daily list", "attendance:attendance_list"),
@@ -113,12 +117,15 @@ COMPANY_MENUS = (
 
 
 def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=None,
-                  can_see_salary=None, report_kinds=None, allowed=None):
+                  can_see_salary=None, report_kinds=None, allowed=None, people_codes=None):
     """The company menus for this request.
 
     ``allowed`` (A12): for a branch manager or a person given access, a check
     on each entry's page (``access_control.page_access``) replaces the role
     flags — they see exactly the branch pages they may open.
+
+    ``people_codes`` (HR): the employees permissions held; an entry marked
+    ``people`` is shown when its code is among them.
     """
     current = getattr(getattr(request, "resolver_match", None), "view_name", "")
     can_record_leave = can_manage if can_record_leave is None else can_record_leave
@@ -131,6 +138,9 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
         for entry in entries:
             if allowed is not None:
                 if not allowed(entry["view"]):
+                    continue
+            elif people_codes is not None and entry["people"]:
+                if entry["people"] not in people_codes:
                     continue
             elif entry["manage"] and not can_manage:
                 continue

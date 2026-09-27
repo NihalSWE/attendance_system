@@ -73,9 +73,23 @@ class EmployeeCreateForm(StyledFormMixin, forms.Form):
         help_text="Per month, day or hour, matching the pay basis.",
     )
 
-    def __init__(self, *args, company=None, branches=None, employees=None, **kwargs):
+    #: ``pay``: "required" - the adder may set pay wherever they may add people;
+    #: "none" - nowhere (HR without salary access): the pay fields are left out
+    #: and the person is added without pay; "optional" - in some branches only:
+    #: the view checks the chosen branch.
+    def __init__(self, *args, company=None, branches=None, employees=None, pay="required",
+                 **kwargs):
         super().__init__(*args, **kwargs)
         self.company = company
+        self.pay = pay
+        if pay == "none":
+            del self.fields["pay_basis"]
+            del self.fields["base_rate"]
+        elif pay == "optional":
+            self.fields["base_rate"].required = False
+            self.fields["base_rate"].help_text = (
+                "Per month, day or hour, matching the pay basis. Only in a branch where you "
+                "prepare salary; elsewhere leave it empty and it is set by whoever does.")
 
         if branches is not None:
             self.fields["branch"].queryset = branches

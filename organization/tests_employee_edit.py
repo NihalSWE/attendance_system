@@ -167,12 +167,20 @@ class EmployeeEditTests(TestCase):
         [row] = self._rows(EmployeeAssignment)
         self.assertEqual((row.department_id, row.employee_code), (self.sales.pk, "E1-X"))
 
-    def test_hr_cannot_edit(self):
-        with self.assertRaises(PermissionDenied):
-            services.update_employee_details(
-                actor=self.hr, company_id=self.company.pk, employee_id=self.employee.pk,
-                values={"first_name": "X"},
-            )
+    def test_hr_edits_details_but_not_pay(self):
+        # Ajay, 2026-09-27: HR edits employees company-wide; pay stays out.
+        services.update_employee_details(
+            actor=self.hr, company_id=self.company.pk, employee_id=self.employee.pk,
+            values={"first_name": "X"},
+        )
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.first_name, "X")
+        with use_company(self.company):
+            may = services.card_permissions(
+                self.hr, self.company.pk,
+                CompanyMembership.all_objects.get(user=self.hr, company=self.company),
+                self.employee.assignments.get())
+        self.assertFalse(may["salary"] or may["salary_view"])
 
     def test_list_has_an_edit_action_and_the_page_saves(self):
         self.client.force_login(self.admin)

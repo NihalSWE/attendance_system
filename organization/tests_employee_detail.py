@@ -171,14 +171,17 @@ class EndEmploymentTests(DetailTestCase):
             self.end(AUG_11)
         self.assertIn("salary starts", str(caught.exception))
 
-    def test_only_an_owner_or_company_admin_may_end_it(self):
+    def test_hr_may_end_it_but_not_for_a_login_holder(self):
+        # HR edits employees in every branch (Ajay, 2026-09-27), so it may end
+        # employment - except someone with more than employee access.
         hr = User.objects.create_user(email="hr@liv.test", password="pw")
         CompanyMembership.all_objects.create(
             company=self.company, user=hr, role=CompanyMembership.Role.HR,
             status=CompanyMembership.Status.ACTIVE,
         )
-        with self.assertRaises(PermissionDenied):
-            self.end(AUG_11, actor=hr)
+        self.end(AUG_11, actor=hr)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.employment_status, "resigned")
 
     def test_another_companys_employee_is_not_found(self):
         from tenants.services import onboard_company
@@ -267,16 +270,18 @@ class PageTests(DetailTestCase):
         response = self.client.get(self.end_url)
         self.assertRedirects(response, self.detail)
 
-    def test_hr_is_turned_away(self):
+    def test_hr_opens_it_without_pay(self):
+        # HR views and edits employees in every branch; salary only where the
+        # Access page gave it (Ajay, 2026-09-27).
         hr = User.objects.create_user(email="hr@liv.test", password="pw")
         CompanyMembership.all_objects.create(
             company=self.company, user=hr, role=CompanyMembership.Role.HR,
             status=CompanyMembership.Status.ACTIVE,
         )
         self.client.force_login(hr)
-        self.assertIn(self.client.get(self.detail).status_code, (302, 403))
-        self.assertIn(self.client.post(self.end_url, {
-            "last_day": "2026-08-11", "status": "resigned", "reason": "x",
-        }).status_code, (302, 403))
+        page = self.client.get(self.detail)
+        self.assertEqual(page.status_code, 200)
+        self.assertFalse(page.context["may"]["salary"])
+        self.assertNotContains(page, "Salary history")
         self.employee.refresh_from_db()
         self.assertEqual(self.employee.employment_status, "active")

@@ -4957,3 +4957,32 @@ words (the app's `.check` row) instead of under a label; the Leave types list
 marks a type "Needs a document"; the box has a help text.
 
 14 tests. Leave suite 95 OK. Full suite 1685 OK.
+
+### Phase A (Ajay's second message): HR and employees, pay kept out — 2026-09-27
+
+Ajay: HR gets `employees.view` and `employees.edit` company-wide, and in the
+same change every pay figure follows `salary.view` in that person's branch.
+HR gets salary only per branch, from the Access page.
+
+- `HR_COMPANY_WIDE` gains `employees.view`, `employees.edit`. HR's Access page
+  note says so ("Salary only where given here").
+- **A leak this found:** the Employees list showed pay to anyone who sees every
+  branch (it took "company-wide" to mean "sees pay"). Pay on the list, its
+  sort and its download now follow `salary.view` alone.
+- Edit employee: the Allowances card (amounts) shows only with `salary.view`;
+  changing pay needs `salary.prepare` **and** `salary.view` (the form shows
+  the current pay). The profile already followed `salary.view`.
+- Create employee without salary access: the pay fields are left out and the
+  person is added without pay ("Needs salary"), for whoever prepares that
+  branch's salary to set. With salary access in some branches only, pay is
+  optional and checked against the chosen branch; pay sent where it may not
+  be set is refused. `create_employee(base_rate=None)` adds no salary row.
+- Sidebar: HR gets All employees and Create employee (`people=` on the entry).
+- HR may end employment (it edits employees), except for a login holder with
+  more than employee access - unchanged rule for everyone who is not the
+  owner or admin.
+- **As Ajay expected:** a salary grant attaches to an Employee record, so an
+  HR login with no employee record of its own cannot be given salary.
+
+14 tests in `organization/tests_hr_access.py`; 6 older tests that encoded
+"HR is kept out of employees" updated to the new rule.
