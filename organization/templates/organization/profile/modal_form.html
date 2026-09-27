@@ -1,0 +1,36 @@
+{% comment %}
+    One profile modal around one form (Ajay, 2026-09-27: every edit opens in a modal).
+    id, title, action, form, submit; optional: section (Edit employee's card name),
+    row / row_name (a hidden id), note, wide, dependent (branch -> department ->
+    designation selects), danger (a red submit button).
+{% endcomment %}
+<dialog class="modal{% if wide %} modal--wide{% endif %}" id="{{ id }}" aria-labelledby="{{ id }}-title">
+    <form class="modal__card" method="post" action="{{ action }}" novalidate{% if dependent %}
+          data-departments-url="{% url 'organization:employee_branch_departments' %}"
+          data-designations-url="{% url 'organization:employee_department_designations' %}"{% endif %}>
+        {% csrf_token %}
+        {% if section %}<input type="hidden" name="section" value="{{ section }}">{% endif %}
+        {% if row %}<input type="hidden" name="{{ row_name|default:'row' }}" value="{{ row }}">{% endif %}
+        <div class="modal__head">
+            <h2 id="{{ id }}-title">{{ title }}</h2>
+            <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <div class="modal__body stack">
+            {% if note %}<p class="t-faint">{{ note }}</p>{% endif %}
+            {% if form.non_field_errors %}
+                <div class="alert alert--danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% if form %}
+                <div class="grid grid--2">
+                    {% for field in form %}
+                        {% include "leaves/includes/field.html" %}
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        <div class="modal__foot">
+            <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+            <button class="btn {% if danger %}btn--danger{% else %}btn--primary{% endif %}" type="submit">{{ submit }}</button>
+        </div>
+    </form>
+</dialog>

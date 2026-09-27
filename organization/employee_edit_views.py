@@ -1,4 +1,10 @@
-"""Edit employee: details, placement and salary, each saved on its own."""
+"""Edit employee: details, placement and salary, each saved on its own.
+
+``edit_sections`` is the page's work - every card's form, and saving whichever
+one was posted - so the employee profile offers the same edits in its modals
+(Ajay, 2026-09-27) with the same forms, checks and services. Each page only
+says where a saved edit goes back to and how to draw the forms.
+"""
 
 from zoneinfo import ZoneInfo
 
@@ -6,6 +12,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError
+from django.http import HttpResponseBase
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -68,6 +75,22 @@ def employee_edit(request, pk):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
+    url = reverse("organization:employee_edit", args=[pk])
+    result = edit_sections(request, company_id, pk,
+                           back=lambda anchor: f"{url}#{anchor}" if anchor else url)
+    if isinstance(result, HttpResponseBase):
+        return result
+    return render(request, "organization/employee_edit.html", result)
+
+
+def edit_sections(request, company_id, pk, *, back):
+    """Every Edit employee form for this person, and the posted one saved.
+
+    Returns the redirect after a save (to ``back(anchor)``: "allowances",
+    "shift", "login" or "" for details, placement and salary), or the context
+    to draw the forms with - a refused one bound, with its reasons.
+    Needs ``employees.edit`` for this person; each card checks its own.
+    """
     membership, employee, assignment, compensation = services.get_employee_for_edit(
         actor=request.user, company_id=company_id, employee_id=pk, code="employees.edit"
     )
@@ -160,7 +183,7 @@ def employee_edit(request, pk):
                     apply_service_errors(chosen, exc)
                 else:
                     messages.success(request, message)
-                    return redirect(f"{reverse('organization:employee_edit', args=[employee.pk])}#allowances")
+                    return redirect(back("allowances"))
 
         shifts = Shift.objects.filter(status=ActiveStatus.ACTIVE).order_by("name")
         shift_form = EmployeeShiftForm(
@@ -192,7 +215,7 @@ def employee_edit(request, pk):
                     apply_service_errors(chosen, exc)
                 else:
                     messages.success(request, message)
-                    return redirect(f"{reverse('organization:employee_edit', args=[employee.pk])}#shift")
+                    return redirect(back("shift"))
 
         # Login (A6).
         login = employee_login.login_for(company_id, employee)
@@ -244,11 +267,11 @@ def employee_edit(request, pk):
                     if chosen is None or isinstance(exc, PermissionDenied):
                         # No form to show it on: say it at the top of the page.
                         messages.error(request, " ".join(getattr(exc, "messages", [str(exc)])))
-                        return redirect(f"{reverse('organization:employee_edit', args=[employee.pk])}#login")
+                        return redirect(back("login"))
                     _login_errors(chosen, exc)
                 else:
                     messages.success(request, message)
-                    return redirect(f"{reverse('organization:employee_edit', args=[employee.pk])}#login")
+                    return redirect(back("login"))
 
         form = {"details": details, "placement": placement, "salary": salary}.get(section)
         if form is not None and form.is_valid():
@@ -282,7 +305,7 @@ def employee_edit(request, pk):
                     apply_service_errors(form, exc)
             else:
                 messages.success(request, message)
-                return redirect("organization:employee_edit", pk=employee.pk)
+                return redirect(back(""))
 
         tz = ZoneInfo(company.timezone or "UTC")
         own_shifts = schedule.employee_shift_history(company_id, employee, tz)
@@ -300,7 +323,8 @@ def employee_edit(request, pk):
         else:
             works_from = "the company shift"
 
-        return render(request, "organization/employee_edit.html", {
+        return {
+            "section": section,
             "employee": employee,
             "assignment": assignment,
             "compensation": compensation,
@@ -330,4 +354,4 @@ def employee_edit(request, pk):
             "give_login": give_login,
             "login_role": login_role,
             "login_password": login_password,
-        })
+        }

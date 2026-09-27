@@ -4986,3 +4986,41 @@ HR gets salary only per branch, from the Access page.
 
 14 tests in `organization/tests_hr_access.py`; 6 older tests that encoded
 "HR is kept out of employees" updated to the new rule.
+
+### Phase B: every Edit employee option on the profile, in modals — 2026-09-27
+
+Ajay: every edit opens in a modal; every option Edit employee has must be on
+the profile; keep the Edit employee page as it is until he has seen the
+profile complete.
+
+- `organization/employee_edit_views.edit_sections` is the Edit employee page's
+  work (every card's form, and saving the posted one), taken out of the view
+  unchanged. The Edit page calls it and draws its cards as before; the profile
+  calls it for its modals and posts to `employee_profile_edit`. Same forms,
+  same checks, same services. Saved: back to the profile's tab. Refused: the
+  profile with that modal open, its reasons and what was typed.
+- On the profile, as modals: Edit details, Change placement (with the
+  dependent branch/department/designation lists), Salary, Give an allowance or
+  deduction, End one (per row), Their own shift and End it, Give a login,
+  Change password, Change access, Disable/Enable (the app's confirm modal).
+  Personal info and photo were modals already.
+- **New: Line manager.** The placement's `manager` was set only when someone
+  was created and never editable. Now a modal on General information
+  (`employee_line_manager`): someone working in a branch the editor sees, not
+  themselves; audited. It does not change who approves leave.
+- Tabs regrouped toward Ajay's list: Profile information (General
+  information, Personal & contact info, Address, Login & password, Salary
+  with allowances, Employment history, Salary history, Recent changes),
+  Attendance report, Leave, Devices, Roster (today's shift, own shifts).
+- General information shows Ajay's fields as the system holds them: device
+  person ID and RFID card from current device enrolments, shift today and
+  where it comes from, line manager, HR manager (the company's HR logins).
+- Fields share names across forms, so each modal's form has its own ids.
+- Select2 and the app's own select now open inside a modal (both attached
+  their list to the page, below the modal's layer).
+- The "Edit employee page" link stays on the profile.
+
+19 tests in `organization/tests_profile_edits.py` (every modal submitted,
+refused ones reopen, view-only and HR without pay). Browser-checked on a
+temporary :8001: both kinds of dropdown open inside modals; a refused edit
+reopens its modal with the reason.

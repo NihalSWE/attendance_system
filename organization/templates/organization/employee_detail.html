@@ -13,8 +13,14 @@
     </script>
     <script defer src="{% static 'attendance/js/missed_scan_kind.js' %}">
     </script>
+    {% if edit %}
+        <script defer src="{% static 'organization/js/employee_form.js' %}">
+        </script>
+    {% endif %}
 {% endblock %}
 {% block page %}
+    {% url 'organization:employee_detail' employee.pk as profile_url %}
+    {% url 'organization:employee_profile_edit' employee.pk as save_url %}
     <div class="crumbs">
         <a href="{% url 'dashboard' %}">
             Dashboard
@@ -73,12 +79,10 @@
         </div>
         <div class="profile-actions">
             {% if may.edit %}
-                <a class="btn btn--primary" href="{% url 'organization:employee_edit' employee.pk %}">
-                    Edit
+                {# Kept until the profile is complete and Ajay has seen it (2026-09-27). #}
+                <a class="btn btn--ghost" href="{% url 'organization:employee_edit' employee.pk %}">
+                    Edit employee page
                 </a>
-                <button class="btn btn--ghost" type="button" data-open-dialog="personal-dialog">
-                    Personal info
-                </button>
             {% endif %}
             {% if may_record_leave and not is_ended %}
                 <a class="btn btn--ghost" href="{% url 'leaves:leave_record' %}?employee={{ employee.pk }}">
@@ -122,146 +126,352 @@
     {% endif %}
 
     <nav class="profile-tabs" role="tablist" aria-label="Profile sections" data-profile-tabs>
-        <a class="profile-tabs__tab" href="#overview" role="tab" data-tab="overview">Overview</a>
-        <a class="profile-tabs__tab" href="#personal" role="tab" data-tab="personal">Personal</a>
+        <a class="profile-tabs__tab" href="#profile" role="tab" data-tab="profile">Profile information</a>
         {% if summary %}
-            <a class="profile-tabs__tab" href="#attendance" role="tab" data-tab="attendance">Attendance</a>
+            <a class="profile-tabs__tab" href="#attendance" role="tab" data-tab="attendance">Attendance report</a>
         {% endif %}
         {% if leave is not None %}
             <a class="profile-tabs__tab" href="#leave" role="tab" data-tab="leave">Leave</a>
         {% endif %}
-        <a class="profile-tabs__tab" href="#employment" role="tab" data-tab="employment">Employment</a>
-        <a class="profile-tabs__tab" href="#devices" role="tab" data-tab="devices">Devices &amp; shift</a>
-        <a class="profile-tabs__tab" href="#activity" role="tab" data-tab="activity">Activity</a>
+        <a class="profile-tabs__tab" href="#devices" role="tab" data-tab="devices">Devices</a>
+        <a class="profile-tabs__tab" href="#roster" role="tab" data-tab="roster">Roster</a>
     </nav>
 
-    <section class="profile-panel" id="overview" role="tabpanel" data-panel="overview">
-    <div class="emp-summary">
+    {# ---------------------------------------------------------------- Profile information #}
+    <section class="profile-panel stack" id="profile" role="tabpanel" data-panel="profile">
         <div class="card">
             <div class="card__head">
-                <h2>
-                    Now
-                </h2>
-                {% if employee.employment_status == "active" %}
-                    <span class="badge badge--success">
-                        Active
-                    </span>
-                {% elif is_ended %}
-                    <span class="badge badge--neutral">
-                        {{ employee.get_employment_status_display }}
-                    </span>
-                {% else %}
-                    <span class="badge badge--warning">
-                        {{ employee.get_employment_status_display }}
-                    </span>
+                <h2>General information</h2>
+                {% if edit %}
+                    <div class="row">
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="details-dialog">Edit details</button>
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="placement-dialog">Change placement</button>
+                        {% if line_manager_form and assignment %}
+                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="line_manager-dialog">Line manager</button>
+                        {% endif %}
+                    </div>
                 {% endif %}
             </div>
             <div class="card__body">
-                <dl class="facts">
-                    <dt>
-                        Joined
-                    </dt>
+                <dl class="facts profile-facts profile-facts--two">
+                    <dt>Name</dt>
+                    <dd>{{ employee.full_name }}</dd>
+                    <dt>Employee ID</dt>
+                    <dd>{{ assignment.employee_code|default:"—" }}</dd>
+                    <dt>Device person ID</dt>
+                    <dd>{{ general.device_ids|join:", "|default:"Not on a device" }}</dd>
+                    <dt>Email</dt>
+                    <dd>{{ employee.work_email|default:"—" }}</dd>
+                    <dt>Phone</dt>
+                    <dd>{{ employee.phone|default:"—" }}</dd>
+                    <dt>Workplace</dt>
+                    <dd>{{ assignment.branch.name|default:"—" }}</dd>
+                    <dt>Department</dt>
+                    <dd>{{ assignment.department.name|default:"—" }}</dd>
+                    <dt>Designation</dt>
+                    <dd>{{ assignment.designation.name|default:"—" }}</dd>
+                    <dt>Employment status</dt>
+                    <dd>{{ employee.get_employment_status_display }}</dd>
+                    <dt>Shift today</dt>
                     <dd>
-                        {{ employee.joining_date|date:"j M Y"|default:"—" }}
+                        {% if general.shift %}
+                            {{ general.shift.name }}, {{ general.shift.start_time|time:"H:i" }}–{{ general.shift.end_time|time:"H:i" }}
+                            <span class="t-faint">· {{ general.shift_from }}</span>
+                        {% else %}
+                            —
+                        {% endif %}
                     </dd>
-                    {% if may.salary %}
-                        <dt>
-                            Salary
-                        </dt>
+                    <dt>Gender</dt>
+                    <dd>{{ gender_label|default:"—" }}</dd>
+                    <dt>RFID card</dt>
+                    <dd>{{ general.cards|join:", "|default:"—" }}</dd>
+                    <dt>Joining date</dt>
+                    <dd>{{ employee.joining_date|date:"j M Y"|default:"—" }}</dd>
+                    <dt>End date</dt>
+                    <dd>{{ employee.leaving_date|date:"j M Y"|default:"—" }}</dd>
+                    <dt>Line manager</dt>
+                    <dd>
+                        {% if assignment.manager %}
+                            <a href="{% url 'organization:employee_detail' assignment.manager_id %}">{{ assignment.manager.full_name }}</a>
+                        {% else %}
+                            —
+                        {% endif %}
+                    </dd>
+                    <dt>HR manager</dt>
+                    <dd>{{ general.hr_managers|join:", "|default:"—" }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="emp-pair">
+            <div class="card">
+                <div class="card__head">
+                    <h2>Personal &amp; contact info</h2>
+                    {% if may.edit %}
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="personal-dialog">Edit</button>
+                    {% endif %}
+                </div>
+                <div class="card__body">
+                    <dl class="facts profile-facts">
+                        {% for label, value in personal_rows %}
+                            {% if label != "Address" and "Emergency" not in label %}
+                                <dt>{{ label }}</dt>
+                                <dd>
+                                    {% if value %}{% if value.year %}{{ value|date:"j M Y" }}{% else %}{{ value }}{% endif %}{% else %}<span class="t-faint">—</span>{% endif %}
+                                </dd>
+                            {% endif %}
+                        {% endfor %}
+                    </dl>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card__head">
+                    <h2>Address</h2>
+                    {% if may.edit %}
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="personal-dialog">Edit</button>
+                    {% endif %}
+                </div>
+                <div class="card__body">
+                    <dl class="facts profile-facts">
+                        {% for label, value in personal_rows %}
+                            {% if label == "Address" or "Emergency" in label %}
+                                <dt>{{ label }}</dt>
+                                <dd>
+                                    {% if value %}{{ value|linebreaksbr }}{% else %}<span class="t-faint">—</span>{% endif %}
+                                </dd>
+                            {% endif %}
+                        {% endfor %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="login">
+            <div class="card__head">
+                <h2>Login &amp; password</h2>
+                {% if not login %}
+                    <span class="badge badge--neutral">No login</span>
+                {% elif login.status == "active" %}
+                    <span class="badge badge--success">Can sign in</span>
+                {% else %}
+                    <span class="badge badge--warning">Disabled</span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                {% if login %}
+                    <dl class="facts profile-facts">
+                        <dt>Signs in with</dt>
+                        <dd>{{ login.user.email }}</dd>
+                        <dt>Access</dt>
+                        <dd>
+                            {{ edit.login_role_label|default:login.get_role_display }}{% for branch in login.allowed_branches.all %}{% if forloop.first %} of {% endif %}{{ branch.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        </dd>
+                    </dl>
+                {% else %}
+                    <p class="t-faint">No login yet. With one they sign in, see their own pages and change the password themselves.</p>
+                {% endif %}
+                {% if edit and edit.may.logins %}
+                    <div class="row">
+                        {% if not login %}
+                            <button class="btn btn--primary btn--sm" type="button" data-open-dialog="login_give-dialog">Give a login</button>
+                        {% elif not edit.login_role_label %}
+                            <p class="field__help">This is the company administrator's login. It is managed on the company page.</p>
+                        {% else %}
+                            {% if edit.may.role %}
+                                <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="login_role-dialog">Change access</button>
+                            {% endif %}
+                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="login_password-dialog">Change password</button>
+                            <form method="post" action="{{ save_url }}"
+                                  data-confirm-title="{% if login.status == 'active' %}Disable {{ employee.full_name }}'s login?{% else %}Enable {{ employee.full_name }}'s login?{% endif %}"
+                                  data-confirm="{% if login.status == 'active' %}They can no longer sign in to this company. Their records stay.{% else %}They can sign in again with their email and password.{% endif %}"
+                                  data-confirm-button="{% if login.status == 'active' %}Disable{% else %}Enable{% endif %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="section" value="{% if login.status == 'active' %}login_disable{% else %}login_enable{% endif %}">
+                                <button class="btn btn--ghost btn--sm{% if login.status == 'active' %} btn--danger-text{% endif %}" type="submit">
+                                    {% if login.status == "active" %}Disable login{% else %}Enable login{% endif %}
+                                </button>
+                            </form>
+                        {% endif %}
+                    </div>
+                {% elif may.edit %}
+                    <p class="field__help">Logins for this branch are managed by someone who may create them.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if may.salary %}
+            <div class="card" id="salary">
+                <div class="card__head">
+                    <h2>Salary</h2>
+                    {% if edit.may.salary %}
+                        <div class="row">
+                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="salary-dialog">
+                                {% if compensation %}Change salary{% else %}Set salary{% endif %}
+                            </button>
+                            {% if edit.give_component_form.fields.component.queryset %}
+                                <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="component_give-dialog">Give an allowance or deduction</button>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="card__body stack">
+                    <dl class="facts profile-facts">
+                        <dt>Now</dt>
                         <dd>
                             {% if compensation %}
                                 {{ compensation.base_rate|money }} {{ compensation.currency }}, {{ compensation.get_pay_basis_display|lower }}
+                                {% if edit.salary_since %}<span class="t-faint">· since {{ edit.salary_since|date:"j M Y" }}</span>{% endif %}
                             {% else %}
-                                None set
+                                None set. They are left out when a month's salary is generated.
                             {% endif %}
                         </dd>
-                    {% endif %}
-                    <dt>
-                        Login
-                    </dt>
-                    <dd>
-                        {% if login %}
-                            {{ employee.user.email }}
-                            {% if login.status == "active" %}
-                                <span class="badge badge--success">
-                                    {{ login.get_role_display }}
-                                </span>
-                            {% else %}
-                                <span class="badge badge--neutral">
-                                    {{ login.get_status_display }}
-                                </span>
-                            {% endif %}
-                        {% else %}
-                            No login
-                        {% endif %}
-                    </dd>
-                    <dt>
-                        Contact
-                    </dt>
-                    <dd>
-                        {{ employee.work_email|default:employee.phone|default:"—" }}
-                    </dd>
-                </dl>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card__head">
-                <h2>
-                    Attendance this month
-                </h2>
-                {% if calendar_url %}
-                    <a class="btn btn--ghost btn--sm emp-head-action" href="{{ calendar_url }}">
-                        Calendar view
-                    </a>
-                {% endif %}
-            </div>
-            <div class="card__body">
-                <dl class="emp-counts">
-                    {% for label, count in month_rows %}
-                        <div class="emp-counts__item{% if label == 'Absent' and count %} emp-counts__item--alert{% endif %}">
-                            <dt>
-                                {{ label }}
-                            </dt>
-                            <dd>
-                                {{ count }}
-                            </dd>
+                    </dl>
+                    {% if edit.employee_components %}
+                        <div class="table-wrap">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Allowance or deduction</th>
+                                        <th class="numeric">Amount</th>
+                                        <th class="numeric">From</th>
+                                        <th class="numeric">Until</th>
+                                        {% if edit.may.salary %}<th class="no-sort">Action</th>{% endif %}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for row in edit.employee_components %}
+                                        <tr>
+                                            <td>
+                                                {{ row.component.name }}
+                                                {% if row.component.kind == 'deduction' %}<span class="badge badge--warning">Deduction</span>{% endif %}
+                                                {% if row.reason %}<div class="t-faint">{{ row.reason }}</div>{% endif %}
+                                            </td>
+                                            <td class="numeric">
+                                                {% if row.percent is not None %}{{ row.percent|floatformat:"-3" }}% of basic{% else %}{{ row.amount|money }}{% endif %}
+                                            </td>
+                                            <td class="numeric">{{ row.effective_from|date:"d M Y" }}</td>
+                                            <td class="numeric">{% if row.effective_to %}{{ row.effective_to|date:"d M Y" }}{% else %}Until ended{% endif %}</td>
+                                            {% if edit.may.salary %}
+                                                <td>
+                                                    {% if not row.effective_to %}
+                                                        <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="component_end-{{ row.pk }}-dialog">End</button>
+                                                    {% endif %}
+                                                </td>
+                                            {% endif %}
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
-                    {% endfor %}
-                </dl>
+                    {% endif %}
+                </div>
             </div>
-        </div>
-    </div>
+        {% endif %}
 
-    </section>
-
-    <section class="profile-panel" id="personal" role="tabpanel" data-panel="personal">
         <div class="card">
             <div class="card__head">
-                <h2>
-                    Personal information
-                </h2>
-                {% if may.edit %}
-                    <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="personal-dialog">
-                        Edit
-                    </button>
+                <h2>Employment history</h2>
+                <span class="badge badge--neutral">{{ placements|length }}</span>
+            </div>
+            {% if placements %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Employee ID</th>
+                                <th>Designation</th>
+                                <th>Department</th>
+                                <th>Branch</th>
+                                <th class="emp-note">Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in placements %}
+                                <tr>
+                                    <td class="emp-date">{{ p.first_day|date:"j M Y" }}</td>
+                                    <td class="emp-date">
+                                        {% if p.is_current %}<span class="badge badge--success">Now</span>{% else %}{{ p.last_day|date:"j M Y" }}{% endif %}
+                                    </td>
+                                    <td>{{ p.row.employee_code }}</td>
+                                    <td>{{ p.row.designation.name }}</td>
+                                    <td>{{ p.row.department.name }}</td>
+                                    <td>{{ p.row.branch.name }}</td>
+                                    <td class="t-muted emp-note">{{ p.row.change_reason|default:"—" }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty"><div class="empty__title">Never placed</div></div>
+            {% endif %}
+        </div>
+
+        {% if may.salary %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>Salary history</h2>
+                    <span class="badge badge--neutral">{{ salaries|length }}</span>
+                </div>
+                {% if salaries %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>From</th>
+                                    <th>To</th>
+                                    <th>Pay basis</th>
+                                    <th class="numeric">Rate</th>
+                                    <th class="emp-note">Note</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for s in salaries %}
+                                    <tr>
+                                        <td class="emp-date">{{ s.first_day|date:"j M Y" }}</td>
+                                        <td class="emp-date">
+                                            {% if s.is_current %}<span class="badge badge--success">Now</span>{% else %}{{ s.last_day|date:"j M Y" }}{% endif %}
+                                        </td>
+                                        <td>{{ s.row.get_pay_basis_display }}</td>
+                                        <td class="numeric">{{ s.row.base_rate|money }} <span class="t-faint">{{ s.row.currency }}</span></td>
+                                        <td class="t-muted emp-note">{{ s.row.reason|default:"—" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty"><div class="empty__title">No salary yet</div></div>
                 {% endif %}
             </div>
-            <div class="card__body">
-                <dl class="facts profile-facts">
-                    {% for label, value in personal_rows %}
-                        <dt>
-                            {{ label }}
-                        </dt>
-                        <dd>
-                            {% if value %}{% if value.year %}{{ value|date:"j M Y" }}{% else %}{{ value|linebreaksbr }}{% endif %}{% else %}<span class="t-faint">—</span>{% endif %}
-                        </dd>
-                    {% endfor %}
-                </dl>
+        {% endif %}
+
+        <div class="card">
+            <div class="card__head">
+                <h2>Recent changes</h2>
             </div>
+            {% if events %}
+                <ul class="emp-list">
+                    {% for event in events %}
+                        <li class="emp-list__item">
+                            <div class="emp-list__main">
+                                <strong>{{ event.label }}</strong>
+                                <span class="t-faint emp-list__dates">
+                                    {{ event.occurred_at|timezone:company_tz|date:"j M Y, H:i" }} · {{ event.actor_user.email|default:"system" }}
+                                </span>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="empty"><div class="empty__title">Nothing recorded yet</div></div>
+            {% endif %}
         </div>
     </section>
 
+    {# ---------------------------------------------------------------- Attendance report #}
     {% if summary %}
         <section class="profile-panel" id="attendance" role="tabpanel" data-panel="attendance">
             <div class="card" data-profile-summary>
@@ -270,8 +480,8 @@
                         Attendance · {{ summary.label }}
                     </h2>
                     <div class="row">
-                        <a class="btn btn--ghost btn--sm" href="?year={{ summary_earlier.0 }}&month={{ summary_earlier.1 }}#attendance">‹ Earlier</a>
-                        <a class="btn btn--ghost btn--sm" href="?year={{ summary_later.0 }}&month={{ summary_later.1 }}#attendance">Later ›</a>
+                        <a class="btn btn--ghost btn--sm" href="{{ profile_url }}?year={{ summary_earlier.0 }}&month={{ summary_earlier.1 }}#attendance">‹ Earlier</a>
+                        <a class="btn btn--ghost btn--sm" href="{{ profile_url }}?year={{ summary_later.0 }}&month={{ summary_later.1 }}#attendance">Later ›</a>
                     </div>
                 </div>
                 <div class="report-summary">
@@ -308,6 +518,15 @@
                             {% if summary.late_dates %}{{ summary.late_dates }} <span class="t-muted">· {{ summary.late_minutes }} minutes in all</span>{% else %}Never late{% endif %}
                         </dd>
                     </dl>
+                    <dl class="emp-counts">
+                        {% for label, count in month_rows %}
+                            <div class="emp-counts__item{% if label == 'Absent' and count %} emp-counts__item--alert{% endif %}">
+                                <dt>{{ label }}</dt>
+                                <dd>{{ count }}</dd>
+                            </div>
+                        {% endfor %}
+                    </dl>
+                    <p class="t-faint">The counts above are this month so far.</p>
                     <div class="row">
                         <a class="btn btn--ghost btn--sm" href="{% url 'reports:monthly_attendance' %}?year={{ summary.year }}&month={{ summary.month }}&employee={{ employee.pk }}">Monthly attendance report</a>
                         <a class="btn btn--ghost btn--sm" href="{% url 'reports:monthly_absent' %}?year={{ summary.year }}&month={{ summary.month }}&employee={{ employee.pk }}">Absent report</a>
@@ -318,6 +537,7 @@
         </section>
     {% endif %}
 
+    {# ---------------------------------------------------------------- Leave #}
     {% if leave is not None %}
         <section class="profile-panel" id="leave" role="tabpanel" data-panel="leave">
             <div class="card" data-profile-leave>
@@ -381,289 +601,101 @@
         </section>
     {% endif %}
 
-    <section class="profile-panel" id="employment" role="tabpanel" data-panel="employment">
-    <div class="card">
-        <div class="card__head">
-            <h2>
-                Placement history
-            </h2>
-            <span class="badge badge--neutral">
-                {{ placements|length }}
-            </span>
-        </div>
-        {% if placements %}
-            <div class="table-wrap">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>
-                                From
-                            </th>
-                            <th>
-                                To
-                            </th>
-                            <th>
-                                Employee ID
-                            </th>
-                            <th>
-                                Designation
-                            </th>
-                            <th>
-                                Department
-                            </th>
-                            <th>
-                                Branch
-                            </th>
-                            <th class="emp-note">
-                                Note
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for p in placements %}
-                            <tr>
-                                <td class="emp-date">
-                                    {{ p.first_day|date:"j M Y" }}
-                                </td>
-                                <td class="emp-date">
-                                    {% if p.is_current %}
-                                        <span class="badge badge--success">
-                                            Now
-                                        </span>
-                                    {% else %}
-                                        {{ p.last_day|date:"j M Y" }}
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {{ p.row.employee_code }}
-                                </td>
-                                <td>
-                                    {{ p.row.designation.name }}
-                                </td>
-                                <td>
-                                    {{ p.row.department.name }}
-                                </td>
-                                <td>
-                                    {{ p.row.branch.name }}
-                                </td>
-                                <td class="t-muted emp-note">
-                                    {{ p.row.change_reason|default:"—" }}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <div class="empty">
-                <div class="empty__title">
-                    Never placed
-                </div>
-            </div>
-        {% endif %}
-    </div>
-
-    {% if may.salary %}
-    <div class="card">
-        <div class="card__head">
-            <h2>
-                Salary history
-            </h2>
-            <span class="badge badge--neutral">
-                {{ salaries|length }}
-            </span>
-        </div>
-        {% if salaries %}
-            <div class="table-wrap">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>
-                                From
-                            </th>
-                            <th>
-                                To
-                            </th>
-                            <th>
-                                Pay basis
-                            </th>
-                            <th class="numeric">
-                                Rate
-                            </th>
-                            <th class="emp-note">
-                                Note
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for s in salaries %}
-                            <tr>
-                                <td class="emp-date">
-                                    {{ s.first_day|date:"j M Y" }}
-                                </td>
-                                <td class="emp-date">
-                                    {% if s.is_current %}
-                                        <span class="badge badge--success">
-                                            Now
-                                        </span>
-                                    {% else %}
-                                        {{ s.last_day|date:"j M Y" }}
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {{ s.row.get_pay_basis_display }}
-                                </td>
-                                <td class="numeric">
-                                    {{ s.row.base_rate|money }}
-                                    <span class="t-faint">
-                                        {{ s.row.currency }}
-                                    </span>
-                                </td>
-                                <td class="t-muted emp-note">
-                                    {{ s.row.reason|default:"—" }}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <div class="empty">
-                <div class="empty__title">
-                    No salary yet
-                </div>
-                <div class="empty__text">
-                    Set one on Edit employee.
-                </div>
-            </div>
-        {% endif %}
-    </div>
-    {% endif %}
-
-    </section>
-
+    {# ---------------------------------------------------------------- Devices #}
     <section class="profile-panel" id="devices" role="tabpanel" data-panel="devices">
-    <div class="emp-pair">
         <div class="card">
             <div class="card__head">
-                <h2>
-                    Devices
-                </h2>
-                <span class="badge badge--neutral">
-                    {{ devices|length }}
-                </span>
+                <h2>Devices</h2>
+                <span class="badge badge--neutral">{{ devices|length }}</span>
             </div>
             {% if devices %}
                 <ul class="emp-list">
                     {% for d in devices %}
                         <li class="emp-list__item">
                             <div class="emp-list__main">
-                                <strong>
-                                    {{ d.row.device.name }}
-                                </strong>
-                                <span class="t-muted">
-                                    user {{ d.row.device_user_id }} · {{ d.row.device.branch.name }}
-                                </span>
+                                <strong>{{ d.row.device.name }}</strong>
+                                <span class="t-muted">user {{ d.row.device_user_id }} · {{ d.row.device.branch.name }}</span>
                                 <span class="t-faint emp-list__dates">
                                     {{ d.first_day|date:"j M Y" }} – {% if d.is_current %}now{% else %}{{ d.last_day|date:"j M Y" }}{% endif %}
                                 </span>
                             </div>
                             <div class="emp-list__badges">
                                 {% if not d.is_current %}
-                                    <span class="badge badge--neutral">
-                                        Ended
-                                    </span>
+                                    <span class="badge badge--neutral">Ended</span>
                                 {% elif not d.row.attendance_enabled %}
-                                    <span class="badge badge--danger">
-                                        Attendance off
-                                    </span>
+                                    <span class="badge badge--danger">Attendance off</span>
                                 {% elif d.row.assigned_device_authorized %}
-                                    <span class="badge badge--success">
-                                        Assigned
-                                    </span>
+                                    <span class="badge badge--success">Assigned</span>
                                 {% else %}
-                                    <span class="badge badge--warning">
-                                        Recognised only
-                                    </span>
+                                    <span class="badge badge--warning">Recognised only</span>
                                 {% endif %}
                             </div>
                         </li>
                     {% endfor %}
                 </ul>
             {% else %}
-                <div class="empty">
-                    <div class="empty__title">
-                        Not enrolled on any device
-                    </div>
-                </div>
+                <div class="empty"><div class="empty__title">Not enrolled on any device</div></div>
             {% endif %}
         </div>
+    </section>
 
-        <div class="card">
+    {# ---------------------------------------------------------------- Roster #}
+    <section class="profile-panel" id="roster" role="tabpanel" data-panel="roster">
+        <div class="card" id="shift">
             <div class="card__head">
-                <h2>
-                    Shift of their own
-                </h2>
-            </div>
-            {% if own_shifts %}
-                <ul class="emp-list">
-                    {% for s in own_shifts %}
-                        <li class="emp-list__item">
-                            <div class="emp-list__main">
-                                <strong>
-                                    {{ s.shift.name }}
-                                </strong>
-                                <span class="t-faint emp-list__dates">
-                                    {{ s.first_day|date:"j M Y" }} – {% if s.last_day %}{{ s.last_day|date:"j M Y" }}{% else %}until changed{% endif %}
-                                </span>
-                            </div>
-                        </li>
-                    {% endfor %}
-                </ul>
-            {% else %}
-                <div class="empty">
-                    <div class="empty__title">
-                        Works their department's shift
+                <h2>Shift</h2>
+                {% if edit and edit.may.shift %}
+                    <div class="row">
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="shift-dialog">Give their own shift</button>
+                        {% if edit.endable %}
+                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="shift_end-dialog">End {{ edit.endable.shift.name }}</button>
+                        {% endif %}
                     </div>
-                </div>
-            {% endif %}
-        </div>
-    </div>
-
-    </section>
-
-    <section class="profile-panel" id="activity" role="tabpanel" data-panel="activity">
-    <div class="card">
-        <div class="card__head">
-            <h2>
-                Recent changes
-            </h2>
-        </div>
-        {% if events %}
-            <ul class="emp-list">
-                {% for event in events %}
-                    <li class="emp-list__item">
-                        <div class="emp-list__main">
-                            <strong>
-                                {{ event.label }}
-                            </strong>
-                            <span class="t-faint emp-list__dates">
-                                {{ event.occurred_at|timezone:company_tz|date:"j M Y, H:i" }} · {{ event.actor_user.email|default:"system" }}
-                            </span>
-                        </div>
-                    </li>
-                {% endfor %}
-            </ul>
-        {% else %}
-            <div class="empty">
-                <div class="empty__title">
-                    Nothing recorded yet
-                </div>
+                {% endif %}
             </div>
-        {% endif %}
-    </div>
+            <div class="card__body stack">
+                <p>
+                    {% if general.shift %}
+                        Today: <strong>{{ general.shift.name }}</strong>, {{ general.shift.start_time|time:"H:i" }}–{{ general.shift.end_time|time:"H:i" }} <span class="t-faint">· {{ general.shift_from }}</span>
+                    {% else %}
+                        No shift today.
+                    {% endif %}
+                </p>
+                <p class="field__help">
+                    An employee works their department's shift (or the company shift). Their own shift wins over it:
+                    without a last day it stays until changed; with one it is temporary.
+                </p>
+                {% if own_shifts %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Own shift</th>
+                                    <th class="numeric">From</th>
+                                    <th class="numeric">Until</th>
+                                    <th>Reason</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in own_shifts %}
+                                    <tr>
+                                        <td>{{ row.shift.name }}</td>
+                                        <td class="numeric">{{ row.first_day|date:"d M Y" }}</td>
+                                        <td class="numeric">{% if row.last_day %}{{ row.last_day|date:"d M Y" }}{% else %}Until changed{% endif %}</td>
+                                        <td>{{ row.reason|default:"—" }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="t-faint">Works their department's shift.</p>
+                {% endif %}
+            </div>
+        </div>
     </section>
 
+    {# ---------------------------------------------------------------- Modals #}
     {% if may_enter_missing %}
         <dialog class="modal modal--wide" id="missing-dialog" aria-labelledby="missing-dialog-title">
             <form class="modal__card" method="post" action="{% url 'attendance:missed_scan_enter' employee.pk %}">
@@ -718,29 +750,48 @@
             </form>
         </dialog>
 
-        <dialog class="modal modal--wide" id="personal-dialog" aria-labelledby="personal-dialog-title">
-            <form class="modal__card" method="post" action="{% url 'organization:employee_personal' employee.pk %}" novalidate>
-                {% csrf_token %}
-                <div class="modal__head">
-                    <h2 id="personal-dialog-title">Personal information</h2>
-                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
-                </div>
-                <div class="modal__body stack">
-                    {% if personal_form.non_field_errors %}
-                        <div class="alert alert--danger">{{ personal_form.non_field_errors }}</div>
-                    {% endif %}
-                    <p class="t-faint">The name, work email, phone and joining date are on Edit employee.</p>
-                    <div class="grid grid--2">
-                        {% for field in personal_form %}
-                            {% include "leaves/includes/field.html" with field=field %}
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="modal__foot">
-                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
-                    <button class="btn btn--primary" type="submit">Save</button>
-                </div>
-            </form>
-        </dialog>
+        {% url 'organization:employee_personal' employee.pk as personal_url %}
+        {% include "organization/profile/modal_form.html" with id="personal-dialog" title="Personal & contact info" action=personal_url form=personal_form submit="Save" wide=True note="The name, work email, phone and joining date are under General information → Edit details." %}
+
+        {% if line_manager_form %}
+            {% url 'organization:employee_line_manager' employee.pk as line_manager_url %}
+            {% include "organization/profile/modal_form.html" with id="line_manager-dialog" title="Line manager" action=line_manager_url form=line_manager_form submit="Save" %}
+        {% endif %}
+    {% endif %}
+
+    {% if edit %}
+        {% include "organization/profile/modal_form.html" with id="details-dialog" title="Edit details" action=save_url section="details" form=edit.details submit="Save details" wide=True note="A new name is sent to the attendance devices they are on." %}
+        {% include "organization/profile/modal_form.html" with id="placement-dialog" title="Change placement" action=save_url section="placement" form=edit.placement submit="Save placement" wide=True dependent=True note="A later date keeps the current placement as history; the date it started corrects it." %}
+        {% if edit.may.salary %}
+            {% include "organization/profile/modal_form.html" with id="salary-dialog" title=edit.compensation|yesno:"Change salary,Set salary" action=save_url section="salary" form=edit.salary submit="Save salary" wide=True note="Regenerate the month's salary to apply it." %}
+            {% if edit.give_component_form.fields.component.queryset %}
+                {% include "organization/profile/modal_form.html" with id="component_give-dialog" title="Give an allowance or deduction" action=save_url section="component_give" form=edit.give_component_form submit="Give it" wide=True note="It is on their payslip the next time salary is generated." %}
+            {% endif %}
+            {% for row in edit.employee_components %}
+                {% if not row.effective_to %}
+                    {% with row_pk=row.pk|stringformat:"s" %}
+                        {% with dialog_id="component_end-"|add:row_pk|add:"-dialog" %}
+                            {% include "organization/profile/modal_form.html" with id=dialog_id title="End "|add:row.component.name action=save_url section="component_end" row=row.pk form=edit.end_component_form submit="End it" note="It is paid up to the last day you choose, and stops after it." %}
+                        {% endwith %}
+                    {% endwith %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+        {% if edit.may.shift %}
+            {% include "organization/profile/modal_form.html" with id="shift-dialog" title="Their own shift" action=save_url section="shift" form=edit.shift_form submit="Save shift" wide=True note="It wins over the department's shift. Without a last day it stays until changed." %}
+            {% if edit.endable %}
+                {% include "organization/profile/modal_form.html" with id="shift_end-dialog" title="End "|add:edit.endable.shift.name action=save_url section="shift_end" row=edit.endable.pk row_name="assignment" form=edit.end_form submit="End this shift" note="Afterwards they are back on the department's shift." %}
+            {% endif %}
+        {% endif %}
+        {% if edit.may.logins %}
+            {% if not login %}
+                {% include "organization/profile/modal_form.html" with id="login_give-dialog" title="Give a login" action=save_url section="login_give" form=edit.give_login submit="Create login" wide=True note="They sign in with this email and password, see only their own pages, and can change the password themselves." %}
+            {% elif edit.login_role_label %}
+                {% include "organization/profile/modal_form.html" with id="login_password-dialog" title="Change password" action=save_url section="login_password" form=edit.login_password submit="Set new password" note="Give them the new password. They can change it themselves after signing in." %}
+                {% if edit.may.role %}
+                    {% include "organization/profile/modal_form.html" with id="login_role-dialog" title="Change access" action=save_url section="login_role" form=edit.login_role submit="Save access" wide=True %}
+                {% endif %}
+            {% endif %}
+        {% endif %}
     {% endif %}
 {% endblock %}

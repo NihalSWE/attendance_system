@@ -5,7 +5,10 @@ document.addEventListener("DOMContentLoaded", function () {
         $(".js-select2").each(function () {
             var $el = $(this);
             var count = $el.find("option").length;
+            // In a modal <dialog> the list opens on the dialog, not behind it.
+            var $dialog = $el.closest("dialog");
             $el.select2({
+                dropdownParent: $dialog.length ? $dialog : $(document.body),
                 theme: "paper",
                 width: "100%",
                 // A short fixed list needs no search box; a long or

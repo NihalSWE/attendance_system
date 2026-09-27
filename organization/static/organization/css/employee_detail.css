@@ -263,3 +263,16 @@ Tokens only.
 .modal--wide {
     max-width: min(760px, calc(100vw - 32px));
 }
+
+/* General information (2026-09-27): two label/value columns side by side on a
+   wide screen, one under the other on a phone. */
+@media (min-width: 900px) {
+    .profile-facts--two {
+        grid-template-columns: minmax(140px, max-content) 1fr minmax(140px, max-content) 1fr;
+        column-gap: var(--s5, 24px);
+    }
+}
+.card__head .row {
+    flex-wrap: wrap;
+    gap: var(--s2, 8px);
+}

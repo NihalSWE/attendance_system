@@ -78,6 +78,11 @@ urlpatterns = [
          name="employee_photo_change"),
     path("employees/<int:pk>/personal/", employee_detail_views.employee_personal,
          name="employee_personal"),
+    # The Edit employee cards as profile modals (Ajay, 2026-09-27).
+    path("employees/<int:pk>/profile/edit/", employee_detail_views.employee_profile_edit,
+         name="employee_profile_edit"),
+    path("employees/<int:pk>/line-manager/", employee_detail_views.employee_line_manager,
+         name="employee_line_manager"),
     path("employees/<int:pk>/reports/", employee_detail_views.employee_report_visibility,
          name="employee_report_visibility"),
     # Feed the dependent branch -> department -> designation selects.
