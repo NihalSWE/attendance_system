@@ -516,3 +516,45 @@ def policy_of(employee, on=None):
     """The policy they have on a day (their own or the default), or None."""
     with use_company(employee.company_id):
         return Book(employee).policy_on(on or timezone.localdate())
+
+
+# --------------------------------------------------------------------------
+# What a person's leave looks like, for the pages
+# --------------------------------------------------------------------------
+
+
+def overview(employee, year, today=None):
+    """One row per leave type they have something of in ``year``: their
+    policy's balance, or - for a type no policy covers - its days per year,
+    as before. Call inside the company's tenant context."""
+    rows = []
+    found = balances(employee, year, today)
+    for item in found:
+        rows.append({
+            "leave_type": item.leave_type, "by_policy": True,
+            "policy": item.policy, "rule": item.rule,
+            "accrued": item.accrued, "carried": item.carried, "expired": item.expired,
+            "adjusted": item.adjusted, "given": item.given, "taken": item.taken,
+            "left": item.left, "entries": item.entries,
+        })
+    covered = {item.leave_type.pk for item in found}
+    for leave_type in LeaveType.objects.filter(status=ActiveStatus.ACTIVE,
+                                               days_per_year__isnull=False).order_by("name"):
+        if leave_type.pk in covered:
+            continue
+        used = taken(employee, leave_type, year)
+        rows.append({
+            "leave_type": leave_type, "by_policy": False, "policy": None, "rule": None,
+            "given": leave_type.days_per_year, "taken": used,
+            "left": leave_type.days_per_year - used, "entries": [],
+        })
+    return rows
+
+
+def left_for(employee, leave_type, year):
+    """``(left, given)`` of one leave type this year, or None if unlimited."""
+    with use_company(employee.company_id):
+        for row in overview(employee, year):
+            if row["leave_type"].pk == leave_type.pk:
+                return row["left"], row["given"]
+    return None

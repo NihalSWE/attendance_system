@@ -349,3 +349,9 @@ Tokens only.
         max-height: 70vh;
     }
 }
+
+/* The Leave tab's balance heading (Phase E). */
+.balance-head {
+    justify-content: space-between;
+    align-items: center;
+}

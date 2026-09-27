@@ -207,3 +207,84 @@ class DecideLeaveForm(StyledFormMixin, forms.Form):
                 and values.get('pay_percentage') is None):
             self.add_error('pay_percentage', 'Give the share of pay kept, from 1 to 99 %.')
         return values
+
+
+# --------------------------------------------------------------------------
+# Leave policies (Phase E, 2026-09-27)
+# --------------------------------------------------------------------------
+
+
+class LeavePolicyForm(StyledFormMixin, forms.Form):
+    code = forms.CharField(max_length=32, label="Code", help_text="Short, e.g. STAFF.")
+    name = forms.CharField(max_length=150, label="Policy",
+                           help_text="As people know it, e.g. Staff, Workers.")
+    description = forms.CharField(max_length=255, required=False, label="Description")
+    is_default = forms.BooleanField(
+        required=False, label="The company default",
+        help_text="Everyone not given another policy has this one.")
+
+
+class PolicyVersionForm(StyledFormMixin, forms.Form):
+    effective_from = forms.DateField(
+        label="From", widget=forms.DateInput(format="%Y-%m-%d", attrs={
+            "type": "date", "data-datepicker": "", "data-placeholder": "Select date"}),
+        help_text="These rules apply from this day until the next version.")
+    note = forms.CharField(max_length=255, required=False, label="Note",
+                           help_text="What changed, for the record.")
+
+
+class PolicyRuleForm(StyledFormMixin, forms.Form):
+    """One leave type's rule in a version (the version page has one per type)."""
+
+    include = forms.BooleanField(required=False, label="Covered")
+    days_per_year = forms.DecimalField(required=False, min_value=0, max_digits=5,
+                                       decimal_places=2, label="Days per year")
+    accrual = forms.ChoiceField(choices=(("yearly", "At the start of the year"),
+                                         ("monthly", "A twelfth each month")),
+                                required=False, label="Given")
+    carry_forward_days = forms.DecimalField(required=False, min_value=0, max_digits=5,
+                                            decimal_places=2, label="Carry forward up to")
+    carry_forward_expires_months = forms.IntegerField(required=False, min_value=1,
+                                                      max_value=12,
+                                                      label="Carried days expire after (months)")
+    allow_half_day = forms.BooleanField(required=False, initial=True, label="Half days")
+    allow_hourly = forms.BooleanField(required=False, initial=True, label="By the hour")
+    allow_negative = forms.BooleanField(required=False, label="May go below zero")
+
+    def clean(self):
+        values = super().clean()
+        if values.get("include") and values.get("days_per_year") is None:
+            self.add_error("days_per_year", "Give the days per year.")
+        if values.get("carry_forward_expires_months") and not values.get("carry_forward_days"):
+            self.add_error("carry_forward_expires_months",
+                           "Only carried days can expire: give how many are carried.")
+        return values
+
+
+class AssignPolicyForm(StyledFormMixin, forms.Form):
+    policy = forms.ModelChoiceField(queryset=None, required=False, label="Leave policy",
+                                    help_text="Empty: the company default.")
+    effective_from = forms.DateField(
+        label="From", widget=forms.DateInput(format="%Y-%m-%d", attrs={
+            "type": "date", "data-datepicker": "", "data-placeholder": "Select date"}),
+        help_text="Their leave is given by this policy from this day.")
+
+    def __init__(self, *args, policies=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        from leaves.models import LeavePolicy
+
+        self.fields["policy"].queryset = policies if policies is not None else LeavePolicy.all_objects.none()
+        self.fields["policy"].empty_label = "The company default"
+
+
+class AdjustBalanceForm(StyledFormMixin, forms.Form):
+    leave_type = forms.ModelChoiceField(queryset=LeaveType.all_objects.none(), label="Leave type")
+    year = forms.IntegerField(min_value=2000, max_value=2100, label="Year")
+    units = forms.DecimalField(max_digits=6, decimal_places=2, label="Days",
+                               help_text="Days to add; with a minus, e.g. -1.5, to take away.")
+    note = forms.CharField(max_length=255, label="Why")
+
+    def __init__(self, *args, leave_types=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if leave_types is not None:
+            self.fields["leave_type"].queryset = leave_types

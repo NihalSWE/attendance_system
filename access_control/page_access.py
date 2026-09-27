@@ -46,6 +46,7 @@ BRANCH_PAGES = {
     # overtime day opens to viewers, and only deciders get its form. Leave
     # types stay the company's. The approval inbox lives under My account.
     "leaves:leave_list": ("leave.view", "leave.record"),
+    "leaves:leave_balance_list": ("leave.view", "leave.record"),
     "leaves:leave_record": "leave.record",
     "leaves:leave_cancel": "leave.record",
     "leaves:leave_amend": "leave.record",
@@ -111,6 +112,10 @@ BRANCH_PAGES = {
     "organization:employee_device_permission": "employees.edit",
     "organization:employee_leave": ("employees.view", "leave.record"),
     "organization:employee_late": ("employees.view", "attendance.fix"),
+    # The owner, admin or HR only (leaves.policies.BALANCE_ROLES): the
+    # service decides.
+    "organization:employee_leave_policy": "employees.view",
+    "organization:employee_leave_adjust": "employees.view",
     "organization:employee_active": "employees.edit",
     "organization:employee_overtime": ("employees.edit", "overtime.decide"),
     "organization:employee_reports": "employees.edit",

@@ -1,0 +1,64 @@
+{% comment %}
+    Leave balances (Phase E, 2026-09-27): ``rows`` from leaves.policies.overview.
+    A type a policy covers shows what was given (earned, carried, expired,
+    adjusted), taken and left, with its entries; any other type its days per year.
+{% endcomment %}
+{% if rows %}
+    <div class="table-wrap">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Leave type</th>
+                    <th>From</th>
+                    <th class="numeric">Given</th>
+                    <th class="numeric">Taken</th>
+                    <th class="numeric">Left</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td>
+                            {{ row.leave_type.name }}
+                            {% if row.entries %}
+                                <details class="balance-entries">
+                                    <summary class="t-faint">How it adds up</summary>
+                                    <ul class="balance-entries__list">
+                                        {% for entry in row.entries %}
+                                            <li>
+                                                <span class="emp-date">{{ entry.entry_date|date:"j M Y" }}</span>
+                                                {{ entry.get_kind_display }}
+                                                <strong>{% if entry.units > 0 %}+{% endif %}{{ entry.units|floatformat:"-2" }}</strong>
+                                                {% if entry.note %}<span class="t-faint">· {{ entry.note }}</span>{% endif %}
+                                            </li>
+                                        {% endfor %}
+                                    </ul>
+                                </details>
+                            {% endif %}
+                        </td>
+                        <td class="t-muted">
+                            {% if row.by_policy %}{{ row.policy.name|default:"Policy" }}{% if row.rule %} · {{ row.rule.get_accrual_display|lower }}{% endif %}{% else %}Days per year{% endif %}
+                        </td>
+                        <td class="numeric">
+                            {{ row.given|floatformat:"-2" }}
+                            {% if row.by_policy and row.carried or row.by_policy and row.adjusted or row.by_policy and row.expired %}
+                                <div class="t-faint">
+                                    {{ row.accrued|floatformat:"-2" }} earned{% if row.carried %} + {{ row.carried|floatformat:"-2" }} carried{% endif %}{% if row.expired %} − {{ row.expired|floatformat:"-2" }} expired{% endif %}{% if row.adjusted %} {% if row.adjusted > 0 %}+{% else %}−{% endif %} {{ row.adjusted|floatformat:"-2"|cut:"-" }} adjusted{% endif %}
+                                </div>
+                            {% endif %}
+                        </td>
+                        <td class="numeric">{{ row.taken|floatformat:"-2" }}</td>
+                        <td class="numeric">
+                            {% if row.left < 0 %}<span class="badge badge--danger">{{ row.left|floatformat:"-2" }}</span>{% else %}<strong>{{ row.left|floatformat:"-2" }}</strong>{% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="empty">
+        <div class="empty__title">No leave allowance</div>
+        <div class="empty__text">No leave policy covers them, and no leave type has days per year.</div>
+    </div>
+{% endif %}

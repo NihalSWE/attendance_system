@@ -255,6 +255,11 @@
                     </dd>
                     <dt>HR manager</dt>
                     <dd>{{ general.hr_managers|join:", "|default:"—" }}</dd>
+                    <dt>Leave policy</dt>
+                    <dd>
+                        {{ leave_policy.name|default:"None - each leave type's days per year" }}{% if leave_policy.is_default %} <span class="t-faint">· company default</span>{% endif %}
+                        {% if policy_form %}<button class="btn btn--quiet btn--sm" type="button" data-open-dialog="leave_policy-dialog">Change</button>{% endif %}
+                    </dd>
                     <dt>Reports to them</dt>
                     <dd>
                         {% for person in reports %}<a href="{% url 'organization:employee_detail' person.pk %}">{{ person.full_name }}</a>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
@@ -728,6 +733,15 @@
                         </button>
                     {% endif %}
                 </div>
+                {% if leave_balances is not None %}
+                    <div class="card__body row balance-head">
+                        <h3 class="t-card-head">Balance in {{ leave_year }}</h3>
+                        {% if adjust_form %}
+                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="adjust-dialog">Adjust balance</button>
+                        {% endif %}
+                    </div>
+                    {% include "leaves/includes/balances.html" with rows=leave_balances %}
+                {% endif %}
                 {% if leave.summary %}
                     <div class="report-summary">
                         {% for label, value in leave.summary %}
@@ -1228,6 +1242,14 @@
                 {% endwith %}
             {% endwith %}
         {% endfor %}
+    {% endif %}
+    {% if policy_form %}
+        {% url 'organization:employee_leave_policy' employee.pk as leave_policy_url %}
+        {% include "organization/profile/modal_form.html" with id="leave_policy-dialog" title="Leave policy" action=leave_policy_url form=policy_form submit="Save" note="Their leave is given by this policy from the day you choose. Leave already taken still counts. Balances from that day are worked out again; days adjusted by hand stay." %}
+    {% endif %}
+    {% if adjust_form %}
+        {% url 'organization:employee_leave_adjust' employee.pk as adjust_url %}
+        {% include "organization/profile/modal_form.html" with id="adjust-dialog" title="Adjust leave balance" action=adjust_url form=adjust_form submit="Record adjustment" note="Adds days to their balance (or, with a minus, takes them away). It stays through any policy change and shows in how the balance adds up." %}
     {% endif %}
     {% if leave_form %}
         {% url 'organization:employee_leave' employee.pk as leave_url %}

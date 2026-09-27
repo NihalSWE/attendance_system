@@ -1,0 +1,77 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Leave balances · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'leaves:leave_list' %}">Leave</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Leave balances
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Leave balances · {{ year }}</h1>
+            <p class="page__sub">What each person was given, has taken and has left of each leave type. Open someone's profile to see how it adds up, or to adjust it.</p>
+        </div>
+        <form class="page__actions row" method="get">
+            <select class="input select js-select" name="year" aria-label="Year" onchange="this.form.submit()">
+                {% for option in years %}
+                    <option value="{{ option }}"{% if option == year %} selected{% endif %}>{{ option }}</option>
+                {% endfor %}
+            </select>
+            <noscript><button class="btn btn--ghost" type="submit">Show</button></noscript>
+        </form>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>Balances</h2>
+            <span class="badge badge--neutral">{{ server_table.page.paginator.count }}</span>
+        </div>
+        {% if not page %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">No balances to show</div>
+                <div class="empty__text">No leave policy or leave type with days per year covers the people you see.</div>
+            </div>
+        {% endif %}
+        {% if server_table or page %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th>Employee ID</th>
+                            <th>Name</th>
+                            <th>Branch</th>
+                            <th>Leave type</th>
+                            <th>From</th>
+                            <th class="numeric">Given</th>
+                            <th class="numeric">Taken</th>
+                            <th class="numeric">Left</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in page %}
+                            <tr>
+                                <td>{{ row.0 }}</td>
+                                <td><a href="{% url 'organization:employee_detail' row.8 %}#leave">{{ row.1 }}</a></td>
+                                <td>{{ row.2 }}</td>
+                                <td>{{ row.3 }}</td>
+                                <td class="t-muted">{{ row.4 }}</td>
+                                <td class="numeric">{{ row.5 }}</td>
+                                <td class="numeric">{{ row.6 }}</td>
+                                <td class="numeric"><strong>{{ row.7 }}</strong></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'base_template/js/platform.js' %}">
+    </script>
+{% endblock %}

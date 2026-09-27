@@ -277,3 +277,17 @@ class NothingChangesWithoutAPolicyTests(PolicyCase):
             self.take(D(2026, 8, 10), D(2026, 8, 12))
         self.post(D(2026, 12, 31))
         self.assertEqual(self.entries(), [])
+
+
+class CommandTests(PolicyCase):
+    def test_the_nightly_command_posts_and_can_run_again(self):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        self.policy()
+        out = StringIO()
+        call_command("post_leave_accruals", stdout=out)
+        call_command("post_leave_accruals", stdout=out)
+        self.assertIn("brought up to", out.getvalue())
+        self.assertEqual(len(self.entries(kind=Kind.ACCRUAL, year=2026)), 1)

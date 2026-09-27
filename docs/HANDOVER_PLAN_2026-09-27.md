@@ -43,3 +43,21 @@ until he says start.
 4. Disallow overtime: never counted or paid for this person?
 5. Make inactive (Suspended): stop their scans counting, or only mark them?
 6. Notification settings: no notifications exist - left out as meaningless.
+
+## Status (2026-09-27): all five phases done
+
+A, B, C, D and E are built, tested and pushed (details in PHASE_STATUS.md).
+The open questions were settled as follows, since Ajay was away - each is
+easy to change if he wants it otherwise:
+
+1. Set as Admin - left as an explanation: a company has one administrator.
+2. Set as Line manager - choose the people who report to them (their line
+   manager); branch manager access stays under Login → Change access.
+3. Late approval - a late arrival approved by whoever may fix that day
+   (a correction, withdrawable): no late minutes, no penalty.
+4. Disallow overtime - from a date: no overtime approved or paid.
+5. Make inactive - Suspended; marks them only (no leave requests or
+   missed-scan reports), attendance and salary as before.
+6. Notification settings - left out: the app sends no notifications.
+
+The Edit employee page is kept, as Ajay asked, until he has seen the profile.

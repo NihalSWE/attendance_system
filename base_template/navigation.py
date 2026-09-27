@@ -51,6 +51,13 @@ COMPANY_MENUS = (
         item("Approval inbox", "me:leave_inbox", "me:leave_decide", manage=True),
         item("Leave types", "leaves:leave_type_list", "leaves:leave_type_create",
              "leaves:leave_type_edit", "leaves:leave_type_status"),
+        # Phase E (2026-09-27): policies are set up by the owner or admin;
+        # balances are seen by whoever sees leave.
+        item("Leave policies", "leaves:leave_policy_list", "leaves:leave_policy_create",
+             "leaves:leave_policy_detail", "leaves:leave_policy_edit",
+             "leaves:leave_policy_version_create", "leaves:leave_policy_version_edit",
+             manage=True),
+        item("Leave balances", "leaves:leave_balance_list"),
     )),
     ("salary", "Salary", (
         item("Salary by month", "payroll:payroll_home", "payroll:payslip", "payroll:penalty_waive",
