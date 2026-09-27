@@ -75,6 +75,12 @@ HEAD_CODES = frozenset({
     "leave.approve",
     "overtime.view",
 })
+#: Whether heading a department gives HEAD_CODES by itself. Off (Nihal,
+#: 2026-09-27): an Employee login sees nothing of the company - its people,
+#: attendance, leave, overtime or reports - until an owner, admin or manager
+#: gives it that access on the Access page, head of a department or not.
+#: ``headed_departments`` then finds none, which every head rule reads.
+HEAD_ACCESS = False
 
 COMPANY_WIDE_ROLES = (Role.OWNER, Role.COMPANY_ADMIN)
 # What the existing HR role already did company-wide before A12 (kept, per Ajay).
@@ -204,6 +210,8 @@ def headed_departments(user, company_id, at=None):
     """
     from organization.models import Department
 
+    if not HEAD_ACCESS:
+        return set()
     if user is None or not getattr(user, "is_authenticated", False) or not user.is_active:
         return set()
     with use_company(company_id):

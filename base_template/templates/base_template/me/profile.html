@@ -1,0 +1,196 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    My profile · Attendance
+{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
+    <link rel="stylesheet" href="{% static 'organization/css/employee_detail.css' %}">
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    {# My profile (Nihal, 2026-09-27): their own details; each change in a modal. #}
+    <div class="card profile-head" data-profile{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div class="profile-head__who">
+            <div class="profile-photo">
+                {% if employee.photo %}
+                    <img src="{% url 'me:photo' %}?v={{ employee.updated_at|date:'U' }}" alt="{{ employee.full_name }}">
+                {% else %}
+                    <span class="profile-photo__initials" aria-hidden="true">{{ employee.first_name|slice:":1"|upper }}{{ employee.last_name|slice:":1"|upper }}</span>
+                {% endif %}
+                <button class="profile-photo__change" type="button" data-open-dialog="photo-dialog">
+                    {% if employee.photo %}Change{% else %}Add photo{% endif %}
+                </button>
+            </div>
+            <div>
+                <h1 class="page__title">{{ employee.full_name }}</h1>
+                <p class="page__sub">
+                    {% if placement %}
+                        {{ placement.employee_code }} · {{ placement.designation.name }} · {{ placement.department.name }} · {{ placement.branch.name }}
+                    {% else %}
+                        No current placement
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        <div class="profile-actions">
+            <button class="btn btn--primary" type="button" data-open-dialog="details-dialog">Edit my details</button>
+        </div>
+    </div>
+
+    <div class="stack">
+        <div class="card">
+            <div class="card__head">
+                <h2>Work</h2>
+                <span class="t-faint">Kept by the company</span>
+            </div>
+            <div class="card__body">
+                <dl class="facts profile-facts profile-facts--two">
+                    <dt>Name</dt>
+                    <dd>{{ employee.full_name }}</dd>
+                    <dt>Employee ID</dt>
+                    <dd>{{ placement.employee_code|default:"—" }}</dd>
+                    <dt>Work email</dt>
+                    <dd>{{ employee.work_email|default:"—" }}</dd>
+                    <dt>Workplace</dt>
+                    <dd>{{ placement.branch.name|default:"—" }}</dd>
+                    <dt>Department</dt>
+                    <dd>{{ placement.department.name|default:"—" }}</dd>
+                    <dt>Designation</dt>
+                    <dd>{{ placement.designation.name|default:"—" }}</dd>
+                    <dt>Line manager</dt>
+                    <dd>{{ placement.manager.full_name|default:"—" }}</dd>
+                    <dt>Joined</dt>
+                    <dd>{{ employee.joining_date|date:"j M Y"|default:"—" }}</dd>
+                </dl>
+                <p class="t-faint">If any of this is wrong, ask HR or your manager to correct it.</p>
+            </div>
+        </div>
+
+        <div class="emp-pair">
+            <div class="card">
+                <div class="card__head">
+                    <h2>Personal &amp; contact info</h2>
+                    <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="details-dialog">Edit</button>
+                </div>
+                <div class="card__body">
+                    <dl class="facts profile-facts">
+                        {% for label, value in personal_rows %}
+                            <dt>{{ label }}</dt>
+                            <dd>{% if value %}{% if value.year %}{{ value|date:"j M Y" }}{% else %}{{ value }}{% endif %}{% else %}<span class="t-faint">—</span>{% endif %}</dd>
+                        {% endfor %}
+                    </dl>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card__head">
+                    <h2>Address</h2>
+                    <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="details-dialog">Edit</button>
+                </div>
+                <div class="card__body">
+                    <dl class="facts profile-facts">
+                        {% for label, value in address_rows %}
+                            <dt>{{ label }}</dt>
+                            <dd>{% if value %}{{ value|linebreaksbr }}{% else %}<span class="t-faint">—</span>{% endif %}</dd>
+                        {% endfor %}
+                    </dl>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>Education history</h2>
+                <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="education_new-dialog">Add qualification</button>
+            </div>
+            {% if education %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Degree or certificate</th>
+                                <th>Institution</th>
+                                <th>Subject or group</th>
+                                <th>Result</th>
+                                <th class="numeric">Year</th>
+                                <th class="no-sort">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row, form in education %}
+                                <tr>
+                                    <td>{{ row.qualification }}{% if row.note %}<div class="t-faint">{{ row.note }}</div>{% endif %}</td>
+                                    <td>{{ row.institution|default:"—" }}</td>
+                                    <td>{{ row.subject|default:"—" }}</td>
+                                    <td>{{ row.result|default:"—" }}</td>
+                                    <td class="numeric">{{ row.passing_year|default:"—" }}</td>
+                                    <td>
+                                        <div class="row">
+                                            <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="education_{{ row.pk }}-dialog">Edit</button>
+                                            <form method="post" action="{% url 'me:education_remove' row.pk %}"
+                                                  data-confirm-title="Remove {{ row.qualification }}?"
+                                                  data-confirm="It is taken off your education history."
+                                                  data-confirm-button="Remove">
+                                                {% csrf_token %}
+                                                <button class="btn btn--quiet btn--sm btn--danger-text" type="submit">Remove</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty"><div class="empty__title">No qualifications yet</div><div class="empty__text">Add your degrees and certificates.</div></div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Modals #}
+    <dialog class="modal" id="photo-dialog" aria-labelledby="photo-dialog-title">
+        <form class="modal__card" method="post" enctype="multipart/form-data" action="{% url 'me:photo_change' %}">
+            {% csrf_token %}
+            <div class="modal__head">
+                <h2 id="photo-dialog-title">{% if employee.photo %}Change your photo{% else %}Add your photo{% endif %}</h2>
+                <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+            </div>
+            <div class="modal__body stack">
+                {% if photo_form.non_field_errors %}<div class="alert alert--danger">{{ photo_form.non_field_errors }}</div>{% endif %}
+                <div class="field">
+                    <label class="field__label" for="{{ photo_form.photo.id_for_label }}">Picture</label>
+                    <input class="input input--file" type="file" name="{{ photo_form.photo.html_name }}" id="{{ photo_form.photo.id_for_label }}" accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp">
+                    <span class="field__help">PNG, JPG or WEBP, up to 3 MB. Only you and the people who look after your record can see it.</span>
+                    {% for error in photo_form.photo.errors %}<span class="field__error">{{ error }}</span>{% endfor %}
+                </div>
+                {% if employee.photo %}
+                    <label class="check" for="{{ photo_form.remove.id_for_label }}">
+                        <input class="check__input" type="checkbox" name="{{ photo_form.remove.html_name }}" id="{{ photo_form.remove.id_for_label }}">
+                        <span>Remove my photo</span>
+                    </label>
+                {% endif %}
+            </div>
+            <div class="modal__foot">
+                <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                <button class="btn btn--primary" type="submit">Save</button>
+            </div>
+        </form>
+    </dialog>
+
+    {% url 'me:details' as details_url %}
+    {% include "organization/profile/modal_form.html" with id="details-dialog" title="My details" action=details_url form=details_form submit="Save" wide=True note="Your name, Employee ID, work email and joining date are kept by the company; ask HR to change those." %}
+    {% url 'me:education_add' as education_add_url %}
+    {% include "organization/profile/modal_form.html" with id="education_new-dialog" title="Add a qualification" action=education_add_url form=education_new_form submit="Save" wide=True %}
+    {% for row, form in education %}
+        {% with row_pk=row.pk|stringformat:"s" %}
+            {% with dialog_id="education_"|add:row_pk|add:"-dialog" %}
+                {% url 'me:education_edit' row.pk as education_edit_url %}
+                {% include "organization/profile/modal_form.html" with id=dialog_id title="Edit "|add:row.qualification action=education_edit_url form=form submit="Save" wide=True %}
+            {% endwith %}
+        {% endwith %}
+    {% endfor %}
+{% endblock %}

@@ -49,8 +49,8 @@ MAX_PHOTO_BYTES = 3 * 1024 * 1024
 
 
 class PersonalForm(StyledFormMixin, forms.ModelForm):
-    gender = forms.ChoiceField(choices=GENDERS, required=False)
-    blood_group = forms.ChoiceField(choices=BLOOD_GROUPS, required=False)
+    gender = forms.ChoiceField(choices=GENDERS, required=False, label="Gender")
+    blood_group = forms.ChoiceField(choices=BLOOD_GROUPS, required=False, label="Blood group")
     marital_status = forms.ChoiceField(choices=MARITAL, required=False, label="Marital status")
 
     class Meta:
@@ -138,6 +138,14 @@ def save_photo(*, actor, company_id, employee_id, upload=None, remove=False):
     """Replace or remove the photo. Stored under a random name, never the
     uploaded one, and served only through the profile's own view."""
     membership, employee = editable(actor, company_id, employee_id)
+    return store_photo(actor=actor, membership=membership, company_id=company_id,
+                       employee=employee, upload=upload, remove=remove)
+
+
+@transaction.atomic
+def store_photo(*, actor, membership, company_id, employee, upload=None, remove=False):
+    """The photo written, once whoever it is may change it (above, or the
+    employee on their own profile, ``employee_self``)."""
     with use_company(company_id):
         old = employee.photo.name if employee.photo else ""
         if upload is not None:

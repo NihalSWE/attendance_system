@@ -6,6 +6,7 @@ rate is withheld where the screen withholds it), and the file is what is on
 screen (scope, search, filters, table search and sort) - not the whole table.
 """
 
+from unittest.mock import patch
 from unittest import mock
 
 from django.urls import reverse
@@ -69,6 +70,7 @@ class WhatIsInTheFileTests(EmployeeExportCase):
 
 
 class PayTests(EmployeeExportCase):
+    @patch("access_control.branch_access.HEAD_ACCESS", True)
     def test_a_department_head_gets_no_salary_columns(self):
         with use_company(self.company):
             self.hq_department.head = self.clerk

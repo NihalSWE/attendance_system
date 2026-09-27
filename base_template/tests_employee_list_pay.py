@@ -11,6 +11,7 @@ in their own branches automatically, ``salary.view`` included, so their column
 stays. That is asserted here too, because it is the easy thing to break.
 """
 
+from unittest.mock import patch
 from django.urls import reverse
 
 from common.tenant import use_company
@@ -71,6 +72,7 @@ class EmployeeListPayColumnTests(TwoBranchCase):
         self.assertContains(page, "Rahim")       # listed, but pay withheld
         self.assertEqual(page.content.decode().count(RAHIM_PAY), 1)
 
+    @patch("access_control.branch_access.HEAD_ACCESS", True)
     def test_a_department_head_gets_no_column(self):
         with use_company(self.company):
             self.hq_department.head = self.clerk

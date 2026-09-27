@@ -10,6 +10,7 @@ see and approve its leave, see its overtime — and never edit employees, never
 see pay, never decide overtime, and never decide their own anything.
 """
 
+from unittest.mock import patch
 import datetime
 from decimal import Decimal
 
@@ -92,6 +93,9 @@ class DepartmentHeadCase(TwoBranchCase):
     DHAKA = datetime.timezone(datetime.timedelta(hours=6))
 
 
+# Heading a department grants nothing by default (Nihal, 2026-09-27);
+# these keep the rule itself tested, switched on.
+@patch("access_control.branch_access.HEAD_ACCESS", True)
 class WhatAHeadReachesTests(DepartmentHeadCase):
     def test_the_head_is_resolved_from_the_department(self):
         self.assertEqual(
@@ -132,6 +136,7 @@ class WhatAHeadReachesTests(DepartmentHeadCase):
         self.assertEqual(headed_departments(self.head, self.company.pk), set())
 
 
+@patch("access_control.branch_access.HEAD_ACCESS", True)
 class HeadSeesTheirDepartmentTests(DepartmentHeadCase):
     def test_the_employees_list_is_their_department_only(self):
         self.client.force_login(self.head)
@@ -216,6 +221,7 @@ class HeadSeesTheirDepartmentTests(DepartmentHeadCase):
         self.assertFalse(scope)
 
 
+@patch("access_control.branch_access.HEAD_ACCESS", True)
 class HeadNeverDecidesTheirOwnTests(DepartmentHeadCase):
     def test_a_head_fixes_their_department_but_not_their_own_day(self):
         self.day(self.employee, 9)
@@ -295,3 +301,30 @@ class HeadChangeIsAuditedTests(DepartmentHeadCase):
             headed_departments(self.employee.user, self.company.pk),
             {self.hq_department.pk},
         ) if self.employee.user_id else None
+
+
+class HeadGetsNothingByDefaultTests(DepartmentHeadCase):
+    """Nihal, 2026-09-27: an Employee login sees none of the company - even as
+    head of a department - until someone gives it access on the Access page."""
+
+    def test_no_codes_no_company_menu_no_pages(self):
+        from access_control.branch_access import CODES, can
+        from access_control.page_access import held_codes
+
+        for code in CODES:
+            self.assertFalse(can(self.head, self.company.pk, code), code)
+        self.assertEqual(held_codes(self.head, self.company.pk), set())
+        self.client.force_login(self.head)
+        page = self.client.get(reverse("me:home"))
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(page.context["branch_menus"], [])
+        self.assertNotContains(page, 'data-menu="employees"')
+        for name in ("employee_list", "leaves:leave_list", "attendance:attendance_list"):
+            response = self.client.get(reverse(name))
+            self.assertIn(response.status_code, (302, 403), name)
+
+    def test_access_given_by_hand_still_works(self):
+        self.grant("employees.view", self.branch, to=self.clerk)
+        self.client.force_login(self.head)
+        page = self.client.get(reverse("me:home"))
+        self.assertContains(page, 'data-menu="employees"')

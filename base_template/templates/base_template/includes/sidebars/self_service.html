@@ -14,6 +14,16 @@
             My account
         </span>
     </a>
+    <a class="sidebar__link {% active request 'profile' %}" href="{% url 'me:profile' %}" aria-label="My profile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <circle cx="9" cy="10.5" r="2.5"/>
+            <path d="M5.5 17a3.5 3.5 0 0 1 7 0M15 9h3M15 13h3"/>
+        </svg>
+        <span>
+            My profile
+        </span>
+    </a>
     <a class="sidebar__link {% active request 'attendance' 'attendance_day' %}" href="{% url 'me:attendance' %}" aria-label="My attendance">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="4.5" width="18" height="16" rx="2"/>

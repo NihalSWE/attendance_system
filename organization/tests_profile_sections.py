@@ -6,6 +6,7 @@ Head Office: Rahim (on the Front device), Clerk; Manny manages it.
 Chittagong: Karim, no branch manager.
 """
 
+from unittest.mock import patch
 import datetime
 import shutil
 import tempfile
@@ -72,6 +73,7 @@ class ApproverTests(SectionCase):
         self.assertTrue(approvers["leave_by_company"])
         self.assertEqual(approvers["leave"], ["admin@liv.test"])
 
+    @patch("access_control.branch_access.HEAD_ACCESS", True)
     def test_someone_given_approve_leave_and_the_department_head(self):
         self.grant("leave.approve", self.branch)
         with use_company(self.company):

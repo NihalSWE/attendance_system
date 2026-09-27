@@ -6,6 +6,7 @@ flag, which the import writes once and nobody clears. The fixture imports two
 people into Head Office the real way, then HR fixes one of them.
 """
 
+from unittest.mock import patch
 from decimal import Decimal
 
 from django.urls import reverse
@@ -112,6 +113,7 @@ class ChipTests(SetupCase):
 
 
 class PayVisibilityTests(SetupCase):
+    @patch("access_control.branch_access.HEAD_ACCESS", True)
     def test_a_department_head_is_never_told_who_has_a_salary(self):
         with use_company(self.company):
             self.hq_department.head = self.clerk
