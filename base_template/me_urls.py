@@ -4,6 +4,7 @@ from django.urls import path
 from attendance import scan_request_views
 from base_template import me_views
 from leaves import request_views
+from organization import employee_self_views
 
 app_name = "me"
 
@@ -11,6 +12,16 @@ app_name = "me"
 # (common.middleware.SelfServiceGate lets this namespace through).
 urlpatterns = [
     path("", me_views.my_account, name="home"),
+    # My profile: their own details, photo and education (2026-09-27).
+    path("profile/", employee_self_views.my_profile, name="profile"),
+    path("profile/details/", employee_self_views.my_details, name="details"),
+    path("profile/photo/", employee_self_views.my_photo_change, name="photo_change"),
+    path("profile/photo/file/", employee_self_views.my_photo, name="photo"),
+    path("profile/education/", employee_self_views.my_education_save, name="education_add"),
+    path("profile/education/<int:row>/", employee_self_views.my_education_save,
+         name="education_edit"),
+    path("profile/education/<int:row>/remove/", employee_self_views.my_education_remove,
+         name="education_remove"),
     path("attendance/", me_views.my_attendance, name="attendance"),
     # Missed-scan requests (Nihal's N11). Not under attendance/, whose <slug:on>
     # day URL would swallow them.

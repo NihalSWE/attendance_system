@@ -5122,3 +5122,30 @@ what it does and does not change said up front. Built as designed:
 `manage.py post_leave_accruals` nightly. Tests: `leaves/tests_leave_shapes.py`
 (17), `leaves/tests_policies.py` (22), `leaves/tests_policy_pages.py` (11).
 Browser-checked on a temporary :8001 (read-only on the real data).
+
+### Employees see only their own pages; My profile — 2026-09-27
+
+Nihal: an Employee login saw a "Company" menu (Employees, Attendance, Leave,
+Salary, Reports) - and could not edit their own details.
+
+- **Why the Company menu showed:** Dia was head of Brand & Marketing, and a
+  department head automatically managed their own department (Ajay's rule,
+  2026-09-20). Nihal decided (2026-09-27): **being head of a department gives
+  no access by itself.** An Employee login sees nothing of the company until
+  an owner, admin or manager gives it access on the Access page.
+  `access_control.branch_access.HEAD_ACCESS = False`; the head rule and its
+  tests stay (run with it on), so it can be switched back. Approver
+  information no longer lists the head as deciding leave. Access given on
+  the Access page works as before (Sajal's "View salaries").
+- **My profile** (`me:profile`, sidebar "My profile"): the employee's own
+  record. They edit, in modals, their personal and contact details, address
+  and emergency contact, photo, and education history. Name, Employee ID,
+  work email, placement and dates are shown as "kept by the company". Every
+  change is audited as theirs; nobody else's record can be reached from it.
+  The photo is served privately (`me:photo`) and is the same photo HR sees.
+- Fixed: Gender and Blood group showed as "None" in the personal details
+  list (no label on those fields), on both profiles.
+
+Tests: `organization/tests_my_profile.py` (10), head-by-default tests in
+`access_control/tests_department_head.py`. Browser-checked as Dia on a
+temporary :8001.

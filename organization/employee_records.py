@@ -74,6 +74,14 @@ def _snapshot(row, fields):
 def save_education(*, actor, company_id, employee_id, values, row_id=None):
     """Add a qualification, or change one (``row_id``)."""
     membership, employee = _editable(actor, company_id, employee_id)
+    return write_education(actor=actor, membership=membership, company_id=company_id,
+                           employee=employee, values=values, row_id=row_id)
+
+
+@transaction.atomic
+def write_education(*, actor, membership, company_id, employee, values, row_id=None):
+    """Add or change a qualification, once whoever it is may (above, or the
+    employee on their own profile, ``employee_self``)."""
     with use_company(company_id):
         if row_id is None:
             row = EmployeeEducation(employee=employee, created_by=actor)
@@ -101,6 +109,12 @@ def save_education(*, actor, company_id, employee_id, values, row_id=None):
 @transaction.atomic
 def remove_education(*, actor, company_id, employee_id, row_id):
     membership, employee = _editable(actor, company_id, employee_id)
+    return delete_education(actor=actor, membership=membership, company_id=company_id,
+                            employee=employee, row_id=row_id)
+
+
+@transaction.atomic
+def delete_education(*, actor, membership, company_id, employee, row_id):
     with use_company(company_id):
         row = EmployeeEducation.objects.filter(pk=row_id, employee=employee).first()
         if row is None:
@@ -242,7 +256,10 @@ def approvers(company_id, employee, assignment):
     is_branch_manager = own is not None and active.filter(user_id=own, role=Role.MANAGER).exists()
     leave = _names(company_id, managers + _granted(company_id, "leave.approve",
                                                    assignment.branch_id, at), leave_out=own)
-    if head is not None and head.pk != employee.pk and head.full_name not in leave:
+    from access_control.branch_access import HEAD_ACCESS
+
+    if (HEAD_ACCESS and head is not None and head.pk != employee.pk
+            and head.full_name not in leave):
         leave.append(head.full_name)
     attendance = _names(company_id, managers + hr + _granted(
         company_id, "attendance.fix", assignment.branch_id, at), leave_out=own)
