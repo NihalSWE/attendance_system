@@ -333,9 +333,19 @@ Tokens only.
 .action-menu__item--danger {
     color: var(--danger, #b42318);
 }
+/* The header card clips what overflows it; the menu must show past it. */
+.profile-head {
+    overflow: visible;
+}
+/* On a phone the list sits along the bottom of the screen, full width. */
 @media (max-width: 640px) {
     .action-menu__list {
-        left: 0;
-        right: auto;
+        position: fixed;
+        top: auto;
+        left: 16px;
+        right: 16px;
+        bottom: 16px;
+        min-width: 0;
+        max-height: 70vh;
     }
 }
