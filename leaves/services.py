@@ -30,7 +30,7 @@ from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
 from leaves import documents
 from leaves.shape import fit, pay_percentage, shape_from, shape_of
-from leaves.policies import policy_check
+from leaves.policies import covered_dates, policy_check
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
 from organization.services import (
     STRUCTURE_ROLES,
@@ -92,8 +92,12 @@ def check_allowance(employee, leave_type, days, half=False, units=None):
     ``units``: what each date takes (``leaves.shape.fit``), else 1 or 0.5."""
     if leave_type.days_per_year is None:
         return
+    # Dates a leave policy decides are checked there (leaves.policies.policy_check).
+    decided = covered_dates(employee, leave_type, [on for on, *_ in days])
     wanted = Counter()
     for on, *_ in days:
+        if on in decided:
+            continue
         if units is not None:
             wanted[on.year] += units[on][3]
         else:
