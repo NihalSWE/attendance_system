@@ -1,11 +1,11 @@
 {% comment %}
     One profile modal around one form (Ajay, 2026-09-27: every edit opens in a modal).
-    id, title, action, form, submit; optional: section (Edit employee's card name),
+    id, title, action, form, submit; optional: section (Edit employee's card name), multipart,
     row / row_name (a hidden id), note, wide, dependent (branch -> department ->
     designation selects), danger (a red submit button).
 {% endcomment %}
 <dialog class="modal{% if wide %} modal--wide{% endif %}" id="{{ id }}" aria-labelledby="{{ id }}-title">
-    <form class="modal__card" method="post" action="{{ action }}" novalidate{% if dependent %}
+    <form class="modal__card" method="post" action="{{ action }}" novalidate{% if multipart %} enctype="multipart/form-data"{% endif %}{% if dependent %}
           data-departments-url="{% url 'organization:employee_branch_departments' %}"
           data-designations-url="{% url 'organization:employee_department_designations' %}"{% endif %}>
         {% csrf_token %}

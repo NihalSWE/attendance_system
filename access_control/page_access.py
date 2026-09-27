@@ -102,6 +102,13 @@ BRANCH_PAGES = {
     "organization:employee_personal": "employees.edit",
     "organization:employee_profile_edit": "employees.edit",
     "organization:employee_line_manager": "employees.edit",
+    "organization:employee_education_add": "employees.edit",
+    "organization:employee_education_edit": "employees.edit",
+    "organization:employee_education_remove": "employees.edit",
+    "organization:employee_document_add": "employees.edit",
+    "organization:employee_document": "employees.view",
+    "organization:employee_document_remove": "employees.edit",
+    "organization:employee_device_permission": "employees.edit",
     "organization:employee_report_visibility": "employees.edit",
 }
 

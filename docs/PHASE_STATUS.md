@@ -5024,3 +5024,41 @@ profile complete.
 refused ones reopen, view-only and HR without pay). Browser-checked on a
 temporary :8001: both kinds of dropdown open inside modals; a refused edit
 reopens its modal with the reason.
+
+### Phase C: the profile's sections and tabs — 2026-09-27
+
+Ajay's checklist: Approver Information, Education History, Employee
+Documents; tabs Enrol Employee, Device Permissions, Roster, Pending Approvals.
+Notification Settings left out: the app sends no notifications.
+
+- **Approver information** (`employee_records.approvers`), read from the rules
+  that decide, not stored: line manager, department head, branch manager(s),
+  who decides their leave (branch manager, department head, anyone given
+  "Approve leave" there - or the company, for a branch manager's own leave
+  or a branch without one, as `leaves.workflow.reviewable` does), who fixes
+  their attendance, the company administrator.
+- **Education history** - new table `employees_education` (qualification,
+  institution, subject, result, year, note). Add / Edit / Remove in modals,
+  audited.
+- **Employee documents** - new table `employees_document` (what it is, name,
+  file, note). PDF or picture up to 5 MB, checked; stored under a random
+  name; opened only through the profile by whoever may see the employee;
+  removing it deletes the file. Audited.
+- **Enrol employee** tab: their branch's devices, Enrol on each (the Employees
+  list's own Map, `devices:employee_map`, coming back to the tab); says so
+  when the Employee ID cannot go on a device; the device history.
+- **Device permissions** tab: per current enrolment - scans count, assigned
+  device, RFID card, role on the terminal. Changed in a modal by whoever
+  manages devices only (as Devices → Enrollments → Edit), audited with every
+  touched field in `before_data` (historical punches are judged by it); a new
+  card or role is sent to their terminals. Dates and user number stay on the
+  Enrollments page.
+- **Roster** tab: the next 14 days - shift (own or not), weekly off, holiday,
+  leave.
+- **Pending approvals** tab (count on the tab): their leave requests waiting,
+  missed scans waiting, days to review and overtime nobody scanned out of
+  (last 62 days), each linked to where it is decided - only the kinds the
+  viewer may see.
+
+**Server: `migrate`** (employees 0005). 17 tests in
+`organization/tests_profile_sections.py`.

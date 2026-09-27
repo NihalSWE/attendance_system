@@ -72,8 +72,57 @@ def _prefixed(edit):
     return edit
 
 
+def _sections(request, company_id, page, bound):
+    """Approver information, education, documents, devices, the roster and
+    what waits for a decision (Ajay, 2026-09-27). ``bound``: a refused form,
+    by its modal's name, drawn again instead of a fresh one."""
+    from access_control.branch_access import can
+    from devices.models import BiometricDevice
+    from devices.services.mapping import employee_id_for
+    from devices.services.panel_access import may_manage_devices
+    from organization import employee_devices
+    from organization import employee_records as records
+
+    employee, assignment, may, today = (page["employee"], page["assignment"], page["may"],
+                                        page["today"])
+    held = records.records(company_id, employee)
+    education = [(row, bound.get(f"education_{row.pk}") or records.EducationForm(
+        instance=row, auto_id=f"education_{row.pk}_%s")) for row in held["education"]]
+    manages_devices = may_manage_devices(request.user, company_id)
+    enrolled = employee_devices.current(company_id, employee)
+    device_rows = [(row, bound.get(f"device_{row.pk}") or employee_devices.DevicePermissionForm(
+        instance=row, auto_id=f"device_{row.pk}_%s") if manages_devices else None)
+        for row in enrolled]
+    branch_devices = []
+    if assignment is not None and may["edit"]:
+        on = {row.device_id for row in enrolled}
+        with use_company(company_id):
+            branch_devices = [
+                (device, device.pk in on) for device in BiometricDevice.objects
+                .filter(branch_id=assignment.branch_id)
+                .exclude(status__in=["retired", "suspended"]).order_by("name")]
+    overtime_seen = bool(assignment) and (is_company_wide(page["membership"]) or can(
+        request.user, company_id, "overtime.view", assignment.branch_id))
+    return {
+        "approvers": records.approvers(company_id, employee, assignment),
+        "education": education,
+        "education_new_form": bound.get("education_new") or records.EducationForm(
+            auto_id="education_new_%s"),
+        "documents": held["documents"],
+        "document_form": bound.get("document") or records.DocumentForm(auto_id="document_%s"),
+        "device_rows": device_rows,
+        "manages_devices": manages_devices,
+        "branch_devices": branch_devices,
+        "device_pin": employee_id_for(employee),
+        "roster": records.roster(company_id, employee, assignment, today),
+        "pending": records.pending(company_id, employee, today,
+                                   leave=page["leave_seen"], attendance=bool(may["attendance"]),
+                                   overtime=overtime_seen),
+    }
+
+
 def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog="",
-             edit=None, line_manager=None):
+             edit=None, line_manager=None, bound=None):
     """The profile page. A refused form comes back bound, so its modal opens
     again with the reasons and what was typed."""
     page = services.employee_history(actor=request.user, company_id=company_id, employee_id=pk)
@@ -102,6 +151,10 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
     earlier = (year - 1, 12) if month == 1 else (year, month - 1)
     later = (year + 1, 1) if month == 12 else (year, month + 1)
     personal_form = personal or profile.PersonalForm(instance=employee)
+    leave = profile.year_leave(actor=request.user, company=company, employee=employee, year=year)
+    page["leave_seen"] = leave is not None
+    with use_company(company_id):
+        sections = _sections(request, company_id, page, bound or {})
     context = {
         **page,
         "month_rows": [(label, counts.get(status, 0)) for status, label in MONTH_ROWS],
@@ -114,8 +167,7 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
         "summary": summary,
         "summary_earlier": earlier,
         "summary_later": later,
-        "leave": profile.year_leave(actor=request.user, company=company, employee=employee,
-                                    year=year),
+        "leave": leave,
         "leave_year": year,
         "personal_form": personal_form,
         "photo_form": photo or profile.PhotoForm(),
@@ -137,6 +189,7 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
         "open_dialog": open_dialog,
         "edit": edit,
         "line_manager_form": line_manager_form,
+        **sections,
         "gender_label": dict(profile.CHOICES.get("gender", ())).get(employee.gender,
                                                                    employee.gender),
         "general": info.general(company_id, employee, page["assignment"], page["devices"],

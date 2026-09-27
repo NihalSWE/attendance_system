@@ -296,3 +296,53 @@ class EmployeeCompensation(TenantOwned, ActorTracked):
         super().clean()
         if self.effective_to and self.effective_to <= self.effective_from:
             raise ValidationError({"effective_to": "End must be after start."})
+
+
+class EmployeeEducation(TenantOwned, ActorTracked):
+    """One qualification an employee holds (Ajay, 2026-09-27: the profile's
+    Education history). Plain facts, kept as entered; nothing reads them."""
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="education")
+    qualification = models.CharField(max_length=150)
+    institution = models.CharField(max_length=200, blank=True)
+    subject = models.CharField(max_length=150, blank=True)
+    result = models.CharField(max_length=64, blank=True)
+    passing_year = models.PositiveSmallIntegerField(null=True, blank=True)
+    note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "employees_education"
+        indexes = [models.Index(fields=["company", "employee"])]
+
+    def __str__(self):
+        return f"{self.employee_id}: {self.qualification}"
+
+
+class EmployeeDocument(TenantOwned, ActorTracked):
+    """A document kept about an employee - their national ID, a certificate,
+    the contract (Ajay, 2026-09-27: the profile's Employee documents).
+
+    Stored under a random name and served only by the profile's own view to
+    whoever may see the employee (organization.employee_records)."""
+
+    class Kind(models.TextChoices):
+        NATIONAL_ID = "national_id", "National ID"
+        PASSPORT = "passport", "Passport"
+        CERTIFICATE = "certificate", "Certificate"
+        CONTRACT = "contract", "Contract or letter"
+        CV = "cv", "CV"
+        OTHER = "other", "Other"
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="documents")
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.OTHER)
+    title = models.CharField(max_length=150)
+    file = models.FileField(upload_to="employee_documents/")
+    file_name = models.CharField(max_length=255)
+    note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "employees_document"
+        indexes = [models.Index(fields=["company", "employee"])]
+
+    def __str__(self):
+        return f"{self.employee_id}: {self.title}"

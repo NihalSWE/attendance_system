@@ -133,8 +133,10 @@
         {% if leave is not None %}
             <a class="profile-tabs__tab" href="#leave" role="tab" data-tab="leave">Leave</a>
         {% endif %}
-        <a class="profile-tabs__tab" href="#devices" role="tab" data-tab="devices">Devices</a>
+        <a class="profile-tabs__tab" href="#enrol" role="tab" data-tab="enrol">Enrol employee</a>
+        <a class="profile-tabs__tab" href="#device-permissions" role="tab" data-tab="device-permissions">Device permissions</a>
         <a class="profile-tabs__tab" href="#roster" role="tab" data-tab="roster">Roster</a>
+        <a class="profile-tabs__tab" href="#pending" role="tab" data-tab="pending">Pending approvals{% if pending.total %} <span class="badge badge--warning">{{ pending.total }}</span>{% endif %}</a>
     </nav>
 
     {# ---------------------------------------------------------------- Profile information #}
@@ -202,6 +204,34 @@
                 </dl>
             </div>
         </div>
+
+        {% if approvers %}
+            <div class="card">
+                <div class="card__head">
+                    <h2>Approver information</h2>
+                </div>
+                <div class="card__body">
+                    <dl class="facts profile-facts profile-facts--two">
+                        <dt>Line manager</dt>
+                        <dd>{{ approvers.line_manager.full_name|default:"—" }}</dd>
+                        <dt>Department head</dt>
+                        <dd>{{ approvers.department_head.full_name|default:"—" }}</dd>
+                        <dt>Branch manager</dt>
+                        <dd>{{ approvers.branch_managers|join:", "|default:"None for their branch" }}</dd>
+                        <dt>Leave decided by</dt>
+                        <dd>
+                            {{ approvers.leave|join:", "|default:"—" }}
+                            {% if approvers.leave_by_company %}<span class="t-faint">· the company decides their leave</span>{% endif %}
+                        </dd>
+                        <dt>Attendance fixed by</dt>
+                        <dd>{{ approvers.attendance|join:", "|default:"—" }}</dd>
+                        <dt>Company administrator</dt>
+                        <dd>{{ approvers.company|join:", "|default:"—" }}</dd>
+                    </dl>
+                    <p class="t-faint">Read from who looks after their branch and department. The line manager is who they report to; it does not decide their leave.</p>
+                </div>
+            </div>
+        {% endif %}
 
         <div class="emp-pair">
             <div class="card">
@@ -409,6 +439,93 @@
             {% endif %}
         </div>
 
+        <div class="card" id="education">
+            <div class="card__head">
+                <h2>Education history</h2>
+                {% if may.edit %}
+                    <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="education_new-dialog">Add qualification</button>
+                {% endif %}
+            </div>
+            {% if education %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Degree or certificate</th>
+                                <th>Institution</th>
+                                <th>Subject or group</th>
+                                <th>Result</th>
+                                <th class="numeric">Year</th>
+                                {% if may.edit %}<th class="no-sort">Action</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row, form in education %}
+                                <tr>
+                                    <td>{{ row.qualification }}{% if row.note %}<div class="t-faint">{{ row.note }}</div>{% endif %}</td>
+                                    <td>{{ row.institution|default:"—" }}</td>
+                                    <td>{{ row.subject|default:"—" }}</td>
+                                    <td>{{ row.result|default:"—" }}</td>
+                                    <td class="numeric">{{ row.passing_year|default:"—" }}</td>
+                                    {% if may.edit %}
+                                        <td>
+                                            <div class="row">
+                                                <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="education_{{ row.pk }}-dialog">Edit</button>
+                                                <form method="post" action="{% url 'organization:employee_education_remove' employee.pk row.pk %}"
+                                                      data-confirm-title="Remove {{ row.qualification }}?"
+                                                      data-confirm="It is taken off {{ employee.full_name }}&#39;s education history."
+                                                      data-confirm-button="Remove">
+                                                    {% csrf_token %}
+                                                    <button class="btn btn--quiet btn--sm btn--danger-text" type="submit">Remove</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty"><div class="empty__title">No qualifications recorded</div></div>
+            {% endif %}
+        </div>
+
+        <div class="card" id="documents">
+            <div class="card__head">
+                <h2>Employee documents</h2>
+                {% if may.edit %}
+                    <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="document-dialog">Add document</button>
+                {% endif %}
+            </div>
+            {% if documents %}
+                <ul class="emp-list">
+                    {% for document in documents %}
+                        <li class="emp-list__item">
+                            <div class="emp-list__main">
+                                <strong><a href="{% url 'organization:employee_document' employee.pk document.pk %}">{{ document.title }}</a></strong>
+                                <span class="t-muted">{{ document.get_kind_display }} · {{ document.file_name }}</span>
+                                <span class="t-faint emp-list__dates">
+                                    Added {{ document.created_at|timezone:company_tz|date:"j M Y" }}{% if document.created_by %} by {{ document.created_by.email }}{% endif %}{% if document.note %} · {{ document.note }}{% endif %}
+                                </span>
+                            </div>
+                            {% if may.edit %}
+                                <form method="post" action="{% url 'organization:employee_document_remove' employee.pk document.pk %}"
+                                      data-confirm-title="Remove {{ document.title }}?"
+                                      data-confirm="The file is deleted and cannot be opened again."
+                                      data-confirm-button="Remove">
+                                    {% csrf_token %}
+                                    <button class="btn btn--quiet btn--sm btn--danger-text" type="submit">Remove</button>
+                                </form>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <div class="empty"><div class="empty__title">No documents yet</div></div>
+            {% endif %}
+        </div>
+
         {% if may.salary %}
             <div class="card">
                 <div class="card__head">
@@ -601,11 +718,50 @@
         </section>
     {% endif %}
 
-    {# ---------------------------------------------------------------- Devices #}
-    <section class="profile-panel" id="devices" role="tabpanel" data-panel="devices">
+    {# ---------------------------------------------------------------- Enrol employee #}
+    <section class="profile-panel stack" id="enrol" role="tabpanel" data-panel="enrol">
         <div class="card">
             <div class="card__head">
-                <h2>Devices</h2>
+                <h2>Enrol on a device</h2>
+            </div>
+            <div class="card__body stack">
+                {% if not assignment %}
+                    <p class="t-faint">They have no placement, so no branch devices to enrol on.</p>
+                {% elif not device_pin %}
+                    <div class="alert alert--warning">
+                        Their Employee ID ({{ assignment.employee_code|default:"none" }}) must be digits only, at most 20, to be used on a device. Change it under General information → Change placement.
+                    </div>
+                {% endif %}
+                {% if branch_devices %}
+                    <ul class="emp-list">
+                        {% for device, enrolled in branch_devices %}
+                            <li class="emp-list__item">
+                                <div class="emp-list__main">
+                                    <strong>{{ device.name }}</strong>
+                                    <span class="t-muted">{{ device.branch.name }}</span>
+                                </div>
+                                <div class="emp-list__badges">
+                                    {% if enrolled %}
+                                        <span class="badge badge--success">Enrolled</span>
+                                    {% elif device_pin %}
+                                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="enrol-{{ device.pk }}-dialog">Enrol</button>
+                                    {% endif %}
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% elif assignment and may.edit %}
+                    <p class="t-faint">{{ assignment.branch.name }} has no devices in use.</p>
+                {% endif %}
+                {% if not may.edit %}
+                    <p class="t-faint">Enrolling is done by whoever may edit this employee.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card__head">
+                <h2>Device history</h2>
                 <span class="badge badge--neutral">{{ devices|length }}</span>
             </div>
             {% if devices %}
@@ -639,6 +795,52 @@
         </div>
     </section>
 
+    {# ---------------------------------------------------------------- Device permissions #}
+    <section class="profile-panel" id="device-permissions" role="tabpanel" data-panel="device-permissions">
+        <div class="card">
+            <div class="card__head">
+                <h2>Device permissions</h2>
+            </div>
+            {% if device_rows %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Device</th>
+                                <th>Person ID</th>
+                                <th>Scans count</th>
+                                <th>Assigned device</th>
+                                <th>RFID card</th>
+                                <th>Role on terminal</th>
+                                {% if manages_devices %}<th class="no-sort">Action</th>{% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row, form in device_rows %}
+                                <tr>
+                                    <td>{{ row.device.name }} <span class="t-faint">· {{ row.device.branch.name }}</span></td>
+                                    <td>{{ row.device_user_id }}</td>
+                                    <td>{% if row.attendance_enabled %}<span class="badge badge--success">Yes</span>{% else %}<span class="badge badge--danger">No</span>{% endif %}</td>
+                                    <td>{% if row.assigned_device_authorized %}Yes{% else %}No{% endif %}</td>
+                                    <td>{{ row.card_number|default:"—" }}</td>
+                                    <td>{{ row.get_device_privilege_display }}</td>
+                                    {% if manages_devices %}
+                                        <td><button class="btn btn--quiet btn--sm" type="button" data-open-dialog="device_{{ row.pk }}-dialog">Change</button></td>
+                                    {% endif %}
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if not manages_devices %}
+                    <p class="t-faint card__body">These are changed by whoever manages the company's devices.</p>
+                {% endif %}
+            {% else %}
+                <div class="empty"><div class="empty__title">Not on any device now</div><div class="empty__text">Enrol them first, on the Enrol employee tab.</div></div>
+            {% endif %}
+        </div>
+    </section>
+
     {# ---------------------------------------------------------------- Roster #}
     <section class="profile-panel" id="roster" role="tabpanel" data-panel="roster">
         <div class="card" id="shift">
@@ -665,6 +867,41 @@
                     An employee works their department's shift (or the company shift). Their own shift wins over it:
                     without a last day it stays until changed; with one it is temporary.
                 </p>
+                {% if roster %}
+                    <h3 class="t-card-head">The next {{ roster|length }} days</h3>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Day</th>
+                                    <th>Works</th>
+                                    <th>Note</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for day in roster %}
+                                    <tr>
+                                        <td class="emp-date">{{ day.day|date:"D j M" }}</td>
+                                        <td>
+                                            {% if day.off %}
+                                                <span class="badge badge--neutral">{{ day.off_label }}</span>
+                                            {% elif day.shift %}
+                                                {{ day.shift.name }}, {{ day.shift.start_time|time:"H:i" }}–{{ day.shift.end_time|time:"H:i" }}
+                                                {% if day.own %}<span class="t-faint">· own shift</span>{% endif %}
+                                            {% else %}
+                                                —
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if day.leave %}<span class="badge badge--warning">{{ day.leave }}</span>{% endif %}
+                                            {% if day.off_name %}<span class="t-faint">{{ day.off_name }}</span>{% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
                 {% if own_shifts %}
                     <div class="table-wrap">
                         <table class="table">
@@ -693,6 +930,84 @@
                 {% endif %}
             </div>
         </div>
+    </section>
+
+    {# ---------------------------------------------------------------- Pending approvals #}
+    <section class="profile-panel stack" id="pending" role="tabpanel" data-panel="pending">
+        {% if not pending.total %}
+            <div class="card">
+                <div class="empty">
+                    <div class="empty__title">Nothing is waiting for a decision</div>
+                    <div class="empty__text">Leave requests, missed scans, days to review and overtime for {{ employee.full_name }} show here while they wait.</div>
+                </div>
+            </div>
+        {% endif %}
+        {% if pending.leave %}
+            <div class="card">
+                <div class="card__head"><h2>Leave requests</h2><span class="badge badge--warning">{{ pending.leave|length }}</span></div>
+                <ul class="emp-list">
+                    {% for request in pending.leave %}
+                        <li class="emp-list__item">
+                            <div class="emp-list__main">
+                                <strong>{{ request.type_name|default:"Leave" }}</strong>
+                                <span class="t-muted">{{ request.first_day|date:"j M Y" }} – {{ request.last_day|date:"j M Y" }}</span>
+                                <span class="t-faint emp-list__dates">{{ request.reason|default:""|truncatechars:80 }}</span>
+                            </div>
+                            <a class="btn btn--ghost btn--sm" href="{% url 'me:leave_decide' request.pk %}">Decide</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        {% if pending.missed %}
+            <div class="card">
+                <div class="card__head"><h2>Missed scans</h2><span class="badge badge--warning">{{ pending.missed|length }}</span></div>
+                <ul class="emp-list">
+                    {% for request in pending.missed %}
+                        <li class="emp-list__item">
+                            <div class="emp-list__main">
+                                <strong>{{ request.work_date|date:"D j M Y" }}</strong>
+                                <span class="t-muted">{{ request.get_kind_display }}</span>
+                                <span class="t-faint emp-list__dates">{{ request.reason|truncatechars:80 }}</span>
+                            </div>
+                            <a class="btn btn--ghost btn--sm" href="{% url 'attendance:missed_scan_decide' request.pk %}">Decide</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        {% if pending.review %}
+            <div class="card">
+                <div class="card__head"><h2>Days to review</h2><span class="badge badge--warning">{{ pending.review|length }}</span></div>
+                <ul class="emp-list">
+                    {% for record in pending.review %}
+                        <li class="emp-list__item">
+                            <div class="emp-list__main">
+                                <strong>{{ record.work_date|date:"D j M Y" }}</strong>
+                                <span class="t-muted">{{ record.get_attendance_status_display }}</span>
+                            </div>
+                            <a class="btn btn--ghost btn--sm" href="{% url 'attendance:attendance_day_fix' employee.pk record.work_date|date:'Y-m-d' %}">Review</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+        {% if pending.overtime %}
+            <div class="card">
+                <div class="card__head"><h2>Overtime to decide</h2><span class="badge badge--warning">{{ pending.overtime|length }}</span></div>
+                <ul class="emp-list">
+                    {% for record in pending.overtime %}
+                        <li class="emp-list__item">
+                            <div class="emp-list__main">
+                                <strong>{{ record.work_date|date:"D j M Y" }}</strong>
+                                <span class="t-muted">Nobody scanned out, so nobody knows when it ended.</span>
+                            </div>
+                            <a class="btn btn--ghost btn--sm" href="{% url 'payroll:overtime_decide' record.pk %}">Decide</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
     </section>
 
     {# ---------------------------------------------------------------- Modals #}
@@ -793,5 +1108,65 @@
                 {% endif %}
             {% endif %}
         {% endif %}
+    {% endif %}
+    {% if may.edit %}
+        {% url 'organization:employee_education_add' employee.pk as education_add_url %}
+        {% include "organization/profile/modal_form.html" with id="education_new-dialog" title="Add a qualification" action=education_add_url form=education_new_form submit="Save" wide=True %}
+        {% for row, form in education %}
+            {% with row_pk=row.pk|stringformat:"s" %}
+                {% with dialog_id="education_"|add:row_pk|add:"-dialog" %}
+                    {% url 'organization:employee_education_edit' employee.pk row.pk as education_edit_url %}
+                    {% include "organization/profile/modal_form.html" with id=dialog_id title="Edit "|add:row.qualification action=education_edit_url form=form submit="Save" wide=True %}
+                {% endwith %}
+            {% endwith %}
+        {% endfor %}
+        {% url 'organization:employee_document_add' employee.pk as document_add_url %}
+        {% include "organization/profile/modal_form.html" with id="document-dialog" title="Add a document" action=document_add_url form=document_form submit="Add document" multipart=True wide=True note="Only people who may see this employee can open it." %}
+        {% for device, enrolled in branch_devices %}
+            {% if not enrolled and device_pin %}
+                <dialog class="modal" id="enrol-{{ device.pk }}-dialog" aria-labelledby="enrol-{{ device.pk }}-title">
+                    <form class="modal__card" method="post" action="{% url 'devices:employee_map' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="employee" value="{{ employee.pk }}">
+                        <input type="hidden" name="device" value="{{ device.pk }}">
+                        <input type="hidden" name="next" value="{{ profile_url }}#enrol">
+                        <div class="modal__head">
+                            <h2 id="enrol-{{ device.pk }}-title">Enrol on {{ device.name }}</h2>
+                            <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                        </div>
+                        <div class="modal__body stack">
+                            <p class="t-faint">They go on the device as person ID {{ device_pin }}. Without a fingerprint or face saved yet, enrol them at the terminal afterwards.</p>
+                            <div class="field">
+                                <label class="field__label" for="enrol-{{ device.pk }}-day">From</label>
+                                <input class="input" type="date" name="start_day" id="enrol-{{ device.pk }}-day" value="{% now 'Y-m-d' %}" data-datepicker>
+                                <span class="field__help">Their scans on it count from this day.</span>
+                            </div>
+                            <label class="check" for="enrol-{{ device.pk }}-attendance">
+                                <input class="check__input" type="checkbox" name="attendance_enabled" id="enrol-{{ device.pk }}-attendance" checked>
+                                <span>Their scans on this device count</span>
+                            </label>
+                            <label class="check" for="enrol-{{ device.pk }}-assigned">
+                                <input class="check__input" type="checkbox" name="assigned" id="enrol-{{ device.pk }}-assigned" checked>
+                                <span>One of their assigned devices</span>
+                            </label>
+                        </div>
+                        <div class="modal__foot">
+                            <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                            <button class="btn btn--primary" type="submit">Enrol</button>
+                        </div>
+                    </form>
+                </dialog>
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+    {% if manages_devices %}
+        {% for row, form in device_rows %}
+            {% with row_pk=row.pk|stringformat:"s" %}
+                {% with dialog_id="device_"|add:row_pk|add:"-dialog" %}
+                    {% url 'organization:employee_device_permission' employee.pk row.pk as device_url %}
+                    {% include "organization/profile/modal_form.html" with id=dialog_id title=row.device.name action=device_url form=form submit="Save" wide=True note="The same as Devices → Enrollments → Edit. A new card or role is sent to the terminals they are on." %}
+                {% endwith %}
+            {% endwith %}
+        {% endfor %}
     {% endif %}
 {% endblock %}
