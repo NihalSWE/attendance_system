@@ -31,6 +31,8 @@ from common.models import ActorTracked, TenantOwned
 class PayType(models.TextChoices):
     PAID = "paid", "Paid"
     UNPAID = "unpaid", "Unpaid"
+    # Phase E (2026-09-27): a share of pay kept, 1-99 %, in the percentage.
+    PARTIAL = "partial", "Part paid"
 
 
 class LeaveType(TenantOwned, ActorTracked):
@@ -237,11 +239,13 @@ class LeaveDay(TenantOwned):
                 condition=models.Q(status__in=["reserved", "approved", "consumed"]),
                 name="uniq_live_leave_day_per_employee_date",
             ),
-            # Pay type and percentage must agree.
+            # Pay type and percentage must agree (part paid: 1-99 %, Phase E).
             models.CheckConstraint(
                 condition=(
                     models.Q(approved_pay_type="paid", approved_pay_percentage=100)
                     | models.Q(approved_pay_type="unpaid", approved_pay_percentage=0)
+                    | models.Q(approved_pay_type="partial", approved_pay_percentage__gte=1,
+                               approved_pay_percentage__lte=99)
                 ),
                 name="leave_day_pay_type_matches_percentage",
             ),

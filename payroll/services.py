@@ -109,6 +109,17 @@ def _monthly_segments(employee, start, end):
     return segments if len(segments) > 1 else None
 
 
+def _paid_minutes(leave_day):
+    """The leave minutes that are paid: all of them, or the part-paid share
+    (Phase E) - for a paid or unpaid leave exactly what it was."""
+    if leave_day is None:
+        return 0
+    percentage = getattr(leave_day, "approved_pay_percentage", None)
+    if percentage is None:
+        return leave_day.leave_minutes
+    return int(leave_day.leave_minutes * percentage / 100)
+
+
 def summarise(records):
     """Day counts for one employee's month, as shown on the payslip."""
     counts = Counter()
@@ -120,7 +131,7 @@ def summarise(records):
         if status == Status.LEAVE:
             if record.payable_fraction > 0:
                 counts["paid_leave"] += 1
-                paid_leave_minutes += record.leave_day.leave_minutes if record.leave_day else 0
+                paid_leave_minutes += _paid_minutes(record.leave_day)
             else:
                 counts["unpaid_leave"] += 1
         elif status in (Status.HOLIDAY, Status.WEEKLY_OFF):
@@ -130,9 +141,9 @@ def summarise(records):
         else:
             counts[status] += 1
         leave_day = getattr(record, "leave_day", None)
-        if status != Status.LEAVE and leave_day is not None and leave_day.approved_pay_type == "paid":
-            # A paid half-day leave on a day the employee also worked.
-            paid_leave_minutes += leave_day.leave_minutes
+        if status != Status.LEAVE and leave_day is not None and leave_day.approved_pay_type != "unpaid":
+            # A paid (or part-paid) part-day leave on a day the employee also worked.
+            paid_leave_minutes += _paid_minutes(leave_day)
         counts["late_minutes"] += record.late_minutes
         counts["overtime_minutes"] += getattr(record, "approved_overtime_minutes", 0)
     counts["worked_minutes"] = worked_minutes

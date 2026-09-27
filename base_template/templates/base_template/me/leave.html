@@ -190,7 +190,7 @@
                                 </td>
                                 <td>
                                     {% if row.request.status == 'approved' and row.request.decision_snapshot.pay_type %}
-                                        {{ row.request.decision_snapshot.pay_type|title }}
+                                        {% if row.request.decision_snapshot.pay_type == "partial" %}Part paid ({{ row.request.decision_snapshot.pay_percentage|floatformat:"-2" }}%){% else %}{{ row.request.decision_snapshot.pay_type|title }}{% endif %}
                                     {% else %}
                                         {% for segment in row.segments %}{{ segment.get_requested_pay_type_display }}{% if not forloop.last %}, {% endif %}{% endfor %}
                                     {% endif %}

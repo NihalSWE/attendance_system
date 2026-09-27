@@ -5,10 +5,11 @@ import datetime
 from django import forms
 
 from common.choices import ActiveStatus
-from common.forms import StyledFormMixin
+from common.forms import TIME_INPUT_FORMATS, StyledFormMixin, time_widget
 from employees.models import Employee
 from leaves.documents import DocumentField
 from leaves.models import LeaveType, PayType
+from leaves.shape import PARTS
 
 
 def _range_input(key, placeholder, presets=True):
@@ -63,14 +64,28 @@ class RecordLeaveForm(StyledFormMixin, forms.Form):
         label="To", widget=_range_input("leave", "Select leave dates")
     )
     duration = forms.ChoiceField(
-        choices=(("full_day", "Full day"), ("half_day", "Half day")),
+        choices=(("full_day", "Full day"), ("half_day", "Half day"), ("hourly", "Some hours")),
         label="Length", required=False, initial="full_day",
-        help_text="A half day is for one date and counts as half a day.",
+        help_text="A half day or some hours is for one date.",
     )
+    half_day_part = forms.ChoiceField(
+        choices=PARTS, label="Which half", required=False, widget=forms.RadioSelect,
+        help_text="The morning excuses a late arrival, the afternoon an early leaving.",
+    )
+    start_time = forms.TimeField(label="From (time)", required=False, widget=time_widget(),
+                                 input_formats=TIME_INPUT_FORMATS)
+    end_time = forms.TimeField(label="Until (time)", required=False, widget=time_widget(),
+                               input_formats=TIME_INPUT_FORMATS,
+                               help_text="Inside that day's shift.")
     pay_type = forms.ChoiceField(
         choices=PayType.choices,
         label="Pay",
-        help_text="Unpaid leave days are deducted from salary; paid leave days are not.",
+        help_text="Unpaid leave is deducted from salary; paid leave is not; part paid keeps "
+                  "the share you give.",
+    )
+    pay_percentage = forms.DecimalField(
+        label="Share of pay kept (%)", required=False, min_value=1, max_value=99,
+        decimal_places=2, help_text="For part paid leave, e.g. 50.",
     )
     document = DocumentField()
     reason = forms.CharField(
@@ -86,12 +101,24 @@ class RecordLeaveForm(StyledFormMixin, forms.Form):
         self.fields["employee"].empty_label = "Select an employee"
         self.fields["leave_type"].empty_label = "Select a leave type"
         self.fields["employee"].label_from_instance = _employee_label
+        # Shown only when they apply (base_template/js/dependent.js).
+        self.fields["half_day_part"].widget.attrs["data-show-when"] = "duration:half_day"
+        self.fields["start_time"].widget.attrs["data-show-when"] = "duration:hourly"
+        self.fields["end_time"].widget.attrs["data-show-when"] = "duration:hourly"
+        self.fields["pay_percentage"].widget.attrs["data-show-when"] = "pay_type:partial"
 
     def clean(self):
         cleaned = super().clean()
         start, end = cleaned.get("start_date"), cleaned.get("end_date")
         if start and end and end < start:
             self.add_error("end_date", "The last day cannot be before the first.")
+        # A value that does not apply to the choice made is dropped, not used.
+        if cleaned.get("duration") != "half_day":
+            cleaned["half_day_part"] = ""
+        if cleaned.get("duration") != "hourly":
+            cleaned["start_time"] = cleaned["end_time"] = None
+        if cleaned.get("pay_type") != "partial":
+            cleaned["pay_percentage"] = None
         return cleaned
 
 
@@ -154,23 +181,29 @@ class RequestLeaveForm(RecordLeaveForm):
         del self.fields['employee']
         self.fields['reason'].required = True
         self.fields['pay_type'].label = 'Requested pay'
-        self.fields['pay_type'].help_text = 'Your approver decides whether the leave is paid or unpaid.'
+        self.fields['pay_type'].help_text = 'Your approver decides whether the leave is paid, unpaid or part paid.'
 
 
 class DecideLeaveForm(StyledFormMixin, forms.Form):
     decision = forms.ChoiceField(choices=(('approve', 'Approve'), ('reject', 'Reject')))
     pay_type = forms.ChoiceField(choices=PayType.choices, label='Approved pay', required=False)
+    pay_percentage = forms.DecimalField(label='Share of pay kept (%)', required=False,
+                                        min_value=1, max_value=99, decimal_places=2)
     reason = forms.CharField(label='Decision note', required=False, widget=forms.Textarea,
                              help_text='Required when rejecting. The employee can read this note.')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['pay_type'].widget.attrs['data-show-when'] = 'decision:approve'
+        self.fields['pay_percentage'].widget.attrs['data-show-when'] = 'pay_type:partial'
 
     def clean(self):
         values = super().clean()
         if values.get('decision') == 'reject' and not values.get('reason'):
             self.add_error('reason', 'Give a reason for rejecting the request.')
         if values.get('decision') == 'approve' and not values.get('pay_type'):
-            self.add_error('pay_type', 'Choose paid or unpaid.')
+            self.add_error('pay_type', 'Choose paid, unpaid or part paid.')
+        if (values.get('decision') == 'approve' and values.get('pay_type') == 'partial'
+                and values.get('pay_percentage') is None):
+            self.add_error('pay_percentage', 'Give the share of pay kept, from 1 to 99 %.')
         return values

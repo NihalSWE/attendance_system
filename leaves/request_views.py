@@ -95,12 +95,16 @@ def leave_decide(request, pk):
         leave = get_object_or_404(workflow.reviewable(member).select_related('employee'), pk=pk)
         segment = leave.segments.select_related('leave_type').get(status='active')
         left = allowance_left(leave.employee, segment.leave_type, segment.start_date.year)
-        form = DecideLeaveForm(request.POST or None, initial={'decision': 'approve', 'pay_type': segment.requested_pay_type})
+        form = DecideLeaveForm(request.POST or None, initial={
+            'decision': 'approve', 'pay_type': segment.requested_pay_type,
+            'pay_percentage': (segment.requested_pay_percentage
+                               if segment.requested_pay_type == 'partial' else None)})
         if request.method == 'POST' and form.is_valid():
             try:
                 workflow.decide_request(actor=request.user, company_id=request.company_id, request_id=pk,
                                         approve=form.cleaned_data['decision'] == 'approve',
-                                        pay_type=form.cleaned_data['pay_type'], reason=form.cleaned_data['reason'])
+                                        pay_type=form.cleaned_data['pay_type'], reason=form.cleaned_data['reason'],
+                                        pay_percentage=form.cleaned_data.get('pay_percentage'))
             except ValidationError as exc:
                 apply_service_errors(form, exc)
             else:

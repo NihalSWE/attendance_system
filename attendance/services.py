@@ -428,7 +428,7 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
 
         leave_by_key = {
             (day.employee_id, day.work_date): day
-            for day in LeaveDay.objects.filter(
+            for day in LeaveDay.objects.select_related("request_segment").filter(
                 employee_id__in=employees.keys(), work_date__gte=start,
                 work_date__lte=end, status__in=LIVE_LEAVE,
             )
@@ -589,23 +589,28 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
     }
 
     if leave is not None and leave.balance_units < ONE:
-        # Half-day leave (Ajay's session, A10 — kept simple): if the employee
-        # came in, the day counts in full with no late or early-out mark; an
-        # unpaid half is still deducted. No scans: only the leave half counts.
-        paid = leave.approved_pay_type == "paid"
-        note = f"Half-day leave ({leave.approved_pay_type})"
+        # Part of the day on leave: a half day (A10) or some hours (Phase E).
+        # Came in: the day counts, less the unpaid share of the leave part.
+        # No scans: only the paid share of the leave part counts. With the
+        # paid share p and the leave's part of the day f (docs/LEAVE_FULL_DESIGN.md):
+        # payable 1 - f(1-p) or f*p - for a paid or unpaid half day exactly
+        # what it always was (1 / 0.5, and 0.5 / 0).
+        share = leave.approved_pay_percentage / Decimal("100")
+        fraction = leave.balance_units
+        note = f"{_part_label(leave)} leave ({_pay_word(leave)})"
         if day_punches:
             paired = _pair(day_punches, window, settings, is_closed)
             status, punch_status, _, minutes = _classify_working_day(
                 window.shift, settings, paired, flag_unusual=False,
             )
             values.update(punch_status=punch_status, **minutes)
+            late, early = _excused(leave, window, minutes)
             values.update(
                 attendance_status=(
                     AttendanceRecord.AttendanceStatus.PRESENT if is_closed else status
                 ),
-                payable_fraction=(ONE if paid else HALF) if is_closed else NONE,
-                late_minutes=0, early_out_minutes=0,
+                payable_fraction=(ONE - fraction * (ONE - share)) if is_closed else NONE,
+                late_minutes=late, early_out_minutes=early,
                 leave_day=leave, note=note, is_open=not is_closed,
             )
         elif not is_closed:
@@ -614,9 +619,9 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
             values.update(
                 attendance_status=AttendanceRecord.AttendanceStatus.LEAVE,
                 punch_status=AttendanceRecord.PunchStatus.NO_PUNCH,
-                payable_fraction=HALF if paid else NONE,
+                payable_fraction=fraction * share,
                 leave_day=leave, is_open=False,
-                note=f"{note}; did not come in for the other half",
+                note=f"{note}; did not come in for the rest of the day",
             )
             paired = None
     elif leave is not None:
@@ -709,6 +714,41 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
     )
     _write_pairing(record, paired)
     return record
+
+
+def _part_label(leave):
+    segment = leave.request_segment
+    if segment.duration_type == "hourly" and segment.start_time and segment.end_time:
+        return f"{segment.start_time:%H:%M}-{segment.end_time:%H:%M}"
+    return {"morning": "Morning half-day", "afternoon": "Afternoon half-day"}.get(
+        segment.half_day_part, "Half-day")
+
+
+def _pay_word(leave):
+    if leave.approved_pay_type == "partial":
+        return f"{leave.approved_pay_percentage.normalize():f}% paid"
+    return leave.approved_pay_type
+
+
+def _excused(leave, window, minutes):
+    """The late and early-out minutes left on a day with part of it on leave.
+
+    Leave at the start of the shift (a morning half, hours from its start)
+    excuses lateness up to its length; at the end (an afternoon half, hours to
+    its end), leaving early. Hours in the middle excuse neither. A half day
+    with no part - every one recorded before Phase E - excuses both, as it
+    always did."""
+    segment = leave.request_segment
+    at_start = leave.covered_start_at <= window.scheduled_start if window.scheduled_start else False
+    at_end = leave.covered_end_at >= window.scheduled_end if window.scheduled_end else False
+    if segment.duration_type == "half_day" and not segment.half_day_part:
+        return 0, 0
+    late, early = minutes.get("late_minutes", 0), minutes.get("early_out_minutes", 0)
+    if at_start:
+        late = max(0, late - leave.leave_minutes)
+    if at_end:
+        early = max(0, early - leave.leave_minutes)
+    return late, early
 
 
 def _status_from_fix(fix):

@@ -81,7 +81,11 @@
                         </div>
 
                         {% include "leaves/includes/field.html" with field=form.duration %}
+                        {% include "leaves/includes/field.html" with field=form.half_day_part %}
+                        {% include "leaves/includes/field.html" with field=form.start_time %}
+                        {% include "leaves/includes/field.html" with field=form.end_time %}
                         {% include "leaves/includes/field.html" with field=form.pay_type %}
+                        {% include "leaves/includes/field.html" with field=form.pay_percentage %}
                     </div>
 
                     {% include "leaves/includes/field.html" with field=form.reason %}
