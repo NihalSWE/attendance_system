@@ -73,10 +73,13 @@ class CompanyNavigationTests(CalendarBase):
         page = self.client.get(reverse("scheduling:schedule_overview"))
         sidebar = page.content.decode().split('</aside>', 1)[0]
         self.assertNotIn('data-menu="devices"', sidebar)
-        for view in ("payroll:salary_settings", "organization:employee_create",
-                     "scheduling:attendance_settings_edit"):
+        for view in ("payroll:salary_settings", "scheduling:attendance_settings_edit"):
             self.assertNotIn(f'href="{reverse(view)}', sidebar)
             self.assertEqual(self.client.get(reverse(view)).status_code, 403)
+        # HR views, adds and edits employees in every branch (Ajay, 2026-09-27).
+        for view in ("employee_list", "organization:employee_create"):
+            self.assertIn(f'href="{reverse(view)}"', sidebar)
+            self.assertEqual(self.client.get(reverse(view)).status_code, 200)
         # HR records leave (A10a), so that link stays in HR's menu.
         self.assertIn(f'href="{reverse("leaves:leave_record")}"', sidebar)
         self.assertIn('data-menu="attendance"', sidebar)
@@ -98,7 +101,9 @@ class CompanyNavigationTests(CalendarBase):
         page = self.client.get(reverse("scheduling:schedule_overview"))
         self.assertEqual(page.context["active_company"], self.other)
         self.assertNotContains(page, 'data-menu="devices"')
-        self.assertFalse(any(link["manage"] for m in page.context["company_menus"] for link in m["links"]))
+        # Only HR's own employee pages (Ajay, 2026-09-27); no administration.
+        self.assertFalse(any(link["manage"] and not link["people"]
+                             for m in page.context["company_menus"] for link in m["links"]))
 
     def test_employee_and_manager_keep_their_own_navigation(self):
         membership = CompanyMembership.all_objects.get(user=self.hr, company=self.company)

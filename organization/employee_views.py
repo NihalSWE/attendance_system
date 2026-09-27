@@ -39,6 +39,22 @@ def _creator(user, company_id):
     return membership, branch_ids
 
 
+def _pay_on_create(user, company_id, branch_ids):
+    """Whether adding someone here sets their pay: "required", "optional" or
+    "none" (see ``EmployeeCreateForm``). Pay follows "prepare salary" and
+    "view salary" in the branch - HR without salary access adds people without."""
+    prepare = branches_for(user, company_id, "salary.prepare")
+    view = branches_for(user, company_id, "salary.view")
+    if prepare is ALL_BRANCHES and view is ALL_BRANCHES:
+        return "required"
+    if branch_ids is ALL_BRANCHES:
+        return "optional" if (prepare and view) else "none"
+    both = {b for b in branch_ids if b in prepare and b in view}
+    if not both:
+        return "none"
+    return "required" if both == set(branch_ids) else "optional"
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def employee_create(request):
@@ -47,6 +63,7 @@ def employee_create(request):
         return bail
 
     membership, branch_ids = _creator(request.user, company_id)
+    pay = _pay_on_create(request.user, company_id, branch_ids)
 
     with use_company(company_id):
         from employees.models import Employee
@@ -65,17 +82,26 @@ def employee_create(request):
                 company=membership.company,
                 branches=branches,
                 employees=employees,
+                pay=pay,
             )
             if form.is_valid():
                 data = form.cleaned_data
                 if branch_ids is not ALL_BRANCHES and data["branch"].pk not in branch_ids:
                     raise PermissionDenied("You can only add people to branches you look after.")
-                if not can(request.user, company_id, "salary.prepare", data["branch"].pk):
-                    # A new employee comes with their pay, which follows
-                    # "prepare salary" in that branch (a branch manager has it).
-                    raise PermissionDenied(
-                        "Adding someone sets their pay, which needs salary access for that branch."
-                    )
+                branch_pk = data["branch"].pk
+                sets_pay = (can(request.user, company_id, "salary.prepare", branch_pk)
+                            and can(request.user, company_id, "salary.view", branch_pk))
+                base_rate = data.get("base_rate")
+                # A new employee's pay follows "prepare salary" in that branch (a
+                # branch manager has it); without it they are added without pay.
+                if base_rate is not None and not sets_pay:
+                    form.add_error("base_rate", "You do not set pay in this branch. Leave it "
+                                                "empty; whoever prepares its salary sets it.")
+                elif base_rate is None and sets_pay and pay != "none":
+                    form.add_error("base_rate", "Enter their pay.")
+            if form.is_valid():
+                data = form.cleaned_data
+                base_rate = data.get("base_rate")
                 try:
                     result = create_employee(
                         company=membership.company,
@@ -87,8 +113,8 @@ def employee_create(request):
                         designation=data["designation"],
                         manager=data.get("manager"),
                         effective_from=data["effective_from"],
-                        pay_basis=data["pay_basis"],
-                        base_rate=data["base_rate"],
+                        pay_basis=data.get("pay_basis") or "monthly",
+                        base_rate=base_rate,
                         joining_date=data["effective_from"],
                         created_by=request.user,
                     )
@@ -99,7 +125,9 @@ def employee_create(request):
                     messages.success(
                         request,
                         f"{employee.full_name} created as "
-                        f"{data['designation'].name} in {data['department'].name}.",
+                        f"{data['designation'].name} in {data['department'].name}."
+                        + ("" if result["compensation"] else
+                           " Their pay is set by whoever prepares that branch's salary."),
                     )
                     return redirect("employee_list")
         else:
@@ -108,6 +136,7 @@ def employee_create(request):
                 branches=branches,
                 employees=employees,
                 initial={"pay_basis": "monthly"},
+                pay=pay,
             )
 
         return render(request, "organization/employee_form.html", {

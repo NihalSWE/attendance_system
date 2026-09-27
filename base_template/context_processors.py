@@ -4,7 +4,7 @@ Presentation only. Every view and service still enforces tenant scope and
 permissions itself — a name in this dropdown is not authorisation.
 """
 
-from access_control.branch_access import can
+from access_control.branch_access import branches_for, can
 from access_control.page_access import opener
 from accounts.services import get_active_memberships
 from tenants.models import Company
@@ -47,6 +47,10 @@ def shell(request):
             can_record_leave=membership.role in LEAVE_RECORDER_ROLES,
             can_see_salary=bool(salary_month_branches(user, company_id)[1]),
             report_kinds=report_kinds(user, company_id),
+            # HR views and edits employees everywhere (Ajay, 2026-09-27).
+            people_codes=({code for code in ("employees.view", "employees.edit")
+                           if branches_for(user, company_id, code)}
+                          if membership.role == "hr" else None),
         )
     elif membership and self_service:
         # A12: the company pages this branch manager / person given access may

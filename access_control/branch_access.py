@@ -5,7 +5,9 @@ older department/designation model, which no page uses):
 
 - Owner and company admin: every permission in every branch.
 - Branch manager: every branch permission in their own branches, automatically.
-- The existing HR role keeps company-wide leave recording and overtime decisions.
+- The existing HR role keeps company-wide leave recording and overtime decisions,
+  and views and edits employees in every branch (Ajay, 2026-09-27). Never
+  salary: that is granted per branch on the Access page, like anyone else's.
 - The payroll manager views, prepares and submits salary in every branch
   (Ajay, 2026-09-23). Approving and finalising stay with the owner/admin.
 - Anyone else: only what an owner, admin or branch manager granted them, per
@@ -80,6 +82,10 @@ HR_COMPANY_WIDE = frozenset({
     "leave.view", "leave.record", "overtime.view", "overtime.decide",
     # HR already saw and fixed attendance company-wide (the old N5 rule).
     "attendance.view", "attendance.fix",
+    # Ajay, 2026-09-27: HR runs the people records - view and edit everyone.
+    # Pay stays out: every salary figure checks ``salary.view`` in the person's
+    # branch, which HR holds only where the Access page granted it.
+    "employees.view", "employees.edit",
 })
 # The payroll manager (Ajay, 2026-09-23): view salary, prepare it, and submit
 # it for approval, across every branch. Not approve: there is exactly one

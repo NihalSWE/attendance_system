@@ -223,10 +223,10 @@ def employee_list_query(request):
         branch = ""
 
     # A12 part 4: the pay column only exists for someone who may see pay
-    # somewhere (Ajay, 2026-09-20).
-    salary_branches = ALL_BRANCHES if company_wide else branches_for(
-        request.user, request.company_id, "salary.view")
-    show_rate_column = company_wide or bool(salary_branches)
+    # somewhere (Ajay, 2026-09-20). Seeing every employee is not seeing their
+    # pay: HR sees everyone and pay only where granted (Ajay, 2026-09-27).
+    salary_branches = branches_for(request.user, request.company_id, "salary.view")
+    show_rate_column = bool(salary_branches)
 
     needs_department = Q(setup_department_code=UNASSIGNED_CODE)
     needs_salary = Q(table_rate__isnull=True)
@@ -257,7 +257,7 @@ def employee_list_query(request):
     if show_rate_column:
         # Sorting by pay would reveal pay order to someone who may not see pay,
         # so it is sortable only for a viewer who may see every row's rate.
-        columns.append("table_rate" if company_wide else None)
+        columns.append("table_rate" if salary_branches is ALL_BRANCHES else None)
     columns += [None, None]
 
     # What a download is named after: the one branch this viewer sees, or the
@@ -336,8 +336,7 @@ def employee_list(request):
         request.company_id,
         employee_ids=[row["e"].pk for row in rows],
     )
-    edit_branches = ALL_BRANCHES if company_wide else branches_for(
-        request.user, request.company_id, "employees.edit")
+    edit_branches = branches_for(request.user, request.company_id, "employees.edit")
     # Device mapping (Map / Bulk map): the active devices of each branch this
     # viewer may map in, and what each row already has.
     from devices.models import BiometricDevice
@@ -353,8 +352,10 @@ def employee_list(request):
     for row in rows:
         row["now"] = now_by_employee.get(row["e"].pk)
         branch_id = row["a"].branch_id if row["a"] else None
-        row["show_rate"] = branch_id in salary_branches if branch_id else company_wide
-        row["can_edit"] = branch_id in edit_branches if branch_id else company_wide
+        row["show_rate"] = (branch_id in salary_branches if branch_id
+                            else salary_branches is ALL_BRANCHES)
+        row["can_edit"] = (branch_id in edit_branches if branch_id
+                           else edit_branches is ALL_BRANCHES)
         row["device"] = badges.get(row["e"].pk)
         row["can_map"] = row["can_edit"] and branch_id in devices_by_branch
         row["gaps"] = setup_gaps(row["e"], row["a"], row["c"], row["show_rate"])
