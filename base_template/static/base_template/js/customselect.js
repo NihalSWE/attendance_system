@@ -93,7 +93,9 @@
         var menu = document.createElement("div");
         menu.className = "cs__menu";
         menu.setAttribute("role", "listbox");
-        document.body.appendChild(menu);
+        // Inside a modal <dialog> the menu lives on the dialog: the page behind
+        // it is below the modal's layer and cannot be clicked.
+        (select.closest("dialog") || document.body).appendChild(menu);
 
         var inst = {wrap: wrap, control: control, menu: menu, select: select};
         var optionEls = [];

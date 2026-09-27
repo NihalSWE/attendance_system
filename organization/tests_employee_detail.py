@@ -233,8 +233,8 @@ class PageTests(DetailTestCase):
     def test_the_history_page(self):
         response = self.client.get(self.detail)
         self.assertEqual(response.status_code, 200)
-        for text in ("Placement history", "Salary history", "30,000.00", "Devices",
-                     "Attendance this month", self.end_url,
+        for text in ("Employment history", "Salary history", "30,000.00", "Devices",
+                     "Attendance report", self.end_url,
                      reverse("organization:employee_edit", args=[self.employee.pk])):
             with self.subTest(text=text):
                 self.assertContains(response, text)

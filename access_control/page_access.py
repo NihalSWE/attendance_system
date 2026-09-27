@@ -100,6 +100,8 @@ BRANCH_PAGES = {
     "organization:employee_photo": "employees.view",
     "organization:employee_photo_change": "employees.edit",
     "organization:employee_personal": "employees.edit",
+    "organization:employee_profile_edit": "employees.edit",
+    "organization:employee_line_manager": "employees.edit",
     "organization:employee_report_visibility": "employees.edit",
 }
 

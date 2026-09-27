@@ -6,16 +6,19 @@ import mimetypes
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, HttpResponseBase
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods, require_POST
 
 from attendance.models import AttendanceRecord
 from common.forms import apply_service_errors
+from common.tenant import use_company
 from organization import employee_detail_services as services
 from attendance.forms import EnterMissingForm
 from organization import employee_profile as profile
+from organization import employee_profile_info as info
+from organization.employee_edit_views import edit_sections
 from organization.employee_detail_forms import EndEmploymentForm
 from organization.employee_edit_services import is_company_wide
 from organization.views import _company_or_redirect
@@ -50,11 +53,45 @@ def _may_record_leave(user, company_id, assignment):
     return record is ALL_BRANCHES or bool(assignment and assignment.branch_id in record)
 
 
-def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=""):
+#: Where a saved profile edit goes back to: the tab its card is on.
+BACK_TABS = {"shift": "roster", "allowances": "profile", "login": "profile", "": "profile"}
+
+
+def _back(pk):
+    url = reverse("organization:employee_detail", args=[pk])
+    return lambda anchor: f"{url}#{BACK_TABS.get(anchor, 'profile')}"
+
+
+def _prefixed(edit):
+    """The Edit employee forms, each with ids of its own: on the profile they
+    sit side by side in modals, and several share field names (last_day,
+    reason). Placement keeps Django's ids - the dependent selects find it so."""
+    for name in ("details", "salary", "give_component_form", "end_component_form",
+                 "shift_form", "end_form", "give_login", "login_role", "login_password"):
+        edit[name].auto_id = f"{name}_%s"
+    return edit
+
+
+def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog="",
+             edit=None, line_manager=None):
     """The profile page. A refused form comes back bound, so its modal opens
     again with the reasons and what was typed."""
     page = services.employee_history(actor=request.user, company_id=company_id, employee_id=pk)
     employee, may = page["employee"], page["may"]
+    if may["edit"] and edit is None:
+        # Every Edit employee card, as modals here (Ajay, 2026-09-27).
+        edit = edit_sections(request, company_id, pk, back=_back(pk))
+    if edit is not None:
+        _prefixed(edit)
+    line_manager_form = None
+    if may["edit"]:
+        with use_company(company_id):
+            choices = info.line_manager_choices(request.user, company_id, employee)
+            assignment = page["assignment"]
+            line_manager_form = line_manager or info.LineManagerForm(
+                choices=choices,
+                initial={"manager": assignment.manager_id if assignment else None})
+            line_manager_form.auto_id = "line_manager_%s"
     counts = page["month_counts"]
     today = page["today"]
     company = page["membership"].company
@@ -65,7 +102,7 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
     earlier = (year - 1, 12) if month == 1 else (year, month - 1)
     later = (year + 1, 1) if month == 12 else (year, month + 1)
     personal_form = personal or profile.PersonalForm(instance=employee)
-    return render(request, "organization/employee_detail.html", {
+    context = {
         **page,
         "month_rows": [(label, counts.get(status, 0)) for status, label in MONTH_ROWS],
         # The Calendar opens only people placed in branches whose attendance
@@ -98,7 +135,17 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
         "missing_form": EnterMissingForm(initial={"work_date": today, "at": today,
                                                   "at_out": today}),
         "open_dialog": open_dialog,
-    })
+        "edit": edit,
+        "line_manager_form": line_manager_form,
+        "gender_label": dict(profile.CHOICES.get("gender", ())).get(employee.gender,
+                                                                   employee.gender),
+        "general": info.general(company_id, employee, page["assignment"], page["devices"],
+                                today),
+    }
+    # Drawn inside the company: the modals' forms read the company's lists
+    # (branches, shifts, a login's branches) as they are drawn.
+    with use_company(company_id):
+        return render(request, "organization/employee_detail.html", context)
 
 
 @login_required
@@ -167,8 +214,50 @@ def employee_personal(request, pk):
             apply_service_errors(form, exc)
         else:
             messages.success(request, "Personal information saved.")
-            return redirect(reverse("organization:employee_detail", args=[pk]) + "#personal")
+            return redirect(reverse("organization:employee_detail", args=[pk]) + "#profile")
     return _profile(request, company_id, pk, personal=form, open_dialog="personal-dialog")
+
+
+@login_required
+@require_POST
+def employee_profile_edit(request, pk):
+    """A profile modal's Edit employee form, saved by the same code as the Edit
+    employee page (``edit_sections``). Refused: the profile again, with that
+    modal open, its reasons and what was typed."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    result = edit_sections(request, company_id, pk, back=_back(pk))
+    if isinstance(result, HttpResponseBase):
+        return result
+    section = result["section"]
+    dialog = (f"component_end-{request.POST.get('row')}-dialog" if section == "component_end"
+              else f"{section}-dialog")
+    return _profile(request, company_id, pk, edit=result, open_dialog=dialog)
+
+
+@login_required
+@require_POST
+def employee_line_manager(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    _membership, employee = profile.editable(request.user, company_id, pk)
+    with use_company(company_id):
+        form = info.LineManagerForm(
+            request.POST, choices=info.line_manager_choices(request.user, company_id, employee))
+        valid = form.is_valid()
+    if valid:
+        try:
+            info.set_line_manager(actor=request.user, company_id=company_id, employee_id=pk,
+                                  manager=form.cleaned_data["manager"])
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, "Line manager saved.")
+            return redirect(reverse("organization:employee_detail", args=[pk]) + "#profile")
+    return _profile(request, company_id, pk, line_manager=form,
+                    open_dialog="line_manager-dialog")
 
 
 @login_required

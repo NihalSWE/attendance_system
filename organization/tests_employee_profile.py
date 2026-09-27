@@ -53,9 +53,11 @@ class ProfileCase(TwoBranchCase):
 class PageTests(ProfileCase):
     def test_the_profile_has_its_tabs_and_actions(self):
         page = self.page()
-        for text in ('data-tab="overview"', 'data-tab="personal"', 'data-tab="attendance"',
-                     'data-tab="leave"', 'data-tab="employment"', "Remove from reports",
-                     "Personal info", reverse("organization:employee_edit", args=[self.employee.pk])):
+        # Ajay's tabs and sections (2026-09-27).
+        for text in ('data-tab="profile"', 'data-tab="attendance"', 'data-tab="leave"',
+                     'data-tab="roster"', "General information", "Personal &amp; contact info",
+                     "Address", "Employment history", "Remove from reports",
+                     reverse("organization:employee_edit", args=[self.employee.pk])):
             self.assertContains(page, text)
         self.assertContains(page, 'class="profile-photo__initials"')    # no photo yet
 
