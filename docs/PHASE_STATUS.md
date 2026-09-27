@@ -4880,3 +4880,32 @@ Built on N11's `MissedScanRequest` + `AttendanceCorrection`, as Ajay said.
 17 tests in `attendance/tests_manual_attendance.py` (+2 for the HR entry
 point); N11's 21 unchanged. Checked in the running app: the case selector
 shows one time, two, or none. **Server: `migrate`.** Full suite 1637 OK.
+
+### Leave: cancel some days, change an approved leave — 2026-09-27 (handover phase 1)
+
+Ajay's feature 3, first part (`docs/HANDOVER_PLAN_2026-09-26.md`).
+
+- **Cancel some days** (`services.cancel_days`): someone came back early - the
+  chosen days stop counting (their `LeaveDay` rows cancelled, kept on record),
+  the rest stay, the leave is "Partially cancelled"; every day chosen is the
+  whole leave. A reason is needed; finalised months refused; audited
+  `leave.days_cancelled`. Freed days return to the yearly allowance.
+- **Change a leave** (`services.amend_leave`, Leave list → Change): type,
+  dates, full or half day, pay. On the same leave: its days and part are
+  cancelled and the new ones written through the same code as Record leave
+  (`_write_leave`, the segment builder shared), so clashes, the allowance and
+  finalised months are checked as when recording; refused means nothing
+  changed (one transaction). Audited `leave.amended` with the days before.
+- **Attendance at once**: recording, cancelling, cancelling days and changing
+  leave work the affected days out again immediately (`_refresh_attendance`) -
+  the loose end noted in A10a ("do not recalculate attendance immediately").
+- **The Leave list and the Leave report** show a changed leave's current dates,
+  type and pay (a leave cancelled whole still shows what it was), and count
+  only the days that still count; the report's "Approved" includes partly
+  cancelled leave.
+- The cancel page offers "The whole leave / Some days" with a box per day.
+  `leaves/includes/field.html` now draws radio and checkbox lists as the
+  project's `.check` rows (they overlapped before) - every form using it.
+
+19 tests in `leaves/tests_cancel_amend.py`. Checked in the running app: the
+cancel page. No migration. Full suite 1656 OK.

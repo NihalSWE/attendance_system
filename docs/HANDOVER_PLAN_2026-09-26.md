@@ -28,7 +28,7 @@ into main and pushed before the next starts.
 
 | Phase | What |
 |---|---|
-| 1 | Leave: cancel some days of a leave, change an approved leave; attendance refreshed at once on record/cancel; the Leave list and report show the current dates and live days. **Half built, paused (2026-09-26)** on branch `feature/leave-cancel-amend-attach` (local, one WIP commit, not merged): services and pages done, the 47 existing leave tests pass; left - new tests, the Leave report's current values, full suite, merge, push |
+| 1 | ✅ Done 2026-09-27: leave - cancel some days, change an approved leave, attendance refreshed at once, list and report show current values |
 | 2 | Leave: attachments (record and request forms; required for leave types that need one; private download) |
 | 3 | Leave: a written plan for policies/versions, the accrual ledger, hourly and partly paid leave, morning/afternoon - no code |
 | 4 | Wrap-up: the prompt for Ajay |

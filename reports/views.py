@@ -45,7 +45,8 @@ def _choices(company_id, scope, report):
 
         choices["leave_statuses"] = [
             (value, label) for value, label in LeaveRequest.Status.choices
-            if value in ("approved", "pending", "rejected", "cancelled", "withdrawn")
+            if value in ("approved", "pending", "partially_cancelled", "rejected", "cancelled",
+                         "withdrawn")
         ]
     if "status" in report.extras:
         choices["statuses"] = AttendanceRecord.AttendanceStatus.choices

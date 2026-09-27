@@ -7,7 +7,19 @@
             </span>
         {% endif %}
     </label>
-    {{ field }}
+    {% if field.field.widget.input_type == "radio" or field.field.widget.allow_multiple_selected and field.field.widget.input_type == "checkbox" %}
+        {# A list of options: each its own .check row, as the rest of the app draws them. #}
+        <div class="check-list">
+            {% for option in field %}
+                <label class="check" for="{{ option.id_for_label }}">
+                    {{ option.tag }}
+                    <span>{{ option.choice_label }}</span>
+                </label>
+            {% endfor %}
+        </div>
+    {% else %}
+        {{ field }}
+    {% endif %}
     {% if field.help_text %}
         <span class="field__help">
             {{ field.help_text }}

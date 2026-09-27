@@ -423,16 +423,32 @@ def overtime(ctx):
 def leave(ctx):
     from leaves.models import LeaveRequest, LeaveRequestSegment
 
+    from django.db.models import Sum
+
+    from leaves.services import LIVE_LEAVE_DAYS
+
     f = ctx.filters
     status = f.extra.get("leave_status") or LeaveRequest.Status.APPROVED
+    cancelled = LeaveRequestSegment.Status.CANCELLED
     segments = LeaveRequestSegment.objects.select_related(
         "leave_type", "leave_request__employee",
         "leave_request__submission_assignment__branch",
         "leave_request__submission_assignment__department",
-    ).filter(start_date__lte=f.last, end_date__gte=f.first)
+    ).filter(start_date__lte=f.last, end_date__gte=f.first).filter(
+        # A changed leave keeps its old part, cancelled: list the current one.
+        # A leave cancelled whole is still listed as what it was.
+        ~Q(status=cancelled) | Q(leave_request__status=LeaveRequest.Status.CANCELLED),
+    ).annotate(
+        # The days that still count, once some were cancelled.
+        live_units=Sum("days__balance_units", filter=Q(days__status__in=LIVE_LEAVE_DAYS)),
+    )
     if not ctx.include_hidden:
         segments = segments.exclude(leave_request__employee__hide_from_reports=True)
-    if status != "all":
+    if status == LeaveRequest.Status.APPROVED:
+        # Partly cancelled leave is approved leave with fewer days.
+        segments = segments.filter(leave_request__status__in=(
+            LeaveRequest.Status.APPROVED, LeaveRequest.Status.PARTIALLY_CANCELLED))
+    elif status != "all":
         segments = segments.filter(leave_request__status=status)
     segments = access.scope(
         segments, ctx.scope, field="leave_request__submission_assignment__branch",
@@ -452,7 +468,9 @@ def leave(ctx):
     for s in segments:
         request = s.leave_request
         placed = request.submission_assignment
-        units = s.requested_units
+        counted = request.status in (LeaveRequest.Status.APPROVED,
+                                     LeaveRequest.Status.PARTIALLY_CANCELLED)
+        units = (s.live_units or 0) if counted else s.requested_units
         by_type[s.leave_type.name] += units
         rows.append([
             placed.employee_code if placed else "", request.employee.full_name,

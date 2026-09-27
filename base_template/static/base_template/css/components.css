@@ -1547,3 +1547,11 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     padding-inline: 6px;
     white-space: nowrap;
 }
+
+/* A radio or checkbox list drawn by leaves/includes/field.html: one .check per option. */
+.check-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2) var(--s4);
+    padding-block: var(--s1);
+}
