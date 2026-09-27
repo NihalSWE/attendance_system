@@ -293,6 +293,9 @@ class AttendanceCorrection(TenantOwned, ActorTracked):
       say. At most one in force per day; a new one supersedes the old.
     - **accept_review** — "the check-out by rule is right". Kept only while
       the day still needs review for that same reason.
+    - **excuse_late** — "their late arrival is approved" (Ajay, 2026-09-27):
+      the day keeps its scans and status, and counts no late minutes, so no
+      late penalty and no Late entry.
 
     Nothing is deleted: a mistake is withdrawn, and the audit log holds both.
     Applied straight away by an administrator or HR; there is no request and
@@ -303,6 +306,7 @@ class AttendanceCorrection(TenantOwned, ActorTracked):
         ADD_SCAN = "add_scan", "Added a scan"
         CHANGE_STATUS = "change_status", "Changed the status"
         ACCEPT_REVIEW = "accept_review", "Accepted as it is"
+        EXCUSE_LATE = "excuse_late", "Late approved"
 
     class Status(models.TextChoices):
         APPLIED = "applied", "In force"

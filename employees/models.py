@@ -90,6 +90,10 @@ class Employee(TenantOwned, ActorTracked):
     # "remove from attendance report"). Their attendance still counts - days,
     # salary, the Daily list are unchanged; only the reports leave them out.
     hide_from_reports = models.BooleanField(default=False)
+    # "Disallow overtime" (Ajay, 2026-09-27): from this day on, no overtime is
+    # approved or paid for them - attendance writes 0 approved minutes and the
+    # Overtime page does not ask about their days. Days before it keep theirs.
+    no_overtime_from = models.DateField(null=True, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
 
     class Meta:

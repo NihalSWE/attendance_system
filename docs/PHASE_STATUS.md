@@ -5062,3 +5062,27 @@ Notification Settings left out: the app sends no notifications.
 
 **Server: `migrate`** (employees 0005). 17 tests in
 `organization/tests_profile_sections.py`.
+
+### Phase D: the profile's twelve actions — 2026-09-27
+
+An **Actions** menu on the profile header (a bottom sheet on a phone); each
+action opens a modal. Mapping (`organization/employee_actions.py`):
+
+| Ajay's action | What it does here |
+|---|---|
+| Apply for Leave | Record leave for this person, in a modal (same form and service as Record leave) |
+| Apply for Late Approval | **New:** approve a late arrival on one of their late days (last 62 days, not in a finalised month). A new correction kind `excuse_late`: the day keeps its scans and counts 0 late minutes - no late penalty, no Late entry. Whoever may fix that day's attendance; withdrawn like any correction |
+| Manual Entry | Add missing attendance (unchanged) |
+| Set as Admin | Explains: a company has exactly one administrator; not given from a profile |
+| Set as HR Manager | **New:** HR is now a login role (owner/admin only), set or taken back |
+| Set as Line Manager | Choose the people who report to them (their line manager); gives no access |
+| Disallow Overtime | **New:** `Employee.no_overtime_from` - from that day no overtime approved or paid, the Overtime page does not ask, approving is refused; days before keep theirs; Allow again undoes it. Whoever decides overtime in their branch |
+| Exclude From Attendance Report | Remove from reports (unchanged) |
+| Make Employee Status Inactive | Suspended (and back to Active). Marks them only: attendance and salary as before; no leave requests or missed-scan reports while suspended |
+| Resign / Delete Employee | End employment in a modal (Delete = terminated, history kept) |
+| Sync Employee | Send them to their branch's devices again (needs a device-usable ID) |
+
+The Leave tab's button opens the leave modal too. **Server: `migrate`**
+(attendance 0007, employees 0006). 23 tests in
+`organization/tests_profile_actions.py`. Browser-checked on a temporary :8001:
+the menu, the leave modal and its date-range picker.

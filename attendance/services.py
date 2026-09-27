@@ -489,6 +489,7 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                     overtime=overtime_by_key.get((employee_id, day)),
                     status_fix=fixes.statuses.get((employee_id, day)),
                     accepted_reason=fixes.accepted.get((employee_id, day)),
+                    late_excused=(fixes.excused or {}).get((employee_id, day)),
                 )
                 if outcome is None:
                     written["skipped"] += 1
@@ -538,12 +539,13 @@ def _overtime_decisions(employee_ids, start, end):
 
 def _write_day(*, day, employee, assignments, window, punches, settings,
                calendar, leave_by_key, company, company_tz, now, locked,
-               overtime=None, status_fix=None, accepted_reason=None):
+               overtime=None, status_fix=None, accepted_reason=None, late_excused=None):
     """One employee-day. Returns the record, "locked", or None for no record.
 
     ``overtime`` is the approved minutes of a decision on this day (payroll's
     A9), or None when nobody has decided it yet. ``status_fix`` and
-    ``accepted_reason`` are corrections a person made to this day (N5).
+    ``accepted_reason`` are corrections a person made to this day (N5);
+    ``late_excused`` a late arrival somebody approved (2026-09-27).
     """
     if locked:
         return "locked"
@@ -672,6 +674,11 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
             # A person said what this day was. The scans and minutes stay as
             # measured; the status and what it pays follow the correction.
             values.update(_status_from_fix(status_fix))
+        if late_excused is not None and values.get("late_minutes"):
+            # Their late arrival was approved: no late minutes, so no late
+            # penalty and no Late entry. The scans stay as they were.
+            values["late_minutes"] = 0
+            values["note"] = f"Late approved: {late_excused.reason}"[:255]
 
     if paired is not None:
         # Overtime's approval rule lives with overtime (payroll, plan step A9):
@@ -681,6 +688,9 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         values["approved_overtime_minutes"] = approved_minutes(
             paired, day_off=info.kind in (HOLIDAY, WEEKLY_OFF), decided=overtime,
         )
+        if employee.no_overtime_from is not None and day >= employee.no_overtime_from:
+            # Overtime is not allowed for them from that day (2026-09-27).
+            values["approved_overtime_minutes"] = 0
         if overtime is not None and paired.open_overtime:
             # The open overtime session was what needed a look, and it has had one.
             values["review_status"] = ReviewStatus.REVIEWED

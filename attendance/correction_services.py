@@ -83,6 +83,7 @@ def snapshot(record):
         "check_out_by_rule": record.check_out_by_rule,
         "review_status": record.review_status,
         "review_reason": record.review_reason,
+        "late_minutes": record.late_minutes,
     }
 
 
@@ -311,6 +312,48 @@ def accept_review(*, actor, company_id, employee_id, work_date, reason):
         return _finish(
             actor=actor, membership=membership, correction=correction,
             before=before, record=record, action="attendance.review_accepted",
+        )
+
+
+def late_days(company_id, employee_id, since, until):
+    """Their late days in a stretch, with no late approval yet, not in a
+    finalised month: what "Apply for late approval" offers."""
+    locked = locked_ranges(company_id)
+    with use_company(company_id):
+        excused = set(AttendanceCorrection.objects.filter(
+            employee_id=employee_id, correction_type=Type.EXCUSE_LATE, status=Status.APPLIED,
+            work_date__gte=since, work_date__lte=until).values_list("work_date", flat=True))
+        records = AttendanceRecord.objects.filter(
+            employee_id=employee_id, work_date__gte=since, work_date__lte=until,
+            late_minutes__gt=0).order_by("-work_date")
+        return [r for r in records
+                if r.work_date not in excused and not _is_locked(r.work_date, locked)]
+
+
+def excuse_late(*, actor, company_id, employee_id, work_date, reason):
+    """Approve a late arrival: the day counts no late minutes (2026-09-27).
+    Whoever may fix that day's attendance; withdrawn like any correction."""
+    membership = require_corrector(actor, company_id, employee_id, work_date)
+    reason = _clean_reason(reason)
+    _refuse_if_locked(company_id, work_date)
+
+    with transaction.atomic(), use_company(company_id):
+        if AttendanceCorrection.objects.filter(
+                employee_id=employee_id, work_date=work_date,
+                correction_type=Type.EXCUSE_LATE, status=Status.APPLIED).exists():
+            raise ValidationError({"work_date": "Their late arrival that day is already approved."})
+        record = _rebuild(company_id, employee_id, work_date)
+        if record is None or not record.late_minutes:
+            raise ValidationError({"work_date": "They were not late that day."})
+        before = snapshot(record)
+        correction = _new(
+            actor=actor, membership=membership, employee_id=employee_id,
+            work_date=work_date, correction_type=Type.EXCUSE_LATE, reason=reason,
+        )
+        record = _rebuild(company_id, employee_id, work_date)
+        return _finish(
+            actor=actor, membership=membership, correction=correction,
+            before=before, record=record, action="attendance.late_approved",
         )
 
 

@@ -42,6 +42,9 @@ def overtime_queryset(branches, first, last, rules, departments=()):
         reachable |= Q(employee_assignment__department_id__in=departments)
     queryset = AttendanceRecord.objects.select_related("employee", "shift", "branch").prefetch_related("sessions").filter(
         reachable, work_date__range=(first, last), is_open=False,
+    ).exclude(
+        # "Disallow overtime" on their profile: nothing to decide from that day.
+        employee__no_overtime_from__lte=F("work_date"),
     ).annotate(
         table_open=Exists(sessions.filter(ended_at__isnull=True, started_at__isnull=False)),
         table_minutes=Case(When(attendance_status__in=overtime.DAYS_OFF, then=Coalesce(Subquery(closed.values("minutes")[:1]), 0)),

@@ -30,7 +30,7 @@ from dataclasses import dataclass
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from access_control.branch_access import (
@@ -70,7 +70,9 @@ CANDIDATES = (
     Q(calculated_overtime_minutes__gt=0)
     | Q(attendance_status__in=DAYS_OFF, first_in_at__isnull=False)
     | Q(sessions__ended_at__isnull=True, sessions__started_at__isnull=False)
-)
+) & ~Q(employee__no_overtime_from__lte=F("work_date"))
+# (The last line: "Disallow overtime" on their profile, 2026-09-27 - from that
+# day their days hold no overtime to decide.)
 
 
 @dataclass
@@ -397,6 +399,11 @@ def decide_overtime(*, actor, company_id, record_id, approve, minutes=None,
             raise ValidationError("This day has not finished yet. Decide its overtime once it has.")
         if not claim.exists:
             raise ValidationError("There is no overtime on this day.")
+        stop = record.employee.no_overtime_from
+        if approve and stop is not None and record.work_date >= stop:
+            raise ValidationError(
+                f"Overtime is not allowed for {record.employee.full_name} "
+                f"from {stop:%d %b %Y}. Allow it again on their profile first.")
         if _is_locked(company_id, record.work_date):
             raise ValidationError("This month's salary is finalised; its overtime cannot change.")
 

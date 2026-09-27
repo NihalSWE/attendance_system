@@ -3,6 +3,7 @@ N6; the profile - photo, personal information, summaries, actions - 2026-09-26).
 
 import mimetypes
 
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -121,6 +122,54 @@ def _sections(request, company_id, page, bound):
     }
 
 
+def _actions(request, company_id, page, bound, may_record_leave):
+    """The forms behind the profile's actions (Ajay's twelve, 2026-09-27; the
+    mapping is in ``organization.employee_actions``)."""
+    from access_control.branch_access import can
+    from organization import employee_actions as actions
+    from organization.employee_detail_forms import EndEmploymentForm
+
+    employee, assignment, may, today = (page["employee"], page["assignment"], page["may"],
+                                        page["today"])
+    ended = page["is_ended"]
+    company_wide = is_company_wide(page["membership"])
+    fixes = bool(assignment) and (company_wide or can(request.user, company_id, "attendance.fix",
+                                                      assignment.branch_id))
+    context = {
+        "leave_form": (bound.get("leave") or actions.leave_form(company_id, employee))
+        if may_record_leave and not ended else None,
+        "late_form": (bound.get("late") or actions.LateForm(
+            days=actions.late_days(company_id, employee, today), auto_id="late_%s"))
+        if fixes and not ended and employee.user_id != request.user.pk else None,
+        "reports": actions.reports_to(company_id, employee),
+    }
+    if not may["edit"]:
+        return context
+    context.update({
+        "inactive_form": bound.get("inactive") or actions.InactiveForm(auto_id="inactive_%s"),
+        "overtime_form": (bound.get("overtime") or actions.OvertimeForm(
+            initial={"from_day": today}, auto_id="overtime_%s"))
+        if actions.may_set_overtime(request.user, company_id, page["membership"], assignment)
+        else None,
+        "reports_form": bound.get("reports") or actions.ReportsForm(
+            choices=info.line_manager_choices(request.user, company_id, employee),
+            initial={"people": [person.pk for person in context["reports"]]},
+            auto_id="reports_%s"),
+    })
+    if may["end"] and not ended:
+        has_login = bool(page["login"] and page["login"].status == "active" and may["logins"])
+        for key, status in (("resign", "resigned"), ("delete", "terminated")):
+            form = bound.get(key) or EndEmploymentForm(
+                initial={"last_day": today, "status": status, "disable_login": has_login,
+                         "end_device_enrollments": True},
+                auto_id=f"{key}_%s")
+            if not has_login:
+                form.fields["disable_login"].widget = forms.HiddenInput()
+                form.initial["disable_login"] = False
+            context[f"{key}_form"] = form
+    return context
+
+
 def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog="",
              edit=None, line_manager=None, bound=None):
     """The profile page. A refused form comes back bound, so its modal opens
@@ -153,8 +202,10 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
     personal_form = personal or profile.PersonalForm(instance=employee)
     leave = profile.year_leave(actor=request.user, company=company, employee=employee, year=year)
     page["leave_seen"] = leave is not None
+    may_record_leave = _may_record_leave(request.user, company_id, page["assignment"])
     with use_company(company_id):
         sections = _sections(request, company_id, page, bound or {})
+        sections.update(_actions(request, company_id, page, bound or {}, may_record_leave))
     context = {
         **page,
         "month_rows": [(label, counts.get(status, 0)) for status, label in MONTH_ROWS],
@@ -179,7 +230,7 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
                                                      getattr(employee, name)))
             for name in profile.PERSONAL_FIELDS
         ],
-        "may_record_leave": _may_record_leave(request.user, company_id, page["assignment"]),
+        "may_record_leave": may_record_leave,
         # Entering a missing scan or day for them: whoever sees their attendance,
         # not for oneself (that is Report a missed scan), and not after they left.
         "may_enter_missing": bool(may["attendance"]) and not page["is_ended"]
@@ -388,6 +439,13 @@ def employee_end(request, pk):
                 return redirect("employee_list")
             return redirect("organization:employee_detail", pk=employee.pk)
 
+    dialog = request.POST.get("dialog", "")
+    if request.method == "POST" and dialog in ("resign", "delete"):
+        # Resign / Delete employee on the profile (Ajay, 2026-09-27): the
+        # modal opens again with the reasons.
+        form.auto_id = f"{dialog}_%s"
+        return _profile(request, company_id, pk, bound={dialog: form},
+                        open_dialog=f"{dialog}-dialog")
     active_devices = [d for d in page["devices"] if d.is_current]
     return render(request, "organization/employee_end.html", {
         **page,

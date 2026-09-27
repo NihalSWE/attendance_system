@@ -109,6 +109,11 @@ BRANCH_PAGES = {
     "organization:employee_document": "employees.view",
     "organization:employee_document_remove": "employees.edit",
     "organization:employee_device_permission": "employees.edit",
+    "organization:employee_leave": ("employees.view", "leave.record"),
+    "organization:employee_late": ("employees.view", "attendance.fix"),
+    "organization:employee_active": "employees.edit",
+    "organization:employee_overtime": ("employees.edit", "overtime.decide"),
+    "organization:employee_reports": "employees.edit",
     "organization:employee_report_visibility": "employees.edit",
 }
 

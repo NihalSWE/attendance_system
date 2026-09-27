@@ -84,38 +84,92 @@
                     Edit employee page
                 </a>
             {% endif %}
-            {% if may_record_leave and not is_ended %}
-                <a class="btn btn--ghost" href="{% url 'leaves:leave_record' %}?employee={{ employee.pk }}">
-                    Record leave
-                </a>
-            {% endif %}
-            {% if may_enter_missing %}
-                <button class="btn btn--ghost" type="button" data-open-dialog="missing-dialog">
-                    Add missing attendance
-                </button>
-            {% endif %}
             {% if calendar_url %}
                 <a class="btn btn--ghost" href="{{ calendar_url }}">
                     Calendar
                 </a>
             {% endif %}
-            {% if may.edit %}
-                <form method="post" action="{% url 'organization:employee_report_visibility' employee.pk %}"
-                      data-confirm-title="{% if employee.hide_from_reports %}Show {{ employee.full_name }} in the reports again?{% else %}Leave {{ employee.full_name }} out of the reports?{% endif %}"
-                      data-confirm="{% if employee.hide_from_reports %}They appear in every report and its downloads again.{% else %}They are left out of every report and its downloads. Their attendance still counts - their days, salary and the Daily list do not change. You can show them again here.{% endif %}"
-                      data-confirm-button="{% if employee.hide_from_reports %}Show in reports{% else %}Leave out{% endif %}">
-                    {% csrf_token %}
-                    <input type="hidden" name="hidden" value="{% if employee.hide_from_reports %}0{% else %}1{% endif %}">
-                    <button class="btn btn--ghost" type="submit">
-                        {% if employee.hide_from_reports %}Show in reports{% else %}Remove from reports{% endif %}
-                    </button>
-                </form>
-                {% if not is_ended and may.end %}
-                    <a class="btn btn--ghost btn--danger-text" href="{% url 'organization:employee_end' employee.pk %}">
-                        End employment
-                    </a>
-                {% endif %}
-            {% endif %}
+            {# Ajay's twelve actions (2026-09-27), each opening a modal. #}
+            <details class="action-menu" data-action-menu>
+                <summary class="btn btn--primary">Actions</summary>
+                <div class="action-menu__list" role="menu">
+                    {% if leave_form %}
+                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="leave-dialog">Apply for leave</button>
+                    {% endif %}
+                    {% if late_form %}
+                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="late-dialog">Apply for late approval</button>
+                    {% endif %}
+                    {% if may_enter_missing %}
+                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="missing-dialog">Manual entry</button>
+                    {% endif %}
+                    {% if may.edit %}
+                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="admin-dialog">Set as admin</button>
+                    {% endif %}
+                    {% if edit.may.role %}
+                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="hr-dialog">
+                            {% if login.role == "hr" %}HR manager: change{% else %}Set as HR manager{% endif %}
+                        </button>
+                    {% endif %}
+                    {% if reports_form and not is_ended %}
+                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="reports-dialog">Set as line manager</button>
+                    {% endif %}
+                    {% if overtime_form %}
+                        {% if employee.no_overtime_from %}
+                            <form method="post" action="{% url 'organization:employee_overtime' employee.pk %}"
+                                  data-confirm-title="Allow overtime for {{ employee.full_name }} again?"
+                                  data-confirm="Their overtime from {{ employee.no_overtime_from|date:'j M Y' }} is worked out again, except in a finalised salary month."
+                                  data-confirm-button="Allow overtime">
+                                {% csrf_token %}
+                                <input type="hidden" name="allow" value="1">
+                                <button class="action-menu__item" type="submit" role="menuitem">Allow overtime</button>
+                            </form>
+                        {% else %}
+                            <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="overtime-dialog">Disallow overtime</button>
+                        {% endif %}
+                    {% endif %}
+                    {% if may.edit %}
+                        <form method="post" action="{% url 'organization:employee_report_visibility' employee.pk %}"
+                              data-confirm-title="{% if employee.hide_from_reports %}Show {{ employee.full_name }} in the reports again?{% else %}Leave {{ employee.full_name }} out of the reports?{% endif %}"
+                              data-confirm="{% if employee.hide_from_reports %}They appear in every report and its downloads again.{% else %}They are left out of every report and its downloads. Their attendance still counts - their days, salary and the Daily list do not change. You can show them again here.{% endif %}"
+                              data-confirm-button="{% if employee.hide_from_reports %}Show in reports{% else %}Leave out{% endif %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="hidden" value="{% if employee.hide_from_reports %}0{% else %}1{% endif %}">
+                            <button class="action-menu__item" type="submit" role="menuitem">
+                                {% if employee.hide_from_reports %}Show in reports{% else %}Remove from reports{% endif %}
+                            </button>
+                        </form>
+                    {% endif %}
+                    {% if inactive_form and not is_ended and employee.user_id != request.user.pk %}
+                        {% if employee.employment_status == "suspended" %}
+                            <form method="post" action="{% url 'organization:employee_active' employee.pk %}"
+                                  data-confirm-title="Make {{ employee.full_name }} active again?"
+                                  data-confirm="They can request leave and report missed scans again."
+                                  data-confirm-button="Make active">
+                                {% csrf_token %}
+                                <input type="hidden" name="active" value="1">
+                                <button class="action-menu__item" type="submit" role="menuitem">Make employee status active</button>
+                            </form>
+                        {% else %}
+                            <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="inactive-dialog">Make employee status inactive</button>
+                        {% endif %}
+                    {% endif %}
+                    {% if resign_form %}
+                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="resign-dialog">Resign employee</button>
+                        <button class="action-menu__item action-menu__item--danger" type="button" role="menuitem" data-open-dialog="delete-dialog">Delete employee</button>
+                    {% endif %}
+                    {% if may.edit and device_pin and branch_devices and not is_ended %}
+                        <form method="post" action="{% url 'devices:employees_send' %}"
+                              data-confirm-title="Send {{ employee.full_name }} to the devices again?"
+                              data-confirm="Their name, person ID {{ device_pin }}, card and saved fingerprint or face go to {{ assignment.branch.name }}'s devices."
+                              data-confirm-button="Sync">
+                            {% csrf_token %}
+                            <input type="hidden" name="employee" value="{{ employee.pk }}">
+                            <input type="hidden" name="next" value="{{ profile_url }}#enrol">
+                            <button class="action-menu__item" type="submit" role="menuitem">Sync employee</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </details>
         </div>
     </div>
 
@@ -201,6 +255,12 @@
                     </dd>
                     <dt>HR manager</dt>
                     <dd>{{ general.hr_managers|join:", "|default:"—" }}</dd>
+                    <dt>Reports to them</dt>
+                    <dd>
+                        {% for person in reports %}<a href="{% url 'organization:employee_detail' person.pk %}">{{ person.full_name }}</a>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+                    </dd>
+                    <dt>Overtime</dt>
+                    <dd>{% if employee.no_overtime_from %}<span class="badge badge--warning">Not allowed from {{ employee.no_overtime_from|date:"j M Y" }}</span>{% else %}Allowed{% endif %}</dd>
                 </dl>
             </div>
         </div>
@@ -662,10 +722,10 @@
                     <h2>
                         Leave in {{ leave_year }}
                     </h2>
-                    {% if may_record_leave and not is_ended %}
-                        <a class="btn btn--ghost btn--sm" href="{% url 'leaves:leave_record' %}?employee={{ employee.pk }}">
-                            Record leave
-                        </a>
+                    {% if leave_form %}
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="leave-dialog">
+                            Apply for leave
+                        </button>
                     {% endif %}
                 </div>
                 {% if leave.summary %}
@@ -1168,5 +1228,91 @@
                 {% endwith %}
             {% endwith %}
         {% endfor %}
+    {% endif %}
+    {% if leave_form %}
+        {% url 'organization:employee_leave' employee.pk as leave_url %}
+        {% include "organization/profile/modal_form.html" with id="leave-dialog" title="Apply for leave" action=leave_url form=leave_form submit="Record leave" multipart=True wide=True note="Recorded as approved leave. Weekly off days and holidays inside the dates are not counted as leave." %}
+    {% endif %}
+    {% if late_form %}
+        {% url 'organization:employee_late' employee.pk as late_url %}
+        {% if late_form.fields.work_date.choices %}
+            {% include "organization/profile/modal_form.html" with id="late-dialog" title="Apply for late approval" action=late_url form=late_form submit="Approve late arrival" wide=True note="The day keeps its scans and counts no late minutes: no late penalty, and it is not a Late entry. It can be withdrawn on the day's Fix page." %}
+        {% else %}
+            <dialog class="modal" id="late-dialog" aria-labelledby="late-dialog-title">
+                <div class="modal__card">
+                    <div class="modal__head">
+                        <h2 id="late-dialog-title">Apply for late approval</h2>
+                        <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                    </div>
+                    <div class="modal__body"><p>{{ employee.full_name }} has no late day to approve in the last two months (outside finalised salary months).</p></div>
+                    <div class="modal__foot"><button class="btn btn--primary" type="button" data-close-dialog>Close</button></div>
+                </div>
+            </dialog>
+        {% endif %}
+    {% endif %}
+    {% if may.edit %}
+        <dialog class="modal" id="admin-dialog" aria-labelledby="admin-dialog-title">
+            <div class="modal__card">
+                <div class="modal__head">
+                    <h2 id="admin-dialog-title">Set as admin</h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <div class="modal__body stack">
+                    <p>A company has exactly one administrator{% if approvers.company %}: <strong>{{ approvers.company|join:", " }}</strong>{% endif %}. It is not given from an employee's profile.</p>
+                    <p class="t-faint">What an administrator does can be given here in parts instead: HR (Set as HR manager), Branch manager (Login → Change access), or any single permission on the Access page.</p>
+                </div>
+                <div class="modal__foot"><button class="btn btn--primary" type="button" data-close-dialog>Close</button></div>
+            </div>
+        </dialog>
+    {% endif %}
+    {% if edit.may.role %}
+        <dialog class="modal" id="hr-dialog" aria-labelledby="hr-dialog-title">
+            <form class="modal__card" method="post" action="{{ save_url }}">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="login_role">
+                <input type="hidden" name="login_role" value="{% if login.role == 'hr' %}employee{% else %}hr{% endif %}">
+                <div class="modal__head">
+                    <h2 id="hr-dialog-title">{% if login.role == "hr" %}HR manager{% else %}Set as HR manager{% endif %}</h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <div class="modal__body stack">
+                    {% if not login %}
+                        <p>{{ employee.full_name }} has no login yet. Give them one with Access: HR.</p>
+                    {% elif not edit.login_role_label %}
+                        <p>This login is the company administrator's, managed on the company page.</p>
+                    {% elif login.role == "hr" %}
+                        <p>{{ employee.full_name }} is HR. Taking it away makes their login an Employee login: their own pages only.</p>
+                    {% else %}
+                        <p>HR views and edits employees, views and records leave, fixes attendance and decides overtime in every branch. Salary only where it is given on the Access page.</p>
+                        {% if login.role == "manager" %}<p class="t-faint">They stop being a branch manager.</p>{% endif %}
+                    {% endif %}
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    {% if not login %}
+                        {% if edit.may.logins %}<button class="btn btn--primary" type="button" data-open-dialog="login_give-dialog">Give a login</button>{% endif %}
+                    {% elif edit.login_role_label %}
+                        <button class="btn {% if login.role == 'hr' %}btn--danger{% else %}btn--primary{% endif %}" type="submit">{% if login.role == "hr" %}Stop being HR{% else %}Make HR{% endif %}</button>
+                    {% endif %}
+                </div>
+            </form>
+        </dialog>
+    {% endif %}
+    {% if reports_form %}
+        {% url 'organization:employee_reports' employee.pk as reports_url %}
+        {% include "organization/profile/modal_form.html" with id="reports-dialog" title="Set as line manager" action=reports_url form=reports_form submit="Save" wide=True note="Choose the people who report to them. Someone already reporting to another person moves to them." %}
+    {% endif %}
+    {% if overtime_form and not employee.no_overtime_from %}
+        {% url 'organization:employee_overtime' employee.pk as overtime_url %}
+        {% include "organization/profile/modal_form.html" with id="overtime-dialog" title="Disallow overtime" action=overtime_url form=overtime_form submit="Disallow overtime" note="Their days from then are worked out again: no overtime approved or paid, and the Overtime page does not ask about them. Allow it again from the same menu." %}
+    {% endif %}
+    {% if inactive_form and employee.employment_status != "suspended" %}
+        {% url 'organization:employee_active' employee.pk as active_url %}
+        {% include "organization/profile/modal_form.html" with id="inactive-dialog" title="Make employee status inactive" action=active_url form=inactive_form submit="Make inactive" danger=True note="Their status becomes Suspended. It marks them only: attendance and salary are counted as before. While inactive they cannot request leave or report a missed scan. Make them active again from the same menu." %}
+    {% endif %}
+    {% if resign_form %}
+        {% url 'organization:employee_end' employee.pk as end_url %}
+        {% include "organization/profile/modal_form.html" with id="resign-dialog" title="Resign "|add:employee.full_name action=end_url row="resign" row_name="dialog" form=resign_form submit="Record resignation" danger=True wide=True note="Their placement and salary end after the last working day. Nothing is deleted — their history, attendance and payslips stay." %}
+        {% include "organization/profile/modal_form.html" with id="delete-dialog" title="Delete "|add:employee.full_name action=end_url row="delete" row_name="dialog" form=delete_form submit="End employment" danger=True wide=True note="Deleting an employee ends their employment: their records stay, as salary and attendance already paid depend on them. They no longer count from the day after the last working day." %}
     {% endif %}
 {% endblock %}
