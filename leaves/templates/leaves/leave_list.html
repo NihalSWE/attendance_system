@@ -170,7 +170,7 @@
                                         {{ leave.table_units|floatformat:"-2" }}
                                     </td>
                                     <td>
-                                        {% if leave.table_pay == "paid" %}Paid{% elif leave.table_pay == "unpaid" %}Unpaid{% else %}—{% endif %}
+                                        {% if leave.table_pay == "paid" %}Paid{% elif leave.table_pay == "unpaid" %}Unpaid{% elif leave.table_pay == "partial" %}Part paid{% else %}—{% endif %}
                                         {% if leave.attachment %}
                                             <div><a class="t-faint" href="{% url 'me:leave_document' leave.pk %}">Document</a></div>
                                         {% endif %}

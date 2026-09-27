@@ -17,8 +17,8 @@
                     <p>{{ segment.requested_units|floatformat:"-1" }} working day(s) · Requested {{ segment.get_requested_pay_type_display|lower }}</p>
                     <p>{{ leave.reason }}</p>
                     <p>Status: {{ leave.get_status_display }}</p>
-                    {% if allowance_left is not None %}
-                        <p>{{ segment.leave_type.name }}: {{ allowance_left|floatformat:"-1" }} of {{ segment.leave_type.days_per_year|floatformat:"-1" }} days left in {{ segment.start_date.year }}</p>
+                    {% if allowance_left %}
+                        <p>{{ segment.leave_type.name }}: {{ allowance_left.0|floatformat:"-2" }} of {{ allowance_left.1|floatformat:"-2" }} days left in {{ segment.start_date.year }}</p>
                     {% endif %}
                 {% else %}
                     <p class="field__help">Request full working days, or a half day on one date. Holidays and weekly off days are skipped. Your branch manager reviews the request; managers' requests and branches without a manager go to the company administrator.</p>
@@ -37,12 +37,16 @@
                         {% if form.start_date %}
                             {% include "leaves/includes/field.html" with field=form.leave_type %}
                             {% include "leaves/includes/field.html" with field=form.duration %}
+                            {% include "leaves/includes/field.html" with field=form.half_day_part %}
+                            {% include "leaves/includes/field.html" with field=form.start_time %}
+                            {% include "leaves/includes/field.html" with field=form.end_time %}
                             <div class="field">
                                 <label class="field__label" for="{{ form.start_date.id_for_label }}">Leave dates *</label>
                                 {{ form.start_date }}{{ form.end_date }}
                                 {{ form.start_date.errors }}{{ form.end_date.errors }}
                             </div>
                             {% include "leaves/includes/field.html" with field=form.pay_type %}
+                            {% include "leaves/includes/field.html" with field=form.pay_percentage %}
                             {% include "leaves/includes/field.html" with field=form.reason %}
                             {% include "leaves/includes/field.html" with field=form.document %}
                         {% else %}

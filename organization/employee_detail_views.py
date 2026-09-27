@@ -135,7 +135,27 @@ def _actions(request, company_id, page, bound, may_record_leave):
     company_wide = is_company_wide(page["membership"])
     fixes = bool(assignment) and (company_wide or can(request.user, company_id, "attendance.fix",
                                                       assignment.branch_id))
+    from leaves import policies
+    from leaves.forms import AdjustBalanceForm, AssignPolicyForm
+    from leaves.models import LeavePolicy, LeaveType
+
+    # Leave policy and balances (Phase E, 2026-09-27).
+    balances_by = policies.may_manage_balances(request.user, company_id) and not ended
+    raw_year = str(request.GET.get("year", ""))
+    leave_year = int(raw_year) if raw_year.isdigit() and 2000 <= int(raw_year) <= 2100 \
+        else today.year
     context = {
+        "leave_policy": policies.Book(employee).policy_on(today),
+        "leave_balances": policies.overview(employee, leave_year, today)
+        if page["leave_seen"] else None,
+        "policy_form": (bound.get("leave_policy") or AssignPolicyForm(
+            policies=LeavePolicy.objects.filter(status="active").order_by("name"),
+            initial={"effective_from": today}, auto_id="leave_policy_%s"))
+        if balances_by else None,
+        "adjust_form": (bound.get("adjust") or AdjustBalanceForm(
+            leave_types=LeaveType.objects.filter(status="active").order_by("name"),
+            initial={"year": leave_year}, auto_id="adjust_%s"))
+        if balances_by else None,
         "leave_form": (bound.get("leave") or actions.leave_form(company_id, employee))
         if may_record_leave and not ended else None,
         "late_form": (bound.get("late") or actions.LateForm(

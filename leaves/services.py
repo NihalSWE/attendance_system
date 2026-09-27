@@ -29,6 +29,8 @@ from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
 from leaves import documents
+from leaves.shape import fit, pay_percentage, shape_from, shape_of
+from leaves.policies import covered_dates, policy_check
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
 from organization.services import (
     STRUCTURE_ROLES,
@@ -39,7 +41,9 @@ from scheduling.calendar import WORKING, WorkCalendar
 
 LEAVE_TYPE_FIELDS = ("code", "name", "days_per_year", "requires_attachment_by_default",
                      "description")
-RECORD_FIELDS = ("employee", "leave_type", "start_date", "end_date", "duration", "pay_type", "reason")
+RECORD_FIELDS = ("employee", "leave_type", "start_date", "end_date", "duration", "pay_type", "reason",
+                 # Phase E (2026-09-27): morning/afternoon, hours, part pay.
+                 "half_day_part", "start_time", "end_time", "pay_percentage")
 
 # A leave longer than this is almost certainly a typo in the year.
 MAX_LEAVE_DAYS = 366
@@ -83,13 +87,21 @@ def allowance_left(employee, leave_type, year):
     return leave_type.days_per_year - used
 
 
-def check_allowance(employee, leave_type, days, half=False):
-    """Refuse leave that would take the employee over the type's yearly allowance."""
+def check_allowance(employee, leave_type, days, half=False, units=None):
+    """Refuse leave that would take the employee over the type's yearly allowance.
+    ``units``: what each date takes (``leaves.shape.fit``), else 1 or 0.5."""
     if leave_type.days_per_year is None:
         return
+    # Dates a leave policy decides are checked there (leaves.policies.policy_check).
+    decided = covered_dates(employee, leave_type, [on for on, *_ in days])
     wanted = Counter()
     for on, *_ in days:
-        wanted[on.year] += Decimal("0.5") if half else Decimal("1")
+        if on in decided:
+            continue
+        if units is not None:
+            wanted[on.year] += units[on][3]
+        else:
+            wanted[on.year] += Decimal("0.5") if half else Decimal("1")
     for year, units in sorted(wanted.items()):
         left = allowance_left(employee, leave_type, year)
         if units > left:
@@ -101,19 +113,9 @@ def check_allowance(employee, leave_type, days, half=False):
 
 
 def is_half_day(values):
-    """Full day unless Half day is chosen. A half day is one date and counts as 0.5.
-
-    Kept simple on purpose: no morning/afternoon choice and no hourly leave.
-    Attendance counts a half-day leave day in full if the employee came in.
-    """
-    duration = values.get("duration") or LeaveRequestSegment.DurationType.FULL_DAY
-    if duration not in (LeaveRequestSegment.DurationType.FULL_DAY,
-                        LeaveRequestSegment.DurationType.HALF_DAY):
-        raise ValidationError({"duration": "Choose a full day or a half day."})
-    half = duration == LeaveRequestSegment.DurationType.HALF_DAY
-    if half and values.get("start_date") != values.get("end_date"):
-        raise ValidationError({"end_date": "A half day is for one date. Choose the same first and last day."})
-    return half
+    """Whether a half day was asked for (checked by ``leaves.shape.shape_from``,
+    which also knows morning/afternoon and hours)."""
+    return shape_from(values).is_half
 
 
 def recorder_branches(actor, company_id):
@@ -390,9 +392,9 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
     employee = values["employee"]
     leave_type = values["leave_type"]
     pay_type = values["pay_type"]
-    if pay_type not in PayType.values:
-        raise ValidationError({"pay_type": "Choose paid or unpaid."})
-    half = is_half_day(values)
+    percentage = pay_percentage(pay_type, values.get("pay_percentage"))
+    shape = shape_from(values)
+    half = shape.is_half
 
     with use_company(company_id):
         if employee.company_id != membership.company.pk:
@@ -432,11 +434,12 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
                 )
             })
 
-        check_allowance(employee, leave_type, days, half)
+        fitted = fit(shape, days)
+        check_allowance(employee, leave_type, days, units=fitted)
+        policy_check(employee, leave_type, days, shape, fitted)
 
         now = timezone.now()
         first_assignment = days[0][1]
-        percentage = Decimal("100") if pay_type == PayType.PAID else Decimal("0")
         if request is not None:
             request = _amend_request(actor=actor, membership=membership, request=request,
                                      values=values, days=days, skipped=skipped, half=half,
@@ -457,6 +460,7 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
             decision_snapshot={
                 "recorded_as_approved_by": actor.pk,
                 "pay_type": pay_type,
+                "pay_percentage": str(percentage),
                 "skipped": [[on.isoformat(), reason] for on, reason in skipped],
             },
             created_by=actor,
@@ -466,7 +470,8 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
                                values=values, days=days, half=half, pay_type=pay_type,
                                percentage=percentage, first_assignment=first_assignment)
         write_approved_days(company=membership.company, employee=employee,
-                            segment=segment, days=days, pay_type=pay_type)
+                            segment=segment, days=days, pay_type=pay_type,
+                            percentage=percentage)
         documents.store(request, document)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
@@ -477,7 +482,9 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
                 "start_date": values["start_date"].isoformat(),
                 "end_date": values["end_date"].isoformat(),
                 "pay_type": pay_type,
+                "pay_percentage": str(percentage),
                 "half_day": half,
+                "shape": shape.describe(),
                 "working_days": len(days),
                 "document": request.attachment_name,
             },
@@ -488,19 +495,22 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
 
 def _new_segment(*, membership, request, leave_type, values, days, half, pay_type,
                  percentage, first_assignment):
+    shape = shape_from(values)
+    fitted = fit(shape, days)
     return create_validated(
         LeaveRequestSegment,
         company=membership.company,
         leave_request=request,
         leave_type=leave_type,
-        duration_type=(LeaveRequestSegment.DurationType.HALF_DAY if half
-                       else LeaveRequestSegment.DurationType.FULL_DAY),
+        duration_type=shape.duration,
+        half_day_part=shape.part,
+        start_time=shape.start_time,
+        end_time=shape.end_time,
         start_date=values["start_date"],
         end_date=values["end_date"],
         timezone=str(_tz(first_assignment)),
-        requested_units=Decimal("0.5") if half else Decimal(len(days)),
-        requested_minutes=(days[0][4].scheduled_minutes // 2 if half
-                           else sum(shift.scheduled_minutes for *_, shift in days)),
+        requested_units=sum((units for *_, units in fitted.values()), Decimal("0")),
+        requested_minutes=sum(minutes for _s, _e, minutes, _u in fitted.values()),
         requested_pay_type=pay_type,
         requested_pay_percentage=percentage,
         sequence_number=(request.segments.count() + 1),
@@ -513,11 +523,11 @@ def _amend_request(*, actor, membership, request, values, days, skipped, half, l
                            values=values, days=days, half=half, pay_type=pay_type,
                            percentage=percentage, first_assignment=first_assignment)
     write_approved_days(company=membership.company, employee=request.employee,
-                        segment=segment, days=days, pay_type=pay_type)
+                        segment=segment, days=days, pay_type=pay_type, percentage=percentage)
     request.status = LeaveRequest.Status.APPROVED
     request.reason = values.get("reason", "") or request.reason
     request.decision_snapshot = {
-        **request.decision_snapshot, "pay_type": pay_type,
+        **request.decision_snapshot, "pay_type": pay_type, "pay_percentage": str(percentage),
         "skipped": [[on.isoformat(), reason] for on, reason in skipped],
     }
     request.updated_by = actor
@@ -704,11 +714,15 @@ def cancel_leave(*, actor, company_id, request_id, reason=""):
     return request
 
 
-def write_approved_days(*, company, employee, segment, days, pay_type):
-    """Shared day expansion for recorded leave and approved employee requests."""
-    percentage = Decimal("100") if pay_type == PayType.PAID else Decimal("0")
-    half = segment.duration_type == LeaveRequestSegment.DurationType.HALF_DAY
-    for on, assignment, covered_start, covered_end, shift in days:
+def write_approved_days(*, company, employee, segment, days, pay_type, percentage=None):
+    """Shared day expansion for recorded leave and approved employee requests.
+    What each day covers, lasts and counts comes from the segment's shape
+    (``leaves.shape``); ``percentage`` is the share of pay kept."""
+    if percentage is None:
+        percentage = pay_percentage(pay_type, segment.requested_pay_percentage)
+    fitted = fit(shape_of(segment), days)
+    for on, assignment, _shift_start, _shift_end, shift in days:
+        covered_start, covered_end, minutes, units = fitted[on]
         create_validated(
             LeaveDay,
             company=company,
@@ -719,8 +733,8 @@ def write_approved_days(*, company, employee, segment, days, pay_type):
             covered_start_at=covered_start,
             covered_end_at=covered_end,
             scheduled_minutes_snapshot=shift.scheduled_minutes,
-            leave_minutes=shift.scheduled_minutes // 2 if half else shift.scheduled_minutes,
-            balance_units=Decimal("0.5") if half else Decimal("1"),
+            leave_minutes=minutes,
+            balance_units=units,
             approved_pay_type=pay_type,
             approved_pay_percentage=percentage,
             shift_snapshot={

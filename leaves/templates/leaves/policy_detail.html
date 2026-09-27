@@ -1,0 +1,106 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ policy.name }} · Leave policies
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'leaves:leave_policy_list' %}">Leave policies</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ policy.name }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">{{ policy.name }} <span class="t-faint">{{ policy.code }}</span></h1>
+            <p class="page__sub">
+                {% if policy.is_default %}The company default: everyone not given another policy has it.{% else %}Given to {{ people }} {{ people|pluralize:"person,people" }} now.{% endif %}
+                {% if policy.status != "active" %}<span class="badge badge--neutral">Inactive</span>{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'leaves:leave_policy_version_create' policy.pk %}">New version</a>
+            <a class="btn btn--ghost" href="{% url 'leaves:leave_policy_edit' policy.pk %}">Edit</a>
+            <form method="post" action="{% url 'leaves:leave_policy_status' policy.pk %}"
+                  data-confirm-title="{% if policy.status == 'active' %}Turn {{ policy.name }} off?{% else %}Turn {{ policy.name }} on?{% endif %}"
+                  data-confirm="{% if policy.status == 'active' %}Nobody new can be given it. People who have it keep it.{% else %}It can be given to people again.{% endif %}"
+                  data-confirm-button="{% if policy.status == 'active' %}Turn off{% else %}Turn on{% endif %}">
+                {% csrf_token %}
+                <input type="hidden" name="status" value="{% if policy.status == 'active' %}inactive{% else %}active{% endif %}">
+                <button class="btn btn--ghost" type="submit">{% if policy.status == "active" %}Turn off{% else %}Turn on{% endif %}</button>
+            </form>
+        </div>
+    </div>
+
+    {% if not versions %}
+        <div class="card">
+            <div class="empty">
+                <div class="empty__title">No rules yet</div>
+                <div class="empty__text">Add its first version: the days each leave type gives, from a date.</div>
+            </div>
+        </div>
+    {% endif %}
+
+    {% for version in versions %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    Version {{ version.number }} · from {{ version.effective_from|date:"j M Y" }}
+                </h2>
+                <div class="row">
+                    {% if version == current %}
+                        <span class="badge badge--success">In force</span>
+                    {% elif version.effective_from > today %}
+                        <span class="badge badge--warning">Starts later</span>
+                        <a class="btn btn--quiet btn--sm" href="{% url 'leaves:leave_policy_version_edit' version.pk %}">Change</a>
+                        <form method="post" action="{% url 'leaves:leave_policy_version_delete' version.pk %}"
+                              data-confirm-title="Remove version {{ version.number }}?"
+                              data-confirm="It has not started, so nothing was given by it."
+                              data-confirm-button="Remove">
+                            {% csrf_token %}
+                            <button class="btn btn--quiet btn--sm btn--danger-text" type="submit">Remove</button>
+                        </form>
+                    {% else %}
+                        <span class="badge badge--neutral">Earlier</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% if version.note %}<p class="card__body t-muted">{{ version.note }}</p>{% endif %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Leave type</th>
+                            <th class="numeric">Days per year</th>
+                            <th>Given</th>
+                            <th>Carry forward</th>
+                            <th>Half days</th>
+                            <th>By the hour</th>
+                            <th>Below zero</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rule in version.rules.all %}
+                            <tr>
+                                <td>{{ rule.leave_type.name }}</td>
+                                <td class="numeric">{{ rule.days_per_year|floatformat:"-2" }}</td>
+                                <td>{{ rule.get_accrual_display }}</td>
+                                <td>
+                                    {% if rule.carry_forward_days %}
+                                        Up to {{ rule.carry_forward_days|floatformat:"-2" }}{% if rule.carry_forward_expires_months %}, expire after {{ rule.carry_forward_expires_months }} month{{ rule.carry_forward_expires_months|pluralize }}{% endif %}
+                                    {% else %}
+                                        None
+                                    {% endif %}
+                                </td>
+                                <td>{{ rule.allow_half_day|yesno:"Yes,No" }}</td>
+                                <td>{{ rule.allow_hourly|yesno:"Yes,No" }}</td>
+                                <td>{{ rule.allow_negative|yesno:"Yes,No" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endfor %}
+    <p class="t-faint">A version that has started stays as it is, so what people were given can always be worked out again. To change the rules, add a new version from a date.</p>
+{% endblock %}

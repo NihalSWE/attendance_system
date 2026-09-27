@@ -19,6 +19,7 @@ from attendance import access
 from attendance.models import AttendanceRecord
 from attendance.services import refresh
 from base_template.tables import Sortable
+from leaves.shape import pay_label
 
 S = AttendanceRecord.AttendanceStatus
 WORKING = (S.PRESENT, S.HALF_DAY, S.INCOMPLETE)
@@ -476,7 +477,7 @@ def leave(ctx):
             placed.employee_code if placed else "", request.employee.full_name,
             placed.branch.name if placed else "", s.leave_type.name,
             when(s.start_date, "%d %b %Y"), when(s.end_date, "%d %b %Y"),
-            _days(units), "Paid" if s.requested_pay_type == "paid" else "Unpaid",
+            _days(units), pay_label(s.requested_pay_type, s.requested_pay_percentage or 0),
             request.get_status_display(), request.reason or "",
         ])
     return Result(columns=PERSON + [

@@ -15,6 +15,9 @@ from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee
 from leaves import documents
+from leaves.policies import policy_check
+from leaves.shape import fit, pay_percentage, shape_from, shape_of
+from leaves.shape import pay_percentage as shape_pay_percentage
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
 from leaves.services import check_allowance, is_half_day, plan_leave_days, write_approved_days, _writable
 from organization.services import require_company_membership, STRUCTURE_ROLES
@@ -116,8 +119,11 @@ def submit_request(*, actor, company_id, values, document=None):
     member = require_company_membership(actor, company_id)
     if actor.is_superuser:
         raise PermissionDenied('Use your employee login to request leave.')
-    values = _writable(values, ('leave_type', 'start_date', 'end_date', 'duration', 'pay_type', 'reason'))
-    half = is_half_day(values)
+    values = _writable(values, ('leave_type', 'start_date', 'end_date', 'duration', 'pay_type',
+                                'reason', 'half_day_part', 'start_time', 'end_time',
+                                'pay_percentage'))
+    shape = shape_from(values)
+    percentage = pay_percentage(values['pay_type'], values.get('pay_percentage'))
     with use_company(company_id):
         employee = Employee.objects.select_for_update().filter(user=actor).first()
         if employee is None or employee.employment_status not in ('active', 'probation'):
@@ -126,13 +132,13 @@ def submit_request(*, actor, company_id, values, document=None):
         if leave_type is None:
             raise ValidationError({'leave_type': 'Choose an active leave type in this company.'})
         documents.require_if_needed(leave_type, document)
-        if values['pay_type'] not in PayType.values:
-            raise ValidationError({'pay_type': 'Choose paid or unpaid.'})
         reason = str(values.get('reason', '')).strip()
         if not reason:
             raise ValidationError({'reason': 'Give a reason for your request.'})
         days, skipped = _plan(company_id, employee, values['start_date'], values['end_date'])
-        check_allowance(employee, leave_type, days, half)
+        fitted = fit(shape, days)
+        check_allowance(employee, leave_type, days, units=fitted)
+        policy_check(employee, leave_type, days, shape, fitted)
         request = create_validated(
             LeaveRequest, company=member.company, employee=employee,
             submission_assignment=days[0][1], reason=reason, status='pending',
@@ -141,14 +147,13 @@ def submit_request(*, actor, company_id, values, document=None):
         create_validated(
             LeaveRequestSegment, company=member.company, leave_request=request,
             leave_type=leave_type, start_date=values['start_date'], end_date=values['end_date'],
-            duration_type=(LeaveRequestSegment.DurationType.HALF_DAY if half
-                           else LeaveRequestSegment.DurationType.FULL_DAY),
+            duration_type=shape.duration, half_day_part=shape.part,
+            start_time=shape.start_time, end_time=shape.end_time,
             timezone=member.company.timezone or 'UTC',
-            requested_units=Decimal('0.5') if half else Decimal(len(days)),
-            requested_minutes=(days[0][4].scheduled_minutes // 2 if half
-                               else sum(shift.scheduled_minutes for *_, shift in days)),
+            requested_units=sum((units for *_, units in fitted.values()), Decimal('0')),
+            requested_minutes=sum(minutes for _s, _e, minutes, _u in fitted.values()),
             requested_pay_type=values['pay_type'],
-            requested_pay_percentage=100 if values['pay_type'] == 'paid' else 0,
+            requested_pay_percentage=percentage,
         )
         documents.store(request, document)
         record_company_event(actor=actor, membership=member, company=member.company,
@@ -182,7 +187,8 @@ def withdraw_request(*, actor, company_id, request_id):
 
 
 @transaction.atomic
-def decide_request(*, actor, company_id, request_id, approve, pay_type='paid', reason=''):
+def decide_request(*, actor, company_id, request_id, approve, pay_type='paid', reason='',
+                   pay_percentage=None):
     member = reviewer(actor, company_id)
     with use_company(company_id):
         request = reviewable(member).select_for_update(of=('self',)).select_related(
@@ -199,23 +205,25 @@ def decide_request(*, actor, company_id, request_id, approve, pay_type='paid', r
         if not approve and not reason:
             raise ValidationError({'reason': 'Give a reason for rejecting the request.'})
         if approve:
-            if pay_type not in PayType.values:
-                raise ValidationError({'pay_type': 'Choose paid or unpaid.'})
+            percentage = shape_pay_percentage(pay_type, pay_percentage)
             days, skipped = _plan(company_id, employee, segment.start_date, segment.end_date,
                                   exclude_request=request.pk)
             if any(assignment.branch_id != request.submission_assignment.branch_id
                    for _, assignment, *_ in days):
                 raise ValidationError('The employee changed branch. Ask them to submit a new request.')
             # Rechecked here: other leave may have been approved since the request.
-            check_allowance(employee, segment.leave_type, days,
-                            segment.duration_type == LeaveRequestSegment.DurationType.HALF_DAY)
+            shape = shape_of(segment)
+            fitted = fit(shape, days)
+            check_allowance(employee, segment.leave_type, days, units=fitted)
+            policy_check(employee, segment.leave_type, days, shape, fitted)
             write_approved_days(company=member.company, employee=employee, segment=segment,
-                                days=days, pay_type=pay_type)
+                                days=days, pay_type=pay_type, percentage=percentage)
         request.status = 'approved' if approve else 'rejected'
         request.decided_at = timezone.now()
         request.updated_by = actor
         request.decision_snapshot = {'decided_by': actor.pk, 'reason': reason,
-                                     'pay_type': pay_type if approve else None}
+                                     'pay_type': pay_type if approve else None,
+                                     'pay_percentage': str(percentage) if approve else None}
         request.full_clean()
         request.save()
         record_company_event(actor=actor, membership=member, company=member.company,

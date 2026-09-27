@@ -1,0 +1,85 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Leave policies · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'leaves:leave_list' %}">Leave</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Leave policies
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Leave policies</h1>
+            <p class="page__sub">
+                What each leave type gives: days per year, how they are earned, what carries
+                forward. Someone with no policy has the company default; with none at all,
+                each leave type's days per year apply.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--primary" href="{% url 'leaves:leave_policy_create' %}">Add policy</a>
+            <a class="btn btn--ghost" href="{% url 'leaves:leave_balance_list' %}">Leave balances</a>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>Policies</h2>
+            <span class="badge badge--neutral">{{ server_table.page.paginator.count }}</span>
+        </div>
+        {% if not policies %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">No leave policies yet</div>
+                <div class="empty__text">Without one, each leave type's days per year apply to everyone, as before.</div>
+            </div>
+        {% endif %}
+        {% if server_table or policies %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Policy</th>
+                            <th>Default</th>
+                            <th class="numeric">Versions</th>
+                            <th class="numeric">Given to</th>
+                            <th>Status</th>
+                            <th class="no-sort">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for policy in policies %}
+                            <tr>
+                                <td>{{ policy.code }}</td>
+                                <td>
+                                    <a href="{% url 'leaves:leave_policy_detail' policy.pk %}">{{ policy.name }}</a>
+                                    {% if policy.description %}<div class="t-faint">{{ policy.description }}</div>{% endif %}
+                                </td>
+                                <td>{% if policy.is_default %}<span class="badge badge--success">Company default</span>{% else %}—{% endif %}</td>
+                                <td class="numeric">
+                                    {{ policy.table_versions }}
+                                    {% if policy.table_first %}<div class="t-faint">from {{ policy.table_first|date:"j M Y" }}</div>{% endif %}
+                                </td>
+                                <td class="numeric">{% if policy.is_default %}Everyone else{% else %}{{ policy.table_people }}{% endif %}</td>
+                                <td>
+                                    {% if policy.status == "active" %}<span class="badge badge--success">Active</span>{% else %}<span class="badge badge--neutral">Inactive</span>{% endif %}
+                                </td>
+                                <td>
+                                    <a class="btn btn--quiet btn--sm" href="{% url 'leaves:leave_policy_detail' policy.pk %}">Open</a>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'base_template/js/platform.js' %}">
+    </script>
+{% endblock %}

@@ -329,7 +329,11 @@ def leave_amend(request, pk):
             initial={
                 "leave_type": segment.leave_type_id, "start_date": segment.start_date,
                 "end_date": segment.end_date, "pay_type": segment.requested_pay_type,
-                "duration": ("half_day" if segment.duration_type == "half_day" else "full_day"),
+                "duration": segment.duration_type or "full_day",
+                "half_day_part": segment.half_day_part,
+                "start_time": segment.start_time, "end_time": segment.end_time,
+                "pay_percentage": (segment.requested_pay_percentage
+                                   if segment.requested_pay_type == "partial" else None),
                 "reason": leave.reason,
             },
         )

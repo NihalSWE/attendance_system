@@ -25,47 +25,10 @@
         <div class="card">
             <div class="card__head">
                 <h2>
-                    Allowance in {{ year }}
+                    Balance in {{ year }}
                 </h2>
             </div>
-            <div class="table-wrap">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>
-                                Leave type
-                            </th>
-                            <th class="numeric">
-                                Days per year
-                            </th>
-                            <th class="numeric">
-                                Used
-                            </th>
-                            <th class="numeric">
-                                Left
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for item in allowances %}
-                            <tr>
-                                <td>
-                                    {{ item.type }}
-                                </td>
-                                <td class="numeric">
-                                    {{ item.allowance|floatformat:"-1" }}
-                                </td>
-                                <td class="numeric">
-                                    {{ item.used|floatformat:"-1" }}
-                                </td>
-                                <td class="numeric">
-                                    {{ item.left|floatformat:"-1" }}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+            {% include "leaves/includes/balances.html" with rows=allowances %}
         </div>
     {% endif %}
 
@@ -190,7 +153,7 @@
                                 </td>
                                 <td>
                                     {% if row.request.status == 'approved' and row.request.decision_snapshot.pay_type %}
-                                        {{ row.request.decision_snapshot.pay_type|title }}
+                                        {% if row.request.decision_snapshot.pay_type == "partial" %}Part paid ({{ row.request.decision_snapshot.pay_percentage|floatformat:"-2" }}%){% else %}{{ row.request.decision_snapshot.pay_type|title }}{% endif %}
                                     {% else %}
                                         {% for segment in row.segments %}{{ segment.get_requested_pay_type_display }}{% if not forloop.last %}, {% endif %}{% endfor %}
                                     {% endif %}

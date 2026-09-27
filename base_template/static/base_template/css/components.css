@@ -1555,3 +1555,17 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     gap: var(--s2) var(--s4);
     padding-block: var(--s1);
 }
+
+/* Leave balances: how a balance adds up (Phase E, 2026-09-27). */
+.balance-entries > summary {
+    cursor: pointer;
+    font-size: .85em;
+}
+.balance-entries__list {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    font-size: .9em;
+}
+.balance-entries__list li {
+    margin: 2px 0;
+}

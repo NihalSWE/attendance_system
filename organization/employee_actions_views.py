@@ -55,6 +55,72 @@ def employee_leave(request, pk):
 
 @login_required
 @require_POST
+def employee_leave_policy(request, pk):
+    """Give them a leave policy from a date (Phase E)."""
+    from leaves import policies
+    from leaves.forms import AssignPolicyForm
+    from leaves.models import LeavePolicy
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    _m, employee, _a, _c = employee_detail_services.get_employee_for_edit(
+        actor=request.user, company_id=company_id, employee_id=pk, code="employees.view")
+    with use_company(company_id):
+        form = AssignPolicyForm(request.POST, auto_id="leave_policy_%s",
+                                policies=LeavePolicy.objects.filter(status="active"))
+        valid = form.is_valid()
+    if valid:
+        try:
+            policies.assign_policy(actor=request.user, company_id=company_id, employee=employee,
+                                   policy=form.cleaned_data["policy"],
+                                   effective_from=form.cleaned_data["effective_from"])
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            chosen = form.cleaned_data["policy"]
+            messages.success(request, f"{employee.full_name} has "
+                                      f"{chosen.name if chosen else 'the company default'} from "
+                                      f"{form.cleaned_data['effective_from']:%d %b %Y}.")
+            return _back(pk, "leave")
+    return _profile(request, company_id, pk, bound={"leave_policy": form},
+                    open_dialog="leave_policy-dialog")
+
+
+@login_required
+@require_POST
+def employee_leave_adjust(request, pk):
+    """Add or take away leave days by hand (Phase E)."""
+    from leaves import policies
+    from leaves.forms import AdjustBalanceForm
+    from leaves.models import LeaveType
+
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    _m, employee, _a, _c = employee_detail_services.get_employee_for_edit(
+        actor=request.user, company_id=company_id, employee_id=pk, code="employees.view")
+    with use_company(company_id):
+        form = AdjustBalanceForm(request.POST, auto_id="adjust_%s",
+                                 leave_types=LeaveType.objects.filter(status="active"))
+        valid = form.is_valid()
+    if valid:
+        data = form.cleaned_data
+        try:
+            policies.adjust(actor=request.user, company_id=company_id, employee=employee,
+                            leave_type=data["leave_type"], year=data["year"],
+                            units=data["units"], note=data["note"])
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, f"{data['leave_type'].name} {data['year']}: "
+                                      f"{data['units']:+} days recorded.")
+            return _back(pk, "leave")
+    return _profile(request, company_id, pk, bound={"adjust": form}, open_dialog="adjust-dialog")
+
+
+@login_required
+@require_POST
 def employee_late(request, pk):
     """Apply for late approval: approve a late arrival on one of their days."""
     company_id, bail = _company_or_redirect(request)

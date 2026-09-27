@@ -117,7 +117,7 @@ class RequestTests(LiveTestCase):
             self.submit(start_date=DAY + datetime.timedelta(days=2), end_date=DAY + datetime.timedelta(days=2))
         self.client.force_login(self.worker)
         page = self.client.get(reverse('me:leave'), {'year': 2026})
-        self.assertContains(page, 'Allowance in 2026')
+        self.assertContains(page, 'Balance in 2026')
 
     def test_employee_withdraws_only_their_own_pending_request(self):
         request = self.submit()

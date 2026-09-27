@@ -5086,3 +5086,39 @@ The Leave tab's button opens the leave modal too. **Server: `migrate`**
 (attendance 0007, employees 0006). 23 tests in
 `organization/tests_profile_actions.py`. Browser-checked on a temporary :8001:
 the menu, the leave modal and its date-range picker.
+
+### Phase E: leave in full — 2026-09-27
+
+Designed first (`docs/LEAVE_FULL_DESIGN.md`, committed before building), with
+what it does and does not change said up front. Built as designed:
+
+- **E1 day shapes** (`leaves/shape.py`): morning / afternoon half days, leave
+  by the hour, part-paid leave (1-99 %). Record leave, Request leave, the
+  approver's decision and Change leave all take them (fields show only when
+  they apply). Attendance reads a part-day leave with the paid share; a
+  morning half / hours at the start excuse lateness, an afternoon half / hours
+  at the end leaving early. **Every existing leave day reads exactly as
+  before** (tested: half days with no part, paid 1/0.5, unpaid 0.5/0).
+  Hourly-paid salary pays leave minutes × the paid share. The database rule
+  on pay was widened to allow part pay.
+- **E2 policies with versions**: Leave → Leave policies (owner/admin). A
+  policy has versions from dates, each with a rule per leave type: days per
+  year, given yearly (prorated for later joiners) or monthly, carry forward
+  up to N days, carried days expire after N months, half days / hours allowed,
+  may go below zero. One policy can be the company default. A version that
+  has started never changes; a new one starts today or later (the first may
+  reach back).
+- **E3 ledger and balances** (`leaves/policies.py`): accruals, carry-forward,
+  expiry, adjustments by hand; taken = the live leave days, never copied.
+  Recording, requesting and approving leave check the balance for dates a
+  policy covers; the type's days per year still decide everything else.
+  `manage.py post_leave_accruals` for a nightly run (pages post as they read).
+- **E4 screens**: the profile's Leave tab shows the balance and how it adds
+  up, "Leave policy" in General information with a modal, "Adjust balance"
+  modal (owner, admin, HR); the employee's own leave page shows their
+  balance; Leave → Leave balances lists everyone the viewer sees leave for.
+
+**Server: `migrate`** (leaves 0004, 0005). Optional cron:
+`manage.py post_leave_accruals` nightly. Tests: `leaves/tests_leave_shapes.py`
+(17), `leaves/tests_policies.py` (22), `leaves/tests_policy_pages.py` (11).
+Browser-checked on a temporary :8001 (read-only on the real data).

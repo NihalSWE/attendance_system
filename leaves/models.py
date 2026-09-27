@@ -31,6 +31,8 @@ from common.models import ActorTracked, TenantOwned
 class PayType(models.TextChoices):
     PAID = "paid", "Paid"
     UNPAID = "unpaid", "Unpaid"
+    # Phase E (2026-09-27): a share of pay kept, 1-99 %, in the percentage.
+    PARTIAL = "partial", "Part paid"
 
 
 class LeaveType(TenantOwned, ActorTracked):
@@ -237,11 +239,13 @@ class LeaveDay(TenantOwned):
                 condition=models.Q(status__in=["reserved", "approved", "consumed"]),
                 name="uniq_live_leave_day_per_employee_date",
             ),
-            # Pay type and percentage must agree.
+            # Pay type and percentage must agree (part paid: 1-99 %, Phase E).
             models.CheckConstraint(
                 condition=(
                     models.Q(approved_pay_type="paid", approved_pay_percentage=100)
                     | models.Q(approved_pay_type="unpaid", approved_pay_percentage=0)
+                    | models.Q(approved_pay_type="partial", approved_pay_percentage__gte=1,
+                               approved_pay_percentage__lte=99)
                 ),
                 name="leave_day_pay_type_matches_percentage",
             ),
@@ -253,3 +257,158 @@ class LeaveDay(TenantOwned):
 
     def __str__(self):
         return f"{self.employee_id} on leave {self.work_date}"
+
+
+# --------------------------------------------------------------------------
+# Leave policies, their versions and the ledger (Phase E, 2026-09-27;
+# docs/LEAVE_FULL_DESIGN.md §2-3). Salary and attendance never read these:
+# they decide how much leave someone may take, not what a leave day is.
+# --------------------------------------------------------------------------
+
+
+class LeavePolicy(TenantOwned, ActorTracked):
+    """A set of leave entitlements - "Staff", "Workers" - given to employees.
+    One may be the company default: everyone not given another has it."""
+
+    code = models.CharField(max_length=32)
+    name = models.CharField(max_length=150)
+    description = models.CharField(max_length=255, blank=True)
+    is_default = models.BooleanField(default=False)
+    status = models.CharField(
+        max_length=16, choices=ActiveStatus.choices, default=ActiveStatus.ACTIVE
+    )
+
+    class Meta:
+        db_table = "leaves_policy"
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(fields=["company", "code"],
+                                    name="uniq_leave_policy_code_per_company"),
+            models.UniqueConstraint(fields=["company"], condition=models.Q(is_default=True),
+                                    name="uniq_default_leave_policy_per_company"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class LeavePolicyVersion(TenantOwned, ActorTracked):
+    """A policy's rules from a date until its next version. A version that has
+    started is never edited: a change is a new version from a date, so what
+    someone was given earlier can always be worked out again."""
+
+    policy = models.ForeignKey(LeavePolicy, on_delete=models.CASCADE, related_name="versions")
+    number = models.PositiveIntegerField()
+    effective_from = models.DateField()
+    note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "leaves_policy_version"
+        ordering = ("policy", "effective_from")
+        constraints = [
+            models.UniqueConstraint(fields=["policy", "number"],
+                                    name="uniq_leave_policy_version_number"),
+            models.UniqueConstraint(fields=["policy", "effective_from"],
+                                    name="uniq_leave_policy_version_start"),
+        ]
+
+    def __str__(self):
+        return f"{self.policy} v{self.number} from {self.effective_from}"
+
+
+class LeavePolicyRule(TenantOwned):
+    """What one leave type gives under one policy version."""
+
+    class Accrual(models.TextChoices):
+        YEARLY = "yearly", "All at the start of the year"
+        MONTHLY = "monthly", "A twelfth each month"
+
+    version = models.ForeignKey(LeavePolicyVersion, on_delete=models.CASCADE,
+                                related_name="rules")
+    leave_type = models.ForeignKey(LeaveType, on_delete=models.PROTECT, related_name="rules")
+    days_per_year = models.DecimalField(max_digits=5, decimal_places=2,
+                                        validators=[MinValueValidator(Decimal("0"))])
+    accrual = models.CharField(max_length=16, choices=Accrual.choices, default=Accrual.YEARLY)
+    carry_forward_days = models.DecimalField(max_digits=5, decimal_places=2, null=True,
+                                             blank=True,
+                                             validators=[MinValueValidator(Decimal("0"))])
+    carry_forward_expires_months = models.PositiveSmallIntegerField(null=True, blank=True)
+    allow_half_day = models.BooleanField(default=True)
+    allow_hourly = models.BooleanField(default=True)
+    allow_negative = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "leaves_policy_rule"
+        constraints = [
+            models.UniqueConstraint(fields=["version", "leave_type"],
+                                    name="uniq_leave_policy_rule_per_type"),
+        ]
+
+    def __str__(self):
+        return f"{self.version}: {self.leave_type} {self.days_per_year}"
+
+
+class EmployeeLeavePolicy(TenantOwned, ActorTracked):
+    """The policy one employee has, from a date (until the next one)."""
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE,
+                                 related_name="leave_policies")
+    policy = models.ForeignKey(LeavePolicy, on_delete=models.PROTECT, related_name="employees")
+    effective_from = models.DateField()
+    # The last day it applies; empty while it is their policy.
+    effective_to = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = "leaves_employee_policy"
+        ordering = ("employee", "effective_from")
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(effective_to__isnull=True)
+                | models.Q(effective_to__gte=models.F("effective_from")),
+                name="leave_employee_policy_end_not_before_start",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.employee_id}: {self.policy} from {self.effective_from}"
+
+
+class LeaveLedgerEntry(TenantOwned):
+    """Leave given or taken back, in days, for one employee, type and year.
+    Leave taken is not written here: it is the live ``LeaveDay`` units."""
+
+    class Kind(models.TextChoices):
+        ACCRUAL = "accrual", "Earned"
+        CARRY_FORWARD = "carry_forward", "Carried forward"
+        EXPIRY = "expiry", "Carried days expired"
+        ADJUSTMENT = "adjustment", "Adjusted by hand"
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE,
+                                 related_name="leave_ledger")
+    leave_type = models.ForeignKey(LeaveType, on_delete=models.PROTECT, related_name="ledger")
+    year = models.PositiveSmallIntegerField()
+    entry_date = models.DateField()
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    units = models.DecimalField(max_digits=7, decimal_places=2)
+    # One automatic entry per period: "2026", "2026-03", "cf-2026", "exp-2026".
+    period_key = models.CharField(max_length=32, blank=True)
+    policy_version = models.ForeignKey(LeavePolicyVersion, null=True, blank=True,
+                                       on_delete=models.PROTECT, related_name="+")
+    note = models.CharField(max_length=255, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        db_table = "leaves_ledger_entry"
+        ordering = ("entry_date", "pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "employee", "leave_type", "kind", "period_key"],
+                condition=~models.Q(kind="adjustment"),
+                name="uniq_automatic_leave_ledger_entry",
+            ),
+        ]
+        indexes = [models.Index(fields=["company", "employee", "leave_type", "year"])]
+
+    def __str__(self):
+        return f"{self.employee_id} {self.leave_type_id} {self.year} {self.kind} {self.units}"

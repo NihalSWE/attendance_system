@@ -1,0 +1,89 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {% if version %}Change version {{ version.number }}{% else %}New version{% endif %} · {{ policy.name }}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'leaves:leave_policy_list' %}">Leave policies</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'leaves:leave_policy_detail' policy.pk %}">{{ policy.name }}</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {% if version %}Change version {{ version.number }}{% else %}New version{% endif %}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">{% if version %}Change version {{ version.number }}{% else %}New version of {{ policy.name }}{% endif %}</h1>
+            <p class="page__sub">
+                {% if first %}
+                    Its first version may start on any date. If that date is in the past,
+                    the leave it gives reaches back to it, and leave already taken since then counts against it.
+                {% else %}
+                    A new version starts today or later; what was given before stays as it was.
+                {% endif %}
+            </p>
+        </div>
+    </div>
+    <form method="post" class="stack" novalidate>
+        {% csrf_token %}
+        <div class="card">
+            <div class="card__body stack">
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger">{{ form.non_field_errors }}</div>
+                {% endif %}
+                <div class="grid grid--2">
+                    {% for field in form %}
+                        {% include "leaves/includes/field.html" %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card__head">
+                <h2>Leave types</h2>
+            </div>
+            <div class="card__body">
+                <p class="field__help">Tick the leave types this policy covers. A type it does not cover keeps its own days per year.</p>
+            </div>
+            <div class="table-wrap">
+                <table class="table policy-rules">
+                    <thead>
+                        <tr>
+                            <th>Leave type</th>
+                            <th>Covered</th>
+                            <th>Days per year</th>
+                            <th>Given</th>
+                            <th>Carry forward up to</th>
+                            <th>Expire after (months)</th>
+                            <th>Half days</th>
+                            <th>By the hour</th>
+                            <th>Below zero</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for leave_type, rule in rule_forms %}
+                            <tr>
+                                <td><strong>{{ leave_type.name }}</strong><div class="t-faint">{{ leave_type.code }}</div></td>
+                                <td>{{ rule.include }}</td>
+                                <td>{{ rule.days_per_year }}{% for e in rule.days_per_year.errors %}<span class="field__error">{{ e }}</span>{% endfor %}</td>
+                                <td>{{ rule.accrual }}</td>
+                                <td>{{ rule.carry_forward_days }}</td>
+                                <td>{{ rule.carry_forward_expires_months }}{% for e in rule.carry_forward_expires_months.errors %}<span class="field__error">{{ e }}</span>{% endfor %}</td>
+                                <td>{{ rule.allow_half_day }}</td>
+                                <td>{{ rule.allow_hourly }}</td>
+                                <td>{{ rule.allow_negative }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="9" class="t-faint">No active leave types. Add them under Leave types first.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="row">
+            <button class="btn btn--primary" type="submit">{% if version %}Save version{% else %}Add version{% endif %}</button>
+            <a class="btn btn--ghost" href="{% url 'leaves:leave_policy_detail' policy.pk %}">Cancel</a>
+        </div>
+    </form>
+{% endblock %}
