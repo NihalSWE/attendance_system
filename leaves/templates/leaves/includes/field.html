@@ -1,24 +1,32 @@
 <div class="field">
-    <label class="field__label" for="{{ field.id_for_label }}">
-        {{ field.label }}
-        {% if field.field.required %}
-            <span class="field__req">
-                *
-            </span>
-        {% endif %}
-    </label>
-    {% if field.field.widget.input_type == "radio" or field.field.widget.allow_multiple_selected and field.field.widget.input_type == "checkbox" %}
-        {# A list of options: each its own .check row, as the rest of the app draws them. #}
-        <div class="check-list">
-            {% for option in field %}
-                <label class="check" for="{{ option.id_for_label }}">
-                    {{ option.tag }}
-                    <span>{{ option.choice_label }}</span>
-                </label>
-            {% endfor %}
-        </div>
+    {% if field.field.widget.input_type == "checkbox" and not field.field.widget.allow_multiple_selected %}
+        {# A single yes/no: the box and its words on one line, as the rest of the app draws it. #}
+        <label class="check" for="{{ field.id_for_label }}">
+            {{ field }}
+            <span>{{ field.label }}</span>
+        </label>
     {% else %}
-        {{ field }}
+        <label class="field__label" for="{{ field.id_for_label }}">
+            {{ field.label }}
+            {% if field.field.required %}
+                <span class="field__req">
+                    *
+                </span>
+            {% endif %}
+        </label>
+        {% if field.field.widget.input_type == "radio" or field.field.widget.allow_multiple_selected and field.field.widget.input_type == "checkbox" %}
+            {# A list of options: each its own .check row, as the rest of the app draws them. #}
+            <div class="check-list">
+                {% for option in field %}
+                    <label class="check" for="{{ option.id_for_label }}">
+                        {{ option.tag }}
+                        <span>{{ option.choice_label }}</span>
+                    </label>
+                {% endfor %}
+            </div>
+        {% else %}
+            {{ field }}
+        {% endif %}
     {% endif %}
     {% if field.help_text %}
         <span class="field__help">

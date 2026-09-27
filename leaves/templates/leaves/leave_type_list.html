@@ -98,6 +98,9 @@
                                 </td>
                                 <td>
                                     {{ leave_type.name }}
+                                    {% if leave_type.requires_attachment_by_default %}
+                                        <div><span class="badge badge--neutral">Needs a document</span></div>
+                                    {% endif %}
                                 </td>
                                 <td class="numeric">
                                     {{ leave_type.days_per_year|floatformat:"-1"|default:"No limit" }}

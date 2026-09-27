@@ -37,7 +37,8 @@ from organization.services import (
 )
 from scheduling.calendar import WORKING, WorkCalendar
 
-LEAVE_TYPE_FIELDS = ("code", "name", "days_per_year", "description")
+LEAVE_TYPE_FIELDS = ("code", "name", "days_per_year", "requires_attachment_by_default",
+                     "description")
 RECORD_FIELDS = ("employee", "leave_type", "start_date", "end_date", "duration", "pay_type", "reason")
 
 # A leave longer than this is almost certainly a typo in the year.

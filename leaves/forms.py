@@ -28,6 +28,9 @@ class LeaveTypeForm(StyledFormMixin, forms.ModelForm):
         labels = {"code": "Code", "name": "Leave type", "days_per_year": "Days per year",
                   "requires_attachment_by_default": "Needs a document"}
         help_texts = {
+            "requires_attachment_by_default": (
+                "Recording or requesting this leave then needs a certificate or letter "
+                "attached (PDF or a picture)."),
             "code": "Short identifier, unique in this company, e.g. CL.",
             "name": "As employees know it, e.g. Casual leave.",
             "days_per_year": "Leave blank for no limit. Approved leave in a calendar year counts; a half day is 0.5.",

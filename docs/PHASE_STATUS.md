@@ -4934,3 +4934,26 @@ Ajay's leave depth: attachments yes; a new table means stop and ask. So
 15 tests in `leaves/tests_documents.py`; the leave suite's 66 pass unchanged.
 Not browser-checked (Nihal asked for speed; the tests post the real forms).
 **Server: `migrate`.** Full suite 1671 OK.
+
+### Leave types saved again; every leave form submitted in tests — 2026-09-27
+
+Nihal: adding a leave type said "Unsupported field:
+requires_attachment_by_default". The "Needs a document" box (leave documents,
+fba9130) was put on the Leave type form, but `LEAVE_TYPE_FIELDS` - the list
+the leave-type services accept, a deliberate strict check - was not given it,
+so every add and edit was refused. Its test only opened the page. Fixed.
+
+To find anything else like it, `leaves/tests_every_form.py` submits every
+leave form through its page as the person who uses it: leave type add, edit
+(the box on and off), off/on, the defaults; Record leave (full, half, with a
+document, by a branch manager); Change; Cancel some days and whole; Request,
+Approve, Reject, Withdraw; a type that needs a document refused without one;
+and every leave page opening for owner, HR, branch manager and employee.
+Checked against the bug: with it put back, 3 of these fail. Nothing else was
+found broken.
+
+Also: a single checkbox drawn by `leaves/includes/field.html` sits beside its
+words (the app's `.check` row) instead of under a label; the Leave types list
+marks a type "Needs a document"; the box has a help text.
+
+14 tests. Leave suite 95 OK. Full suite 1685 OK.
