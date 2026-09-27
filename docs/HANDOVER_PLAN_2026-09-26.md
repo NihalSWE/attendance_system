@@ -31,7 +31,7 @@ into main and pushed before the next starts.
 | 1 | ✅ Done 2026-09-27: leave - cancel some days, change an approved leave, attendance refreshed at once, list and report show current values |
 | 2 | ✅ Done 2026-09-27: leave documents - one per leave (a column, no new table); record, request, change; "Needs a document" on leave types; private download |
 | 3 | ~~A plan for policies/ledger~~ - **dropped**: Ajay decided (2026-09-27) not to build policies/versions or the accrual ledger; the days-per-year allowance stays the balance |
-| 4 | Wrap-up: the prompt for Ajay |
+| 4 | ~~The prompt for Ajay~~ - not needed: Ajay is out; the handover is complete |
 
 ## Open questions for Ajay
 
