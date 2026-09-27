@@ -231,7 +231,7 @@ def leave_record(request):
         if chosen.isdigit() and employees.filter(pk=int(chosen)).exists():
             initial["employee"] = int(chosen)
         form = RecordLeaveForm(
-            request.POST or None,
+            request.POST or None, request.FILES or None,
             employees=employees.order_by("first_name", "last_name"),
             leave_types=LeaveType.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
             initial=initial,
@@ -252,7 +252,8 @@ def leave_record(request):
                 "working day(s)."
             ),
             action=lambda data: services.record_leave(
-                actor=request.user, company_id=company_id, values=data
+                actor=request.user, company_id=company_id, values=_without_document(data),
+                document=data.get("document"),
             ),
         )
 
@@ -298,6 +299,11 @@ def leave_cancel(request, pk):
     )
 
 
+def _without_document(data):
+    """The form's values for the service; the document goes on its own."""
+    return {key: value for key, value in data.items() if key != "document"}
+
+
 def _current_segment(leave):
     """The leave's current part: the latest not cancelled, else the latest."""
     parts = leave.segments.select_related("leave_type").order_by("-sequence_number", "-pk")
@@ -317,7 +323,7 @@ def leave_amend(request, pk):
     with use_company(company_id):
         segment = _current_segment(leave)
         form = AmendLeaveForm(
-            request.POST or None,
+            request.POST or None, request.FILES or None,
             employees=Employee.objects.filter(pk=leave.employee_id),
             leave_types=LeaveType.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
             initial={
@@ -340,7 +346,8 @@ def leave_amend(request, pk):
             "allowance, and no day in a finalised salary month."),
         success="Leave changed.",
         action=lambda data: services.amend_leave(
-            actor=request.user, company_id=company_id, request_id=leave.pk, values=data),
+            actor=request.user, company_id=company_id, request_id=leave.pk,
+            values=_without_document(data), document=data.get("document")),
     )
 
 

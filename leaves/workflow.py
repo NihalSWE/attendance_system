@@ -14,6 +14,7 @@ from auditlog.services import record_company_event
 from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee
+from leaves import documents
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
 from leaves.services import check_allowance, is_half_day, plan_leave_days, write_approved_days, _writable
 from organization.services import require_company_membership, STRUCTURE_ROLES
@@ -111,7 +112,7 @@ def _plan(company_id, employee, start, end, *, exclude_request=None):
 
 
 @transaction.atomic
-def submit_request(*, actor, company_id, values):
+def submit_request(*, actor, company_id, values, document=None):
     member = require_company_membership(actor, company_id)
     if actor.is_superuser:
         raise PermissionDenied('Use your employee login to request leave.')
@@ -124,6 +125,7 @@ def submit_request(*, actor, company_id, values):
         leave_type = LeaveType.objects.filter(pk=values['leave_type'].pk, status='active').first()
         if leave_type is None:
             raise ValidationError({'leave_type': 'Choose an active leave type in this company.'})
+        documents.require_if_needed(leave_type, document)
         if values['pay_type'] not in PayType.values:
             raise ValidationError({'pay_type': 'Choose paid or unpaid.'})
         reason = str(values.get('reason', '')).strip()
@@ -148,9 +150,11 @@ def submit_request(*, actor, company_id, values):
             requested_pay_type=values['pay_type'],
             requested_pay_percentage=100 if values['pay_type'] == 'paid' else 0,
         )
+        documents.store(request, document)
         record_company_event(actor=actor, membership=member, company=member.company,
                              action='leave.submitted', obj=request,
-                             after={'status': 'pending', 'working_days': len(days)})
+                             after={'status': 'pending', 'working_days': len(days),
+                                    'document': request.attachment_name})
         return request
 
 

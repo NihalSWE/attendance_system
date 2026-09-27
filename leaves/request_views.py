@@ -30,12 +30,16 @@ from leaves.services import allowance_left
 def request_leave(request):
     member = workflow.require_company_membership(request.user, request.company_id)
     with use_company(request.company_id):
-        form = RequestLeaveForm(request.POST or None,
+        form = RequestLeaveForm(request.POST or None, request.FILES or None,
                                 leave_types=LeaveType.objects.filter(status='active'),
                                 initial={'pay_type': 'paid', 'duration': 'full_day'})
         if request.method == 'POST' and form.is_valid():
             try:
-                workflow.submit_request(actor=request.user, company_id=request.company_id, values=form.cleaned_data)
+                values = {key: value for key, value in form.cleaned_data.items()
+                          if key != 'document'}
+                workflow.submit_request(actor=request.user, company_id=request.company_id,
+                                        values=values,
+                                        document=form.cleaned_data.get('document'))
             except ValidationError as exc:
                 apply_service_errors(form, exc)
             else:
@@ -161,3 +165,31 @@ def branch_attendance(request):
     return render(request, 'leaves/branch_attendance.html', {
         'form': form, 'rows': rows, 'page_obj': page, 'on': on, 'q': query,
     })
+
+
+@login_required
+@require_http_methods(['GET'])
+def leave_document(request, pk):
+    """A leave's document: the employee's own, or for whoever may see or decide
+    that leave (leaves.documents.may_open) - never a public file address."""
+    import mimetypes
+
+    from django.http import FileResponse, Http404
+
+    from leaves.documents import may_open
+
+    if not request.company_id:
+        raise Http404('No company.')
+    with use_company(request.company_id):
+        leave = get_object_or_404(
+            LeaveRequest.objects.select_related('employee', 'submission_assignment'), pk=pk)
+        if not may_open(request.user, request.company_id, leave):
+            raise PermissionDenied('This document is not yours to open.')
+        if not leave.attachment:
+            raise Http404('No document.')
+        kind = mimetypes.guess_type(leave.attachment.name)[0] or 'application/octet-stream'
+        reply = FileResponse(leave.attachment.open('rb'), content_type=kind,
+                             filename=leave.attachment_name or None)
+    reply['Cache-Control'] = 'private, max-age=300'
+    reply['X-Content-Type-Options'] = 'nosniff'
+    return reply

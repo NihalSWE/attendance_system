@@ -23,8 +23,15 @@
                 {% else %}
                     <p class="field__help">Request full working days, or a half day on one date. Holidays and weekly off days are skipped. Your branch manager reviews the request; managers' requests and branches without a manager go to the company administrator.</p>
                 {% endif %}
+                {% if leave.attachment %}
+                    <p>
+                        <a class="btn btn--ghost btn--sm" href="{% url 'me:leave_document' leave.pk %}" data-leave-document>
+                            Open the document · {{ leave.attachment_name|default:"attached" }}
+                        </a>
+                    </p>
+                {% endif %}
                 {% if not leave or leave.status == 'pending' %}
-                    <form method="post" class="stack" novalidate>
+                    <form method="post" class="stack" enctype="multipart/form-data" novalidate>
                         {% csrf_token %}
                         {{ form.non_field_errors }}
                         {% if form.start_date %}
@@ -37,6 +44,7 @@
                             </div>
                             {% include "leaves/includes/field.html" with field=form.pay_type %}
                             {% include "leaves/includes/field.html" with field=form.reason %}
+                            {% include "leaves/includes/field.html" with field=form.document %}
                         {% else %}
                             {% for field in form %}
                                 {% include "leaves/includes/field.html" %}

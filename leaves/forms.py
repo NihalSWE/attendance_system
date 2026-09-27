@@ -7,6 +7,7 @@ from django import forms
 from common.choices import ActiveStatus
 from common.forms import StyledFormMixin
 from employees.models import Employee
+from leaves.documents import DocumentField
 from leaves.models import LeaveType, PayType
 
 
@@ -23,8 +24,9 @@ def _range_input(key, placeholder, presets=True):
 class LeaveTypeForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = LeaveType
-        fields = ("code", "name", "days_per_year", "description")
-        labels = {"code": "Code", "name": "Leave type", "days_per_year": "Days per year"}
+        fields = ("code", "name", "days_per_year", "requires_attachment_by_default", "description")
+        labels = {"code": "Code", "name": "Leave type", "days_per_year": "Days per year",
+                  "requires_attachment_by_default": "Needs a document"}
         help_texts = {
             "code": "Short identifier, unique in this company, e.g. CL.",
             "name": "As employees know it, e.g. Casual leave.",
@@ -67,6 +69,7 @@ class RecordLeaveForm(StyledFormMixin, forms.Form):
         label="Pay",
         help_text="Unpaid leave days are deducted from salary; paid leave days are not.",
     )
+    document = DocumentField()
     reason = forms.CharField(
         label="Reason", required=False, widget=forms.Textarea
     )
@@ -137,6 +140,8 @@ class AmendLeaveForm(RecordLeaveForm):
         super().__init__(*args, **kwargs)
         del self.fields["employee"]
         self.fields["reason"].help_text = "Recorded with the change."
+        self.fields["document"].help_text = (
+            "Replaces the document it has, if you choose one. PDF, JPG, PNG or WEBP, up to 5 MB.")
 
 
 class RequestLeaveForm(RecordLeaveForm):

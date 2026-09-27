@@ -42,7 +42,7 @@
                     </div>
                 {% endif %}
 
-                <form method="post" class="stack" novalidate>
+                <form method="post" class="stack" enctype="multipart/form-data" novalidate>
                     {% csrf_token %}
 
                     <div class="grid grid--2">
@@ -85,6 +85,7 @@
                     </div>
 
                     {% include "leaves/includes/field.html" with field=form.reason %}
+                    {% include "leaves/includes/field.html" with field=form.document %}
 
                     <div class="row">
                         <button class="btn btn--primary" type="submit">

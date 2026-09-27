@@ -204,6 +204,9 @@
                                 </td>
                                 <td>
                                     {{ row.request.reason|default:"—"|truncatechars:60 }}
+                                    {% if row.request.attachment %}
+                                        <div><a class="t-faint" href="{% url 'me:leave_document' row.request.pk %}">Document</a></div>
+                                    {% endif %}
                                     {% if row.request.decision_snapshot.reason %}
                                         <p class="field__help">Decision: {{ row.request.decision_snapshot.reason }}</p>
                                     {% endif %}

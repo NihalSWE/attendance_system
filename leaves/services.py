@@ -28,6 +28,7 @@ from common.choices import ActiveStatus
 from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
+from leaves import documents
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
 from organization.services import (
     STRUCTURE_ROLES,
@@ -373,14 +374,15 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
 
 
 @transaction.atomic
-def record_leave(*, actor, company_id, values):
-    """Record approved leave for one employee."""
+def record_leave(*, actor, company_id, values, document=None):
+    """Record approved leave for one employee, with its document if any."""
     membership, branches = recorder_branches(actor, company_id)
     return _write_leave(actor=actor, membership=membership, branches=branches,
-                        company_id=company_id, values=values)
+                        company_id=company_id, values=values, document=document)
 
 
-def _write_leave(*, actor, membership, branches, company_id, values, request=None):
+def _write_leave(*, actor, membership, branches, company_id, values, request=None,
+                 document=None):
     """Record approved leave - a new request, or (``request``) the new dates of
     an amended one, whose old days are already cancelled."""
     values = _writable(values, RECORD_FIELDS)
@@ -397,6 +399,7 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
         _refuse_own_leave(actor, employee)
         if leave_type.company_id != membership.company.pk or leave_type.status != ActiveStatus.ACTIVE:
             raise ValidationError({"leave_type": "Choose an active leave type."})
+        documents.require_if_needed(leave_type, document, request)
         _refuse_finalised_month(company_id, values["start_date"], values["end_date"])
 
         days, skipped = plan_leave_days(
@@ -434,10 +437,12 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
         first_assignment = days[0][1]
         percentage = Decimal("100") if pay_type == PayType.PAID else Decimal("0")
         if request is not None:
-            return _amend_request(actor=actor, membership=membership, request=request,
-                                  values=values, days=days, skipped=skipped, half=half,
-                                  leave_type=leave_type, pay_type=pay_type,
-                                  percentage=percentage, first_assignment=first_assignment)
+            request = _amend_request(actor=actor, membership=membership, request=request,
+                                     values=values, days=days, skipped=skipped, half=half,
+                                     leave_type=leave_type, pay_type=pay_type,
+                                     percentage=percentage, first_assignment=first_assignment)
+            documents.store(request, document)
+            return request
         request = create_validated(
             LeaveRequest,
             company=membership.company,
@@ -461,6 +466,7 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
                                percentage=percentage, first_assignment=first_assignment)
         write_approved_days(company=membership.company, employee=employee,
                             segment=segment, days=days, pay_type=pay_type)
+        documents.store(request, document)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="leave.recorded", obj=request,
@@ -472,6 +478,7 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
                 "pay_type": pay_type,
                 "half_day": half,
                 "working_days": len(days),
+                "document": request.attachment_name,
             },
         )
     _refresh_attendance(company_id, employee.pk, [on for on, *_ in days])
@@ -591,7 +598,7 @@ def cancel_days(*, actor, company_id, request_id, work_dates, reason=""):
 
 
 @transaction.atomic
-def amend_leave(*, actor, company_id, request_id, values):
+def amend_leave(*, actor, company_id, request_id, values, document=None):
     """Change an approved leave's type, dates, half or full day, or pay. The old
     days stop counting and the new ones are written, on the same leave, with
     every check recording makes - clashes, the allowance, finalised months."""
@@ -616,7 +623,8 @@ def amend_leave(*, actor, company_id, request_id, values):
         request.segments.update(status=LeaveRequestSegment.Status.CANCELLED)
     values = {**values, "employee": request.employee}
     request = _write_leave(actor=actor, membership=membership, branches=branches,
-                           company_id=company_id, values=values, request=request)
+                           company_id=company_id, values=values, request=request,
+                           document=document)
     with use_company(company_id):
         new = live_days(request)
         record_company_event(

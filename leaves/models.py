@@ -116,6 +116,10 @@ class LeaveRequest(TenantOwned, ActorTracked):
     )
     decision_snapshot = models.JSONField(default=dict, blank=True)
     decided_at = models.DateTimeField(null=True, blank=True)
+    # One supporting document - a medical certificate, a letter (2026-09-27).
+    # Stored under a random name; served only by leaves.documents.
+    attachment = models.FileField(upload_to="leave_documents/", null=True, blank=True)
+    attachment_name = models.CharField(max_length=255, blank=True)
 
     class Meta:
         db_table = "payroll_leave_request"

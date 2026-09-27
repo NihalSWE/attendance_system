@@ -29,8 +29,8 @@ into main and pushed before the next starts.
 | Phase | What |
 |---|---|
 | 1 | ✅ Done 2026-09-27: leave - cancel some days, change an approved leave, attendance refreshed at once, list and report show current values |
-| 2 | Leave: attachments (record and request forms; required for leave types that need one; private download) |
-| 3 | Leave: a written plan for policies/versions, the accrual ledger, hourly and partly paid leave, morning/afternoon - no code |
+| 2 | ✅ Done 2026-09-27: leave documents - one per leave (a column, no new table); record, request, change; "Needs a document" on leave types; private download |
+| 3 | ~~A plan for policies/ledger~~ - **dropped**: Ajay decided (2026-09-27) not to build policies/versions or the accrual ledger; the days-per-year allowance stays the balance |
 | 4 | Wrap-up: the prompt for Ajay |
 
 ## Open questions for Ajay
@@ -42,3 +42,11 @@ into main and pushed before the next starts.
 
 Nihal said (2026-09-26): nothing is implemented until he says start; then one
 phase at a time, each finished, pushed and reported before the next.
+
+## Ajay's leave depth (2026-09-27)
+
+Build: attachments, amendment, partial cancellation. Do not build: policies
+with versions, the accrual / carry-forward ledger. Hourly, partly paid and
+morning/afternoon only if one falls out naturally - not chased. The
+days-per-year allowance per leave type stays the balance. A new table or a
+dated-version model means stop and ask Ajay.

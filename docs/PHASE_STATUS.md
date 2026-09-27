@@ -4909,3 +4909,28 @@ Ajay's feature 3, first part (`docs/HANDOVER_PLAN_2026-09-26.md`).
 
 19 tests in `leaves/tests_cancel_amend.py`. Checked in the running app: the
 cancel page. No migration. Full suite 1656 OK.
+
+### Leave documents — 2026-09-27 (handover phase 2)
+
+Ajay's leave depth: attachments yes; a new table means stop and ask. So
+**one document per leave**, kept on the leave (`LeaveRequest.attachment` +
+`attachment_name`, migration `leaves/0003_leave_attachment.py`) - no table.
+
+- Added when leave is **recorded** (Record leave), **requested** (Request
+  leave) or **changed** (Change - replaces it, the old file removed). A
+  leave type can require one: "Needs a document" on the Leave type form
+  (`requires_attachment_by_default` existed in the database but no screen set
+  it); without one, recording or requesting that type is refused, and a
+  changed leave keeps the one it has.
+- PDF, JPG, PNG or WEBP up to 5 MB, checked to be what it says (`%PDF-`, or
+  Pillow), stored under a random name (`leaves/documents.py`).
+- Opened only through `me:leave_document` (every login reaches "me" pages;
+  the view checks): the employee, whoever may see that leave on the Leave list,
+  and whoever may decide it; served `private`. Links on the Leave list, My
+  leave, and the approval page. Audited with the file name.
+- Views pass the document separately: the services' strict field check
+  (`_writable`) stays as it was.
+
+15 tests in `leaves/tests_documents.py`; the leave suite's 66 pass unchanged.
+Not browser-checked (Nihal asked for speed; the tests post the real forms).
+**Server: `migrate`.** Full suite 1671 OK.
