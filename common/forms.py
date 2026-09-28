@@ -25,6 +25,30 @@ def normalize_bd_phone(value):
     return digits
 
 
+BD_MOBILE_HELP = "An 11-digit Bangladesh mobile number, e.g. 01712345678."
+
+
+def normalize_bd_mobile(value):
+    """A Bangladesh mobile number (Nihal, 2026-09-28): 11 digits, 013 to 019,
+    typed as 01712345678, +8801712345678 or 8801712345678. Stored as the
+    other phone numbers are, with 88 in front: "8801712345678". Blank is
+    blank. A landline is refused - use ``normalize_bd_phone`` where one is
+    allowed."""
+    value = (value or "").strip()
+    if not value or value == "+88":
+        return ""
+    if not re.fullmatch(r"\+?[0-9 ()-]+", value):
+        raise ValidationError("Enter the mobile number using digits only.")
+    digits = re.sub(r"[^0-9]", "", value)
+    if digits.startswith("00"):
+        digits = digits[2:]
+    if digits.startswith("88"):
+        digits = digits[2:]
+    if not re.fullmatch(r"01[3-9][0-9]{8}", digits):
+        raise ValidationError(f"Enter {BD_MOBILE_HELP[0].lower()}{BD_MOBILE_HELP[1:]}")
+    return "88" + digits
+
+
 class BangladeshPhoneInput(forms.TextInput):
     input_type = "tel"
 

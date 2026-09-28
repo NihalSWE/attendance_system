@@ -10,7 +10,8 @@
     grid-template-columns: repeat(2,minmax(0,1fr));
     gap: var(--s5);
 }
-.field[data-field="address"], .field[data-field="reason"] {
+/* Address sits beside the phone (Nihal, 2026-09-28); a reason still spans the row. */
+.field[data-field="reason"] {
     grid-column: 1 / -1;
 }
 .form-actions {

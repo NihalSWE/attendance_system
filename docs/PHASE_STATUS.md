@@ -5250,3 +5250,8 @@ see a password being typed.
 
 Tests: `tenants/tests_platform_create.py` (9); the cold-start test uses the
 one form.
+- (Same day) Address beside Phone / mobile number on the root's company
+  forms; the phone there must be an **11-digit Bangladesh mobile number**
+  (013-019, e.g. 01712345678; +88 or 88 in front is fine), stored as
+  8801712345678 - `common.forms.normalize_bd_mobile`. Blank is allowed.
+  Other phone fields (company profile, employees) keep accepting landlines.
