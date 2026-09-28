@@ -89,29 +89,29 @@
                     Calendar
                 </a>
             {% endif %}
-            {# Ajay's twelve actions (2026-09-27), each opening a modal. #}
-            <details class="action-menu" data-action-menu>
-                <summary class="btn btn--primary">Actions</summary>
-                <div class="action-menu__list" role="menu">
+        </div>
+        {# Ajay's twelve actions (2026-09-27), each opening a modal; shown directly (2026-09-28). #}
+        <div class="profile-action-bar" role="group" aria-label="Actions">
+                <div class="profile-action-bar__list">
                     {% if leave_form %}
-                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="leave-dialog">Apply for leave</button>
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="leave-dialog">Apply for leave</button>
                     {% endif %}
                     {% if late_form %}
-                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="late-dialog">Apply for late approval</button>
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="late-dialog">Apply for late approval</button>
                     {% endif %}
                     {% if may_enter_missing %}
-                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="missing-dialog">Manual entry</button>
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="missing-dialog">Manual entry</button>
                     {% endif %}
                     {% if may.edit %}
-                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="admin-dialog">Set as admin</button>
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="admin-dialog">Set as admin</button>
                     {% endif %}
                     {% if edit.may.role %}
-                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="hr-dialog">
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="hr-dialog">
                             {% if login.role == "hr" %}HR manager: change{% else %}Set as HR manager{% endif %}
                         </button>
                     {% endif %}
                     {% if reports_form and not is_ended %}
-                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="reports-dialog">Set as line manager</button>
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="reports-dialog">Set as line manager</button>
                     {% endif %}
                     {% if overtime_form %}
                         {% if employee.no_overtime_from %}
@@ -121,10 +121,10 @@
                                   data-confirm-button="Allow overtime">
                                 {% csrf_token %}
                                 <input type="hidden" name="allow" value="1">
-                                <button class="action-menu__item" type="submit" role="menuitem">Allow overtime</button>
+                                <button class="btn btn--ghost btn--sm" type="submit">Allow overtime</button>
                             </form>
                         {% else %}
-                            <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="overtime-dialog">Disallow overtime</button>
+                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="overtime-dialog">Disallow overtime</button>
                         {% endif %}
                     {% endif %}
                     {% if may.edit %}
@@ -134,7 +134,7 @@
                               data-confirm-button="{% if employee.hide_from_reports %}Show in reports{% else %}Leave out{% endif %}">
                             {% csrf_token %}
                             <input type="hidden" name="hidden" value="{% if employee.hide_from_reports %}0{% else %}1{% endif %}">
-                            <button class="action-menu__item" type="submit" role="menuitem">
+                            <button class="btn btn--ghost btn--sm" type="submit">
                                 {% if employee.hide_from_reports %}Show in reports{% else %}Remove from reports{% endif %}
                             </button>
                         </form>
@@ -147,15 +147,15 @@
                                   data-confirm-button="Make active">
                                 {% csrf_token %}
                                 <input type="hidden" name="active" value="1">
-                                <button class="action-menu__item" type="submit" role="menuitem">Make employee status active</button>
+                                <button class="btn btn--ghost btn--sm" type="submit">Make employee status active</button>
                             </form>
                         {% else %}
-                            <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="inactive-dialog">Make employee status inactive</button>
+                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="inactive-dialog">Make employee status inactive</button>
                         {% endif %}
                     {% endif %}
                     {% if resign_form %}
-                        <button class="action-menu__item" type="button" role="menuitem" data-open-dialog="resign-dialog">Resign employee</button>
-                        <button class="action-menu__item action-menu__item--danger" type="button" role="menuitem" data-open-dialog="delete-dialog">Delete employee</button>
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="resign-dialog">Resign employee</button>
+                        <button class="btn btn--ghost btn--sm btn--danger-text" type="button" data-open-dialog="delete-dialog">Delete employee</button>
                     {% endif %}
                     {% if may.edit and device_pin and branch_devices and not is_ended %}
                         <form method="post" action="{% url 'devices:employees_send' %}"
@@ -165,11 +165,10 @@
                             {% csrf_token %}
                             <input type="hidden" name="employee" value="{{ employee.pk }}">
                             <input type="hidden" name="next" value="{{ profile_url }}#enrol">
-                            <button class="action-menu__item" type="submit" role="menuitem">Sync employee</button>
+                            <button class="btn btn--ghost btn--sm" type="submit">Sync employee</button>
                         </form>
                     {% endif %}
                 </div>
-            </details>
         </div>
     </div>
 
@@ -1094,12 +1093,12 @@
                     <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
                 </div>
                 <div class="modal__body stack">
-                    <p class="t-faint">It waits for approval by someone who may fix attendance in their branch - not you, if you enter it.</p>
+                    <p class="t-faint">{% if may_approve_own_entry %}You may approve it yourself: leave "Approve it now" ticked and the attendance changes at once.{% else %}It waits for approval by someone who may fix attendance in their branch - not you, if you enter it.{% endif %}</p>
                     {% include "attendance/includes/fix_fields.html" with form=missing_form %}
                 </div>
                 <div class="modal__foot">
                     <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
-                    <button class="btn btn--primary" type="submit">Send for approval</button>
+                    <button class="btn btn--primary" type="submit">{% if may_approve_own_entry %}Save{% else %}Send for approval{% endif %}</button>
                 </div>
             </form>
         </dialog>

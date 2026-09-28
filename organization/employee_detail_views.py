@@ -46,6 +46,12 @@ def _month(source, today):
     return year, month
 
 
+def _may_approve_own(user, company_id):
+    from attendance.scan_requests import may_approve_own
+
+    return may_approve_own(user, company_id)
+
+
 def _may_record_leave(user, company_id, assignment):
     """May this login record leave for someone placed here (Record leave's rule)?"""
     from access_control.branch_access import ALL_BRANCHES, branches_for
@@ -255,7 +261,9 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
         # not for oneself (that is Report a missed scan), and not after they left.
         "may_enter_missing": bool(may["attendance"]) and not page["is_ended"]
         and employee.user_id != request.user.pk,
-        "missing_form": EnterMissingForm(initial={"work_date": today, "at": today,
+        "may_approve_own_entry": _may_approve_own(request.user, company_id),
+        "missing_form": EnterMissingForm(approve_now=_may_approve_own(request.user, company_id),
+                                         initial={"work_date": today, "at": today,
                                                   "at_out": today}),
         "open_dialog": open_dialog,
         "edit": edit,

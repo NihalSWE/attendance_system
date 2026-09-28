@@ -228,11 +228,13 @@ def missed_scan_enter(request, employee_pk):
         day = None
     if day is not None:
         initial = {"work_date": day, "at": day, "at_out": day}
-    form = EnterMissingForm(request.POST or None, initial=initial)
+    may_approve = scan_requests.may_approve_own(request.user, company_id)
+    form = EnterMissingForm(request.POST or None, initial=initial, approve_now=may_approve)
     if request.method == "POST" and form.is_valid():
         data = form.cleaned_data
+        approve_now = may_approve and data.get("approve_now")
         try:
-            scan_requests.enter_for(
+            (scan_requests.enter_and_approve if approve_now else scan_requests.enter_for)(
                 actor=request.user, company_id=company_id, employee_id=employee.pk,
                 work_date=data["work_date"], kind=data["kind"], at=data["at"],
                 at_out=data["at_out"], reason=data["reason"],
@@ -241,6 +243,8 @@ def missed_scan_enter(request, employee_pk):
             apply_service_errors(form, exc)
         else:
             messages.success(request, (
+                f"Saved and approved. {employee.full_name}'s attendance on "
+                f"{data['work_date']:%d %b} is updated." if approve_now else
                 f"Sent for approval. {employee.full_name}'s attendance changes once someone "
                 "who may fix it approves - not you, if you entered it."))
             return redirect(reverse("organization:employee_detail", args=[employee.pk])

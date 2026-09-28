@@ -355,3 +355,24 @@ Tokens only.
     justify-content: space-between;
     align-items: center;
 }
+
+/* The profile's actions, shown directly (Nihal, 2026-09-28): a row of
+   buttons across the bottom of the header card, wrapping as needed. */
+.profile-action-bar {
+    flex-basis: 100%;
+    padding-top: var(--s3, 12px);
+    border-top: 1px solid var(--border);
+}
+.profile-action-bar__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2, 8px);
+}
+.profile-action-bar__list form {
+    margin: 0;
+    display: inline-flex;
+}
+/* Nothing to do for this viewer: no empty row. */
+.profile-action-bar:not(:has(button, a)) {
+    display: none;
+}

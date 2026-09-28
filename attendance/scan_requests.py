@@ -122,6 +122,24 @@ def enter_for(*, actor, company_id, employee_id, work_date, kind, at, at_out, re
                    reason=reason, who="They")
 
 
+def may_approve_own(actor, company_id):
+    """The owner or company admin may approve what they entered (``decide``)."""
+    membership = require_company_membership(actor, company_id)
+    return membership.role in COMPANY_ADMINS
+
+
+@transaction.atomic
+def enter_and_approve(*, actor, company_id, employee_id, work_date, kind, at, at_out, reason):
+    """Enter it and approve it in one step - the owner or company admin only.
+    Either both happen or neither does."""
+    if not may_approve_own(actor, company_id):
+        raise PermissionDenied("Someone else who may fix attendance approves what you enter.")
+    request = enter_for(actor=actor, company_id=company_id, employee_id=employee_id,
+                        work_date=work_date, kind=kind, at=at, at_out=at_out, reason=reason)
+    return decide(actor=actor, company_id=company_id, request_id=request.pk, approve=True,
+                  note="Entered and approved in one step")
+
+
 def _times(company_id, employee, work_date, kind, at, at_out):
     """``(check-in or the one scan, check-out or None)`` the request adds."""
     if kind not in Kind.values:

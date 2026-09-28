@@ -298,3 +298,13 @@ class EndingTests(ActionCase):
             "reason": "Duplicate record", "end_device_enrollments": "on"})
         self.assertEqual(self.fresh().employment_status, "terminated")
         self.assertTrue(Employee.all_objects.filter(pk=self.employee.pk).exists())
+
+
+class ActionsShownDirectlyTests(ActionCase):
+    def test_the_actions_are_buttons_not_a_menu(self):
+        page = self.client.get(self.profile_url)
+        self.assertContains(page, 'class="profile-action-bar"')
+        self.assertNotContains(page, "data-action-menu")
+        self.assertNotContains(page, "{#")          # no template comment shown as text
+        self.assertContains(page, 'class="btn btn--ghost btn--sm" type="button" '
+                                  'data-open-dialog="leave-dialog">Apply for leave</button>')

@@ -208,3 +208,47 @@ class HrEntryPointTests(ManualCase):
         response = self.client.get(reverse("attendance:missed_scan_pick"),
                                    {"employee": str(self.far.pk)}, follow=True)
         self.assertContains(response, "Choose someone whose attendance you look after.")
+
+
+class ApproveNowTests(ManualCase):
+    """The owner or company admin enters and approves in one step (Nihal,
+    2026-09-28: an entry by them did not change the day until approved)."""
+
+    def post(self, user, **extra):
+        self.client.force_login(user)
+        return self.client.post(reverse("attendance:missed_scan_enter", args=[self.clerk.pk]), {
+            "kind": "both", "work_date": MONDAY.isoformat(),
+            "at_0": MONDAY.isoformat(), "at_1": "09:00",
+            "at_out_0": MONDAY.isoformat(), "at_out_1": "18:00",
+            "reason": "Forgot the card", **extra})
+
+    def test_the_admin_saves_it_and_the_day_is_present_at_once(self):
+        response = self.post(self.admin, approve_now="on")
+        self.assertEqual(response.status_code, 302)
+        request = MissedScanRequest.all_objects.get(employee=self.clerk)
+        self.assertEqual(request.status, MissedScanRequest.Status.APPROVED)
+        self.assertEqual(request.decided_by, self.admin)
+        self.assertEqual(self.day(self.clerk).attendance_status, "present")
+        self.client.get(reverse("organization:employee_detail", args=[self.clerk.pk]))
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertIn("Saved and approved", " ".join(messages))
+
+    def test_unticked_it_waits_as_before(self):
+        self.post(self.admin)
+        self.assertEqual(MissedScanRequest.all_objects.get(employee=self.clerk).status,
+                         MissedScanRequest.Status.PENDING)
+        self.assertNotEqual(self.day(self.clerk).attendance_status, "present")
+
+    def test_hr_is_not_offered_it_and_cannot_force_it(self):
+        self.client.force_login(self.hr)
+        page = self.client.get(reverse("attendance:missed_scan_enter", args=[self.clerk.pk]))
+        self.assertNotContains(page, "Approve it now")
+        self.post(self.hr, approve_now="on")
+        self.assertEqual(MissedScanRequest.all_objects.get(employee=self.clerk).status,
+                         MissedScanRequest.Status.PENDING)
+
+    def test_the_profile_modal_offers_it_to_the_admin(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("organization:employee_detail", args=[self.clerk.pk]))
+        self.assertContains(page, "Approve it now")
+        self.assertContains(page, "You may approve it yourself")

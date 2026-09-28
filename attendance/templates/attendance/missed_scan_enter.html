@@ -31,7 +31,7 @@
                 Missing attendance for {{ employee.full_name }}
             </h1>
             <p class="page__sub">
-                It waits for approval by someone who may fix attendance in their branch, then the day is worked out again with it.
+                {% if form.fields.approve_now %}You may approve it yourself: leave "Approve it now" ticked and the day is worked out again with it at once.{% else %}It waits for approval by someone who may fix attendance in their branch, then the day is worked out again with it.{% endif %}
             </p>
         </div>
     </div>
@@ -45,7 +45,7 @@
                 Cancel
             </a>
             <button class="btn btn--primary" type="submit">
-                Send for approval
+                {% if form.fields.approve_now %}Save{% else %}Send for approval{% endif %}
             </button>
         </div>
     </form>
