@@ -5157,8 +5157,11 @@ employees claim it; it is approved and paid. As in many Bangladeshi
 companies, no trip is needed unless the company says so.
 
 - **Salary → LFA settings** (owner/admin): on/off, name, note for
-  employees; amount: fixed, a % of monthly basic (100 = one month) or decided
-  by the approver, with an optional maximum; months of service needed;
+  employees; amount: fixed, **months of basic salary** (1, 1.5...), **months
+  of gross salary** (basic + the monthly allowances in force: fixed ones in
+  full, percentage ones on basic - as the payslip gives them) or decided by
+  the approver, with an optional maximum (Nihal, 2026-09-28: months, not a
+  percentage; migration 0011 turns a saved % into months); months of service needed;
   probation or not; once a calendar or service year, claims per year; leave
   needed or not (which types, at least how many days); proof needed or not;
   less in the first year or not; paid on the payslip or separately.

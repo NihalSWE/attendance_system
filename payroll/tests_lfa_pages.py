@@ -21,7 +21,7 @@ THIS_MONTH = timezone.localdate().replace(day=1).isoformat()
 
 SETTINGS = {
     "enabled": "1", "name": "Leave Fare Assistance", "description": "Once a year.",
-    "amount_method": "basic_percent", "fixed_amount": "", "basic_percent": "100",
+    "amount_method": "basic_months", "fixed_amount": "", "months": "1",
     "max_amount": "", "min_service_months": "12", "probation_eligible": "0",
     "cycle": "calendar_year", "claims_per_cycle": "1", "requires_leave": "0",
     "min_leave_days": "", "requires_document": "0", "prorate_first_cycle": "0",
@@ -71,6 +71,8 @@ class SettingsPageTests(PageCase):
                              [self.leave_type.pk])
         page = self.client.get(reverse("payroll:lfa_settings"))
         self.assertContains(page, 'data-show-when="amount_method:fixed"')
+        self.assertContains(page, 'data-show-when="amount_method:basic_months,gross_months"')
+        self.assertContains(page, "Months of gross salary")
 
     def test_a_missing_number_is_said_on_the_form(self):
         page = self.switch_on(amount_method="fixed", fixed_amount="")
