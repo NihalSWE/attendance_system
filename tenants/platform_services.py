@@ -91,6 +91,38 @@ def create_platform_company(*, actor, values):
     return company
 
 
+@transaction.atomic
+def create_company_with_administrator(*, actor, values):
+    """Create company (Nihal, 2026-09-28): the company, its administrator's
+    login and its status in one step - all of it, or none of it. The email is
+    the company's and the login's; the administrator is named after the
+    company until edited."""
+    require_platform_owner(actor)
+    values = dict(values)
+    password = values.pop("password", "")
+    values.pop("password_confirm", None)
+    status = values.pop("status", Company.Status.TRIAL)
+    if status not in (Company.Status.TRIAL, Company.Status.ACTIVE):
+        raise ValidationError({"status": "Choose Trial or Active."})
+    email = User.objects.normalize_email((values.get("email") or "").strip()).lower()
+    if not email:
+        raise ValidationError({"email": "Enter the email the administrator signs in with."})
+    if User.objects.filter(email__iexact=email).exists():
+        raise ValidationError({"email": "This email already belongs to an account. Use another."})
+    try:
+        validate_password(password, User(email=email, first_name=values.get("name", "")))
+    except ValidationError as exc:
+        raise ValidationError({"password": exc.messages})
+    values["email"] = email
+    company = create_platform_company(actor=actor, values=values)
+    grant_company_administrator(actor=actor, company_id=company.pk, email=email,
+                                first_name=company.name[:150], password=password)
+    if status != company.status:
+        company = change_company_status(actor=actor, company_id=company.pk, status=status,
+                                        reason="Chosen when the company was created.")
+    return company
+
+
 def ensure_feature_catalogue(*, actor):
     """Onboarding supplies the minimal catalogue without demo data or grants."""
     require_platform_owner(actor)

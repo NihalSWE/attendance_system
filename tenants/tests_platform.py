@@ -47,16 +47,16 @@ class PlatformTests(TestCase):
         self.assertEqual((data["recordsTotal"], data["draw"]), (0, 0))
 
     def test_cold_start_http_onboarding_and_admin_login(self):
-        response = self.client.post(reverse("platform:company_create"), self.values)
+        # One form: the company and its administrator's login (2026-09-28).
+        response = self.client.post(reverse("platform:company_create"), {
+            "name": "Acme Company", "email": "new-admin@example.test", "phone": "",
+            "address": "", "password": "Different-Safe-Test-782!",
+            "password_confirm": "Different-Safe-Test-782!", "status": "trial"})
         company = Company.objects.get(name="Acme Company")
         self.assertRedirects(response, self.url("company_detail", company))
         self.assertTrue(Branch.all_objects.get(company=company).is_default)
         self.assertEqual(CompanyAttendanceSettings.all_objects.filter(company=company).count(), 1)
         self.assertEqual(Feature.objects.count(), 3)
-        response = self.client.post(self.url("administrator_create", company), {
-            "account_mode": "new", "email": "new-admin@example.test", "first_name": "New", "last_name": "Admin",
-            "password": "Different-Safe-Test-782!", "password_confirm": "Different-Safe-Test-782!", "role": "company_admin"})
-        self.assertRedirects(response, self.url("company_detail", company))
         self.client.logout()
         self.assertTrue(self.client.login(email="new-admin@example.test", password="Different-Safe-Test-782!"))
         self.assertContains(self.client.get("/"), "Acme Company")
