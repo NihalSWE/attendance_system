@@ -1,8 +1,7 @@
 """Leave Fare Assistance (Nihal, 2026-09-28).
 
 Each company sets its own rules (``LfaSettings``): how much (a fixed amount,
-a share of monthly basic, or what the approver decides, with an optional
-cap), after how many months of service, whether probation counts, how often
+or months of basic or of gross salary, with an optional cap), after how many months of service, whether probation counts, how often
 (a calendar or service year, and how many claims in it), whether it needs
 leave taken with it (and which types, how many days), whether it needs proof
 attached, whether the first year is prorated, and whether it is paid on the
@@ -101,9 +100,8 @@ def _check_settings(values):
     if method in (Method.BASIC_MONTHS, Method.GROSS_MONTHS) and not values.get("months"):
         raise ValidationError({"months": "Give how many months, e.g. 1 for one month's "
                                          "salary."})
-    if method == Method.APPROVER and not values.get("max_amount"):
-        raise ValidationError({"max_amount": "When the approver decides, give the most they "
-                                             "may approve."})
+    if method not in Method.values:
+        raise ValidationError({"amount_method": "Choose how much."})
     if not values.get("claims_per_cycle"):
         raise ValidationError({"claims_per_cycle": "At least one."})
 
@@ -186,8 +184,6 @@ def amount_for(settings, employee, on, cycle):
                                                 if gross else 0)
             amount = monthly * settings.months
             how = f"{months} of {'gross' if gross else 'basic'} salary ({_money(monthly)})"
-    else:
-        how = "decided by the approver"
     if amount is not None and settings.prorate_first_cycle and employee.joining_date \
             and employee.joining_date > cycle[0]:
         months = service_months(employee, cycle[1] + datetime.timedelta(days=1))

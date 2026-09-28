@@ -5159,9 +5159,12 @@ companies, no trip is needed unless the company says so.
 - **Salary → LFA settings** (owner/admin): on/off, name, note for
   employees; amount: fixed, **months of basic salary** (1, 1.5...), **months
   of gross salary** (basic + the monthly allowances in force: fixed ones in
-  full, percentage ones on basic - as the payslip gives them) or decided by
-  the approver, with an optional maximum (Nihal, 2026-09-28: months, not a
-  percentage; migration 0011 turns a saved % into months); months of service needed;
+  full, percentage ones on basic - as the payslip gives them), with an
+  optional maximum (Nihal, 2026-09-28: months, not a percentage - migration
+  0011 turns a saved % into months; "decided by the approver" removed as the
+  same as a fixed amount - 0012 turns it into a fixed amount of its maximum.
+  For someone paid by the day or hour, or with no salary set, the approver
+  still enters the amount when approving, up to the maximum); months of service needed;
   probation or not; once a calendar or service year, claims per year; leave
   needed or not (which types, at least how many days); proof needed or not;
   less in the first year or not; paid on the payslip or separately.

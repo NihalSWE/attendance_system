@@ -73,6 +73,7 @@ class SettingsPageTests(PageCase):
         self.assertContains(page, 'data-show-when="amount_method:fixed"')
         self.assertContains(page, 'data-show-when="amount_method:basic_months,gross_months"')
         self.assertContains(page, "Months of gross salary")
+        self.assertNotContains(page, "Decided by the approver")
 
     def test_a_missing_number_is_said_on_the_form(self):
         page = self.switch_on(amount_method="fixed", fixed_amount="")

@@ -918,7 +918,9 @@ class LfaSettings(TenantOwned, ActorTracked):
         FIXED = "fixed", "A fixed amount"
         BASIC_MONTHS = "basic_months", "Months of basic salary"
         GROSS_MONTHS = "gross_months", "Months of gross salary (basic + allowances)"
-        APPROVER = "approver", "Decided by the approver"
+        # "Decided by the approver" was removed (Nihal, 2026-09-28): the same as
+        # a fixed amount. The approver still enters it for someone whose salary
+        # cannot give it (paid by the day or hour, or no salary set).
 
     class Cycle(models.TextChoices):
         CALENDAR_YEAR = "calendar_year", "Once a calendar year (January to December)"

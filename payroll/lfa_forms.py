@@ -38,8 +38,7 @@ class LfaSettingsForm(StyledFormMixin, forms.Form):
                                 help_text="1 = one month's salary; 1.5 = one and a half.")
     max_amount = forms.DecimalField(required=False, min_value=1, max_digits=14,
                                     decimal_places=2, label="At most",
-                                    help_text="The most one claim can pay. Needed when the "
-                                              "approver decides; otherwise optional.")
+                                    help_text="Optional: the most one claim can pay.")
     min_service_months = forms.IntegerField(min_value=0, max_value=600,
                                             label="Months of service needed",
                                             help_text="0 for none. Counted from the joining date.")
