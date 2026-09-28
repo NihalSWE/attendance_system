@@ -34,8 +34,8 @@ class LfaCase(TwoBranchCase):
 
     def rules(self, leave_types=(), **values):
         data = {"enabled": True, "name": "LFA", "description": "",
-                "amount_method": "basic_percent", "fixed_amount": None,
-                "basic_percent": Decimal("100"), "max_amount": None, "min_service_months": 12,
+                "amount_method": "basic_months", "fixed_amount": None,
+                "months": Decimal("1"), "max_amount": None, "min_service_months": 12,
                 "probation_eligible": False, "cycle": "calendar_year", "claims_per_cycle": 1,
                 "requires_leave": False, "min_leave_days": None, "requires_document": False,
                 "prorate_first_cycle": False, "payment": "with_salary", **values}
@@ -68,6 +68,32 @@ class EligibilityTests(LfaCase):
         again = self.check()
         self.assertFalse(again.ok)
         self.assertIn("Already claimed 1 of 1", " ".join(again.reasons))
+
+    def test_months_of_basic_or_of_gross(self):
+        from payroll import component_services
+
+        rent = component_services.create_component(
+            actor=self.admin, company_id=self.company.pk,
+            values={"code": "HR", "name": "House rent", "kind": "earning",
+                    "method": "percent_of_basic", "default_amount": None,
+                    "default_percent": Decimal("50"), "description": ""})
+        travel = component_services.create_component(
+            actor=self.admin, company_id=self.company.pk,
+            values={"code": "TR", "name": "Transport", "kind": "earning", "method": "fixed",
+                    "default_amount": Decimal("2000"), "default_percent": None,
+                    "description": ""})
+        for component, amount, percent in ((rent, None, Decimal("50")),
+                                           (travel, Decimal("2000"), None)):
+            component_services.give_component(
+                actor=self.admin, company_id=self.company.pk, employee_id=self.employee.pk,
+                values={"component": component, "amount": amount, "percent": percent,
+                        "effective_from": D(2026, 1, 1), "reason": ""})
+        self.rules(months=Decimal("1.5"))
+        found = self.check()
+        self.assertEqual(found.amount, Decimal("45000.00"))                # 1.5 x 30,000
+        self.assertIn("1.5 months of basic", found.how)
+        self.rules(amount_method="gross_months", months=Decimal("1"))
+        self.assertEqual(self.check().amount, Decimal("47000.00"))          # 30,000 + 15,000 + 2,000
 
     def test_no_trip_no_leave_needed_by_default(self):
         self.rules()
@@ -201,7 +227,7 @@ class DecisionTests(LfaCase):
         self.assertEqual((claim.status, claim.payment_reference), ("paid", "Cheque 1234"))
 
     def test_the_approver_decides_the_amount_up_to_the_cap(self):
-        self.rules(amount_method="approver", basic_percent=None, max_amount=Decimal("25000"))
+        self.rules(amount_method="approver", months=None, max_amount=Decimal("25000"))
         claim = self.claim()
         self.assertIsNone(claim.calculated_amount)
         with self.assertRaisesMessage(ValidationError, "Give the amount"):
@@ -243,7 +269,7 @@ class DecisionTests(LfaCase):
                    approve=True, pay_month=AUGUST)
         claim.refresh_from_db()
         self.assertEqual(claim.approved_amount, Decimal("30000.00"))
-        self.assertEqual(claim.settings_snapshot["amount_method"], "basic_percent")
+        self.assertEqual(claim.settings_snapshot["amount_method"], "basic_months")
 
     def test_an_employee_withdraws_their_own_pending_claim(self):
         self.rules()
@@ -263,7 +289,24 @@ class SettingsTests(LfaCase):
 
     def test_each_amount_method_needs_its_number(self):
         for method, field, said in (("fixed", "fixed_amount", "Give the amount"),
-                                    ("basic_percent", "basic_percent", "share of basic"),
+                                    ("basic_months", "months", "how many months"),
                                     ("approver", "max_amount", "most they may approve")):
             with self.subTest(method=method), self.assertRaisesMessage(ValidationError, said):
-                self.rules(amount_method=method, **{field: None, "basic_percent": None})
+                self.rules(amount_method=method, **{field: None, "months": None})
+
+
+class MigrationTests(LfaCase):
+    def test_a_saved_percentage_becomes_months(self):
+        import importlib
+
+        from django.apps import apps
+
+        from payroll.models import LfaSettings
+
+        self.rules()
+        LfaSettings.all_objects.filter(company=self.company).update(
+            amount_method="basic_percent", months=Decimal("50"))     # 50 % of basic
+        migration = importlib.import_module("payroll.migrations.0011_lfa_months")
+        migration.percent_to_months(apps, None)
+        saved = LfaSettings.all_objects.get(company=self.company)
+        self.assertEqual((saved.amount_method, saved.months), ("basic_months", Decimal("0.50")))

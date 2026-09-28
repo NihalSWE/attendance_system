@@ -916,7 +916,8 @@ class LfaSettings(TenantOwned, ActorTracked):
 
     class AmountMethod(models.TextChoices):
         FIXED = "fixed", "A fixed amount"
-        BASIC_PERCENT = "basic_percent", "A share of monthly basic salary"
+        BASIC_MONTHS = "basic_months", "Months of basic salary"
+        GROSS_MONTHS = "gross_months", "Months of gross salary (basic + allowances)"
         APPROVER = "approver", "Decided by the approver"
 
     class Cycle(models.TextChoices):
@@ -931,9 +932,10 @@ class LfaSettings(TenantOwned, ActorTracked):
     name = models.CharField(max_length=100, default="Leave Fare Assistance")
     description = models.TextField(blank=True)
     amount_method = models.CharField(max_length=16, choices=AmountMethod.choices,
-                                     default=AmountMethod.BASIC_PERCENT)
+                                     default=AmountMethod.BASIC_MONTHS)
     fixed_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
-    basic_percent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    # How many months of basic (or gross) salary: 1, 1.5, 2 (Nihal, 2026-09-28).
+    months = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True)
     max_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
     min_service_months = models.PositiveSmallIntegerField(default=12)
     probation_eligible = models.BooleanField(default=False)

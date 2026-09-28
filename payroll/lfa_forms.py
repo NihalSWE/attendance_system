@@ -33,10 +33,9 @@ class LfaSettingsForm(StyledFormMixin, forms.Form):
                                       label="How much")
     fixed_amount = forms.DecimalField(required=False, min_value=1, max_digits=14,
                                       decimal_places=2, label="Amount")
-    basic_percent = forms.DecimalField(required=False, min_value=1, max_value=1000,
-                                       max_digits=6, decimal_places=2,
-                                       label="Share of monthly basic (%)",
-                                       help_text="100 = one month's basic salary.")
+    months = forms.DecimalField(required=False, min_value=0.25, max_value=24, max_digits=4,
+                                decimal_places=2, label="How many months",
+                                help_text="1 = one month's salary; 1.5 = one and a half.")
     max_amount = forms.DecimalField(required=False, min_value=1, max_digits=14,
                                     decimal_places=2, label="At most",
                                     help_text="The most one claim can pay. Needed when the "
@@ -68,7 +67,7 @@ class LfaSettingsForm(StyledFormMixin, forms.Form):
             self.fields["leave_types"].queryset = leave_types
         # Shown only when they apply (base_template/js/dependent.js).
         shown = {"fixed_amount": "amount_method:fixed",
-                 "basic_percent": "amount_method:basic_percent",
+                 "months": "amount_method:basic_months,gross_months",
                  "leave_types": "requires_leave:1", "min_leave_days": "requires_leave:1"}
         for name, rule in shown.items():
             self.fields[name].widget.attrs["data-show-when"] = rule
@@ -76,7 +75,7 @@ class LfaSettingsForm(StyledFormMixin, forms.Form):
     @classmethod
     def initial_from(cls, settings):
         data = {name: getattr(settings, name) for name in (
-            "name", "description", "amount_method", "fixed_amount", "basic_percent",
+            "name", "description", "amount_method", "fixed_amount", "months",
             "max_amount", "min_service_months", "cycle", "claims_per_cycle", "min_leave_days",
             "payment")}
         for flag in ("enabled", "probation_eligible", "requires_leave", "requires_document",

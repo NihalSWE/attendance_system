@@ -54,7 +54,7 @@ Payment = LfaSettings.Payment
 LIVE = (Status.PENDING, Status.APPROVED, Status.PAID)
 CENT = Decimal("0.01")
 SETTINGS_FIELDS = (
-    "enabled", "name", "description", "amount_method", "fixed_amount", "basic_percent",
+    "enabled", "name", "description", "amount_method", "fixed_amount", "months",
     "max_amount", "min_service_months", "probation_eligible", "cycle", "claims_per_cycle",
     "requires_leave", "min_leave_days", "requires_document", "prorate_first_cycle", "payment",
 )
@@ -98,9 +98,9 @@ def _check_settings(values):
     method = values.get("amount_method")
     if method == Method.FIXED and not values.get("fixed_amount"):
         raise ValidationError({"fixed_amount": "Give the amount."})
-    if method == Method.BASIC_PERCENT and not values.get("basic_percent"):
-        raise ValidationError({"basic_percent": "Give the share of basic, e.g. 100 for one "
-                                                "month's basic."})
+    if method in (Method.BASIC_MONTHS, Method.GROSS_MONTHS) and not values.get("months"):
+        raise ValidationError({"months": "Give how many months, e.g. 1 for one month's "
+                                         "salary."})
     if method == Method.APPROVER and not values.get("max_amount"):
         raise ValidationError({"max_amount": "When the approver decides, give the most they "
                                              "may approve."})
@@ -174,14 +174,18 @@ def amount_for(settings, employee, on, cycle):
     amount, how = None, ""
     if settings.amount_method == Method.FIXED:
         amount, how = settings.fixed_amount, "fixed amount"
-    elif settings.amount_method == Method.BASIC_PERCENT:
+    elif settings.amount_method in (Method.BASIC_MONTHS, Method.GROSS_MONTHS):
+        gross = settings.amount_method == Method.GROSS_MONTHS
+        months = f"{settings.months.normalize():f} month{'' if settings.months == 1 else 's'}"
         if compensation is None:
             how = "no salary set - the approver decides"
         elif compensation.pay_basis != EmployeeCompensation.PayBasis.MONTHLY:
             how = "paid by the day or hour - the approver decides"
         else:
-            amount = compensation.base_rate * settings.basic_percent / 100
-            how = f"{settings.basic_percent.normalize():f}% of monthly basic"
+            monthly = compensation.base_rate + (allowances(employee, on, compensation.base_rate)
+                                                if gross else 0)
+            amount = monthly * settings.months
+            how = f"{months} of {'gross' if gross else 'basic'} salary ({_money(monthly)})"
     else:
         how = "decided by the approver"
     if amount is not None and settings.prorate_first_cycle and employee.joining_date \
@@ -193,6 +197,24 @@ def amount_for(settings, employee, on, cycle):
     if amount is not None and settings.max_amount:
         amount = min(amount, settings.max_amount)
     return (_money(amount) if amount is not None else None), currency, how
+
+
+def allowances(employee, on, basic):
+    """The monthly allowances in force for them on a day - a fixed one in
+    full, a percentage one of ``basic`` - as the payslip gives them."""
+    from payroll.models import EmployeeSalaryComponent, SalaryComponent
+
+    total = Decimal("0")
+    for row in (EmployeeSalaryComponent.objects.select_related("component")
+                .filter(employee=employee, status=EmployeeSalaryComponent.Status.ACTIVE,
+                        component__status="active",
+                        component__kind=SalaryComponent.Kind.EARNING, effective_from__lte=on)
+                .filter(Q(effective_to__isnull=True) | Q(effective_to__gte=on))):
+        if row.component.method == SalaryComponent.Method.PERCENT_OF_BASIC:
+            total += basic * (row.percent or 0) / 100
+        else:
+            total += row.amount or 0
+    return total
 
 
 @dataclass
