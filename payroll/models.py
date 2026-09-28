@@ -740,6 +740,9 @@ class PayrollAdjustment(TenantOwned, ActorTracked):
     adjustment_type = models.CharField(max_length=16, choices=AdjustmentType.choices)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     reason = models.CharField(max_length=255)
+    # The payslip line's code when it is not an ordinary bonus or deduction:
+    # "LFA" for an approved Leave Fare Assistance claim (2026-09-28).
+    code = models.CharField(max_length=32, blank=True, default="")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
 
     class Meta:
@@ -896,3 +899,108 @@ class EmployeeSalaryComponent(TenantOwned, ActorTracked):
             and self.effective_from <= day
             and (self.effective_to is None or day <= self.effective_to)
         )
+
+
+
+# --------------------------------------------------------------------------
+# Leave Fare Assistance (2026-09-28): the company sets its own rules; an
+# employee claims it (or HR for them); an approver decides it; it is paid on a
+# payslip or separately. docs/PHASE_STATUS.md "LFA".
+# --------------------------------------------------------------------------
+
+
+class LfaSettings(TenantOwned, ActorTracked):
+    """One company's LFA rules. A claim keeps a copy of the rules it was made
+    under (``LfaClaim.settings_snapshot``), so changing them later never
+    changes a claim already made."""
+
+    class AmountMethod(models.TextChoices):
+        FIXED = "fixed", "A fixed amount"
+        BASIC_PERCENT = "basic_percent", "A share of monthly basic salary"
+        APPROVER = "approver", "Decided by the approver"
+
+    class Cycle(models.TextChoices):
+        CALENDAR_YEAR = "calendar_year", "Once a calendar year (January to December)"
+        SERVICE_YEAR = "service_year", "Once a service year (from their joining date)"
+
+    class Payment(models.TextChoices):
+        WITH_SALARY = "with_salary", "On the monthly payslip"
+        SEPARATELY = "separately", "Paid separately"
+
+    enabled = models.BooleanField(default=False)
+    name = models.CharField(max_length=100, default="Leave Fare Assistance")
+    description = models.TextField(blank=True)
+    amount_method = models.CharField(max_length=16, choices=AmountMethod.choices,
+                                     default=AmountMethod.BASIC_PERCENT)
+    fixed_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    basic_percent = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    max_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    min_service_months = models.PositiveSmallIntegerField(default=12)
+    probation_eligible = models.BooleanField(default=False)
+    cycle = models.CharField(max_length=16, choices=Cycle.choices, default=Cycle.CALENDAR_YEAR)
+    claims_per_cycle = models.PositiveSmallIntegerField(default=1)
+    requires_leave = models.BooleanField(default=False)
+    leave_types = models.ManyToManyField("leaves.LeaveType", blank=True, related_name="+")
+    min_leave_days = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    requires_document = models.BooleanField(default=False)
+    prorate_first_cycle = models.BooleanField(default=False)
+    payment = models.CharField(max_length=16, choices=Payment.choices,
+                               default=Payment.WITH_SALARY)
+
+    class Meta:
+        db_table = "payroll_lfa_settings"
+        constraints = [
+            models.UniqueConstraint(fields=["company"], name="uniq_lfa_settings_per_company"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({'on' if self.enabled else 'off'})"
+
+
+class LfaClaim(TenantOwned, ActorTracked):
+    """One employee's claim for LFA in one cycle."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Waiting for approval"
+        APPROVED = "approved", "Approved"
+        PAID = "paid", "Paid"
+        REJECTED = "rejected", "Rejected"
+        WITHDRAWN = "withdrawn", "Withdrawn"
+        CANCELLED = "cancelled", "Cancelled"
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.PROTECT,
+                                 related_name="lfa_claims")
+    cycle_start = models.DateField()
+    cycle_end = models.DateField()
+    leave_request = models.ForeignKey("leaves.LeaveRequest", null=True, blank=True,
+                                      on_delete=models.PROTECT, related_name="lfa_claims")
+    note = models.TextField(blank=True)
+    document = models.FileField(upload_to="lfa_documents/", null=True, blank=True)
+    document_name = models.CharField(max_length=255, blank=True)
+    calculated_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True,
+                                            blank=True)
+    approved_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True,
+                                          blank=True)
+    currency = models.CharField(max_length=3, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    payment = models.CharField(max_length=16, choices=LfaSettings.Payment.choices)
+    payroll_adjustment = models.OneToOneField(PayrollAdjustment, null=True, blank=True,
+                                              on_delete=models.PROTECT,
+                                              related_name="lfa_claim")
+    paid_on = models.DateField(null=True, blank=True)
+    payment_reference = models.CharField(max_length=100, blank=True)
+    submitted_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name="+")
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name="+")
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=255, blank=True)
+    settings_snapshot = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "payroll_lfa_claim"
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=["company", "employee", "cycle_start"])]
+
+    def __str__(self):
+        return f"LFA {self.employee_id} {self.cycle_start:%Y-%m-%d} {self.status}"

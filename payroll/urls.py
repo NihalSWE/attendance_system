@@ -1,6 +1,6 @@
 from django.urls import path
 
-from payroll import views
+from payroll import lfa_views, views
 
 app_name = "payroll"
 
@@ -29,4 +29,12 @@ urlpatterns = [
     path("overtime/", views.overtime_list, name="overtime_list"),
     path("overtime/<int:pk>/", views.overtime_decide, name="overtime_decide"),
     path("overtime/<int:pk>/undo/", views.overtime_undo, name="overtime_undo"),
+    # Leave Fare Assistance (2026-09-28).
+    path("lfa/settings/", lfa_views.lfa_settings, name="lfa_settings"),
+    path("lfa/", lfa_views.lfa_claims, name="lfa_claims"),
+    path("lfa/new/", lfa_views.lfa_claim_new, name="lfa_claim_new"),
+    path("lfa/<int:pk>/", lfa_views.lfa_claim, name="lfa_claim"),
+    path("lfa/<int:pk>/cancel/", lfa_views.lfa_cancel, name="lfa_cancel"),
+    path("lfa/<int:pk>/paid/", lfa_views.lfa_paid, name="lfa_paid"),
+    path("lfa/<int:pk>/document/", lfa_views.lfa_document, name="lfa_document"),
 ]

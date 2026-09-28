@@ -5,6 +5,7 @@ from attendance import scan_request_views
 from base_template import me_views
 from leaves import request_views
 from organization import employee_self_views
+from payroll import lfa_views
 
 app_name = "me"
 
@@ -38,6 +39,9 @@ urlpatterns = [
     path("leave-inbox/<int:pk>/", request_views.leave_decide, name="leave_decide"),
     path("branch-attendance/", request_views.branch_attendance, name="branch_attendance"),
     path("payslips/", me_views.my_payslips, name="payslips"),
+    path("lfa/", lfa_views.my_lfa, name="lfa"),
+    path("lfa/<int:pk>/withdraw/", lfa_views.my_lfa_withdraw, name="lfa_withdraw"),
+    path("lfa/<int:pk>/document/", lfa_views.lfa_document, name="lfa_document"),
     path("payslips/<int:pk>/", me_views.my_payslip, name="payslip"),
     path("password/", login_required(me_views.MyPasswordView.as_view()), name="password"),
 ]

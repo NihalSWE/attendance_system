@@ -1,0 +1,64 @@
+{% extends "base_template/base.html" %}
+{% load money %}
+{% block title %}
+    Enter an LFA claim · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'payroll:lfa_claims' %}">LFA claims</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Enter a claim
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Enter an LFA claim</h1>
+            <p class="page__sub">For someone who cannot claim it themselves, e.g. without a login.</p>
+        </div>
+    </div>
+    <div class="form-page stack">
+        <form method="get" class="card">
+            <div class="card__body row">
+                <div class="field" style="flex:1">
+                    <label class="field__label" for="choose-employee">Employee</label>
+                    <select class="input select js-select2" id="choose-employee" name="employee" onchange="this.form.submit()">
+                        <option value="">Choose the employee</option>
+                        {% for person in form.fields.employee.queryset %}
+                            <option value="{{ person.pk }}"{% if employee and person.pk == employee.pk %} selected{% endif %}>{{ person.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <noscript><button class="btn btn--ghost" type="submit">Check</button></noscript>
+            </div>
+        </form>
+        {% if employee %}
+            <div class="card">
+                <div class="card__body stack">
+                    {% if found.ok %}
+                        <div class="alert alert--success">
+                            {{ employee.full_name }} can claim it{% if found.amount %}: {{ found.amount|money }} {{ found.currency }}{% endif %} <span class="t-faint">({{ found.how }})</span> for {{ found.cycle.0|date:"j M Y" }} – {{ found.cycle.1|date:"j M Y" }}.
+                        </div>
+                        <form method="post" class="stack" enctype="multipart/form-data" novalidate>
+                            {% csrf_token %}
+                            <input type="hidden" name="employee" value="{{ employee.pk }}">
+                            {% if form.non_field_errors %}<div class="alert alert--danger">{{ form.non_field_errors }}</div>{% endif %}
+                            {% for field in form.visible_fields %}
+                                {% if field.name != "employee" %}{% include "leaves/includes/field.html" %}{% endif %}
+                            {% endfor %}
+                            <div class="row">
+                                <button class="btn btn--primary" type="submit">Enter claim</button>
+                                <a class="btn btn--ghost" href="{% url 'payroll:lfa_claims' %}">Cancel</a>
+                            </div>
+                        </form>
+                    {% else %}
+                        <div class="alert alert--warning">
+                            {{ employee.full_name }} cannot claim it now:
+                            <ul>{% for reason in found.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

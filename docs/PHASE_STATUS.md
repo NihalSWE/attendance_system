@@ -5149,3 +5149,33 @@ Salary, Reports) - and could not edit their own details.
 Tests: `organization/tests_my_profile.py` (10), head-by-default tests in
 `access_control/tests_department_head.py`. Browser-checked as Dia on a
 temporary :8001.
+
+### Leave Fare Assistance (LFA) — 2026-09-28
+
+Nihal: each company sets its own LFA rules in a form and switches it on;
+employees claim it; it is approved and paid. As in many Bangladeshi
+companies, no trip is needed unless the company says so.
+
+- **Salary → LFA settings** (owner/admin): on/off, name, note for
+  employees; amount: fixed, a % of monthly basic (100 = one month) or decided
+  by the approver, with an optional maximum; months of service needed;
+  probation or not; once a calendar or service year, claims per year; leave
+  needed or not (which types, at least how many days); proof needed or not;
+  less in the first year or not; paid on the payslip or separately.
+- **My LFA** (employee sidebar, only while LFA is on): whether they can claim
+  it now and how much, or why not; Claim LFA (modal); their claims; withdraw
+  while waiting.
+- **Salary → LFA claims**: decided by the owner, admin, or whoever prepares
+  salary in that branch - never their own. Approve with the amount and the
+  salary month, or reject with a reason; enter a claim for someone without a
+  login; cancel an approved claim not yet paid; mark paid (paid separately).
+- **Payment**: on the payslip as its own **LFA** line in the chosen month (the
+  first not finalised from it), through `PayrollAdjustment` (`code="LFA"`);
+  **Paid** once that month is finalised. It cannot be removed as a bonus -
+  cancelling the claim takes it off. Separately: marked paid with date and
+  reference.
+- A claim keeps the rules it was made under (`settings_snapshot`); proof is
+  stored privately.
+
+**Server: `migrate`** (payroll 0010). Tests: `payroll/tests_lfa.py` (20),
+`payroll/tests_lfa_pages.py` (11).

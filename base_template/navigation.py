@@ -69,6 +69,11 @@ COMPANY_MENUS = (
              fragment="penalty-rules", manage=True),
         item("Overtime", "payroll:overtime_list", "payroll:overtime_decide", "payroll:overtime_undo"),
         item("Overtime settings", "payroll:salary_settings", fragment="overtime-rules", manage=True),
+        # Leave Fare Assistance (2026-09-28): claims for whoever prepares salary;
+        # the rules for the owner or admin.
+        item("LFA claims", "payroll:lfa_claims", "payroll:lfa_claim", "payroll:lfa_claim_new",
+             salary=True),
+        item("LFA settings", "payroll:lfa_settings", manage=True),
     )),
     ("shifts", "Shifts", (
         item("Overview", "scheduling:schedule_overview"),

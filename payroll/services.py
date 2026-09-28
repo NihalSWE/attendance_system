@@ -420,7 +420,8 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
         adjustment_lines.append((len(lines), adjustment.pk))
         source = getattr(adjustment, "source_payroll_period", None)
         lines.append((
-            kind, "CORRECTION" if source else ("BONUS" if kind == "earning" else "DEDUCTION"),
+            kind, getattr(adjustment, "code", "") or (
+                "CORRECTION" if source else ("BONUS" if kind == "earning" else "DEDUCTION")),
             f"{adjustment.reason} (correction for {source.name})" if source
             else adjustment.reason,
             ONE, adjustment.amount, money(adjustment.amount),
@@ -1371,6 +1372,10 @@ def remove_adjustment(*, actor, company_id, adjustment_id):
         ).filter(pk=adjustment_id, status=PayrollAdjustment.Status.ACTIVE).first()
         if adjustment is None:
             raise PermissionDenied("Line not found in this company.")
+        if adjustment.code == "LFA":
+            # It belongs to an approved LFA claim: cancelling the claim takes
+            # it off, so the claim and the payslip never disagree.
+            raise ValidationError("This is an LFA payment. Cancel the LFA claim to take it off.")
         period = adjustment.target_payroll_period
         # The payslip it sits on decides the branch.
         record = PayrollRecord.objects.select_related("employee_assignment_at_period_end").filter(
