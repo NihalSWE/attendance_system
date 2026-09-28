@@ -14,9 +14,9 @@
 {% endblock %}
 {% block page %}
     {# My profile (Nihal, 2026-09-27): their own details; each change in a modal. #}
-    <div class="card profile-head" data-profile{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
-        <div class="profile-head__who">
-            <div class="profile-photo">
+    <section class="profile-hero" data-profile{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div class="profile-hero__top">
+            <div class="profile-photo profile-photo--hero">
                 {% if employee.photo %}
                     <img src="{% url 'me:photo' %}?v={{ employee.updated_at|date:'U' }}" alt="{{ employee.full_name }}">
                 {% else %}
@@ -26,21 +26,22 @@
                     {% if employee.photo %}Change{% else %}Add photo{% endif %}
                 </button>
             </div>
-            <div>
-                <h1 class="page__title">{{ employee.full_name }}</h1>
-                <p class="page__sub">
-                    {% if placement %}
-                        {{ placement.employee_code }} · {{ placement.designation.name }} · {{ placement.department.name }} · {{ placement.branch.name }}
-                    {% else %}
-                        No current placement
-                    {% endif %}
+            <div class="profile-hero__who">
+                {% if placement %}<div class="profile-hero__eyebrow">{{ placement.designation.name }}</div>{% endif %}
+                <h1 class="profile-hero__name">{{ employee.full_name }}</h1>
+                <p class="profile-hero__meta">
+                    {% if placement %}{{ placement.department.name }} · {{ placement.branch.name }}{% else %}No current placement{% endif %}
                 </p>
+                <div class="profile-hero__chips">
+                    {% if placement %}<span class="hero-chip">ID {{ placement.employee_code }}</span>{% endif %}
+                    {% if employee.joining_date %}<span class="hero-chip hero-chip--muted">Joined {{ employee.joining_date|date:"j M Y" }}</span>{% endif %}
+                </div>
+            </div>
+            <div class="profile-hero__links">
+                <button class="hero-btn" type="button" data-open-dialog="details-dialog">Edit my details</button>
             </div>
         </div>
-        <div class="profile-actions">
-            <button class="btn btn--primary" type="button" data-open-dialog="details-dialog">Edit my details</button>
-        </div>
-    </div>
+    </section>
 
     <div class="stack">
         <div class="card">

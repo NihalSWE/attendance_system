@@ -301,10 +301,28 @@ class EndingTests(ActionCase):
 
 
 class ActionsShownDirectlyTests(ActionCase):
-    def test_the_actions_are_buttons_not_a_menu(self):
+    """Shown directly, grouped in the profile's side rail (2026-09-28)."""
+
+    def test_the_actions_are_grouped_buttons_not_a_menu(self):
         page = self.client.get(self.profile_url)
-        self.assertContains(page, 'class="profile-action-bar"')
+        self.assertContains(page, 'class="profile-hero"')
+        self.assertContains(page, 'class="card rail-card profile-action-bar"')
         self.assertNotContains(page, "data-action-menu")
         self.assertNotContains(page, "{#")          # no template comment shown as text
-        self.assertContains(page, 'class="btn btn--ghost btn--sm" type="button" '
-                                  'data-open-dialog="leave-dialog">Apply for leave</button>')
+        for group in ("Leave &amp; attendance", "Roles &amp; access", "Employment"):
+            self.assertContains(page, f'<div class="rail-group__label">{group}</div>')
+        self.assertContains(page, 'data-open-dialog="leave-dialog">')
+        self.assertContains(page, "<span>Apply for leave</span>")
+        self.assertContains(page, 'class="rail-action rail-action--danger" type="button" '
+                                  'data-open-dialog="delete-dialog"')
+
+    def test_this_months_numbers_in_the_hero(self):
+        page = self.client.get(self.profile_url)
+        for label in ("Present", "Absent", "Leave", "Waiting", "With us"):
+            self.assertContains(page, f"<dt>{label}</dt>")
+
+    def test_a_view_only_viewer_gets_no_action_groups(self):
+        self.grant("employees.view", self.branch)
+        self.client.force_login(self.clerk_user)
+        page = self.client.get(self.profile_url)
+        self.assertNotContains(page, "rail-group__label")

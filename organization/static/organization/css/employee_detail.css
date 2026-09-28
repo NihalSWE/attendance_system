@@ -118,7 +118,460 @@ Tokens only.
     }
 }
 
-/* --- The profile (2026-09-26): header, tabs, day strip ------------------ */
+/* ============================================================================
+The employee profile (redesigned 2026-09-28): an ink hero, then the sections
+on the left and a rail of grouped actions and a summary on the right.
+Tokens only - status colours come from the --*-soft / --*-ink pairs.
+========================================================================= */
+
+.btn--danger-text {
+    color: var(--danger-ink);
+}
+.modal--wide {
+    max-width: min(760px, calc(100vw - 32px));
+}
+.card__head .row {
+    flex-wrap: wrap;
+    gap: var(--s2);
+}
+.i {
+    width: 16px;
+    height: 16px;
+    flex: none;
+}
+
+/* --- Photo ------------------------------------------------------------------ */
+.profile-photo {
+    position: relative;
+    flex: none;
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    display: grid;
+    place-items: center;
+}
+.profile-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.profile-photo__initials {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+.profile-photo__change {
+    position: absolute;
+    inset: auto 0 0 0;
+    border: 0;
+    padding: 5px 0 7px;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--on-accent);
+    background: var(--accent);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity var(--tr);
+}
+.profile-photo:hover .profile-photo__change,
+.profile-photo__change:focus-visible {
+    opacity: .92;
+}
+.profile-photo--hero {
+    width: 112px;
+    height: 112px;
+    box-shadow: 0 0 0 4px var(--accent-hover);
+}
+
+/* --- Hero ------------------------------------------------------------------- */
+.profile-hero {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-ink);
+    padding: var(--s6);
+    margin-bottom: var(--s5);
+}
+.profile-hero__top {
+    display: flex;
+    gap: var(--s5);
+    align-items: center;
+    flex-wrap: wrap;
+}
+.profile-hero__who {
+    flex: 1 1 320px;
+    min-width: 0;
+}
+.profile-hero__eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--on-accent-soft);
+}
+.profile-hero__name {
+    margin: 2px 0 0;
+    font-size: 28px;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    color: var(--on-accent);
+    overflow-wrap: anywhere;
+}
+.profile-hero__meta {
+    margin: 4px 0 0;
+    color: var(--on-accent-soft);
+    font-size: 14px;
+}
+.profile-hero__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    margin-top: var(--s3);
+}
+.hero-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--on-accent);
+    background: var(--accent-hover);
+    border: 1px solid var(--accent-hover);
+    white-space: nowrap;
+}
+.hero-chip--success {
+    color: var(--success-ink);
+    background: var(--success-soft);
+    border-color: var(--success-soft);
+}
+.hero-chip--warning {
+    color: var(--warning-ink);
+    background: var(--warning-soft);
+    border-color: var(--warning-soft);
+}
+.hero-chip--muted {
+    color: var(--on-accent-soft);
+    background: transparent;
+    border-color: var(--on-accent-dim);
+}
+.profile-hero__contact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2) var(--s5);
+    margin-top: var(--s3);
+    font-size: 13px;
+    color: var(--on-accent-soft);
+}
+.profile-hero__contact span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+.profile-hero__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    align-self: flex-start;
+}
+.hero-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: var(--r);
+    border: 1px solid var(--on-accent-dim);
+    color: var(--on-accent);
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background var(--tr), border-color var(--tr);
+}
+.hero-btn:hover,
+.hero-btn:focus-visible {
+    background: var(--accent-hover);
+    border-color: var(--on-accent-soft);
+    color: var(--on-accent);
+}
+.profile-hero__stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.6fr);
+    gap: 1px;
+    margin: var(--s6) 0 0;
+    border-radius: var(--r);
+    background: var(--accent-hover);
+    border: 1px solid var(--accent-hover);
+    position: relative;
+}
+.hero-stat {
+    padding: var(--s3) var(--s4);
+    background: var(--accent);
+    min-width: 0;
+}
+.hero-stat:first-of-type {
+    border-radius: var(--r) 0 0 var(--r);
+}
+.hero-stat:last-of-type {
+    border-radius: 0 var(--r) var(--r) 0;
+}
+.hero-stat dt {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--on-accent-dim);
+}
+.hero-stat dd {
+    margin: 2px 0 0;
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--on-accent);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.hero-stat--wide dd {
+    font-size: 15px;
+    padding-top: 5px;
+}
+.hero-stat--alert dd {
+    color: var(--warning-soft);
+}
+.profile-hero__note {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    margin: 0;
+    font-size: 11px;
+    color: var(--on-accent-dim);
+}
+
+/* --- Layout: sections left, rail right --------------------------------------- */
+.profile-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-areas: "main rail";
+    gap: var(--s5);
+    align-items: start;
+}
+.profile-main {
+    grid-area: main;
+    min-width: 0;
+}
+/* Scrolls with the page: every action stays in plain view, none hidden in an
+   inner scroll on a short screen. */
+.profile-rail {
+    grid-area: rail;
+    display: flex;
+    flex-direction: column;
+    gap: var(--s4);
+}
+.rail-card {
+    margin: 0;
+    padding: var(--s3);
+}
+.rail-card__head {
+    padding: var(--s1) var(--s2) var(--s2);
+    font-size: 13px;
+    font-weight: 700;
+}
+.rail-group + .rail-group {
+    margin-top: var(--s2);
+    padding-top: var(--s2);
+    border-top: 1px solid var(--border);
+}
+.rail-group__label {
+    padding: var(--s1) var(--s2);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.rail-group form {
+    margin: 0;
+}
+.rail-action {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    width: 100%;
+    padding: 8px var(--s2);
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--text);
+    font: inherit;
+    font-size: 13.5px;
+    text-align: left;
+    cursor: pointer;
+    transition: background var(--tr);
+}
+.rail-action .i {
+    color: var(--muted);
+}
+.rail-action:hover,
+.rail-action:focus-visible {
+    background: var(--surface-sunken);
+    outline: none;
+}
+.rail-action:hover .i {
+    color: var(--text);
+}
+.rail-action--danger,
+.rail-action--danger .i {
+    color: var(--danger-ink);
+}
+.rail-action--danger:hover {
+    background: var(--danger-soft);
+}
+/* Nothing to do for this viewer: no empty card. */
+.profile-action-bar:not(:has(button)) {
+    display: none;
+}
+.glance {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+}
+.glance > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--s2);
+    border-top: 1px solid var(--border);
+}
+.glance > div:first-child {
+    border-top: 0;
+}
+.glance dt {
+    font-size: 11.5px;
+    color: var(--muted);
+}
+.glance dd {
+    margin: 0;
+    font-size: 13.5px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+/* --- Tabs: a pill bar ---------------------------------------------------------- */
+.profile-tabs {
+    display: flex;
+    gap: var(--s1);
+    padding: var(--s1);
+    margin-bottom: var(--s4);
+    overflow-x: auto;
+    overflow-y: hidden;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    scrollbar-width: none;
+}
+.profile-tabs::-webkit-scrollbar {
+    display: none;
+}
+.profile-tabs__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px var(--s3);
+    border-radius: var(--r);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--muted);
+    text-decoration: none;
+    transition: background var(--tr), color var(--tr);
+}
+.profile-tabs__tab:hover {
+    color: var(--text);
+}
+.profile-tabs__tab.is-active {
+    color: var(--text);
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+
+/* --- Sections ------------------------------------------------------------------ */
+/* Without the script every section shows, spaced apart. */
+.profile-panel + .profile-panel {
+    margin-top: var(--s5);
+}
+.profile-tabs-ready .profile-panel + .profile-panel {
+    margin-top: 0;
+}
+.profile-panel > .card + .card,
+.profile-panel > .card + .emp-pair,
+.profile-panel > .emp-pair + .card {
+    margin-top: var(--s4);
+}
+.profile-panel .card__head h2 {
+    font-size: 15px;
+}
+.profile-facts {
+    grid-template-columns: minmax(140px, max-content) 1fr;
+    row-gap: var(--s3);
+}
+.profile-facts dt {
+    font-size: 12.5px;
+}
+.profile-facts dd {
+    font-weight: 500;
+}
+@media (min-width: 900px) {
+    .profile-facts--two {
+        grid-template-columns: minmax(140px, max-content) 1fr minmax(140px, max-content) 1fr;
+        column-gap: var(--s6);
+    }
+}
+.report-summary__item--alert .report-summary__value {
+    color: var(--danger-ink);
+}
+.balance-head {
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* The month, day by day. */
+.day-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+    gap: 4px;
+    margin-bottom: var(--s3);
+}
+.day-strip__day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 0;
+    border-radius: var(--r-sm);
+    background: var(--surface-sunken);
+    font-size: 11px;
+}
+.day-strip__num {
+    color: var(--muted);
+}
+.day-strip__code {
+    font-weight: 700;
+    font-size: 12px;
+}
+.day-strip__day--p { background: var(--success-soft); color: var(--success-ink); }
+.day-strip__day--lt,
+.day-strip__day--hd,
+.day-strip__day--in { background: var(--warning-soft); color: var(--warning-ink); }
+.day-strip__day--a { background: var(--danger-soft); color: var(--danger-ink); }
+.day-strip__day--lv { background: var(--info-soft); color: var(--info-ink); }
+
+/* My profile keeps the plain header card. */
 .profile-head {
     display: flex;
     flex-wrap: wrap;
@@ -134,245 +587,54 @@ Tokens only.
     align-items: center;
     min-width: 0;
 }
-.profile-head__badges {
-    flex-wrap: wrap;
-    gap: var(--s2);
-    margin-top: var(--s2);
-}
-.profile-photo {
-    position: relative;
-    flex: none;
-    width: 96px;
-    height: 96px;
-    border-radius: 50%;
-    overflow: hidden;
-    background: var(--surface-2, #eef1f5);
-    display: grid;
-    place-items: center;
-}
-.profile-photo img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-}
-.profile-photo__initials {
-    font-size: 32px;
-    font-weight: 700;
-    opacity: .7;
-}
-.profile-photo__change {
-    position: absolute;
-    inset: auto 0 0 0;
-    border: 0;
-    padding: 4px 0;
-    font-size: 11px;
-    color: #fff;
-    background: rgba(17, 17, 19, .55);
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity .15s;
-}
-.profile-photo:hover .profile-photo__change,
-.profile-photo__change:focus-visible {
-    opacity: 1;
-}
 .profile-actions {
     display: flex;
     flex-wrap: wrap;
     gap: var(--s2);
     align-items: center;
 }
-.profile-actions form {
-    margin: 0;
-}
-.btn--danger-text {
-    color: var(--danger, #b42318);
-}
-.profile-tabs {
-    display: flex;
-    gap: var(--s1);
-    overflow-x: auto;
-    overflow-y: hidden;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: var(--s4);
-    scrollbar-width: none;
-}
-.profile-tabs__tab {
-    padding: var(--s2) var(--s3);
-    font-size: 13.5px;
-    font-weight: 600;
-    white-space: nowrap;
-    color: inherit;
-    opacity: .65;
-    text-decoration: none;
-    border-bottom: 2px solid transparent;
-}
-.profile-tabs__tab:hover {
-    opacity: 1;
-}
-.profile-tabs__tab.is-active {
-    opacity: 1;
-    border-bottom-color: currentColor;
-}
-/* Without the script every section shows, spaced apart. */
-.profile-panel + .profile-panel {
-    margin-top: var(--s5);
-}
-.profile-tabs-ready .profile-panel + .profile-panel {
-    margin-top: 0;
-}
-.profile-panel > .card + .card,
-.profile-panel > .card + .emp-pair,
-.profile-panel > .emp-pair + .card {
-    margin-top: var(--s4);
-}
-.profile-facts {
-    grid-template-columns: minmax(140px, max-content) 1fr;
-}
-.report-summary__item--alert .report-summary__value {
-    color: var(--danger, #b42318);
-}
-.day-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
-    gap: 4px;
-    margin-bottom: var(--s3);
-}
-.day-strip__day {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 4px 0;
-    border-radius: 6px;
-    background: var(--surface-2, #f1f3f6);
-    font-size: 11px;
-}
-.day-strip__num {
-    opacity: .6;
-}
-.day-strip__code {
-    font-weight: 700;
-    font-size: 12px;
-}
-.day-strip__day--p { background: #e7f5ec; }
-.day-strip__day--lt { background: #fff4de; }
-.day-strip__day--hd { background: #fff4de; }
-.day-strip__day--a { background: #fde8e7; }
-.day-strip__day--lv { background: #e6f0fd; }
-.day-strip__day--in { background: #fff4de; }
-.modal--wide {
-    max-width: min(760px, calc(100vw - 32px));
-}
 
-/* General information (2026-09-27): two label/value columns side by side on a
-   wide screen, one under the other on a phone. */
-@media (min-width: 900px) {
-    .profile-facts--two {
-        grid-template-columns: minmax(140px, max-content) 1fr minmax(140px, max-content) 1fr;
-        column-gap: var(--s5, 24px);
+/* --- Narrower screens ------------------------------------------------------------ */
+@media (max-width: 1180px) {
+    .profile-layout {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "rail" "main";
+    }
+    .profile-rail {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        align-items: start;
     }
 }
-.card__head .row {
-    flex-wrap: wrap;
-    gap: var(--s2, 8px);
+@media (max-width: 720px) {
+    .profile-hero {
+        padding: var(--s4);
+    }
+    .profile-hero__name {
+        font-size: 22px;
+    }
+    .profile-photo--hero {
+        width: 84px;
+        height: 84px;
+    }
+    .profile-hero__stats {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .hero-stat--wide {
+        grid-column: 1 / -1;
+    }
+    .hero-stat:first-of-type,
+    .hero-stat:last-of-type {
+        border-radius: 0;
+    }
+    .profile-hero__note {
+        display: none;
+    }
 }
-
-/* The profile's Actions menu (2026-09-27): a list under the button. */
-.action-menu {
-    position: relative;
-}
-.action-menu > summary {
-    list-style: none;
-    cursor: pointer;
-}
-.action-menu > summary::-webkit-details-marker {
-    display: none;
-}
-.action-menu > summary::after {
-    content: "";
-    display: inline-block;
-    margin-left: 8px;
-    border: 4px solid transparent;
-    border-top-color: currentColor;
-    transform: translateY(2px);
-}
-.action-menu__list {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 6px);
-    z-index: 50;
-    min-width: 240px;
-    max-height: min(70vh, 520px);
-    overflow-y: auto;
-    padding: 6px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--r-lg, 12px);
-    box-shadow: var(--shadow-lg);
-}
-.action-menu__list form {
-    margin: 0;
-}
-.action-menu__item {
-    display: block;
-    width: 100%;
-    padding: 9px 12px;
-    border: 0;
-    border-radius: var(--r-sm);
+button.hero-btn {
     background: none;
-    color: var(--text);
     font: inherit;
-    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
-}
-.action-menu__item:hover,
-.action-menu__item:focus-visible {
-    background: var(--surface-sunken);
-    outline: none;
-}
-.action-menu__item--danger {
-    color: var(--danger, #b42318);
-}
-/* The header card clips what overflows it; the menu must show past it. */
-.profile-head {
-    overflow: visible;
-}
-/* On a phone the list sits along the bottom of the screen, full width. */
-@media (max-width: 640px) {
-    .action-menu__list {
-        position: fixed;
-        top: auto;
-        left: 16px;
-        right: 16px;
-        bottom: 16px;
-        min-width: 0;
-        max-height: 70vh;
-    }
-}
-
-/* The Leave tab's balance heading (Phase E). */
-.balance-head {
-    justify-content: space-between;
-    align-items: center;
-}
-
-/* The profile's actions, shown directly (Nihal, 2026-09-28): a row of
-   buttons across the bottom of the header card, wrapping as needed. */
-.profile-action-bar {
-    flex-basis: 100%;
-    padding-top: var(--s3, 12px);
-    border-top: 1px solid var(--border);
-}
-.profile-action-bar__list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--s2, 8px);
-}
-.profile-action-bar__list form {
-    margin: 0;
-    display: inline-flex;
-}
-/* Nothing to do for this viewer: no empty row. */
-.profile-action-bar:not(:has(button, a)) {
-    display: none;
 }

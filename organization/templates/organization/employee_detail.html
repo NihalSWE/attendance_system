@@ -37,10 +37,10 @@
         {{ employee.full_name }}
     </div>
 
-    {# The profile: who they are, then what can be done for them. #}
-    <div class="card profile-head" data-profile{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
-        <div class="profile-head__who">
-            <div class="profile-photo">
+    {# The profile (redesigned 2026-09-28): who they are and this month on top; sections left, actions right. #}
+    <section class="profile-hero" data-profile{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div class="profile-hero__top">
+            <div class="profile-photo profile-photo--hero">
                 {% if employee.photo %}
                     <img src="{% url 'organization:employee_photo' employee.pk %}?v={{ employee.updated_at|date:'U' }}" alt="{{ employee.full_name }}">
                 {% else %}
@@ -52,67 +52,77 @@
                     </button>
                 {% endif %}
             </div>
-            <div>
-                <h1 class="page__title">
-                    {{ employee.full_name }}
-                </h1>
-                <p class="page__sub">
-                    {% if assignment %}
-                        {{ assignment.employee_code }} · {{ assignment.designation.name }} · {{ assignment.department.name }} · {{ assignment.branch.name }}
-                    {% else %}
-                        No current placement
-                    {% endif %}
+            <div class="profile-hero__who">
+                {% if assignment %}<div class="profile-hero__eyebrow">{{ assignment.designation.name }}</div>{% endif %}
+                <h1 class="profile-hero__name">{{ employee.full_name }}</h1>
+                <p class="profile-hero__meta">
+                    {% if assignment %}{{ assignment.department.name }} · {{ assignment.branch.name }}{% else %}No current placement{% endif %}
                 </p>
-                <div class="row profile-head__badges">
+                <div class="profile-hero__chips">
+                    {% if assignment %}<span class="hero-chip">ID {{ assignment.employee_code }}</span>{% endif %}
                     {% if employee.employment_status == "active" %}
-                        <span class="badge badge--success">Active</span>
+                        <span class="hero-chip hero-chip--success">Active</span>
                     {% else %}
-                        <span class="badge badge--neutral">{{ employee.get_employment_status_display }}</span>
+                        <span class="hero-chip hero-chip--muted">{{ employee.get_employment_status_display }}</span>
                     {% endif %}
-                    {% if employee.hide_from_reports %}
-                        <span class="badge badge--warning">Left out of reports</span>
-                    {% endif %}
-                    {% if employee.phone %}<span class="t-muted">{{ employee.phone }}</span>{% endif %}
-                    {% if employee.work_email %}<span class="t-muted">{{ employee.work_email }}</span>{% endif %}
+                    {% if employee.hide_from_reports %}<span class="hero-chip hero-chip--warning">Left out of reports</span>{% endif %}
+                    {% if employee.no_overtime_from %}<span class="hero-chip hero-chip--warning">No overtime from {{ employee.no_overtime_from|date:"j M Y" }}</span>{% endif %}
+                    {% if login and login.status == "active" %}<span class="hero-chip">{{ edit.login_role_label|default:login.get_role_display }} login</span>{% endif %}
+                </div>
+                <div class="profile-hero__contact">
+                    {% if employee.work_email %}<span><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6l8.5 7 8.5-7"/></svg>{{ employee.work_email }}</span>{% endif %}
+                    {% if employee.phone %}<span><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.5h3.5l1.5 4.5-2.2 1.4a11 11 0 0 0 6.8 6.8l1.4-2.2 4.5 1.5V19a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 3.5 5.1 1.5 1.5 0 0 1 5 3.5z"/></svg>{{ employee.phone }}</span>{% endif %}
+                    {% if employee.joining_date %}<span><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-4.4-7-10.5A7 7 0 0 1 12 3.5a7 7 0 0 1 7 7C19 16.6 12 21 12 21z"/><circle cx="12" cy="10.5" r="2.5"/></svg>Joined {{ employee.joining_date|date:"j M Y" }}</span>{% endif %}
                 </div>
             </div>
+            <div class="profile-hero__links">
+                {% if may.edit %}
+                    {# Kept until the profile is complete and Ajay has seen it (2026-09-27). #}
+                    <a class="hero-btn" href="{% url 'organization:employee_edit' employee.pk %}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit employee page</a>
+                {% endif %}
+                {% if calendar_url %}
+                    <a class="hero-btn" href="{{ calendar_url }}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Calendar</a>
+                {% endif %}
+            </div>
         </div>
-        <div class="profile-actions">
-            {% if may.edit %}
-                {# Kept until the profile is complete and Ajay has seen it (2026-09-27). #}
-                <a class="btn btn--ghost" href="{% url 'organization:employee_edit' employee.pk %}">
-                    Edit employee page
-                </a>
-            {% endif %}
-            {% if calendar_url %}
-                <a class="btn btn--ghost" href="{{ calendar_url }}">
-                    Calendar
-                </a>
-            {% endif %}
+        <dl class="profile-hero__stats" aria-label="This month so far">
+            {% for label, count in month_rows %}
+                {% if label == "Present" or label == "Absent" or label == "Leave" %}
+                    <div class="hero-stat{% if label == 'Absent' and count %} hero-stat--alert{% endif %}">
+                        <dt>{{ label }}</dt>
+                        <dd>{{ count }}</dd>
+                    </div>
+                {% endif %}
+            {% endfor %}
+            <div class="hero-stat{% if pending.total %} hero-stat--alert{% endif %}">
+                <dt>Waiting</dt>
+                <dd>{{ pending.total|default:0 }}</dd>
+            </div>
+            <div class="hero-stat hero-stat--wide">
+                <dt>With us</dt>
+                <dd>{% if employee.joining_date %}{{ employee.joining_date|timesince }}{% else %}—{% endif %}</dd>
+            </div>
+            <p class="profile-hero__note">This month so far</p>
+        </dl>
+    </section>
+
+    {% if is_ended %}
+        <div class="alert alert--info">
+            {{ employee.get_employment_status_display }} — last working day {{ employee.leaving_date|date:"j M Y" }}. Their history is kept below.
         </div>
-        {# Ajay's twelve actions (2026-09-27), each opening a modal; shown directly (2026-09-28). #}
-        <div class="profile-action-bar" role="group" aria-label="Actions">
-                <div class="profile-action-bar__list">
-                    {% if leave_form %}
-                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="leave-dialog">Apply for leave</button>
-                    {% endif %}
-                    {% if late_form %}
-                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="late-dialog">Apply for late approval</button>
-                    {% endif %}
-                    {% if may_enter_missing %}
-                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="missing-dialog">Manual entry</button>
-                    {% endif %}
-                    {% if may.edit %}
-                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="admin-dialog">Set as admin</button>
-                    {% endif %}
-                    {% if edit.may.role %}
-                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="hr-dialog">
-                            {% if login.role == "hr" %}HR manager: change{% else %}Set as HR manager{% endif %}
-                        </button>
-                    {% endif %}
-                    {% if reports_form and not is_ended %}
-                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="reports-dialog">Set as line manager</button>
-                    {% endif %}
+    {% endif %}
+
+    <div class="profile-layout">
+    <aside class="profile-rail" aria-label="Actions and summary">
+        {# Ajay's twelve actions (2026-09-27), each opening a modal; shown directly, in groups (2026-09-28). #}
+        <div class="card rail-card profile-action-bar" role="group" aria-label="Actions">
+            <div class="rail-card__head">Actions</div>
+            {% if leave_form or late_form or may_enter_missing or overtime_form or may.edit %}
+                <div class="rail-group">
+                    <div class="rail-group__label">Leave &amp; attendance</div>
+                    {% if leave_form %}<button class="rail-action" type="button" data-open-dialog="leave-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 3.5h14v17l-3.5-2.2L12 20.5l-3.5-2.2L5 20.5z"/><path d="M9 9h6M9 13h4"/></svg><span>Apply for leave</span></button>{% endif %}
+                    {% if late_form %}<button class="rail-action" type="button" data-open-dialog="late-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>Apply for late approval</span></button>{% endif %}
+                    {% if may_enter_missing %}<button class="rail-action" type="button" data-open-dialog="missing-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 13v4M10 15h4"/></svg><span>Manual entry</span></button>{% endif %}
                     {% if overtime_form %}
                         {% if employee.no_overtime_from %}
                             <form method="post" action="{% url 'organization:employee_overtime' employee.pk %}"
@@ -121,10 +131,10 @@
                                   data-confirm-button="Allow overtime">
                                 {% csrf_token %}
                                 <input type="hidden" name="allow" value="1">
-                                <button class="btn btn--ghost btn--sm" type="submit">Allow overtime</button>
+                                <button class="rail-action" type="submit"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2 1.5M9.5 2.5h5"/></svg><span>Allow overtime</span></button>
                             </form>
                         {% else %}
-                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="overtime-dialog">Disallow overtime</button>
+                            <button class="rail-action" type="button" data-open-dialog="overtime-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2 1.5M9.5 2.5h5"/></svg><span>Disallow overtime</span></button>
                         {% endif %}
                     {% endif %}
                     {% if may.edit %}
@@ -134,11 +144,24 @@
                               data-confirm-button="{% if employee.hide_from_reports %}Show in reports{% else %}Leave out{% endif %}">
                             {% csrf_token %}
                             <input type="hidden" name="hidden" value="{% if employee.hide_from_reports %}0{% else %}1{% endif %}">
-                            <button class="btn btn--ghost btn--sm" type="submit">
-                                {% if employee.hide_from_reports %}Show in reports{% else %}Remove from reports{% endif %}
-                            </button>
+                            <button class="rail-action" type="submit"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>{% if employee.hide_from_reports %}Show in reports{% else %}Remove from reports{% endif %}</span></button>
                         </form>
                     {% endif %}
+                </div>
+            {% endif %}
+            {% if may.edit or edit.may.role or reports_form %}
+                <div class="rail-group">
+                    <div class="rail-group__label">Roles &amp; access</div>
+                    {% if may.edit %}<button class="rail-action" type="button" data-open-dialog="admin-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.5-3.2 8.2-7.5 9.5-4.3-1.3-7.5-5-7.5-9.5V6z"/></svg><span>Set as admin</span></button>{% endif %}
+                    {% if edit.may.role %}
+                        <button class="rail-action" type="button" data-open-dialog="hr-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-2-4.7"/></svg><span>{% if login.role == "hr" %}HR manager: change{% else %}Set as HR manager{% endif %}</span></button>
+                    {% endif %}
+                    {% if reports_form and not is_ended %}<button class="rail-action" type="button" data-open-dialog="reports-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="6" r="3"/><path d="M12 9v4M5 17v-2h14v2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/></svg><span>Set as line manager</span></button>{% endif %}
+                </div>
+            {% endif %}
+            {% if inactive_form or resign_form or may.edit and device_pin and branch_devices and not is_ended %}
+                <div class="rail-group">
+                    <div class="rail-group__label">Employment</div>
                     {% if inactive_form and not is_ended and employee.user_id != request.user.pk %}
                         {% if employee.employment_status == "suspended" %}
                             <form method="post" action="{% url 'organization:employee_active' employee.pk %}"
@@ -147,15 +170,11 @@
                                   data-confirm-button="Make active">
                                 {% csrf_token %}
                                 <input type="hidden" name="active" value="1">
-                                <button class="btn btn--ghost btn--sm" type="submit">Make employee status active</button>
+                                <button class="rail-action" type="submit"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5v5M14.5 9.5v5"/></svg><span>Make employee status active</span></button>
                             </form>
                         {% else %}
-                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="inactive-dialog">Make employee status inactive</button>
+                            <button class="rail-action" type="button" data-open-dialog="inactive-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5v5M14.5 9.5v5"/></svg><span>Make employee status inactive</span></button>
                         {% endif %}
-                    {% endif %}
-                    {% if resign_form %}
-                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="resign-dialog">Resign employee</button>
-                        <button class="btn btn--ghost btn--sm btn--danger-text" type="button" data-open-dialog="delete-dialog">Delete employee</button>
                     {% endif %}
                     {% if may.edit and device_pin and branch_devices and not is_ended %}
                         <form method="post" action="{% url 'devices:employees_send' %}"
@@ -165,19 +184,30 @@
                             {% csrf_token %}
                             <input type="hidden" name="employee" value="{{ employee.pk }}">
                             <input type="hidden" name="next" value="{{ profile_url }}#enrol">
-                            <button class="btn btn--ghost btn--sm" type="submit">Sync employee</button>
+                            <button class="rail-action" type="submit"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.7-4.4L3 9M4 13a8 8 0 0 0 14.7 4.4L21 15"/><path d="M3 4v5h5M21 20v-5h-5"/></svg><span>Sync employee</span></button>
                         </form>
                     {% endif %}
+                    {% if resign_form %}
+                        <button class="rail-action" type="button" data-open-dialog="resign-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h5v16h-5M10 16l4-4-4-4M14 12H3"/></svg><span>Resign employee</span></button>
+                        <button class="rail-action rail-action--danger" type="button" data-open-dialog="delete-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9.5 7V4h5v3M6.5 7l1 13h9l1-13"/></svg><span>Delete employee</span></button>
+                    {% endif %}
                 </div>
+            {% endif %}
         </div>
-    </div>
 
-    {% if is_ended %}
-        <div class="alert alert--info">
-            {{ employee.get_employment_status_display }} — last working day {{ employee.leaving_date|date:"j M Y" }}. Their history is kept below.
+        <div class="card rail-card">
+            <div class="rail-card__head">At a glance</div>
+            <dl class="glance">
+                <div><dt>Line manager</dt><dd>{% if assignment.manager %}<a href="{% url 'organization:employee_detail' assignment.manager_id %}">{{ assignment.manager.full_name }}</a>{% else %}—{% endif %}</dd></div>
+                <div><dt>Shift today</dt><dd>{% if general.shift %}{{ general.shift.name }} <span class="t-faint">{{ general.shift.start_time|time:"H:i" }}–{{ general.shift.end_time|time:"H:i" }}</span>{% else %}—{% endif %}</dd></div>
+                <div><dt>Leave policy</dt><dd>{{ leave_policy.name|default:"Days per year" }}</dd></div>
+                <div><dt>Login</dt><dd>{% if login %}{{ login.user.email }}{% if login.status != "active" %} <span class="badge badge--warning">Disabled</span>{% endif %}{% else %}No login{% endif %}</dd></div>
+                <div><dt>Device person ID</dt><dd>{{ general.device_ids|join:", "|default:"Not on a device" }}</dd></div>
+            </dl>
         </div>
-    {% endif %}
+    </aside>
 
+    <div class="profile-main">
     <nav class="profile-tabs" role="tablist" aria-label="Profile sections" data-profile-tabs>
         <a class="profile-tabs__tab" href="#profile" role="tab" data-tab="profile">Profile information</a>
         {% if summary %}
@@ -1082,6 +1112,9 @@
             </div>
         {% endif %}
     </section>
+
+    </div>
+    </div>
 
     {# ---------------------------------------------------------------- Modals #}
     {% if may_enter_missing %}

@@ -5205,3 +5205,22 @@ Manual entry did not open; a manual entry did not change the attendance.
   (445962) was entered with on 27 Sep is still waiting: approve it under
   Missed scans.
 - Fixed: a two-line template comment showed as text on the profile.
+
+### Employee profile redesigned — 2026-09-28
+
+Nihal: make the profile more professional and modern. Layout and look only;
+every action, modal, permission and form is as it was.
+
+- **Hero** (the palette's ink card): photo, designation, name, department and
+  branch; chips for Employee ID, status, left out of reports, overtime off,
+  login role; email, phone, joined; Edit employee page and Calendar; a strip
+  of this month so far - Present, Absent, Leave, Waiting (pending
+  approvals), With us (time since joining).
+- **Two columns**: the tabs (a pill bar) and sections on the left; on the
+  right the **actions, grouped** - Leave & attendance, Roles & access,
+  Employment - each with an icon, and **At a glance** (line manager, shift
+  today, leave policy, login, device person ID). Below 1180px the right column
+  moves above the tabs; on a phone everything stacks, no sideways scroll.
+- Tokens only: the day strip's hard-coded colours now use the status
+  soft/ink pairs.
+- My profile (the employee's own page) uses the same hero.
