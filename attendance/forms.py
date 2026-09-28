@@ -124,13 +124,22 @@ class MissedScanForm(StyledFormMixin, forms.Form):
 
 
 class EnterMissingForm(MissedScanForm):
-    """The same, entered for someone by HR or their manager."""
+    """The same, entered for someone by HR or their manager.
 
-    def __init__(self, *args, **kwargs):
+    ``approve_now``: the owner or company admin may approve what they enter
+    (nobody is above them), so they are offered to do it in the same step -
+    ticked, so their entry changes the attendance at once (2026-09-28)."""
+
+    def __init__(self, *args, approve_now=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["at"].label = "Time of the scan (the check-in when both are missing)"
         self.fields["reason"].widget.attrs["placeholder"] = (
             "e.g. Came in with the visitors at the side gate; confirmed by the guard")
+        if approve_now:
+            self.fields["approve_now"] = forms.BooleanField(
+                required=False, initial=True, label="Approve it now",
+                help_text="The attendance changes at once. Untick to leave it for someone "
+                          "else who may fix attendance to approve.")
 
 
 class DecideMissedScanForm(StyledFormMixin, forms.Form):

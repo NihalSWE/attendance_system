@@ -5185,3 +5185,23 @@ companies, no trip is needed unless the company says so.
 
 **Server: `migrate`** (payroll 0010). Tests: `payroll/tests_lfa.py` (20),
 `payroll/tests_lfa_pages.py` (11).
+
+### Profile actions shown directly; manual entry fixes — 2026-09-28
+
+Nihal: the actions were hidden under an "Actions" dropdown; the clock in
+Manual entry did not open; a manual entry did not change the attendance.
+
+- The twelve actions are buttons across the bottom of the profile header,
+  not a menu (hidden when a viewer has none).
+- **The time picker now opens inside a modal** (`timepicker.js` attached its
+  panel to the page, below the modal's layer - as the dropdowns did before).
+  This fixes every time field in a modal (manual entry, leave by the hour).
+- **Why the entry did not change the day:** it was saved and waiting for
+  approval (Attendance → Missed scans), as manual entry was built. The owner
+  or company admin - the only ones allowed to approve their own entry - now
+  get **"Approve it now"** (ticked) and the day is worked out at once
+  (`scan_requests.enter_and_approve`: entry and approval together or not at
+  all). Everyone else's entry still waits for someone else. The request Ajay
+  (445962) was entered with on 27 Sep is still waiting: approve it under
+  Missed scans.
+- Fixed: a two-line template comment showed as text on the profile.

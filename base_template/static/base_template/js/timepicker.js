@@ -99,7 +99,10 @@
         panel.className = "tp__panel";
         panel.setAttribute("role", "dialog");
         panel.setAttribute("aria-label", "Choose a time");
-        document.body.appendChild(panel);   // no ancestor overflow can clip it
+        // No ancestor overflow can clip it. Inside a modal <dialog> it lives on
+        // the dialog: the page behind is below the modal's layer and cannot be
+        // clicked (as datepicker.js and customselect.js do).
+        (input.closest("dialog") || document.body).appendChild(panel);
 
         var item = {wrap: wrap, button: button, panel: panel, input: input};
         var chosenHour = null;
