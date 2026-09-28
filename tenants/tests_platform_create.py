@@ -14,7 +14,7 @@ User = get_user_model()
 PASSWORD = "Different-Safe-Test-782!"
 
 
-class CreateCompanyTests(TestCase):
+class CreateCase(TestCase):
     def setUp(self):
         self.root = User.objects.create_superuser(email="root@example.test",
                                                   password="Root-test-786!R")
@@ -26,6 +26,8 @@ class CreateCompanyTests(TestCase):
                 "status": "active", **changes}
         return self.client.post(reverse("platform:company_create"), data)
 
+
+class CreateCompanyTests(CreateCase):
     def test_the_form_asks_for_exactly_this(self):
         form = self.client.get(reverse("platform:company_create")).context["form"]
         self.assertEqual(list(form.fields), ["name", "email", "phone", "address", "password",
@@ -92,3 +94,34 @@ class EditPagesTests(TestCase):
     def test_the_sign_in_page_has_the_eye(self):
         self.client.logout()
         self.assertContains(self.client.get(reverse("login")), "password_toggle.js")
+
+
+class MobileNumberTests(CreateCase):
+    """11-digit Bangladesh mobile numbers only (Nihal, 2026-09-28)."""
+
+    def test_typed_any_usual_way_it_is_kept_one_way(self):
+        for typed in ("01712345678", "+8801712345678", "8801712345678"):
+            with self.subTest(typed=typed):
+                self.post(phone=typed, email=f"{typed[-4:]}{len(typed)}@acme.test",
+                          name=f"Acme {typed}")
+                self.assertEqual(Company.objects.get(name=f"Acme {typed}").phone,
+                                 "8801712345678")
+
+    def test_anything_else_is_refused_and_nothing_is_made(self):
+        for typed in ("0171234567", "017123456789", "01212345678", "0212345678"):
+            with self.subTest(typed=typed):
+                page = self.post(phone=typed)
+                self.assertContains(page, "11-digit Bangladesh mobile number")
+                self.assertFalse(Company.objects.filter(name="Acme Company").exists())
+
+    def test_blank_is_allowed(self):
+        self.post(phone="+88")
+        self.assertEqual(Company.objects.get(name="Acme Company").phone, "")
+
+    def test_edit_company_checks_it_too(self):
+        self.post()
+        company = Company.objects.get(name="Acme Company")
+        page = self.client.post(reverse("platform:company_edit", args=[company.public_id]),
+                                {"name": "Acme Company", "email": "owner@acme.test",
+                                 "phone": "12345", "address": ""})
+        self.assertContains(page, "11-digit Bangladesh mobile number")

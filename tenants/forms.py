@@ -1,7 +1,7 @@
 """Platform forms using the shared project input conventions."""
 from django import forms
 from accounts.models import CompanyMembership
-from common.forms import BangladeshPhoneInput, StyledFormMixin
+from common.forms import BD_MOBILE_HELP, BangladeshPhoneInput, StyledFormMixin, normalize_bd_mobile
 from tenants.models import Company, CompanyFeature, Feature
 from tenants.platform_services import validate_company_values
 
@@ -15,6 +15,8 @@ class CompanyForm(StyledFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["phone"].label = "Phone / mobile number"
+        self.fields["phone"].help_text = BD_MOBILE_HELP
         if self.instance.pk:
             for name in ("code", "slug"):
                 self.fields[name] = forms.CharField(
@@ -22,6 +24,9 @@ class CompanyForm(StyledFormMixin, forms.ModelForm):
                     widget=forms.TextInput(attrs={"class": "input", "readonly": True}),
                     help_text="Generated automatically and retained when the name changes.",
                 )
+
+    def clean_phone(self):
+        return normalize_bd_mobile(self.cleaned_data.get("phone"))
 
     def clean(self):
         return validate_company_values(super().clean())
@@ -39,7 +44,7 @@ class CompanyCreateForm(StyledFormMixin, forms.Form):
     email = forms.EmailField(label="Email", widget=forms.EmailInput(attrs={"autocomplete": "username"}),
                              help_text="The company's email, and the administrator signs in with it.")
     phone = forms.CharField(required=False, label="Phone / mobile number",
-                            widget=BangladeshPhoneInput())
+                            help_text=BD_MOBILE_HELP, widget=BangladeshPhoneInput())
     address = forms.CharField(required=False, label="Address", widget=forms.TextInput())
     password = forms.CharField(label="Password", help_text=PASSWORD_HELP,
                                widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}))
@@ -48,6 +53,9 @@ class CompanyCreateForm(StyledFormMixin, forms.Form):
     status = forms.ChoiceField(label="Status", initial=Company.Status.TRIAL,
                                choices=[(Company.Status.TRIAL, "Trial"),
                                         (Company.Status.ACTIVE, "Active")])
+
+    def clean_phone(self):
+        return normalize_bd_mobile(self.cleaned_data.get("phone"))
 
     def clean(self):
         data = super().clean()
