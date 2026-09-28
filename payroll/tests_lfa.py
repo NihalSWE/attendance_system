@@ -226,10 +226,16 @@ class DecisionTests(LfaCase):
         claim.refresh_from_db()
         self.assertEqual((claim.status, claim.payment_reference), ("paid", "Cheque 1234"))
 
-    def test_the_approver_decides_the_amount_up_to_the_cap(self):
-        self.rules(amount_method="approver", months=None, max_amount=Decimal("25000"))
+    def test_paid_by_the_day_the_approver_enters_the_amount_up_to_the_cap(self):
+        # Months of basic cannot be worked out from a daily rate.
+        from employees.models import EmployeeCompensation
+
+        EmployeeCompensation.all_objects.filter(employee=self.employee).update(
+            pay_basis="daily", base_rate=Decimal("1000"))
+        self.rules(max_amount=Decimal("25000"))
         claim = self.claim()
         self.assertIsNone(claim.calculated_amount)
+        self.assertIn("paid by the day or hour", claim.settings_snapshot["how"])
         with self.assertRaisesMessage(ValidationError, "Give the amount"):
             lfa.decide(actor=self.admin, company_id=self.company.pk, claim_id=claim.pk,
                        approve=True, pay_month=AUGUST)
@@ -290,9 +296,13 @@ class SettingsTests(LfaCase):
     def test_each_amount_method_needs_its_number(self):
         for method, field, said in (("fixed", "fixed_amount", "Give the amount"),
                                     ("basic_months", "months", "how many months"),
-                                    ("approver", "max_amount", "most they may approve")):
+                                    ("gross_months", "months", "how many months")):
             with self.subTest(method=method), self.assertRaisesMessage(ValidationError, said):
                 self.rules(amount_method=method, **{field: None, "months": None})
+
+    def test_decided_by_the_approver_is_no_longer_a_choice(self):
+        with self.assertRaisesMessage(ValidationError, "Choose how much"):
+            self.rules(amount_method="approver", max_amount=Decimal("25000"))
 
 
 class MigrationTests(LfaCase):
