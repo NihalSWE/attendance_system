@@ -14,7 +14,13 @@ from django.views.decorators.http import require_http_methods
 from accounts.models import CompanyMembership
 from access_control.services import is_feature_enabled
 from auditlog.models import AuditLog
-from tenants.forms import AdministratorForm, CompanyFeatureForm, CompanyForm, CompanyStatusForm
+from tenants.forms import (
+    AdministratorForm,
+    CompanyCreateForm,
+    CompanyFeatureForm,
+    CompanyForm,
+    CompanyStatusForm,
+)
 from tenants.models import Company, Feature
 from tenants import platform_services as services
 
@@ -94,10 +100,14 @@ def _form_page(request, *, form, title, submit_label, action, company=None, expl
 @platform_required
 @require_http_methods(["GET", "POST"])
 def company_create(request):
-    form = CompanyForm(request.POST or None)
+    # The company and its administrator's login in one form (2026-09-28).
+    form = CompanyCreateForm(request.POST or None)
     return _form_page(request, form=form, title="Create company", submit_label="Create company",
-        explanation="A Head Office branch and attendance settings will be created automatically. The company starts in Trial status.",
-        action=lambda data: services.create_platform_company(actor=request.user, values=data))
+        explanation=("The company and its administrator's login are created together: the "
+                     "administrator signs in with this email and password. A Head Office branch "
+                     "and attendance settings are created automatically."),
+        action=lambda data: services.create_company_with_administrator(actor=request.user,
+                                                                       values=data))
 
 
 @platform_required

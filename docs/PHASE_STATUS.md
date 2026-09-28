@@ -5224,3 +5224,29 @@ every action, modal, permission and form is as it was.
 - Tokens only: the day strip's hard-coded colours now use the status
   soft/ink pairs.
 - My profile (the employee's own page) uses the same hero.
+
+### Root: Create company with its administrator; password eye — 2026-09-28
+
+Nihal: on the root, creating a company then its administrator took two
+forms; legal name was not needed; the password help printed HTML; no way to
+see a password being typed.
+
+- **Create company is one form**: Name, Email, Phone / mobile number,
+  Address, Password, Confirm password, Status (Trial or Active).
+  `platform_services.create_company_with_administrator` makes the company, its
+  administrator's login (signs in with that email; named after the company
+  until edited) and its status together - or nothing, if the email is taken,
+  the password is weak or they do not match. "Add company administrator"
+  stays for a company that has none.
+- **No legal name** on the root's Create and Edit company (the field stays in
+  the database; the company's own Company profile still has "Registered
+  name").
+- **Password help**: one plain line ("At least 8 characters, not only
+  numbers, and not a common password."; on Edit administrator "Leave blank to
+  keep the current password.") instead of Django's HTML list printed as text.
+- **Eye icon on every password box** - sign-in, root, Edit employee logins,
+  profile modals, Change password (`password_toggle.js`, loaded by the base
+  page and the sign-in page). The box posts exactly as before.
+
+Tests: `tenants/tests_platform_create.py` (9); the cold-start test uses the
+one form.

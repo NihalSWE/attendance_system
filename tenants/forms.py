@@ -1,6 +1,5 @@
 """Platform forms using the shared project input conventions."""
 from django import forms
-from django.contrib.auth.password_validation import password_validators_help_text_html
 from accounts.models import CompanyMembership
 from common.forms import BangladeshPhoneInput, StyledFormMixin
 from tenants.models import Company, CompanyFeature, Feature
@@ -10,7 +9,8 @@ from tenants.platform_services import validate_company_values
 class CompanyForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Company
-        fields = ("name", "legal_name", "email", "phone", "address")
+        # No legal name (Nihal, 2026-09-28): the name is enough.
+        fields = ("name", "email", "phone", "address")
         widgets = {"address": forms.TextInput(), "phone": BangladeshPhoneInput()}
 
     def __init__(self, *args, **kwargs):
@@ -27,6 +27,35 @@ class CompanyForm(StyledFormMixin, forms.ModelForm):
         return validate_company_values(super().clean())
 
 
+#: What a password must be, in one line (Django's own list printed its HTML).
+PASSWORD_HELP = "At least 8 characters, not only numbers, and not a common password."
+
+
+class CompanyCreateForm(StyledFormMixin, forms.Form):
+    """Create company: the company and its administrator's login on one form
+    (Nihal, 2026-09-28). The email is the company's and the login's."""
+
+    name = forms.CharField(max_length=255, label="Name")
+    email = forms.EmailField(label="Email", widget=forms.EmailInput(attrs={"autocomplete": "username"}),
+                             help_text="The company's email, and the administrator signs in with it.")
+    phone = forms.CharField(required=False, label="Phone / mobile number",
+                            widget=BangladeshPhoneInput())
+    address = forms.CharField(required=False, label="Address", widget=forms.TextInput())
+    password = forms.CharField(label="Password", help_text=PASSWORD_HELP,
+                               widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}))
+    password_confirm = forms.CharField(label="Confirm password",
+                                       widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}))
+    status = forms.ChoiceField(label="Status", initial=Company.Status.TRIAL,
+                               choices=[(Company.Status.TRIAL, "Trial"),
+                                        (Company.Status.ACTIVE, "Active")])
+
+    def clean(self):
+        data = super().clean()
+        if data.get("password") and data.get("password") != data.get("password_confirm"):
+            self.add_error("password_confirm", "Passwords do not match.")
+        return data
+
+
 class CompanyStatusForm(StyledFormMixin, forms.Form):
     status = forms.ChoiceField(choices=Company.Status.choices)
     reason = forms.CharField(widget=forms.Textarea, max_length=2000)
@@ -36,7 +65,7 @@ class AdministratorForm(StyledFormMixin, forms.Form):
     email = forms.EmailField(widget=forms.EmailInput(attrs={"autocomplete": "username"}))
     first_name = forms.CharField(max_length=150, required=False)
     last_name = forms.CharField(max_length=150, required=False)
-    password = forms.CharField(widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}), help_text=password_validators_help_text_html())
+    password = forms.CharField(widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}), help_text=PASSWORD_HELP)
     password_confirm = forms.CharField(widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}), label="Confirm password")
 
     def __init__(self, *args, company=None, member=None, **kwargs):
@@ -44,7 +73,7 @@ class AdministratorForm(StyledFormMixin, forms.Form):
         if member:
             self.fields["password"].required = False
             self.fields["password_confirm"].required = False
-            self.fields["password"].help_text = "Leave blank to keep the current password. " + str(password_validators_help_text_html())
+            self.fields["password"].help_text = "Leave blank to keep the current password."
             self.fields["status"] = forms.ChoiceField(
                 choices=CompanyMembership.Status.choices,
                 widget=forms.Select(attrs={"class": "input select"}),

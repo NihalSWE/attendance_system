@@ -1569,3 +1569,39 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
 .balance-entries__list li {
     margin: 2px 0;
 }
+
+/* Show or hide a password (2026-09-28, password_toggle.js). */
+.pw-field {
+    position: relative;
+    display: block;
+}
+.pw-field > input {
+    width: 100%;
+    padding-right: 42px;
+}
+.pw-toggle {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    transform: translateY(-50%);
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--r-sm);
+    background: none;
+    color: var(--muted);
+    cursor: pointer;
+}
+.pw-toggle svg {
+    width: 18px;
+    height: 18px;
+}
+.pw-toggle:hover,
+.pw-toggle:focus-visible {
+    color: var(--text);
+    background: var(--surface-sunken);
+    outline: none;
+}
