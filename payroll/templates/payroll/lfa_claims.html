@@ -1,0 +1,84 @@
+{% extends "base_template/base.html" %}
+{% load static money %}
+{% block title %}
+    LFA claims · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'payroll:payroll_home' %}">Salary</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        LFA claims
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">LFA claims</h1>
+            <p class="page__sub">
+                {% if not settings.enabled %}LFA is off, so nobody can claim it now.{% else %}{{ settings.name }}: claims to decide, and what was approved and paid.{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if settings.enabled %}
+                <a class="btn btn--primary" href="{% url 'payroll:lfa_claim_new' %}">Enter a claim</a>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <form method="get" class="card__head">
+            <h2>Claims</h2>
+            <select class="input select js-select" name="show" aria-label="Show" onchange="this.form.submit()">
+                {% for key, label, count in tabs %}
+                    <option value="{{ key }}"{% if key == show %} selected{% endif %}>{{ label }} ({{ count }})</option>
+                {% endfor %}
+            </select>
+            <noscript><button class="btn btn--ghost btn--sm" type="submit">Show</button></noscript>
+        </form>
+        {% if not claims %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">No claims here</div>
+            </div>
+        {% endif %}
+        {% if server_table or claims %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Year</th>
+                            <th class="numeric">Amount</th>
+                            <th>Paid</th>
+                            <th>Status</th>
+                            <th>Claimed</th>
+                            <th class="no-sort">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in claims %}
+                            <tr>
+                                <td>{{ claim.employee.full_name }}</td>
+                                <td>{{ claim.cycle_start|date:"j M Y" }} – {{ claim.cycle_end|date:"j M Y" }}</td>
+                                <td class="numeric">
+                                    {% if claim.approved_amount %}{{ claim.approved_amount|money }}{% elif claim.calculated_amount %}{{ claim.calculated_amount|money }}{% else %}<span class="t-faint">Approver decides</span>{% endif %}
+                                </td>
+                                <td>
+                                    {% if claim.payment == "with_salary" %}With salary{% if claim.payroll_adjustment %} · {{ claim.payroll_adjustment.target_payroll_period.name }}{% endif %}{% else %}Separately{% endif %}
+                                </td>
+                                <td>
+                                    {% if claim.status == "pending" %}<span class="badge badge--warning">{{ claim.get_status_display }}</span>{% elif claim.status == "approved" or claim.status == "paid" %}<span class="badge badge--success">{{ claim.get_status_display }}</span>{% else %}<span class="badge badge--neutral">{{ claim.get_status_display }}</span>{% endif %}
+                                </td>
+                                <td class="emp-date">{{ claim.created_at|date:"j M Y" }}</td>
+                                <td><a class="btn btn--quiet btn--sm" href="{% url 'payroll:lfa_claim' claim.pk %}">{% if claim.status == "pending" %}Decide{% else %}Open{% endif %}</a></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'base_template/js/platform.js' %}">
+    </script>
+{% endblock %}

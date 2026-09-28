@@ -59,6 +59,13 @@ BRANCH_PAGES = {
     # Undo finalise, salary settings, penalty rules and waiving a penalty are
     # not listed: they stay with the owner and company admin.
     "payroll:payroll_home": ("salary.view", "salary.prepare"),
+    # LFA claims: decided by whoever prepares salary in the branch (payroll.lfa).
+    "payroll:lfa_claims": "salary.prepare",
+    "payroll:lfa_claim": "salary.prepare",
+    "payroll:lfa_claim_new": "salary.prepare",
+    "payroll:lfa_cancel": "salary.prepare",
+    "payroll:lfa_paid": "salary.prepare",
+    "payroll:lfa_document": "salary.prepare",
     "payroll:payroll_generate": "salary.prepare",
     # Salary approval (A11): whoever prepares salary submits the month, and
     # can take it back; approving stays with the owner and company admin.

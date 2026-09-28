@@ -1,0 +1,95 @@
+{% extends "base_template/base.html" %}
+{% load static money %}
+{% block title %}
+    My LFA · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="page__head" data-profile{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ settings.name|default:"Leave Fare Assistance" }}</h1>
+            {% if settings.description %}<p class="page__sub">{{ settings.description|linebreaksbr }}</p>{% endif %}
+        </div>
+        <div class="page__actions">
+            {% if found.ok %}
+                <button class="btn btn--primary" type="button" data-open-dialog="claim-dialog">Claim LFA</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__body">
+            {% if found.ok %}
+                <div class="alert alert--success">
+                    You can claim it{% if found.amount %}: <strong>{{ found.amount|money }} {{ found.currency }}</strong>{% endif %}
+                    for {{ found.cycle.0|date:"j M Y" }} – {{ found.cycle.1|date:"j M Y" }}.
+                    {% if not found.amount %}Your approver decides the amount.{% endif %}
+                </div>
+            {% else %}
+                <div class="alert alert--info">
+                    You cannot claim it right now:
+                    <ul>{% for reason in found.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head"><h2>My claims</h2></div>
+        {% if claims %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Year</th>
+                            <th class="numeric">Amount</th>
+                            <th>Status</th>
+                            <th>Paid</th>
+                            <th class="no-sort">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for claim in claims %}
+                            <tr>
+                                <td>{{ claim.cycle_start|date:"j M Y" }} – {{ claim.cycle_end|date:"j M Y" }}</td>
+                                <td class="numeric">{% if claim.approved_amount %}{{ claim.approved_amount|money }}{% elif claim.calculated_amount %}{{ claim.calculated_amount|money }}{% else %}—{% endif %}</td>
+                                <td>
+                                    {{ claim.get_status_display }}
+                                    {% if claim.decision_note %}<div class="t-faint">{{ claim.decision_note }}</div>{% endif %}
+                                </td>
+                                <td>
+                                    {% if claim.status == "paid" %}{{ claim.paid_on|date:"j M Y" }}
+                                    {% elif claim.status == "approved" and claim.payroll_adjustment %}With the salary of {{ claim.payroll_adjustment.target_payroll_period.name }}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>
+                                    {% if claim.document %}<a class="btn btn--quiet btn--sm" href="{% url 'me:lfa_document' claim.pk %}">Proof</a>{% endif %}
+                                    {% if claim.status == "pending" %}
+                                        <form method="post" action="{% url 'me:lfa_withdraw' claim.pk %}" style="display:inline"
+                                              data-confirm-title="Withdraw this claim?"
+                                              data-confirm="It is not decided or paid. You can claim again."
+                                              data-confirm-button="Withdraw">
+                                            {% csrf_token %}
+                                            <button class="btn btn--quiet btn--sm" type="submit">Withdraw</button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty"><div class="empty__title">No claims yet</div></div>
+        {% endif %}
+    </div>
+
+    {% if found.ok %}
+        {% url 'me:lfa' as claim_url %}
+        {% include "organization/profile/modal_form.html" with id="claim-dialog" title="Claim LFA" action=claim_url form=form submit="Send for approval" multipart=True wide=True note="It goes to your approver. You can withdraw it until it is decided." %}
+    {% endif %}
+{% endblock %}

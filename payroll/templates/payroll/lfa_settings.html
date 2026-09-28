@@ -1,0 +1,77 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    LFA settings · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'payroll:payroll_home' %}">Salary</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        LFA settings
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Leave Fare Assistance</h1>
+            <p class="page__sub">
+                Your company's own rules. Fill them in and switch LFA on; employees then claim it
+                from their own panel, and it is decided on LFA claims.
+                {% if settings.pk %}{% if settings.enabled %}<span class="badge badge--success">On</span>{% else %}<span class="badge badge--neutral">Off</span>{% endif %}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'payroll:lfa_claims' %}">LFA claims</a>
+        </div>
+    </div>
+    <form method="post" class="stack" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}<div class="alert alert--danger">{{ form.non_field_errors }}</div>{% endif %}
+        <div class="card">
+            <div class="card__head"><h2>Switch and name</h2></div>
+            <div class="card__body grid grid--2">
+                {% include "leaves/includes/field.html" with field=form.enabled %}
+                {% include "leaves/includes/field.html" with field=form.name %}
+                {% include "leaves/includes/field.html" with field=form.description %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>How much</h2></div>
+            <div class="card__body grid grid--2">
+                {% include "leaves/includes/field.html" with field=form.amount_method %}
+                {% include "leaves/includes/field.html" with field=form.fixed_amount %}
+                {% include "leaves/includes/field.html" with field=form.basic_percent %}
+                {% include "leaves/includes/field.html" with field=form.max_amount %}
+                {% include "leaves/includes/field.html" with field=form.prorate_first_cycle %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>Who can claim, and how often</h2></div>
+            <div class="card__body grid grid--2">
+                {% include "leaves/includes/field.html" with field=form.min_service_months %}
+                {% include "leaves/includes/field.html" with field=form.probation_eligible %}
+                {% include "leaves/includes/field.html" with field=form.cycle %}
+                {% include "leaves/includes/field.html" with field=form.claims_per_cycle %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>What it needs</h2></div>
+            <div class="card__body grid grid--2">
+                {% include "leaves/includes/field.html" with field=form.requires_leave %}
+                {% include "leaves/includes/field.html" with field=form.requires_document %}
+                {% include "leaves/includes/field.html" with field=form.leave_types %}
+                {% include "leaves/includes/field.html" with field=form.min_leave_days %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>How it is paid</h2></div>
+            <div class="card__body grid grid--2">
+                {% include "leaves/includes/field.html" with field=form.payment %}
+                <p class="field__help">On the monthly payslip: an approved claim is a separate "LFA" line in the salary month the approver chooses, paid when that month is finalised. Separately: it is marked paid, with the date and a reference.</p>
+            </div>
+        </div>
+        <div class="row">
+            <button class="btn btn--primary" type="submit">Save LFA settings</button>
+        </div>
+        <p class="t-faint">A claim keeps the rules it was made under: changing these later does not change a claim already made.</p>
+    </form>
+{% endblock %}

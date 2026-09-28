@@ -73,4 +73,12 @@ def shell(request):
         "sidebar_unrestricted_admin": unrestricted_admin,
         "sidebar_branch_manager": bool(membership and membership.role == 'manager'),
         "sidebar_leave_approver": leave_approver,
+        # "My LFA", once the company has switched LFA on (2026-09-28).
+        "sidebar_lfa": bool(self_service and company_id and _lfa_on(company_id)),
     }
+
+
+def _lfa_on(company_id):
+    from payroll.models import LfaSettings
+
+    return LfaSettings.all_objects.filter(company_id=company_id, enabled=True).exists()

@@ -1,0 +1,98 @@
+{% extends "base_template/base.html" %}
+{% load static money %}
+{% block title %}
+    LFA claim · {{ claim.employee.full_name }}
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'payroll:lfa_claims' %}">LFA claims</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ claim.employee.full_name }}
+    </div>
+    <div class="page__head" data-profile{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ claim.settings_snapshot.name|default:"LFA" }} · {{ claim.employee.full_name }}</h1>
+            <p class="page__sub">For {{ claim.cycle_start|date:"j M Y" }} – {{ claim.cycle_end|date:"j M Y" }} · {{ claim.get_status_display }}</p>
+        </div>
+        <div class="page__actions">
+            {% if may_decide and claim.status == "approved" %}
+                {% if claim.payment == "separately" %}
+                    <button class="btn btn--primary" type="button" data-open-dialog="paid-dialog">Mark as paid</button>
+                {% endif %}
+                <button class="btn btn--ghost btn--danger-text" type="button" data-open-dialog="cancel-dialog">Cancel claim</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__body">
+            <dl class="facts profile-facts profile-facts--two">
+                <dt>Employee</dt>
+                <dd><a href="{% url 'organization:employee_detail' claim.employee.pk %}">{{ claim.employee.full_name }}</a></dd>
+                <dt>Claimed</dt>
+                <dd>{{ claim.created_at|date:"j M Y" }}{% if claim.submitted_by and claim.submitted_by_id != claim.employee.user_id %} <span class="t-faint">· entered by {{ claim.submitted_by.email }}</span>{% endif %}</dd>
+                <dt>Amount by the rules</dt>
+                <dd>{% if claim.calculated_amount %}{{ claim.calculated_amount|money }} {{ claim.currency }}{% else %}The approver decides{% endif %} <span class="t-faint">· {{ claim.settings_snapshot.how }}</span></dd>
+                <dt>Approved</dt>
+                <dd>{% if claim.approved_amount %}{{ claim.approved_amount|money }} {{ claim.currency }}{% else %}—{% endif %}</dd>
+                <dt>Paid</dt>
+                <dd>
+                    {% if claim.status == "paid" %}{{ claim.paid_on|date:"j M Y" }}{% if claim.payment_reference %} · {{ claim.payment_reference }}{% endif %}
+                    {% elif claim.payroll_adjustment %}With the salary of {{ claim.payroll_adjustment.target_payroll_period.name }}
+                    {% elif claim.payment == "separately" %}Separately
+                    {% else %}With salary{% endif %}
+                </dd>
+                <dt>Leave</dt>
+                <dd>{% if claim.leave_request %}Leave from {{ claim.leave_request.submitted_at|date:"j M Y" }}{% else %}Not needed{% endif %}</dd>
+                <dt>Proof</dt>
+                <dd>{% if claim.document %}<a href="{% url 'payroll:lfa_document' claim.pk %}">{{ claim.document_name|default:"Open" }}</a>{% else %}—{% endif %}</dd>
+                <dt>Note</dt>
+                <dd>{{ claim.note|default:"—" }}</dd>
+                {% if claim.decision_note %}
+                    <dt>Decision note</dt>
+                    <dd>{{ claim.decision_note }}</dd>
+                {% endif %}
+            </dl>
+        </div>
+    </div>
+
+    {% if claim.status == "pending" %}
+        <div class="card">
+            <div class="card__head"><h2>Decision</h2></div>
+            <div class="card__body">
+                {% if may_decide %}
+                    <form method="post" class="stack" novalidate>
+                        {% csrf_token %}
+                        {% if decision.non_field_errors %}<div class="alert alert--danger">{{ decision.non_field_errors }}</div>{% endif %}
+                        <div class="grid grid--2">
+                            {% for field in decision %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                        <div class="row">
+                            <button class="btn btn--primary" type="submit">Save decision</button>
+                        </div>
+                    </form>
+                {% else %}
+                    <p class="t-faint">It is decided by the owner, the company administrator or whoever prepares salary in their branch - not by the person claiming.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+
+    {% if may_decide and claim.status == "approved" %}
+        {% url 'payroll:lfa_cancel' claim.pk as cancel_url %}
+        {% include "organization/profile/modal_form.html" with id="cancel-dialog" title="Cancel this claim" action=cancel_url form=cancel_form submit="Cancel claim" danger=True note="It is not paid, and its payslip line is taken off. The employee can claim again in this year." %}
+        {% if claim.payment == "separately" %}
+            {% url 'payroll:lfa_paid' claim.pk as paid_url %}
+            {% include "organization/profile/modal_form.html" with id="paid-dialog" title="Mark as paid" action=paid_url form=paid_form submit="Mark as paid" %}
+        {% endif %}
+    {% endif %}
+{% endblock %}
