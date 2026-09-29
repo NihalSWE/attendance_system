@@ -236,6 +236,50 @@ class IngestionEndpointTests(TestCase):
         # Both scans survive as evidence.
         self.assertEqual(PunchEvent.all_objects.count(), 2)
 
+    def test_repeat_presses_under_five_seconds_count_once(self):
+        # Nihal, 2026-09-29: under 5 seconds, 2, 3 or more scans are one scan.
+        # A burst 1 s and then 3 s apart: only the first counts; each repeat
+        # is kept, confirmed_duplicate of the scan before it, and excluded.
+        self._post_attlog(body=(
+            "1\t2026-09-08 09:01:02\t0\t1\t0\t\t\n"
+            "1\t2026-09-08 09:01:03\t0\t1\t0\t\t\n"
+            "1\t2026-09-08 09:01:06\t0\t1\t0\t\t\n"
+        ))
+        punches = list(PunchEvent.all_objects.order_by("punched_at_utc"))
+        self.assertEqual(len(punches), 3)
+        first, second, third = punches
+        self.assertEqual(first.dedupe_status, PunchEvent.DedupeStatus.UNIQUE)
+        for repeat, before in ((second, first), (third, second)):
+            self.assertEqual(repeat.dedupe_status, PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE)
+            self.assertEqual(repeat.duplicate_of_id, before.pk)
+            self.assertEqual(repeat.processing_status, PunchEvent.ProcessingStatus.EXCLUDED)
+            self.assertTrue(repeat.is_repeat_scan)
+        self.assertFalse(first.is_repeat_scan)
+
+    def test_a_repeat_in_a_later_upload_counts_once_too(self):
+        self._post_attlog(body="1\t2026-09-08 09:01:02\t0\t1\t0\t\t\n", stamp="1")
+        self._post_attlog(body="1\t2026-09-08 09:01:04\t0\t1\t0\t\t\n", stamp="2")
+        later = PunchEvent.all_objects.order_by("punched_at_utc").last()
+        self.assertEqual(later.dedupe_status, PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE)
+
+    def test_five_seconds_apart_is_not_a_repeat_press(self):
+        # "Under 5 seconds": 5 s apart stays with the review window, as before.
+        self._post_attlog(body=(
+            "1\t2026-09-08 09:01:02\t0\t1\t0\t\t\n"
+            "1\t2026-09-08 09:01:07\t0\t1\t0\t\t\n"
+        ))
+        later = PunchEvent.all_objects.order_by("punched_at_utc").last()
+        self.assertEqual(later.dedupe_status, PunchEvent.DedupeStatus.PROBABLE_DUPLICATE)
+
+    def test_repeats_are_per_person(self):
+        # Two people scanning a second apart are two scans.
+        self._post_attlog(body=(
+            "1\t2026-09-08 09:01:02\t0\t1\t0\t\t\n"
+            "2\t2026-09-08 09:01:03\t0\t1\t0\t\t\n"
+        ))
+        self.assertEqual(
+            PunchEvent.all_objects.filter(dedupe_status=PunchEvent.DedupeStatus.UNIQUE).count(), 2)
+
     # --- malformed input --------------------------------------------------
 
     def test_unparsable_timestamp_keeps_evidence_and_flags_the_message(self):

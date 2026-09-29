@@ -294,6 +294,60 @@ class ScreenTests(MappingCase):
         self.assertContains(response, "777 (no employee has this Employee ID)")
 
 
+class WhyNotLinkedTests(MappingCase):
+    """Device users → why each user is not linked, and a filter for it
+    (Nihal, 2026-09-29). Ajay is the real case: linked on this device under an
+    old number (14, from the demo data), while the device knows him as 445962."""
+
+    def setUp(self):
+        super().setUp()
+        self.upload(USERS + "user uid=16\tcardno=\tpin=445800\tpassword=\tgroup=1\tstarttime=0"
+                            "\tendtime=0\tname=Far\tprivilege=0\tdisable=0\tverify=0\n")
+        with use_company(self.company):
+            DeviceEnrollment.objects.create(
+                device=self.device, employee=self.ajay, device_user_id="14",
+                effective_from=datetime.datetime(2000, 1, 1, tzinfo=datetime.timezone.utc),
+                assigned_device_authorized=True)
+
+    def reasons(self):
+        with use_company(self.company):
+            roster = build_roster(self.device)
+            counts = mapping.why_not_linked(self.device, roster)
+        return counts, {row["pin"]: row["unlinked"] for row in roster if "unlinked" in row}
+
+    def test_each_unlinked_user_says_why(self):
+        counts, why = self.reasons()
+        self.assertEqual({pin: w["code"] for pin, w in why.items()}, {
+            "445962": "other_number", "445900": "ready", "777": "no_employee",
+            "445800": "other_branch"})
+        self.assertIn("already linked on this device as user 14", why["445962"]["text"])
+        self.assertEqual(why["445962"]["employee"], self.ajay)
+        self.assertIn("works at Chittagong", why["445800"]["text"])
+        self.assertEqual(counts, {"other_number": 1, "ready": 1, "no_employee": 1, "other_branch": 1})
+
+    def test_the_reason_matches_what_link_does(self):
+        # "Ready" links; the others are refused for the reason shown.
+        with use_company(self.company):
+            result = mapping.map_automatically(actor=self.admin, device=self.device)
+        self.assertEqual([o.enrollment.device_user_id for o in result.mapped], ["445900"])
+        failed = {employee.first_name: reason for employee, _, reason in result.failed}
+        self.assertIn("already mapped", failed["Ajay"])
+        self.assertIn("works at Chittagong", failed["Far"])
+
+    def test_page_lists_reasons_and_filters_by_them(self):
+        self.client.force_login(self.admin)
+        url = reverse("devices:device_users", args=[self.device.public_id])
+        page = self.client.get(url).content.decode()
+        self.assertIn("Employee already linked under another number", page)
+        self.assertIn('href="?mapping=unmapped:other_number"', page)
+        self.assertIn("already linked on this device as user 14", page)
+        only = self.client.get(url, {"mapping": "unmapped:other_number"})
+        pins = [row["pin"] for row in only.context["page"].object_list]
+        self.assertEqual(pins, ["445962"])
+        ready = self.client.get(url, {"mapping": "unmapped:ready"})
+        self.assertEqual([row["pin"] for row in ready.context["page"].object_list], ["445900"])
+
+
 class TransferTests(MappingCase):
     def setUp(self):
         super().setUp()

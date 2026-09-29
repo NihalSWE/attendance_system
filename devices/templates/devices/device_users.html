@@ -142,7 +142,18 @@
                 </h2>
                 <p class="notice__text">
                     Their scans are saved, but they don't count towards attendance until each user is linked to an employee.
+                    <a href="?mapping=unmapped">Show them</a>
                 </p>
+                {% if unlinked_reasons %}
+                    <ul class="unlinked-reasons">
+                        {% for value, label, count in unlinked_reasons %}
+                            <li>
+                                <a href="?mapping={{ value }}">{{ label }}</a>
+                                <span class="badge badge--neutral">{{ count }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
                 <div class="notice__actions">
                     <form method="post" action="{% url 'devices:device_users_import' device.public_id %}">
                         {% csrf_token %}
@@ -199,6 +210,11 @@
                     <option value="unmapped" {% if mapping == 'unmapped' %}selected{% endif %}>
                         Not linked
                     </option>
+                    {% for value, label, count in unlinked_reasons %}
+                        <option value="{{ value }}" {% if mapping == value %}selected{% endif %}>
+                            Not linked — {{ label|lower }} ({{ count }})
+                        </option>
+                    {% endfor %}
                 </select>
             </div>
             <button class="btn btn--ghost" type="submit">
@@ -225,6 +241,9 @@
                                 Name on device
                             </th>
                             <th>
+                                Employee
+                            </th>
+                            <th>
                                 Role
                             </th>
                             <th class="numeric">
@@ -244,9 +263,6 @@
                             </th>
                             <th>
                                 Photo
-                            </th>
-                            <th>
-                                Employee
                             </th>
                             <th>
                                 Write to device
@@ -289,6 +305,30 @@
                                         <span class="t-faint">
                                             (no name set)
                                         </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if row.employee %}
+                                        <div class="linked-employee">
+                                            <span class="badge badge--success">
+                                                Linked
+                                            </span>
+                                            <a href="{% url 'organization:employee_detail' row.employee.pk %}">
+                                                {{ row.employee.full_name }}
+                                            </a>
+                                        </div>
+                                    {% else %}
+                                        <span class="badge badge--warning">
+                                            Not linked
+                                        </span>
+                                        {% if row.unlinked %}
+                                            <div class="unlinked-why">
+                                                {{ row.unlinked.text }}
+                                                {% if row.unlinked.employee %}
+                                                    <a href="{% url 'organization:employee_detail' row.unlinked.employee.pk %}">Open {{ row.unlinked.employee.full_name }}</a>
+                                                {% endif %}
+                                            </div>
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                                 <td>
@@ -337,22 +377,6 @@
                                     {% else %}
                                         <span class="t-faint">
                                             —
-                                        </span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if row.employee %}
-                                        <div class="linked-employee">
-                                            <span class="badge badge--success">
-                                                Linked
-                                            </span>
-                                            <a href="{% url 'organization:employee_detail' row.employee.pk %}">
-                                                {{ row.employee.full_name }}
-                                            </a>
-                                        </div>
-                                    {% else %}
-                                        <span class="badge badge--warning">
-                                            Not linked
                                         </span>
                                     {% endif %}
                                 </td>

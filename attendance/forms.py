@@ -77,13 +77,16 @@ class MissedScanForm(StyledFormMixin, forms.Form):
         label="What is missing", choices=MISSING_KINDS, initial="check_in", required=False,
         widget=forms.Select(attrs={"data-missing-kind": ""}),
     )
+    # Asked only for a whole missing day (Nihal, 2026-09-29): for a scan, the
+    # day is the scan's own date - see scan_requests.attendance_day.
     work_date = forms.DateField(
-        label="Attendance day", widget=date_widget("Choose a date"),
-        help_text="The day whose attendance is missing the scan.",
+        label="Day", widget=date_widget("Choose a date"), required=False,
+        help_text="The day that is missing. The shift's start and end are used.",
     )
     at = CompanyDateTimeField(
         label="When you scanned", placeholder="Choose a date", required=False,
-        help_text="Usually the same date. On a night shift, a scan after midnight is on the next date.",
+        help_text=("The date and time of the scan. After midnight on a night shift, pick the "
+                   "next date: it still counts for the day the shift started."),
     )
     at_out = CompanyDateTimeField(
         label="Check-out", placeholder="Choose a date", required=False,
@@ -103,6 +106,7 @@ class MissedScanForm(StyledFormMixin, forms.Form):
         for name in ("at", "at_out"):
             for part in self.fields[name].widget.widgets:
                 part.attrs["data-missing-time"] = name
+        self.fields["work_date"].widget.attrs["data-missing-time"] = "work_date"
 
     def _time_given(self, name):
         return bool((self.data.get(self.add_prefix(name) + "_1") or "").strip())
@@ -113,7 +117,12 @@ class MissedScanForm(StyledFormMixin, forms.Form):
         kind = data["kind"] = data.get("kind") or "scan"
         if kind == "whole_day":
             data["at"] = data["at_out"] = None     # the shift's times, worked out later
+            if not data.get("work_date") and "work_date" not in self.errors:
+                self.add_error("work_date", "Choose the day that is missing.")
             return data
+        # A scan's day is the day it counts on, worked out from its date and
+        # time; a date left in the hidden Day box must not overrule it.
+        data["work_date"] = None
         if not self._time_given("at"):
             self.add_error("at", "Enter the time of the scan.")
         if kind == "both" and not self._time_given("at_out"):

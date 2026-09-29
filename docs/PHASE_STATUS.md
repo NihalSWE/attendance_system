@@ -5255,3 +5255,43 @@ one form.
   (013-019, e.g. 01712345678; +88 or 88 in front is fine), stored as
   8801712345678 - `common.forms.normalize_bd_mobile`. Blank is allowed.
   Other phone fields (company profile, employees) keep accepting landlines.
+
+### Device users "why not linked"; one scan under 5 seconds; forms show what they hold; one calendar per time — 2026-09-29
+
+Nihal's list of 2026-09-29 (items 2, 3 and 5 were questions, answered in chat;
+item 2 - Ajay's punches "unresolved" - is diagnosed, not changed, until Nihal
+says how).
+
+- **Device users → why each user is not linked** (`mapping.why_not_linked`):
+  under every "Not linked" badge, the reason and what links them - ready
+  (press Link to existing employees), the employee with that Employee ID is
+  already linked on this device under another number, works at another
+  branch, no employee has that Employee ID, or the number is not digits. The
+  reasons are the same checks `map_employee` makes, so the screen and the
+  button agree. The yellow notice counts them with links, and the Mapping
+  filter gains one "Not linked - <reason>" option per reason present.
+- **Repeat presses under 5 seconds are one scan** (`ingestion.REPEAT_SCAN_SECONDS`):
+  a scan by the same device user on the same device less than 5 s after the
+  scan before is stored as evidence, `confirmed_duplicate` of that scan, and
+  excluded - so 2, 3 or more presses in a row count once. 5 s or more apart
+  is left to the company's review window as before. Punches shows "Repeat -
+  ignored" (`PunchEvent.is_repeat_scan`). New punches only; punches already
+  stored keep their status (attendance already dropped repeats inside the
+  company's 30 s window when pairing).
+- **Edit forms open on what they hold**: Leave policy on the policy given to
+  them; Set shift on their own shift; Line manager on who is recorded even
+  when that person is outside the viewer's list (keeping them is not
+  refused); a gender, blood group or marital status saved in another
+  spelling is matched, and one that is no choice is offered as it is, so
+  saving never wipes it.
+- **Manual entry / Report a missed scan: one calendar per time.** The
+  "Attendance day" box shows only for "A whole missing day". For a check-in,
+  check-out or both, the day is the scan's own date - or, after midnight on a
+  night shift, the day before, whichever the scan counts on
+  (`scan_requests.attendance_day`); a date left in the hidden box is ignored.
+  What is wrong with a worked-out day is said at the scan's time.
+
+Tests: `devices/tests_ingestion.py` (+4), `devices/tests_mapping.py`
+(WhyNotLinkedTests, 3), `attendance/tests_manual_attendance.py`
+(DayFromTheScanTests, 5), `organization/tests_profile_edits.py`
+(FormsOpenOnWhatTheyHaveTests, 4).

@@ -186,6 +186,45 @@ class PageTests(ManualCase):
         self.assertNotEqual(response.status_code, 200)
 
 
+class DayFromTheScanTests(ManualCase):
+    """One calendar per time (Nihal, 2026-09-29): the attendance day is asked
+    only for a whole missing day; a scan's day is its own date."""
+
+    def post(self, **values):
+        self.client.force_login(self.admin)
+        return self.client.post(reverse("attendance:missed_scan_enter", args=[self.clerk.pk]),
+                                {"reason": "Forgot the card", "approve_now": "on", **values})
+
+    def test_both_missing_without_a_day_counts_on_the_scans_date(self):
+        response = self.post(kind="both", at_0=MONDAY.isoformat(), at_1="09:00",
+                             at_out_0=MONDAY.isoformat(), at_out_1="18:00")
+        self.assertEqual(response.status_code, 302)
+        request = MissedScanRequest.all_objects.get(employee=self.clerk)
+        self.assertEqual((request.work_date, request.status), (MONDAY, "approved"))
+        self.assertEqual(self.day(self.clerk).attendance_status, "present")
+
+    def test_a_date_left_in_the_hidden_day_box_is_ignored(self):
+        # The modal starts the day box on today; hidden, it must not overrule the scan.
+        self.post(kind="check_in", work_date="2026-08-20", at_0=MONDAY.isoformat(), at_1="09:00")
+        self.assertEqual(MissedScanRequest.all_objects.get(employee=self.clerk).work_date, MONDAY)
+
+    def test_a_whole_day_still_asks_for_the_day(self):
+        page = self.post(kind="whole_day")
+        self.assertContains(page, "Choose the day that is missing.")
+        self.assertFalse(MissedScanRequest.all_objects.filter(employee=self.clerk).exists())
+
+    def test_the_service_works_the_day_out_for_the_employee_too(self):
+        request = scan_requests.submit(actor=self.clerk_user, company_id=self.company.pk,
+                                       work_date=None, at=at(9), reason="Card left at home",
+                                       kind=Kind.CHECK_IN)
+        self.assertEqual(request.work_date, MONDAY)
+
+    def test_the_form_shows_the_day_only_for_a_whole_day(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("attendance:missed_scan_enter", args=[self.clerk.pk]))
+        self.assertContains(page, 'data-missing-time="work_date"')
+
+
 class HrEntryPointTests(ManualCase):
     """HR holds no "view employees", so has no profile to start from: Missed
     scans offers "Enter missing attendance" with a person picker."""

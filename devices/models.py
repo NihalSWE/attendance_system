@@ -990,3 +990,15 @@ class PunchEvent(TenantOwned):
         legitimately be blank for a punch captured before the device had one.
         """
         return self.device_timezone or None
+
+    @property
+    def is_repeat_scan(self):
+        """A second press less than five seconds after the scan before
+        (ingestion.REPEAT_SCAN_SECONDS), as opposed to the same record sent
+        again: both are confirmed_duplicate, only a repeat is at another
+        instant. Select ``duplicate_of`` with the list that asks."""
+        return (
+            self.dedupe_status == self.DedupeStatus.CONFIRMED_DUPLICATE
+            and self.duplicate_of_id is not None
+            and self.duplicate_of.punched_at_utc != self.punched_at_utc
+        )
