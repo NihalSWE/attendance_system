@@ -71,6 +71,11 @@ ui_urlpatterns = [
         name="device_map_automatically",
     ),
     path(
+        "devices/<uuid:public_id>/users/replace-links/",
+        mapping.device_replace_links,
+        name="device_replace_links",
+    ),
+    path(
         "devices/<uuid:public_id>/users/transfer/",
         mapping.device_users_transfer,
         name="device_users_transfer",

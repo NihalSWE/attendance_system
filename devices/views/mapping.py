@@ -176,6 +176,30 @@ def device_map_automatically(request, public_id):
     return redirect("devices:device_users", public_id=device.public_id)
 
 
+@require_POST
+@login_required
+@company_user_required
+def device_replace_links(request, public_id):
+    """Device users → Replace old link: users whose employee is linked here
+    under another number get the number the device uses (2026-09-29)."""
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    result = mapping.replace_old_links(actor=request.user, device=device, pins=_picked(request))
+    if result.replaced:
+        messages.success(request, "Linked: " + ", ".join(
+            f"{employee.full_name} as {new} (was {old}) from {start:%d %b}"
+            for employee, old, new, start in result.replaced[:10]) + ".")
+        if result.rechecked:
+            messages.success(request, f"{result.rechecked} earlier scan(s) now count.")
+        elif result.rechecked is None:
+            messages.info(request, "Earlier scans were not re-checked: an administrator can do it "
+                                   "under Devices → Which devices count → Re-check punches.")
+    for pin, reason in result.skipped[:10]:
+        messages.warning(request, f"{pin}: {reason}")
+    if not (result.replaced or result.skipped):
+        messages.info(request, "No user here is linked under an old number.")
+    return redirect("devices:device_users", public_id=device.public_id)
+
+
 def _picked(request):
     """The ticked device user numbers, or None for "every user" (all=1 or none sent)."""
     if request.POST.get("all") == "1":

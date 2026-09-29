@@ -517,6 +517,77 @@ def why_not_linked(device, roster):
     return counts
 
 
+@dataclass
+class ReplaceResult:
+    replaced: list = field(default_factory=list)   # (employee, old pin, new pin, start)
+    skipped: list = field(default_factory=list)    # (pin, reason)
+    rechecked: int | None = 0
+
+
+def _first_scan_day(device, pin):
+    """The company-local day this number first scanned on the device, or None."""
+    from devices.models import PunchEvent
+
+    first = (PunchEvent.all_objects.filter(device=device, device_user_id=pin)
+             .order_by("punched_at_utc").values_list("punched_at_utc", flat=True).first())
+    return first.astimezone(_zone(device.company)).date() if first else None
+
+
+def replace_old_links(*, actor, device, pins=None):
+    """Replace each "already linked under another number" link (Nihal,
+    2026-09-29).
+
+    Ajay was linked on this device as user 14 by the demo data, while the
+    terminal knows him as 445962, his Employee ID. For each such user (the
+    ticked ones, or all when ``pins`` is None): the old link ends, and the
+    number the device uses is linked from the day it first scanned here -
+    today if it never has - then that day's excluded punches are judged again
+    so they count. The old link's history is kept: scans it covered stay
+    theirs. Nothing is written to the device; the person is on it already.
+    """
+    wanted = None if pins is None else {str(p) for p in pins}
+    roster = build_roster(device)
+    why_not_linked(device, roster)
+    result = ReplaceResult()
+    earliest = None
+    for row in roster:
+        pin, why = row["pin"], row.get("unlinked") or {}
+        if why.get("code") != "other_number" or (wanted is not None and pin not in wanted):
+            continue
+        employee = why["employee"]
+        if not may_map(actor, device.company_id, current_assignment(employee).branch_id):
+            result.skipped.append((pin, "not in a branch you may map"))
+            continue
+        old = live_enrollment(device, employee)
+        if old is None:
+            result.skipped.append((pin, "the old link has already ended"))
+            continue
+        first_day = _first_scan_day(device, pin)
+        start = day_start(device.company, first_day) if first_day else day_start(device.company)
+        if start <= old.effective_from:
+            start = day_start(device.company)
+        try:
+            with transaction.atomic():
+                old.effective_to = start
+                old.updated_by = actor
+                old.save(update_fields=["effective_to", "updated_by", "updated_at"])
+                outcome = map_employee(actor=actor, device=device, employee=employee,
+                                       start_day=start, upload=False, check_access=False)
+                _audit(actor, device, "device_enrollment.replaced", outcome.enrollment, {
+                    "device": device.serial_number, "employee_id": employee.pk,
+                    "old_device_user_id": old.device_user_id, "old_enrollment": old.pk,
+                    "device_user_id": pin, "effective_from": start.isoformat(),
+                })
+        except MappingError as exc:
+            result.skipped.append((pin, str(exc)))
+            continue
+        result.replaced.append((employee, old.device_user_id, pin, start))
+        earliest = start if earliest is None else min(earliest, start)
+    if earliest is not None:
+        result.rechecked = recheck_from(actor=actor, device=device, start=earliest)
+    return result
+
+
 UNASSIGNED_CODE = "UNASSIGNED"
 UNASSIGNED_NAME = "Unassigned"
 
