@@ -5295,3 +5295,45 @@ Tests: `devices/tests_ingestion.py` (+4), `devices/tests_mapping.py`
 (WhyNotLinkedTests, 3), `attendance/tests_manual_attendance.py`
 (DayFromTheScanTests, 5), `organization/tests_profile_edits.py`
 (FormsOpenOnWhatTheyHaveTests, 4).
+- (Same day) **Replace old link** on Device users: a user whose employee is
+  linked on the device under another number (the demo data's 14/15/13 for
+  Ajay, Dia, Sajal) - the old link ends and the device's number is linked
+  from its first scan there; the excluded punches since then are re-checked.
+  Nihal pressed it; their punches count (`mapping.replace_old_links`).
+
+### Inactive for a period: scans blocked, days Inactive, no salary — 2026-09-29
+
+Nihal: "Make employee status inactive" takes a start and end date; after the
+end they are active again by themselves; without an end, until the admin,
+HR or branch manager makes them active; their punches show blocked and count
+for nothing - no hours, no attendance, no salary for those days.
+
+- **`EmployeeInactivePeriod`** (employees 0007): first day, last day or
+  none, reason, the status to give back. Set and ended in
+  `organization.employee_inactive`; read by date in `employees.inactive`.
+- **Status**: Suspended while a period covers today; after its last day the
+  previous status (active or probation) comes back by itself. Applied at
+  most once an hour per company on a request (`common.middleware`) and by
+  `manage.py apply_inactive_periods` for a scheduler. A planned period
+  starts by itself; "Cancel planned inactive" drops it.
+- **Punches**: `Blocked: employee inactive` (devices 0009, an excluding
+  status), shown "Blocked - inactive" on Punches. Decided by the punch's
+  own day, so a re-check after ending a period early counts them again.
+- **Attendance day**: `Inactive` (attendance 0008) - nothing worked, payable
+  0, not absent; a scan added by hand does not count. Calendar: neutral
+  "Inactive"; report grids: IA.
+- **Salary**: monthly - a deduction line "Inactive days (N of M days), not
+  paid", each day at the rate in force that day (as a joiner's days before
+  joining); fixed allowances prorated without those days; percent ones follow
+  the basic earned. Daily/hourly - an Inactive day pays nothing. Not counted
+  absent, so no absence deduction or penalty on top.
+- **Make active** (admin, HR, branch manager - `employees.edit`): active from
+  today; the period ends yesterday (or is cancelled if it had not started),
+  and today's scans are judged again. A Suspended status from before periods
+  existed is simply made Active, as before.
+- **Refused**: a period over another one, over recorded leave (cancel it
+  first), before joining, or over a finalised salary month. No leave and no
+  manual entry on an inactive day.
+
+Tests: `organization/tests_profile_actions.py` (StatusTests, 12),
+`payroll/tests_proration.py` (InactiveDaysTests).

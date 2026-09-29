@@ -61,6 +61,7 @@ from attendance.models import (
 from auditlog.services import record_company_event
 from common.tenant import use_company
 from devices.models import PunchEvent
+from employees import inactive as inactive_periods
 from employees.models import Employee, EmployeeAssignment
 from leaves.models import LeaveDay
 from organization.services import require_company_membership
@@ -434,6 +435,9 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
             )
         }
         overtime_by_key = _overtime_decisions(employees.keys(), lookback, end)
+        # Inactive periods (2026-09-29): those days are Inactive, not worked.
+        inactive_by_employee = inactive_periods.periods(company_id, employees.keys(),
+                                                        lookback, end)
         # What people fixed by hand (plan step N5). Read in on every pass, so a
         # correction survives the next punch rather than being overwritten.
         fixes = correction_input.in_force(
@@ -490,6 +494,8 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                     status_fix=fixes.statuses.get((employee_id, day)),
                     accepted_reason=fixes.accepted.get((employee_id, day)),
                     late_excused=(fixes.excused or {}).get((employee_id, day)),
+                    inactive=inactive_periods.on(
+                        inactive_by_employee.get(employee_id, ()), day),
                 )
                 if outcome is None:
                     written["skipped"] += 1
@@ -539,13 +545,16 @@ def _overtime_decisions(employee_ids, start, end):
 
 def _write_day(*, day, employee, assignments, window, punches, settings,
                calendar, leave_by_key, company, company_tz, now, locked,
-               overtime=None, status_fix=None, accepted_reason=None, late_excused=None):
+               overtime=None, status_fix=None, accepted_reason=None, late_excused=None,
+               inactive=None):
     """One employee-day. Returns the record, "locked", or None for no record.
 
     ``overtime`` is the approved minutes of a decision on this day (payroll's
     A9), or None when nobody has decided it yet. ``status_fix`` and
     ``accepted_reason`` are corrections a person made to this day (N5);
-    ``late_excused`` a late arrival somebody approved (2026-09-27).
+    ``late_excused`` a late arrival somebody approved (2026-09-27);
+    ``inactive`` the inactive period covering the day (2026-09-29), which
+    wins over everything: nothing worked, nothing paid, not absent.
     """
     if locked:
         return "locked"
@@ -588,7 +597,17 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         "calculated_at": now,
     }
 
-    if leave is not None and leave.balance_units < ONE:
+    if inactive is not None:
+        # Their scans that day were blocked (devices' EMPLOYEE_INACTIVE), and a
+        # scan added by hand does not count either: the day is not theirs.
+        values.update(
+            attendance_status=AttendanceRecord.AttendanceStatus.INACTIVE,
+            punch_status=AttendanceRecord.PunchStatus.NO_PUNCH,
+            payable_fraction=NONE, is_open=False,
+            note=f"Inactive: {inactive.reason}"[:255],
+        )
+        paired = None
+    elif leave is not None and leave.balance_units < ONE:
         # Part of the day on leave: a half day (A10) or some hours (Phase E).
         # Came in: the day counts, less the unpaid share of the leave part.
         # No scans: only the paid share of the leave part counts. With the

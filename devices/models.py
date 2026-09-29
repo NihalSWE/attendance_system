@@ -887,6 +887,8 @@ class PunchEvent(TenantOwned):
         BRANCH_MISMATCH = "branch_mismatch", "Branch mismatch"
         ENROLLMENT_DISABLED = "enrollment_disabled", "Enrollment disabled"
         POLICY_UNRESOLVED = "policy_unresolved", "Policy unresolved"
+        # The employee was inactive that day (EmployeeInactivePeriod, 2026-09-29).
+        EMPLOYEE_INACTIVE = "employee_inactive", "Blocked: employee inactive"
 
     class DedupeStatus(models.TextChoices):
         UNIQUE = "unique", "Unique"

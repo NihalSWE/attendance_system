@@ -19,7 +19,14 @@ from leaves.policies import policy_check
 from leaves.shape import fit, pay_percentage, shape_from, shape_of
 from leaves.shape import pay_percentage as shape_pay_percentage
 from leaves.models import LeaveDay, LeaveRequest, LeaveRequestSegment, LeaveType, PayType
-from leaves.services import check_allowance, is_half_day, plan_leave_days, write_approved_days, _writable
+from leaves.services import (
+    _writable,
+    check_allowance,
+    is_half_day,
+    plan_leave_days,
+    refuse_inactive_days,
+    write_approved_days,
+)
 from organization.services import require_company_membership, STRUCTURE_ROLES
 
 
@@ -136,6 +143,7 @@ def submit_request(*, actor, company_id, values, document=None):
         if not reason:
             raise ValidationError({'reason': 'Give a reason for your request.'})
         days, skipped = _plan(company_id, employee, values['start_date'], values['end_date'])
+        refuse_inactive_days(company_id, employee, [on for on, *_ in days])
         fitted = fit(shape, days)
         check_allowance(employee, leave_type, days, units=fitted)
         policy_check(employee, leave_type, days, shape, fitted)

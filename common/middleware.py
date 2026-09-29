@@ -38,6 +38,12 @@ class TenantMiddleware:
         # inheriting whatever the previous request on this thread left behind.
         token = set_current_company_id(company_id)
         try:
+            if company_id:
+                # Inactive periods start and end on their own day (2026-09-29):
+                # at most once an hour per company, never failing the request.
+                from organization.employee_inactive import apply_due_hourly
+
+                apply_due_hourly(company_id)
             return self.get_response(request)
         finally:
             clear_current_company_id(token)

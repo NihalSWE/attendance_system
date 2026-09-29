@@ -60,11 +60,14 @@
                 </p>
                 <div class="profile-hero__chips">
                     {% if assignment %}<span class="hero-chip">ID {{ assignment.employee_code }}</span>{% endif %}
-                    {% if employee.employment_status == "active" %}
+                    {% if inactive_now %}
+                        <span class="hero-chip hero-chip--warning" title="{{ inactive_now.reason }}">Inactive from {{ inactive_now.start_date|date:"j M Y" }}{% if inactive_now.end_date %} to {{ inactive_now.end_date|date:"j M Y" }}{% else %} · until made active{% endif %}</span>
+                    {% elif employee.employment_status == "active" %}
                         <span class="hero-chip hero-chip--success">Active</span>
                     {% else %}
                         <span class="hero-chip hero-chip--muted">{{ employee.get_employment_status_display }}</span>
                     {% endif %}
+                    {% if inactive_next %}<span class="hero-chip hero-chip--warning" title="{{ inactive_next.reason }}">Inactive planned {{ inactive_next.start_date|date:"j M Y" }}{% if inactive_next.end_date %}–{{ inactive_next.end_date|date:"j M Y" }}{% endif %}</span>{% endif %}
                     {% if employee.hide_from_reports %}<span class="hero-chip hero-chip--warning">Left out of reports</span>{% endif %}
                     {% if employee.no_overtime_from %}<span class="hero-chip hero-chip--warning">No overtime from {{ employee.no_overtime_from|date:"j M Y" }}</span>{% endif %}
                     {% if login and login.status == "active" %}<span class="hero-chip">{{ edit.login_role_label|default:login.get_role_display }} login</span>{% endif %}
@@ -163,14 +166,23 @@
                 <div class="rail-group">
                     <div class="rail-group__label">Employment</div>
                     {% if inactive_form and not is_ended and employee.user_id != request.user.pk %}
-                        {% if employee.employment_status == "suspended" %}
+                        {% if employee.employment_status == "suspended" or inactive_now %}
                             <form method="post" action="{% url 'organization:employee_active' employee.pk %}"
                                   data-confirm-title="Make {{ employee.full_name }} active again?"
-                                  data-confirm="They can request leave and report missed scans again."
+                                  data-confirm="Active from today: their scans from today count, their salary is paid from today, and they can request leave and report missed scans again.{% if inactive_now %} Days before today stay inactive.{% endif %}"
                                   data-confirm-button="Make active">
                                 {% csrf_token %}
                                 <input type="hidden" name="active" value="1">
                                 <button class="rail-action" type="submit"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5v5M14.5 9.5v5"/></svg><span>Make employee status active</span></button>
+                            </form>
+                        {% elif inactive_next %}
+                            <form method="post" action="{% url 'organization:employee_active' employee.pk %}"
+                                  data-confirm-title="Cancel the planned inactive period?"
+                                  data-confirm="{{ employee.full_name }} was to be inactive from {{ inactive_next.start_date|date:'j M Y' }}{% if inactive_next.end_date %} to {{ inactive_next.end_date|date:'j M Y' }}{% endif %}. They stay active."
+                                  data-confirm-button="Cancel it">
+                                {% csrf_token %}
+                                <input type="hidden" name="active" value="1">
+                                <button class="rail-action" type="submit"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5v5M14.5 9.5v5"/></svg><span>Cancel planned inactive</span></button>
                             </form>
                         {% else %}
                             <button class="rail-action" type="button" data-open-dialog="inactive-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5v5M14.5 9.5v5"/></svg><span>Make employee status inactive</span></button>
@@ -1360,9 +1372,9 @@
         {% url 'organization:employee_overtime' employee.pk as overtime_url %}
         {% include "organization/profile/modal_form.html" with id="overtime-dialog" title="Disallow overtime" action=overtime_url form=overtime_form submit="Disallow overtime" note="Their days from then are worked out again: no overtime approved or paid, and the Overtime page does not ask about them. Allow it again from the same menu." %}
     {% endif %}
-    {% if inactive_form and employee.employment_status != "suspended" %}
+    {% if inactive_form and employee.employment_status != "suspended" and not inactive_now and not inactive_next %}
         {% url 'organization:employee_active' employee.pk as active_url %}
-        {% include "organization/profile/modal_form.html" with id="inactive-dialog" title="Make employee status inactive" action=active_url form=inactive_form submit="Make inactive" danger=True note="Their status becomes Suspended. It marks them only: attendance and salary are counted as before. While inactive they cannot request leave or report a missed scan. Make them active again from the same menu." %}
+        {% include "organization/profile/modal_form.html" with id="inactive-dialog" title="Make employee status inactive" action=active_url form=inactive_form submit="Make inactive" danger=True note="On these days their scans are kept but blocked, the day is Inactive (not absent) and no salary is paid for it. They cannot request leave or report a missed scan while inactive. With a last day they are active again by themselves the next day; without one, until the owner, admin, HR or their branch manager makes them active." %}
     {% endif %}
     {% if resign_form %}
         {% url 'organization:employee_end' employee.pk as end_url %}

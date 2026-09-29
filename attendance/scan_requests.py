@@ -43,6 +43,7 @@ from attendance.models import MissedScanRequest
 from attendance.services import _is_locked, locked_ranges
 from auditlog.services import record_company_event
 from common.tenant import use_company
+from employees import inactive
 from employees.models import Employee
 from organization.services import STRUCTURE_ROLES as COMPANY_ADMINS
 from organization.services import require_company_membership
@@ -237,6 +238,9 @@ def _create(*, actor, membership, company_id, employee, work_date, kind, at, at_
     branch_id = access.day_branch(company_id, employee.pk, work_date)
     if branch_id is None:
         raise ValidationError({day_field: f"{who} were not placed in a branch on that day."})
+    if inactive.covering(company_id, employee.pk, work_date) is not None:
+        # An inactive day counts nothing, a scan added by hand included (2026-09-29).
+        raise ValidationError({day_field: f"{who} were inactive on that day, so it does not count."})
 
     with use_company(company_id):
         if MissedScanRequest.objects.filter(

@@ -26,9 +26,10 @@ WORKING = (S.PRESENT, S.HALF_DAY, S.INCOMPLETE)
 
 #: One letter or two per day on the weekly and monthly grids.
 CODES = {S.PRESENT: "P", S.HALF_DAY: "HD", S.ABSENT: "A", S.LEAVE: "LV",
-         S.HOLIDAY: "H", S.WEEKLY_OFF: "W", S.INCOMPLETE: "IN"}
+         S.HOLIDAY: "H", S.WEEKLY_OFF: "W", S.INCOMPLETE: "IN", S.INACTIVE: "IA"}
 LEGEND = ("P present · LT present, came late · HD half day · A absent · LV leave · "
-          "H holiday · W weekly off · IN incomplete (no check-out) · blank: no record")
+          "H holiday · W weekly off · IN incomplete (no check-out) · IA inactive · "
+          "blank: no record")
 
 
 @dataclass

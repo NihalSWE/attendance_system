@@ -214,23 +214,162 @@ class OvertimeTests(ActionCase):
 
 
 class StatusTests(ActionCase):
-    def test_inactive_then_active(self):
-        refused = self.client.post(self.url("employee_active"), {"reason": ""})
-        self.assertModalOpen(refused, "inactive-dialog")
-        self.assertBack(self.client.post(self.url("employee_active"),
-                                         {"reason": "Under investigation"}))
+    """Inactive for a period (Nihal, 2026-09-29): from a first day to a last
+    day, or until made active; scans blocked, days Inactive, no salary."""
+
+    ONE = datetime.timedelta(days=1)
+
+    def make_inactive(self, start, end=None, reason="Under investigation", employee=None):
+        return self.client.post(self.url("employee_active", employee), {
+            "start_date": start.isoformat(), "end_date": end.isoformat() if end else "",
+            "reason": reason})
+
+    def make_active(self):
+        return self.client.post(self.url("employee_active"), {"active": "1"})
+
+    def periods(self):
+        from employees.models import EmployeeInactivePeriod
+
+        return list(EmployeeInactivePeriod.all_objects.filter(employee=self.employee)
+                    .order_by("start_date"))
+
+    def punch_statuses(self, day):
+        from devices.models import PunchEvent
+
+        return {p.authorization_status for p in PunchEvent.all_objects.filter(
+            employee=self.employee, punched_at_device__date=day)}
+
+    def apply_due(self, today):
+        from organization.employee_inactive import apply_due
+
+        return apply_due(self.company.pk, today=today)
+
+    def test_a_refused_form_reopens_it(self):
+        self.assertModalOpen(self.client.post(self.url("employee_active"), {"reason": ""}),
+                             "inactive-dialog")
+        self.assertModalOpen(self.make_inactive(TODAY, TODAY - self.ONE), "inactive-dialog")
+        self.assertEqual(self.periods(), [])
+
+    def test_without_a_last_day_it_lasts_until_made_active(self):
+        self.assertEqual(self.worked(DAY).attendance_status, "present")
+        self.assertBack(self.make_inactive(DAY))
         self.assertEqual(self.fresh().employment_status, "suspended")
-        self.assertContains(self.client.get(self.profile_url), "Make employee status active")
-        self.assertBack(self.client.post(self.url("employee_active"), {"active": "1"}))
+        day = self.record(DAY)
+        self.assertEqual((day.attendance_status, day.worked_minutes, day.payable_fraction),
+                         ("inactive", 0, 0))
+        self.assertEqual(self.punch_statuses(DAY), {"employee_inactive"})
+        page = self.client.get(self.profile_url)
+        self.assertContains(page, "Make employee status active")
+        self.assertContains(page, f"Inactive from {DAY.day} {DAY:%b %Y}")
+        # Days pass: with no last day nothing changes by itself.
+        self.apply_due(TODAY + datetime.timedelta(days=30))
+        self.assertEqual(self.fresh().employment_status, "suspended")
+        self.assertBack(self.make_active())
         self.assertEqual(self.fresh().employment_status, "active")
-        self.assertEqual(AuditLog.objects.filter(action="employee.status_changed").count(), 2)
+        # Active from today: the days before it stay inactive.
+        self.assertEqual(self.periods()[0].end_date, TODAY - self.ONE)
+        self.assertEqual(self.record(DAY).attendance_status, "inactive")
+        self.assertEqual(AuditLog.objects.filter(action__in=[
+            "employee.made_inactive", "employee.made_active"]).count(), 2)
+
+    def test_with_a_last_day_they_are_active_again_by_themselves(self):
+        self.make_inactive(TODAY, TODAY + 2 * self.ONE)
+        self.assertEqual(self.fresh().employment_status, "suspended")
+        self.apply_due(TODAY + 2 * self.ONE)
+        self.assertEqual(self.fresh().employment_status, "suspended")
+        self.apply_due(TODAY + 3 * self.ONE)
+        self.assertEqual(self.fresh().employment_status, "active")
+
+    def test_probation_is_given_back(self):
+        Employee.all_objects.filter(pk=self.employee.pk).update(employment_status="probation")
+        self.make_inactive(TODAY, TODAY)
+        self.apply_due(TODAY + self.ONE)
+        self.assertEqual(self.fresh().employment_status, "probation")
+
+    def test_a_past_period_changes_the_days_not_the_status(self):
+        self.worked(DAY)
+        self.assertBack(self.make_inactive(DAY - self.ONE, DAY))
+        self.assertEqual(self.fresh().employment_status, "active")
+        self.assertEqual(self.record(DAY).attendance_status, "inactive")
+
+    def test_a_planned_period_starts_by_itself_and_can_be_cancelled(self):
+        start = TODAY + 2 * self.ONE
+        self.make_inactive(start, start + 2 * self.ONE)
+        self.assertEqual(self.fresh().employment_status, "active")
+        page = self.client.get(self.profile_url)
+        self.assertContains(page, "Inactive planned")
+        self.assertContains(page, "Cancel planned inactive")
+        self.apply_due(start)
+        self.assertEqual(self.fresh().employment_status, "suspended")
+        Employee.all_objects.filter(pk=self.employee.pk).update(employment_status="active")
+        self.make_active()
+        self.assertEqual(self.periods()[0].status, "cancelled")
+
+    def test_made_active_the_same_day_its_scans_count_again(self):
+        self.punch(TODAY, 12)
+        self.make_inactive(TODAY)
+        self.assertEqual(self.punch_statuses(TODAY), {"employee_inactive"})
+        self.make_active()
+        self.assertEqual(self.periods()[0].status, "cancelled")
+        self.assertEqual(self.punch_statuses(TODAY), {"authorized"})
+
+    def test_a_scan_arriving_on_an_inactive_day_is_blocked(self):
+        from devices.models import PunchEvent
+        from devices.services.processing import resolve_and_authorize
+
+        self.make_inactive(DAY)
+        punch = self.punch(DAY, 9)
+        with use_company(self.company):
+            resolve_and_authorize(PunchEvent.objects.get(pk=punch.pk))
+        blocked = PunchEvent.all_objects.get(pk=punch.pk)
+        self.assertEqual(blocked.authorization_status, "employee_inactive")
+        self.assertEqual(blocked.processing_status, "excluded")
+        self.assertIn("inactive", blocked.authorization_snapshot["decision_reason"])
+
+    def test_not_over_another_period_or_leave(self):
+        self.make_inactive(DAY, DAY + self.ONE)
+        response = self.make_inactive(DAY + self.ONE, DAY + 2 * self.ONE)
+        self.assertModalOpen(response, "inactive-dialog")
+        self.assertContains(response, "already inactive from")
+        from leaves import services as leave_services
+
+        with use_company(self.company):
+            leave_services.record_leave(actor=self.admin, company_id=self.company.pk, values={
+                "employee": self.clerk, "leave_type": self.leave_type,
+                "start_date": TODAY + 5 * self.ONE, "end_date": TODAY + 5 * self.ONE,
+                "pay_type": "paid", "reason": ""})
+        response = self.make_inactive(TODAY + 4 * self.ONE, employee=self.clerk)
+        self.assertContains(response, "They have leave on")
+
+    def test_no_leave_or_manual_entry_on_inactive_days(self):
+        from django.core.exceptions import ValidationError
+
+        from attendance import scan_requests
+        from leaves import services as leave_services
+
+        self.make_inactive(DAY, DAY)
+        with self.assertRaisesMessage(ValidationError, "inactive on"):
+            leave_services.record_leave(actor=self.admin, company_id=self.company.pk, values={
+                "employee": self.employee, "leave_type": self.leave_type,
+                "start_date": DAY, "end_date": DAY, "pay_type": "paid", "reason": ""})
+        with self.assertRaisesMessage(ValidationError, "inactive on that day"):
+            scan_requests.enter_for(
+                actor=self.admin, company_id=self.company.pk, employee_id=self.employee.pk,
+                work_date=DAY, kind="check_out",
+                at=datetime.datetime.combine(DAY, datetime.time(18), tzinfo=UTC),
+                at_out=None, reason="x")
+
+    def test_an_old_suspension_is_made_active_as_before(self):
+        Employee.all_objects.filter(pk=self.employee.pk).update(employment_status="suspended")
+        self.assertBack(self.make_active())
+        self.assertEqual(self.fresh().employment_status, "active")
 
     def test_not_oneself(self):
         with use_company(self.company):
             self.clerk.user = self.manager
             self.clerk.save(update_fields=["user"])
         self.client.force_login(self.manager)
-        response = self.client.post(self.url("employee_active", self.clerk), {"reason": "x"})
+        response = self.make_inactive(TODAY, reason="x", employee=self.clerk)
         self.assertEqual(response.status_code, 403)
 
 
