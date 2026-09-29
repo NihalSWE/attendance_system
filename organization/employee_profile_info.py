@@ -99,6 +99,17 @@ def line_manager_choices(actor, company_id, employee):
             .order_by("first_name", "last_name"))
 
 
+def line_manager_form_choices(actor, company_id, employee, assignment):
+    """``line_manager_choices`` plus the line manager they have now, when that
+    person is outside it (another branch, or no longer working): the form
+    opens on who is recorded, and keeping them is not refused (Nihal,
+    2026-09-29). Call inside the company's context."""
+    choices = line_manager_choices(actor, company_id, employee)
+    if assignment is not None and assignment.manager_id:
+        choices = choices | Employee.objects.filter(pk=assignment.manager_id)
+    return choices
+
+
 @transaction.atomic
 def set_line_manager(*, actor, company_id, employee_id, manager):
     """Record who they report to, on their current placement. Not dated: it
@@ -111,7 +122,7 @@ def set_line_manager(*, actor, company_id, employee_id, manager):
         if manager is not None:
             if manager.pk == employee.pk:
                 raise ValidationError({"manager": "Someone cannot be their own line manager."})
-            if not line_manager_choices(actor, company_id, employee).filter(pk=manager.pk).exists():
+            if manager.pk != assignment.manager_id and not line_manager_choices(actor, company_id, employee).filter(pk=manager.pk).exists():
                 raise ValidationError({"manager": "Choose someone working in a branch you see."})
         before = assignment.manager.full_name if assignment.manager_id else ""
         assignment.manager = manager

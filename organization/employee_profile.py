@@ -69,6 +69,25 @@ class PersonalForm(StyledFormMixin, forms.ModelForm):
             "address": forms.Textarea(attrs={"rows": 2}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # The form opens on what they hold (Nihal, 2026-09-29). A gender, blood
+        # group or marital status saved in another spelling ("Male", "a+") is
+        # matched to its choice; one that is not a choice at all is offered as
+        # it is - otherwise the box shows "—" and saving would wipe it.
+        for name in CHOICES:
+            held = (getattr(self.instance, name, "") or "").strip()
+            if not held or name not in self.fields:
+                continue
+            field = self.fields[name]
+            match = next((value for value, _label in field.choices
+                          if value and value.lower() == held.lower()), None)
+            if match is None:
+                field.choices = [*field.choices, (held, held)]
+                match = held
+            if not self.is_bound:
+                self.initial[name] = match
+
     def clean_date_of_birth(self):
         born = self.cleaned_data.get("date_of_birth")
         if born and born > datetime.date.today():

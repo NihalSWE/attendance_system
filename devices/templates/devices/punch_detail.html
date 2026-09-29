@@ -26,7 +26,7 @@
                 </span>
             </nav>
             <h1 class="page__title">
-                Why this punch was {% if punch.authorization_status == 'authorized' %}accepted{% else %}not counted{% endif %}
+                Why this punch was {% if punch.authorization_status == 'authorized' and not punch.is_repeat_scan %}accepted{% else %}not counted{% endif %}
             </h1>
             <p class="page__sub">
                 Append-only evidence. The decision below is a frozen snapshot of what applied when the punch happened.
@@ -237,7 +237,14 @@
                                     Duplicate status
                                 </td>
                                 <td>
-                                    {{ punch.get_dedupe_status_display }}
+                                    {% if punch.is_repeat_scan %}
+                                        Repeat scan — ignored
+                                        <div class="t-faint">
+                                            Scanned again less than 5 seconds after the scan before, so it is one scan and only the first counts.
+                                        </div>
+                                    {% else %}
+                                        {{ punch.get_dedupe_status_display }}
+                                    {% endif %}
                                     {% if punch.duplicate_of_id %}
                                         <div class="t-faint">
                                             <a href="{% url 'devices:punch_detail' punch.duplicate_of_id %}">

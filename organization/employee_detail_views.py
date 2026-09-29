@@ -150,13 +150,18 @@ def _actions(request, company_id, page, bound, may_record_leave):
     raw_year = str(request.GET.get("year", ""))
     leave_year = int(raw_year) if raw_year.isdigit() and 2000 <= int(raw_year) <= 2100 \
         else today.year
+    book = policies.Book(employee)
+    # The policy given to them by hand today, so its modal opens on it (Nihal,
+    # 2026-09-29: an edit form shows what they already have). None: the default.
+    own_policy = next((row.policy_id for row in book.own if row.effective_from <= today
+                       and (row.effective_to is None or today <= row.effective_to)), None)
     context = {
-        "leave_policy": policies.Book(employee).policy_on(today),
+        "leave_policy": book.policy_on(today),
         "leave_balances": policies.overview(employee, leave_year, today)
         if page["leave_seen"] else None,
         "policy_form": (bound.get("leave_policy") or AssignPolicyForm(
             policies=LeavePolicy.objects.filter(status="active").order_by("name"),
-            initial={"effective_from": today}, auto_id="leave_policy_%s"))
+            initial={"effective_from": today, "policy": own_policy}, auto_id="leave_policy_%s"))
         if balances_by else None,
         "adjust_form": (bound.get("adjust") or AdjustBalanceForm(
             leave_types=LeaveType.objects.filter(status="active").order_by("name"),
@@ -210,8 +215,9 @@ def _profile(request, company_id, pk, *, personal=None, photo=None, open_dialog=
     line_manager_form = None
     if may["edit"]:
         with use_company(company_id):
-            choices = info.line_manager_choices(request.user, company_id, employee)
             assignment = page["assignment"]
+            choices = info.line_manager_form_choices(request.user, company_id, employee,
+                                                     assignment)
             line_manager_form = line_manager or info.LineManagerForm(
                 choices=choices,
                 initial={"manager": assignment.manager_id if assignment else None})
@@ -375,9 +381,14 @@ def employee_line_manager(request, pk):
     if bail:
         return bail
     _membership, employee = profile.editable(request.user, company_id, pk)
+    from organization.employee_edit_services import get_employee_for_edit
+
+    _membership, _employee, assignment, _pay = get_employee_for_edit(
+        actor=request.user, company_id=company_id, employee_id=pk, code="employees.edit")
     with use_company(company_id):
         form = info.LineManagerForm(
-            request.POST, choices=info.line_manager_choices(request.user, company_id, employee))
+            request.POST, choices=info.line_manager_form_choices(request.user, company_id,
+                                                                 employee, assignment))
         valid = form.is_valid()
     if valid:
         try:

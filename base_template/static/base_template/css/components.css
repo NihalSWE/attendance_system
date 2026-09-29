@@ -1336,6 +1336,30 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     gap: 6px;
     white-space: nowrap;
 }
+/* Why a device user is not linked, and what links them (2026-09-29). */
+.unlinked-why {
+    margin-top: 6px;
+    min-width: 260px;
+    max-width: 42ch;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: normal;
+}
+.unlinked-reasons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 10px 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: 13px;
+}
+.unlinked-reasons li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
 
 /* The shared confirm dialog (confirm.js). */
 .modal--confirm { max-width: min(440px, calc(100vw - 32px)); }

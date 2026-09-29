@@ -188,6 +188,69 @@ class ShiftTests(ProfileEditCase):
         self.assertModalOpen(self.save("shift", shift="", first_day=""), "shift-dialog")
 
 
+class FormsOpenOnWhatTheyHaveTests(ProfileEditCase):
+    """Nihal, 2026-09-29: an edit form shows the data they already have; only
+    what is missing is blank."""
+
+    def page(self):
+        return self.client.get(self.profile_url).context
+
+    def test_their_own_shift_is_chosen_in_set_shift(self):
+        self.assertIsNone(self.page()["edit"]["shift_form"].initial.get("shift"))
+        self.save("shift", shift=self.shift.pk, first_day=TODAY.isoformat(), last_day="",
+                  reason="Nights")
+        self.assertEqual(self.page()["edit"]["shift_form"].initial["shift"], self.shift.pk)
+
+    def test_their_leave_policy_is_chosen(self):
+        from leaves import policies, policy_admin
+
+        staff = policy_admin.save_policy(actor=self.admin, company_id=self.company.pk, values={
+            "code": "STAFF", "name": "Staff", "description": "", "is_default": False})
+        self.assertIsNone(self.page()["policy_form"].initial.get("policy"))
+        policies.assign_policy(actor=self.admin, company_id=self.company.pk,
+                               employee=self.employee, policy=staff,
+                               effective_from=datetime.date(2026, 1, 1))
+        self.assertEqual(self.page()["policy_form"].initial["policy"], staff.pk)
+
+    def test_personal_choices_saved_in_another_spelling_are_shown_and_kept(self):
+        with use_company(self.company):
+            Employee.objects.filter(pk=self.employee.pk).update(
+                gender="Male", blood_group="a+", marital_status="Engaged")
+        form = self.page()["personal_form"]
+        self.assertEqual((form.initial["gender"], form.initial["blood_group"],
+                          form.initial["marital_status"]), ("male", "A+", "Engaged"))
+        self.assertIn(("Engaged", "Engaged"), form.fields["marital_status"].choices)
+        # Saved without touching it, the value that is no choice stays.
+        response = self.client.post(
+            reverse("organization:employee_personal", args=[self.employee.pk]),
+            {"gender": "male", "blood_group": "A+", "marital_status": "Engaged"})
+        self.assertEqual(response.status_code, 302)
+        self.employee.refresh_from_db()
+        self.assertEqual(self.employee.marital_status, "Engaged")
+
+    def test_a_line_manager_outside_the_list_is_shown_and_kept(self):
+        # Karim is at Chittagong, which the branch manager does not see.
+        placement = self.placed()
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(pk=placement.pk).update(manager=self.far)
+        self.client.force_login(self.manager)
+        form = self.page()["line_manager_form"]
+        self.assertEqual(form.initial["manager"], self.far.pk)
+        self.assertIn(self.far, form.fields["manager"].queryset)
+        response = self.client.post(
+            reverse("organization:employee_line_manager", args=[self.employee.pk]),
+            {"manager": self.far.pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.placed().manager_id, self.far.pk)
+        # Choosing someone else out of reach is still refused.
+        with use_company(self.company):
+            EmployeeAssignment.objects.filter(pk=placement.pk).update(manager=None)
+        response = self.client.post(
+            reverse("organization:employee_line_manager", args=[self.employee.pk]),
+            {"manager": self.far.pk})
+        self.assertModalOpen(response, "line_manager-dialog")
+
+
 class LoginTests(ProfileEditCase):
     PASSWORD = "Str0ng-pass-2026"
 

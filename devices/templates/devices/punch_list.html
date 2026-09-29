@@ -162,7 +162,11 @@
                                     {{ punch.get_verification_method_display }}
                                 </td>
                                 <td>
-                                    {% if punch.processing_status == 'excluded' %}
+                                    {% if punch.is_repeat_scan %}
+                                        <span class="badge badge--neutral" title="Scanned again less than 5 seconds after the scan before: one scan, so only the first counts.">
+                                            Repeat — ignored
+                                        </span>
+                                    {% elif punch.processing_status == 'excluded' %}
                                         <span class="badge badge--danger">
                                             Excluded
                                         </span>
@@ -181,7 +185,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if punch.dedupe_status == 'confirmed_duplicate' %}
+                                    {% if punch.is_repeat_scan %}
+                                        Scanned again within 5 seconds — the first scan counts
+                                    {% elif punch.dedupe_status == 'confirmed_duplicate' %}
                                         Retransmission of an earlier punch
                                     {% elif punch.dedupe_status == 'probable_duplicate' %}
                                         Close to another scan — needs a decision

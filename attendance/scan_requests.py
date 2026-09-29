@@ -31,6 +31,9 @@ Since 2026-09-26 (Ajay):
   review when salary is generated.
 """
 
+import datetime
+import zoneinfo
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -87,17 +90,52 @@ def _audit(actor, membership, request, action, before=None):
     )
 
 
+def attendance_day(*, actor, membership, company_id, employee, kind, at, at_out):
+    """The day a missing scan belongs to, when the form did not ask for it.
+
+    Only a whole missing day asks for the day (Nihal, 2026-09-29: three
+    calendars for one check-in and check-out). Otherwise it is the date of
+    the scan - the check-in when both are missing - or, for a scan after
+    midnight on a night shift, the day before: whichever day it counts on,
+    tried the way approving would. When neither takes it, the scan's own
+    date, and ``_create`` says why it does not fit. None without a time.
+    """
+    if at is None:
+        return None
+    try:
+        zone = zoneinfo.ZoneInfo(membership.company.timezone or "UTC")
+    except zoneinfo.ZoneInfoNotFoundError:
+        zone = zoneinfo.ZoneInfo("UTC")
+    day = timezone.localtime(at, zone).date()
+    scans = [at] + ([at_out] if kind == Kind.BOTH and at_out is not None else [])
+    for candidate in (day, day - datetime.timedelta(days=1)):
+        try:
+            correction_services.check_scans_fit(
+                actor=actor, membership=membership, company_id=company_id,
+                employee_id=employee.pk, work_date=candidate, scans=scans,
+            )
+        except (ValidationError, PermissionDenied):
+            continue
+        return candidate
+    return day
+
+
 def submit(*, actor, company_id, work_date, at, reason, kind=Kind.SCAN, at_out=None):
-    """The employee's own request, from their login."""
+    """The employee's own request, from their login. ``work_date`` None: the
+    day the scan counts on (``attendance_day``)."""
     membership = require_company_membership(actor, company_id)
     if actor.is_superuser:
         raise PermissionDenied("Use your employee login to report a missed scan.")
     employee = my_employee(actor, company_id)
     if employee is None or employee.employment_status not in WORKING:
         raise PermissionDenied("An active employee record linked to your login is required.")
+    derived = work_date is None and kind != Kind.WHOLE_DAY
+    if derived:
+        work_date = attendance_day(actor=actor, membership=membership, company_id=company_id,
+                                   employee=employee, kind=kind, at=at, at_out=at_out)
     return _create(actor=actor, membership=membership, company_id=company_id,
                    employee=employee, work_date=work_date, kind=kind, at=at, at_out=at_out,
-                   reason=reason, who="You")
+                   reason=reason, who="You", derived=derived)
 
 
 def enter_for(*, actor, company_id, employee_id, work_date, kind, at, at_out, reason):
@@ -113,13 +151,17 @@ def enter_for(*, actor, company_id, employee_id, work_date, kind, at, at_out, re
         raise PermissionDenied("For your own attendance, use Report a missed scan.")
     if employee.employment_status not in WORKING:
         raise ValidationError(f"{employee.full_name} no longer works here.")
+    derived = work_date is None and kind != Kind.WHOLE_DAY
+    if derived:
+        work_date = attendance_day(actor=actor, membership=membership, company_id=company_id,
+                                   employee=employee, kind=kind, at=at, at_out=at_out)
     if work_date is not None:
         branch_id, department_id = access.day_place(company_id, employee.pk, work_date)
         if not access.in_scope(branch_id, department_id, scope):
             raise PermissionDenied("That day is in a branch whose attendance you do not see.")
     return _create(actor=actor, membership=membership, company_id=company_id,
                    employee=employee, work_date=work_date, kind=kind, at=at, at_out=at_out,
-                   reason=reason, who="They")
+                   reason=reason, who="They", derived=derived)
 
 
 def may_approve_own(actor, company_id):
@@ -170,13 +212,18 @@ def _times(company_id, employee, work_date, kind, at, at_out):
     return at, (at_out if kind == Kind.BOTH else None)
 
 
-def _create(*, actor, membership, company_id, employee, work_date, kind, at, at_out, reason, who):
+def _create(*, actor, membership, company_id, employee, work_date, kind, at, at_out, reason, who,
+            derived=False):
+    # A day worked out from the scan (``attendance_day``) has no box of its
+    # own on the form: what is wrong with it is said at the scan's time.
+    day_field = "at" if derived else "work_date"
     reason = (reason or "").strip()
     errors = {}
     if not reason:
         errors["reason"] = "Say what happened, so whoever approves it knows."
     if work_date is None:
-        errors["work_date"] = "Choose the day."
+        errors[day_field] = ("Choose the date and time of the scan." if derived
+                             else "Choose the day.")
     if errors:
         raise ValidationError(errors)
     first, second = _times(company_id, employee, work_date, kind, at, at_out)
@@ -185,11 +232,11 @@ def _create(*, actor, membership, company_id, employee, work_date, kind, at, at_
         raise ValidationError({"at": "A scan cannot be in the future."})
     if _is_locked(work_date, locked_ranges(company_id)):
         raise ValidationError({
-            "work_date": "Salary for that month is finalised, so the day can no longer change."
+            day_field: "Salary for that month is finalised, so the day can no longer change."
         })
     branch_id = access.day_branch(company_id, employee.pk, work_date)
     if branch_id is None:
-        raise ValidationError({"work_date": f"{who} were not placed in a branch on that day."})
+        raise ValidationError({day_field: f"{who} were not placed in a branch on that day."})
 
     with use_company(company_id):
         if MissedScanRequest.objects.filter(

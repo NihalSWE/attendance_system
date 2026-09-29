@@ -429,6 +429,82 @@ def map_automatically(*, actor, device, pins=None):
     return result
 
 
+#: Why a device user is not linked to an employee, and what links them (Nihal,
+#: 2026-09-29: "which are they, why are they not linked, what do they need").
+#: In the order the Device users filter lists them.
+UNLINKED_REASONS = {
+    "ready": "Ready to link",
+    "other_number": "Employee already linked under another number",
+    "other_branch": "Employee works at another branch",
+    "no_employee": "No employee has this Employee ID",
+    "not_digits": "Device number is not digits",
+}
+
+
+def why_not_linked(device, roster):
+    """Explain every unlinked user still on the device, in place.
+
+    Each such roster row gets ``unlinked``: ``code`` (a key of
+    UNLINKED_REASONS), ``text`` (why, and what to do, in words) and
+    ``employee`` (who their number points to, if anyone). It answers exactly
+    the questions ``map_employee`` asks when Link to existing employees
+    runs, so the screen and the button agree. Returns ``{code: count}``.
+    """
+    from employees.models import EmployeeAssignment
+
+    rows = [r for r in roster if not r["is_mapped"] and not r.get("removed_from_device")]
+    counts = {}
+    if not rows:
+        return counts
+    owners = {}
+    for assignment in (
+        EmployeeAssignment.all_objects.filter(
+            company_id=device.company_id, employee_code__in=[r["pin"] for r in rows])
+        .exclude(status="cancelled").select_related("employee", "branch")
+        .order_by("-effective_from")
+    ):
+        # The employee whose *current* Employee ID it is, as map_automatically.
+        if assignment.employee_code not in owners and current_assignment(assignment.employee) == assignment:
+            owners[assignment.employee_code] = assignment
+    now = timezone.now()
+    linked_as = {
+        e.employee_id: e.device_user_id
+        for e in DeviceEnrollment.all_objects.filter(
+            device=device, employee_id__in=[a.employee_id for a in owners.values()])
+        .exclude(enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED)
+        .filter(effective_from__lte=now).exclude(effective_to__lte=now)
+    }
+    for row in rows:
+        pin = row["pin"]
+        assignment = owners.get(pin)
+        employee = assignment.employee if assignment else None
+        if not pin.isdigit() or len(pin) > 20:
+            code, text = "not_digits", (
+                f"{pin} cannot be an Employee ID (digits only, at most 20). "
+                "Link it by hand with Map a user.")
+        elif employee is None:
+            code, text = "no_employee", (
+                f"No employee has Employee ID {pin}. Add them as an employee, give the right "
+                f"employee Employee ID {pin} (Edit employee), or link by hand with Map a user.")
+        elif assignment.branch_id != device.branch_id:
+            code, text = "other_branch", (
+                f"{employee.full_name} has Employee ID {pin} but works at "
+                f"{assignment.branch.name}; this device is at {device.branch.name}. "
+                "Move them to this branch, or use a device of theirs.")
+        elif employee.pk in linked_as:
+            code, text = "other_number", (
+                f"{employee.full_name} has Employee ID {pin} but is already linked on this "
+                f"device as user {linked_as[employee.pk]}, and one person has one number per "
+                f"device. End that old link to link {pin}.")
+        else:
+            code, text = "ready", (
+                f"{employee.full_name} has Employee ID {pin}. "
+                "Press Link to existing employees.")
+        row["unlinked"] = {"code": code, "text": text, "employee": employee}
+        counts[code] = counts.get(code, 0) + 1
+    return counts
+
+
 UNASSIGNED_CODE = "UNASSIGNED"
 UNASSIGNED_NAME = "Unassigned"
 

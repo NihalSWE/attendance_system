@@ -186,9 +186,13 @@ def edit_sections(request, company_id, pk, *, back):
                     return redirect(back("allowances"))
 
         shifts = Shift.objects.filter(status=ActiveStatus.ACTIVE).order_by("name")
+        calendar = WorkCalendar(company_id, today, today)
+        own = calendar.employee_shift(employee.pk, today)
         shift_form = EmployeeShiftForm(
             request.POST if section == "shift" else None,
-            shifts=shifts, initial={"first_day": today},
+            shifts=shifts,
+            # Opens on the shift of their own they have today, if any (2026-09-29).
+            initial={"first_day": today, "shift": getattr(own, "shift_id", None)},
         )
         end_form = EndEmployeeShiftForm(
             request.POST if section == "shift_end" else None, initial={"last_day": today},
@@ -312,8 +316,6 @@ def edit_sections(request, company_id, pk, *, back):
         # Allowances are pay: listed only for whoever may see this person's salary.
         employee_components = (list(component_services.employee_rows(company_id, employee))
                                if may["salary_view"] else [])
-        calendar = WorkCalendar(company_id, today, today)
-        own = calendar.employee_shift(employee.pk, today)
         department_id = assignment.department_id if assignment else None
         works = calendar.shift_for(department_id, today, employee_id=employee.pk)
         if own is not None:

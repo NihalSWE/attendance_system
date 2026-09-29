@@ -826,7 +826,7 @@ def punch_list(request):
     # carry future dates — either buries the punch that just came in.
     # received_at is our clock, so the latest entry is always on top.
     queryset = (
-        PunchEvent.objects.select_related("device", "employee", "device_message")
+        PunchEvent.objects.select_related("device", "employee", "device_message", "duplicate_of")
         .order_by("-received_at", "-id")
     )
 
@@ -875,7 +875,7 @@ def punch_list(request):
 def punch_detail(request, pk):
     punch = get_object_or_404(
         PunchEvent.objects.select_related(
-            "device", "employee", "device_enrollment", "device_message", "branch"
+            "device", "employee", "device_enrollment", "device_message", "branch", "duplicate_of"
         ),
         pk=pk,
     )
@@ -969,6 +969,8 @@ def device_users(request, public_id):
         row["saved_fingerprints"] = counts.get("fingerprint", 0)
         row["saved_faces"] = counts.get("face", 0)
         row["saved_total"] = sum(counts.values())
+    # Why each unlinked user is not linked, and what links them (2026-09-29).
+    unlinked = mapping_service.why_not_linked(device, full_roster)
     roster = full_roster
 
     search = request.GET.get("q", "").strip()
@@ -986,13 +988,18 @@ def device_users(request, public_id):
         roster = [r for r in roster if r["is_mapped"]]
     elif mapping == "unmapped":
         roster = [r for r in roster if not r["is_mapped"]]
+    elif mapping.startswith("unmapped:"):
+        reason = mapping.split(":", 1)[1]
+        roster = [r for r in roster if (r.get("unlinked") or {}).get("code") == reason]
 
     page = _paginate_rows(
         request, roster,
         search=("pin", "name", "privilege_label", "card_number", "employee_name"),
-        order=(None, "pin", "name", "privilege_label", "fingerprint_count", "face_count",
-               "saved_total", "card_number", "has_password", "has_photo",
-               "employee_name", None, "counts_for_attendance"),
+        # Employee sits beside the name, so why someone is not linked shows
+        # without scrolling sideways (2026-09-29).
+        order=(None, "pin", "name", "employee_name", "privilege_label", "fingerprint_count",
+               "face_count", "saved_total", "card_number", "has_password", "has_photo",
+               None, "counts_for_attendance"),
     )
     # What this device's protocol has been proven for (commands.MEASURED_WRITES):
     # until a write is proven it is offered only for the test user, on the
@@ -1006,6 +1013,11 @@ def device_users(request, public_id):
         "search": search,
         "mapping": mapping,
         "unmapped_count": sum(1 for r in full_roster if not r["is_mapped"] and not r["removed_from_device"]),
+        # (filter value, label, how many) for each reason someone is not linked.
+        "unlinked_reasons": [
+            (f"unmapped:{code}", label, unlinked[code])
+            for code, label in mapping_service.UNLINKED_REASONS.items() if unlinked.get(code)
+        ],
         "can_refresh": protocol.supports(device, "query_users"),
         # No user writes to a 2.x device until its write form is measured.
         "user_writes": user_writes,

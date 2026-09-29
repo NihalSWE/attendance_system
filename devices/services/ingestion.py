@@ -44,6 +44,15 @@ SAFE_HEADERS = ("Content-Type", "Content-Length", "User-Agent", "Host", "Accept"
 
 DEFAULT_REPEAT_WINDOW_SECONDS = 30
 
+# Scans by one person on one device less than this apart are one scan (Nihal,
+# 2026-09-29: "under 5 sec, if there are 2/3 or more, take only 1"). The
+# terminal often reports a single press twice, a second apart. The first
+# counts; each repeat is kept as evidence, marked confirmed_duplicate of the
+# scan before it and excluded - so a burst of presses is one scan however
+# long it runs, as long as each is under this after the one before. Five
+# seconds or more apart is left to the review window below, as before.
+REPEAT_SCAN_SECONDS = 5
+
 
 class DeviceAuthenticationError(Exception):
     """The sender could not be identified as exactly one registered device."""
@@ -232,6 +241,23 @@ def _repeat_window_seconds(company_id):
     return seconds if seconds is not None else DEFAULT_REPEAT_WINDOW_SECONDS
 
 
+def _repeat_scan(*, device, punch, punched_at_utc):
+    """The scan just before this one, when it was less than
+    REPEAT_SCAN_SECONDS earlier: this one is then a repeat press. Rows earlier in the same batch
+    count, because a double press usually arrives inside one upload."""
+    return (
+        PunchEvent.all_objects.filter(
+            company_id=device.company_id,
+            device=device,
+            device_user_id=punch.device_user_id,
+            punched_at_utc__gt=punched_at_utc - timedelta(seconds=REPEAT_SCAN_SECONDS),
+            punched_at_utc__lte=punched_at_utc,
+        )
+        .order_by("-punched_at_utc", "-id")
+        .first()
+    )
+
+
 def _nearby_punch(*, device, punch, punched_at_utc, window_seconds):
     """A different punch from the same identity within the repeat window.
 
@@ -300,12 +326,16 @@ def extract_punch_events(*, device, message, parsed):
         identical = _natural_key_duplicate(
             device=device, punch=punch, punched_at_utc=punched_at_utc
         )
-        if identical is not None:
-            # A retransmitted record: kept as evidence, excluded from
-            # allocation so the attendance effect is not counted twice.
+        repeat = None if identical is not None else _repeat_scan(
+            device=device, punch=punch, punched_at_utc=punched_at_utc
+        )
+        if identical is not None or repeat is not None:
+            # A retransmitted record, or a repeat press within
+            # REPEAT_SCAN_SECONDS: kept as evidence, excluded from allocation
+            # so the attendance effect is not counted twice.
             dedupe_status = PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE
             processing_status = PunchEvent.ProcessingStatus.EXCLUDED
-            duplicate_of = identical
+            duplicate_of = identical or repeat
         else:
             nearby = _nearby_punch(
                 device=device,
