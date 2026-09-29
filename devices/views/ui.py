@@ -1013,9 +1013,9 @@ def device_users(request, public_id):
         "search": search,
         "mapping": mapping,
         "unmapped_count": sum(1 for r in full_roster if not r["is_mapped"] and not r["removed_from_device"]),
-        # (filter value, label, how many) for each reason someone is not linked.
+        # (filter value, label, how many, what to do) for each reason someone is not linked.
         "unlinked_reasons": [
-            (f"unmapped:{code}", label, unlinked[code])
+            (f"unmapped:{code}", label, unlinked[code], mapping_service.UNLINKED_HINTS[code])
             for code, label in mapping_service.UNLINKED_REASONS.items() if unlinked.get(code)
         ],
         "can_refresh": protocol.supports(device, "query_users"),
