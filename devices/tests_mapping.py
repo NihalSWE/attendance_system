@@ -339,7 +339,8 @@ class WhyNotLinkedTests(MappingCase):
         url = reverse("devices:device_users", args=[self.device.public_id])
         page = self.client.get(url).content.decode()
         self.assertIn("Employee already linked under another number", page)
-        self.assertIn('href="?mapping=unmapped:other_number"', page)
+        self.assertIn('href="?mapping=unmapped:other_number">Show them</a>', page)
+        self.assertIn("That old link has to end before this number can be linked.", page)
         self.assertIn("already linked on this device as user 14", page)
         only = self.client.get(url, {"mapping": "unmapped:other_number"})
         pins = [row["pin"] for row in only.context["page"].object_list]

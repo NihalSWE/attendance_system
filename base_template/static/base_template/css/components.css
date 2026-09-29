@@ -1347,18 +1347,40 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     white-space: normal;
 }
 .unlinked-reasons {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px 16px;
-    margin: 10px 0 0;
+    display: grid;
+    gap: 8px;
+    margin: 12px 0 0;
     padding: 0;
     list-style: none;
-    font-size: 13px;
+    max-width: 760px;
 }
-.unlinked-reasons li {
-    display: inline-flex;
+.unlinked-reasons__row {
+    display: flex;
     align-items: center;
-    gap: 6px;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+}
+.unlinked-reasons__label {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.unlinked-reasons__hint {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+.unlinked-reasons__row .btn { flex-shrink: 0; }
+@media (max-width: 640px) {
+    .unlinked-reasons__row { flex-direction: column; align-items: stretch; }
 }
 
 /* The shared confirm dialog (confirm.js). */

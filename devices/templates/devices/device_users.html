@@ -142,14 +142,19 @@
                 </h2>
                 <p class="notice__text">
                     Their scans are saved, but they don't count towards attendance until each user is linked to an employee.
-                    <a href="?mapping=unmapped">Show them</a>
                 </p>
                 {% if unlinked_reasons %}
-                    <ul class="unlinked-reasons">
-                        {% for value, label, count in unlinked_reasons %}
-                            <li>
-                                <a href="?mapping={{ value }}">{{ label }}</a>
-                                <span class="badge badge--neutral">{{ count }}</span>
+                    <ul class="unlinked-reasons" aria-label="Why they are not linked">
+                        {% for value, label, count, hint in unlinked_reasons %}
+                            <li class="unlinked-reasons__row">
+                                <div class="unlinked-reasons__text">
+                                    <div class="unlinked-reasons__label">
+                                        {{ label }}
+                                        <span class="badge badge--warning">{{ count }} user{{ count|pluralize }}</span>
+                                    </div>
+                                    <div class="unlinked-reasons__hint">{{ hint }}</div>
+                                </div>
+                                <a class="btn btn--ghost btn--sm" href="?mapping={{ value }}">Show them</a>
                             </li>
                         {% endfor %}
                     </ul>
@@ -210,7 +215,7 @@
                     <option value="unmapped" {% if mapping == 'unmapped' %}selected{% endif %}>
                         Not linked
                     </option>
-                    {% for value, label, count in unlinked_reasons %}
+                    {% for value, label, count, hint in unlinked_reasons %}
                         <option value="{{ value }}" {% if mapping == value %}selected{% endif %}>
                             Not linked — {{ label|lower }} ({{ count }})
                         </option>

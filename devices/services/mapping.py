@@ -440,6 +440,18 @@ UNLINKED_REASONS = {
     "not_digits": "Device number is not digits",
 }
 
+#: What to do about each reason, in one line, for the notice on Device users.
+UNLINKED_HINTS = {
+    "ready": "Their number is an employee's Employee ID. Press Link to existing employees.",
+    "other_number": ("The employee with this Employee ID is already linked on this device under "
+                     "an old number. That old link has to end before this number can be linked."),
+    "other_branch": ("The employee with this Employee ID is placed at another branch. Move them "
+                     "to this branch, or use a device of their branch."),
+    "no_employee": ("No employee has this number as Employee ID. Add them as employees, or give "
+                    "the right employee this Employee ID."),
+    "not_digits": "An Employee ID on a device is digits only. Link them by hand with Map a user.",
+}
+
 
 def why_not_linked(device, roster):
     """Explain every unlinked user still on the device, in place.
