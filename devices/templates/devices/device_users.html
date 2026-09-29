@@ -154,7 +154,19 @@
                                     </div>
                                     <div class="unlinked-reasons__hint">{{ hint }}</div>
                                 </div>
-                                <a class="btn btn--ghost btn--sm" href="?mapping={{ value }}">Show them</a>
+                                <div class="unlinked-reasons__actions">
+                                    <a class="btn btn--ghost btn--sm" href="?mapping={{ value }}">Show them</a>
+                                    {% if value == "unmapped:other_number" %}
+                                        <form method="post" action="{% url 'devices:device_replace_links' device.public_id %}"
+                                              data-confirm-title="Replace {{ count }} old link{{ count|pluralize }}?"
+                                              data-confirm="Each person's old link on {{ device.name }} ends, and the number the device uses for them is linked from the day it first scanned here. Their scans since then are checked again, so they count. Earlier history stays as it is."
+                                              data-confirm-button="Replace">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="all" value="1">
+                                            <button class="btn btn--primary btn--sm" type="submit">Replace old links</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
                             </li>
                         {% endfor %}
                     </ul>
@@ -333,6 +345,16 @@
                                                     <a href="{% url 'organization:employee_detail' row.unlinked.employee.pk %}">Open {{ row.unlinked.employee.full_name }}</a>
                                                 {% endif %}
                                             </div>
+                                            {% if row.unlinked.code == "other_number" %}
+                                                <form class="unlinked-fix" method="post" action="{% url 'devices:device_replace_links' device.public_id %}"
+                                                      data-confirm-title="Link {{ row.unlinked.employee.full_name }} as {{ row.pin }}?"
+                                                      data-confirm="Their old link on {{ device.name }} ends, and {{ row.pin }} is linked to them from the day it first scanned here. Their scans since then are checked again, so they count."
+                                                      data-confirm-button="Replace">
+                                                    {% csrf_token %}
+                                                    <input type="hidden" name="pin" value="{{ row.pin }}">
+                                                    <button class="btn btn--primary btn--sm" type="submit">Replace old link</button>
+                                                </form>
+                                            {% endif %}
                                         {% endif %}
                                     {% endif %}
                                 </td>

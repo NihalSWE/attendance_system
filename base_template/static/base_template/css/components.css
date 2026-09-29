@@ -1379,6 +1379,15 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     line-height: 1.45;
 }
 .unlinked-reasons__row .btn { flex-shrink: 0; }
+.unlinked-reasons__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.unlinked-reasons__actions form,
+.unlinked-fix { margin: 0; }
+.unlinked-fix { margin-top: 8px; }
 @media (max-width: 640px) {
     .unlinked-reasons__row { flex-direction: column; align-items: stretch; }
 }

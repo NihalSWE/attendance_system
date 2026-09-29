@@ -347,6 +347,62 @@ class WhyNotLinkedTests(MappingCase):
         self.assertEqual(pins, ["445962"])
         ready = self.client.get(url, {"mapping": "unmapped:ready"})
         self.assertEqual([row["pin"] for row in ready.context["page"].object_list], ["445900"])
+        self.assertIn("Replace old links", page)
+
+
+class ReplaceOldLinkTests(WhyNotLinkedTests):
+    """Replace old link (Nihal, 2026-09-29): the demo link 14 → Ajay ends, and
+    445962 - the number the terminal uses - is linked from its first scan,
+    whose excluded punches then count."""
+
+    def setUp(self):
+        super().setUp()
+        self.scan_day = timezone.localdate() - datetime.timedelta(days=3)
+        self.client.post(f"/iclock/cdata?SN={SN}&table=ATTLOG&Stamp=77",
+                         data=f"445962\t{self.scan_day:%Y-%m-%d} 09:00:00\t0\t15\t0\t\t\n",
+                         content_type="text/plain")
+        self.client.force_login(self.admin)
+
+    def punch(self):
+        from devices.models import PunchEvent
+
+        return PunchEvent.all_objects.get(device=self.device, device_user_id="445962")
+
+    def test_the_old_link_ends_the_new_one_starts_at_the_first_scan_and_it_counts(self):
+        self.assertEqual(self.punch().authorization_status, "unknown_employee")
+        response = self.client.post(
+            reverse("devices:device_replace_links", args=[self.device.public_id]),
+            {"pin": "445962"}, follow=True)
+        self.assertContains(response, "Ajay as 445962 (was 14)")
+        start = mapping.day_start(self.company, self.scan_day)
+        old = DeviceEnrollment.all_objects.get(device=self.device, device_user_id="14")
+        new = DeviceEnrollment.all_objects.get(device=self.device, device_user_id="445962")
+        self.assertEqual((old.effective_to, new.effective_from, new.employee), (start, start, self.ajay))
+        self.assertEqual(self.punch().authorization_status, "authorized")
+        self.assertEqual(self.punch().employee, self.ajay)
+        _counts, why = self.reasons()
+        self.assertNotIn("445962", why)
+
+    def test_all_replaces_only_old_links(self):
+        self.client.post(reverse("devices:device_replace_links", args=[self.device.public_id]),
+                         {"all": "1"})
+        self.assertTrue(DeviceEnrollment.all_objects.filter(device_user_id="445962").exists())
+        # Moin was "ready", not linked under an old number: left to Link.
+        self.assertFalse(DeviceEnrollment.all_objects.filter(device_user_id="445900").exists())
+
+    def test_a_number_that_never_scanned_is_linked_from_today(self):
+        from devices.models import PunchEvent
+
+        PunchEvent.all_objects.filter(device_user_id="445962").delete()
+        with use_company(self.company):
+            result = mapping.replace_old_links(actor=self.admin, device=self.device)
+        self.assertEqual(result.replaced[0][3], mapping.day_start(self.company))
+
+    def test_a_branch_manager_elsewhere_cannot(self):
+        self.client.force_login(self.member("far@amz.test", "manager", branches=[self.unit]))
+        self.client.post(reverse("devices:device_replace_links", args=[self.device.public_id]),
+                         {"all": "1"})
+        self.assertIsNone(DeviceEnrollment.all_objects.get(device_user_id="14").effective_to)
 
 
 class TransferTests(MappingCase):
