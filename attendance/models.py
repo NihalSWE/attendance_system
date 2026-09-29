@@ -179,6 +179,9 @@ class AttendanceRecord(TenantOwned):
         HOLIDAY = "holiday", "Holiday"
         WEEKLY_OFF = "weekly_off", "Weekly off"
         INCOMPLETE = "incomplete", "Incomplete"
+        # Inside an inactive period (EmployeeInactivePeriod, 2026-09-29):
+        # nothing worked, nothing paid, not absent.
+        INACTIVE = "inactive", "Inactive"
 
     class PunchStatus(models.TextChoices):
         COMPLETE = "complete", "Complete"

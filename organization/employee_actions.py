@@ -16,9 +16,9 @@ Ajay's twelve, mapped:
 - Disallow Overtime - from a day on, no overtime approved or paid for them
   (``Employee.no_overtime_from``); Allow again clears it.
 - Exclude From Attendance Report - Remove from reports, as before.
-- Make Employee Status Inactive - Suspended, and back to Active. It marks them
-  only: attendance and salary are counted as before; a suspended person cannot
-  request leave or report a missed scan (what Suspended already did).
+- Make Employee Status Inactive - from a first day to a last day (or until
+  made active): scans blocked, days Inactive, no salary for them
+  (``organization.employee_inactive``, 2026-09-29).
 - Resign Employee / Delete Employee - End employment (history kept), as before.
 - Sync Employee - send them to their branch's devices again.
 """
@@ -48,41 +48,8 @@ ENDED = (Status.RESIGNED, Status.TERMINATED, Status.RETIRED)
 # --------------------------------------------------------------------------
 
 
-class InactiveForm(StyledFormMixin, forms.Form):
-    reason = forms.CharField(label="Why", max_length=255,
-                             help_text="Recorded with the change.")
-
-
-@transaction.atomic
-def set_active(*, actor, company_id, employee_id, active, reason=""):
-    membership, employee, _a, _c = get_employee_for_edit(
-        actor=actor, company_id=company_id, employee_id=employee_id, code="employees.edit")
-    if employee.user_id is not None and employee.user_id == actor.pk:
-        raise PermissionDenied("You cannot change your own status.")
-    if employee.employment_status in ENDED:
-        raise ValidationError("They have left. Their status stays as it is.")
-    before = employee.employment_status
-    if active:
-        if before != Status.SUSPENDED:
-            raise ValidationError("They are not inactive.")
-        employee.employment_status = Status.ACTIVE
-    else:
-        reason = (reason or "").strip()
-        if not reason:
-            raise ValidationError({"reason": "Say why, so the next person reading this knows."})
-        if before not in WORKING:
-            raise ValidationError("They are already inactive.")
-        employee.employment_status = Status.SUSPENDED
-    with use_company(company_id):
-        employee.updated_by = actor
-        employee.save(update_fields=["employment_status", "updated_by", "updated_at"])
-        record_company_event(
-            actor=actor, membership=membership, company=membership.company,
-            action="employee.status_changed", obj=employee,
-            before={"employment_status": before},
-            after={"employment_status": employee.employment_status, "reason": reason},
-        )
-    return employee
+# Since 2026-09-29 a period with a first and last day, which blocks their
+# scans and salary on those days: organization.employee_inactive.
 
 
 # --------------------------------------------------------------------------

@@ -24,6 +24,7 @@ EXCLUDING_STATUSES = {
     PunchEvent.AuthorizationStatus.DEPARTMENT_MISMATCH,
     PunchEvent.AuthorizationStatus.BRANCH_MISMATCH,
     PunchEvent.AuthorizationStatus.ENROLLMENT_DISABLED,
+    PunchEvent.AuthorizationStatus.EMPLOYEE_INACTIVE,
 }
 
 

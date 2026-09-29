@@ -31,6 +31,7 @@ STATUS_TONE = {
     AttendanceRecord.AttendanceStatus.LEAVE: "info",
     AttendanceRecord.AttendanceStatus.HOLIDAY: "info",
     AttendanceRecord.AttendanceStatus.WEEKLY_OFF: "neutral",
+    AttendanceRecord.AttendanceStatus.INACTIVE: "neutral",
 }
 
 STATUS_LABEL = {
@@ -41,6 +42,7 @@ STATUS_LABEL = {
     AttendanceRecord.AttendanceStatus.LEAVE: "Leave",
     AttendanceRecord.AttendanceStatus.HOLIDAY: "Holiday",
     AttendanceRecord.AttendanceStatus.WEEKLY_OFF: "Weekly off",
+    AttendanceRecord.AttendanceStatus.INACTIVE: "Inactive",
 }
 
 ALLOCATION_LABEL = {
@@ -225,7 +227,7 @@ def summarise(days):
     """The strip above the grid. Counted from the same days it sits over."""
     counts = {
         "present": 0, "late": 0, "absent": 0, "leave": 0,
-        "holiday": 0, "weekly_off": 0, "incomplete": 0, "half_day": 0,
+        "holiday": 0, "weekly_off": 0, "incomplete": 0, "half_day": 0, "inactive": 0,
     }
     worked = 0
     S = AttendanceRecord.AttendanceStatus
@@ -248,6 +250,8 @@ def summarise(days):
             counts["weekly_off"] += 1
         elif record.attendance_status == S.INCOMPLETE:
             counts["incomplete"] += 1
+        elif record.attendance_status == S.INACTIVE:
+            counts["inactive"] += 1
         if record.late_minutes:
             counts["late"] += 1
     counts["in_office"] = hours_and_minutes(worked)

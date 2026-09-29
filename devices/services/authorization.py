@@ -25,6 +25,7 @@ the device they happened to walk up to, which would let a permissive branch
 authorize attendance for a restricted employee.
 """
 
+import zoneinfo
 from dataclasses import dataclass, field
 
 from django.db.models import Q
@@ -33,6 +34,7 @@ from django.utils import timezone
 from common.choices import DeviceAttendanceScope
 from devices.models import DeviceDepartment, PunchEvent
 from devices.services.policy_history import is_missing, value_at_or_unresolved
+from employees import inactive
 from employees.models import EmployeeAssignment
 from organization.models import Branch
 from scheduling.models import CompanyAttendanceSettings
@@ -136,6 +138,18 @@ def _device_serves_department(*, device, department_id, at):
     )
 
 
+def _inactive_on(device, employee_id, at):
+    """``(company day, period)`` when the employee was inactive on the day of
+    ``at`` in the company's time zone, else None."""
+    try:
+        zone = zoneinfo.ZoneInfo(device.company.timezone or "UTC")
+    except zoneinfo.ZoneInfoNotFoundError:
+        zone = zoneinfo.ZoneInfo("UTC")
+    day = at.astimezone(zone).date()
+    period = inactive.covering(device.company_id, employee_id, day)
+    return (day, period) if period is not None else None
+
+
 def evaluate(*, punch, enrollment, policy_at=None):
     """Decide the authorization status for one resolved punch.
 
@@ -176,6 +190,22 @@ def evaluate(*, punch, enrollment, policy_at=None):
         )
         return AuthorizationOutcome(
             PunchEvent.AuthorizationStatus.ENROLLMENT_DISABLED, snapshot
+        )
+
+    # 2b. Inactive that day (Nihal, 2026-09-29): the scan is kept, blocked.
+    # A fact about the day, so a re-check judges it on the punch's own day -
+    # ending the period early is what lets those scans count again.
+    blocked = _inactive_on(device, enrollment.employee_id, at)
+    if blocked is not None:
+        day, period = blocked
+        snapshot["inactive_period_id"] = period.pk
+        snapshot["decision_reason"] = (
+            f"the employee was inactive on {day:%d %b %Y}"
+            f"{f' ({period.reason})' if period.reason else ''}; scans on inactive days "
+            "are kept but do not count"
+        )
+        return AuthorizationOutcome(
+            PunchEvent.AuthorizationStatus.EMPLOYEE_INACTIVE, snapshot
         )
 
     assignment = _assignment_at(

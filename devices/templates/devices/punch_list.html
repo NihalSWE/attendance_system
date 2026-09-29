@@ -166,6 +166,10 @@
                                         <span class="badge badge--neutral" title="Scanned again less than 5 seconds after the scan before: one scan, so only the first counts.">
                                             Repeat — ignored
                                         </span>
+                                    {% elif punch.authorization_status == 'employee_inactive' %}
+                                        <span class="badge badge--warning" title="The employee was inactive that day: the scan is kept, but it does not count.">
+                                            Blocked — inactive
+                                        </span>
                                     {% elif punch.processing_status == 'excluded' %}
                                         <span class="badge badge--danger">
                                             Excluded

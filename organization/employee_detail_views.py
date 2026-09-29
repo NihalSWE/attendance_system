@@ -174,10 +174,17 @@ def _actions(request, company_id, page, bound, may_record_leave):
         if fixes and not ended and employee.user_id != request.user.pk else None,
         "reports": actions.reports_to(company_id, employee),
     }
+    # Their inactive period now, or the next one planned (2026-09-29).
+    from organization import employee_inactive
+
+    planned = employee_inactive.open_periods(employee, today)
+    context["inactive_now"] = next((p for p in planned if p.start_date <= today), None)
+    context["inactive_next"] = next((p for p in planned if p.start_date > today), None)
     if not may["edit"]:
         return context
     context.update({
-        "inactive_form": bound.get("inactive") or actions.InactiveForm(auto_id="inactive_%s"),
+        "inactive_form": bound.get("inactive") or employee_inactive.InactiveForm(
+            initial={"start_date": today}, auto_id="inactive_%s"),
         "overtime_form": (bound.get("overtime") or actions.OvertimeForm(
             initial={"from_day": today}, auto_id="overtime_%s"))
         if actions.may_set_overtime(request.user, company_id, page["membership"], assignment)

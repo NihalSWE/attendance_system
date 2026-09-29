@@ -33,6 +33,7 @@ from attendance.services import calculate_attendance, month_bounds, recalculate
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
 from common.tenant import use_company
+from employees import inactive as inactive_periods
 from employees.models import EmployeeAssignment, EmployeeCompensation
 from organization.services import (
     STRUCTURE_ROLES,
@@ -317,8 +318,13 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                   penalty_rules=(), waived=frozenset(), employee_key="", adjustments=(),
-                  employed_days=None, basic_segments=None, components=()):
+                  employed_days=None, basic_segments=None, components=(), inactive_days=()):
     """Lines and totals for one employee. Pure: no database writes.
+
+    ``inactive_days`` are the employed days of the month they were inactive
+    (2026-09-29): a monthly salary is not paid for them, day by calendar day
+    at the rate in force that day, as a joiner's is not paid before joining.
+    A daily or hourly one needs nothing more - an Inactive day pays nothing.
 
     ``components`` are this employee's allowances and recurring deductions
     for the month (``component_lines``), already narrowed to the days each was
@@ -364,6 +370,20 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
             ))
         else:
             lines.append(("earning", "BASIC", "Basic salary", ONE, rate, money(rate)))
+        if inactive_days:
+            def rate_on(day):
+                for segment_rate, segment_first, segment_last in basic_segments or ():
+                    if segment_first <= day <= segment_last:
+                        return Decimal(segment_rate)
+                return rate
+
+            count = len(inactive_days)
+            unpaid = sum((rate_on(day) for day in inactive_days), Decimal("0")) / Decimal(days_in_month)
+            lines.append((
+                "deduction", "INACTIVE",
+                f"Inactive days ({count} of {days_in_month} days), not paid",
+                Decimal(count), unpaid / Decimal(count), money(unpaid),
+            ))
         per_day = _per_day(rules, rate, records, days_in_month)
         if per_day:
             lines.extend(_monthly_deductions(rules, per_day, records))
@@ -409,6 +429,10 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     basic_earned = sum(
         (amount for kind, code, *_, amount in lines
          if kind == "earning" and code in ("BASIC", "DAYS", "HOURS")),
+        Decimal("0"),
+    ) - sum(
+        # Basic not paid for inactive days is not earned either.
+        (amount for kind, code, *_, amount in lines if kind == "deduction" and code == "INACTIVE"),
         Decimal("0"),
     )
     lines.extend(component_lines(components, basic_earned, days_in_month))
@@ -476,13 +500,14 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     }
 
 
-def employee_components(company_id, first, last, employee_ids):
+def employee_components(company_id, first, last, employee_ids, inactive=None):
     """``{employee_id: [(kind, code, name, method, value, days)]}`` for a month.
 
     ``days`` counts the days of the month the row was in force and the person
     was employed, so somebody given an allowance mid-month, or who joined or
-    left, is paid for the part that applied. Call inside no particular
-    context; it opens the company's own.
+    left, is paid for the part that applied. ``inactive`` (``{employee_id:
+    set of days}``) takes their inactive days out too (2026-09-29). Call
+    inside no particular context; it opens the company's own.
     """
     from payroll.models import EmployeeSalaryComponent
 
@@ -505,6 +530,8 @@ def employee_components(company_id, first, last, employee_ids):
             starts = max(first, row.effective_from, employee.joining_date or first)
             ends = min(last, row.effective_to or last, employee.leaving_date or last)
             days = (ends - starts).days + 1
+            days -= sum(1 for day in (inactive or {}).get(row.employee_id, ())
+                        if starts <= day <= ends)
             if days <= 0:
                 continue
             component = row.component
@@ -840,9 +867,19 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
         # a day fixed afterwards is caught before the month is approved.
         fingerprints = attendance_fingerprints(
             company_id, period, [employee.pk for employee in records_by_employee])
+        # Their inactive days inside the employment this month (2026-09-29).
+        found =inactive_periods.periods(company_id, [e.pk for e in records_by_employee],
+                                         first, last)
+        inactive_by_employee = {
+            employee.pk: inactive_periods.days(
+                found.get(employee.pk, ()), max(first, employee.joining_date or first),
+                min(last, employee.leaving_date or last))
+            for employee in records_by_employee if employee.pk in found
+        }
         # Allowances and recurring deductions in force this month, per person.
         components_by_employee = employee_components(
-            company_id, first, last, [employee.pk for employee in records_by_employee])
+            company_id, first, last, [employee.pk for employee in records_by_employee],
+            inactive=inactive_by_employee)
 
         skipped = dict(previous_skipped)
         skipped_now = []
@@ -871,6 +908,7 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
                 components=components_by_employee.get(employee.pk, ()),
                 employed_days=employed_days,
                 basic_segments=basic_segments,
+                inactive_days=sorted(inactive_by_employee.get(employee.pk, ())),
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,

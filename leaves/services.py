@@ -377,6 +377,23 @@ def plan_leave_days(*, company_id, employee, start_date, end_date):
 
 
 @transaction.atomic
+def refuse_inactive_days(company_id, employee, work_dates):
+    """No leave on days they are inactive (2026-09-29): nothing is paid for
+    those days, so leave there would only use up their balance."""
+    from employees import inactive
+
+    if not work_dates:
+        return
+    found = inactive.periods(company_id, [employee.pk], min(work_dates), max(work_dates))
+    blocked = sorted(inactive.days(found.get(employee.pk, ()), min(work_dates),
+                                   max(work_dates)) & set(work_dates))
+    if blocked:
+        raise ValidationError({"start_date": (
+            f"{employee.full_name} is inactive on "
+            + ", ".join(f"{day:%d %b}" for day in blocked[:5])
+            + (" and more" if len(blocked) > 5 else "") + ", so leave cannot be taken then.")})
+
+
 def record_leave(*, actor, company_id, values, document=None):
     """Record approved leave for one employee, with its document if any."""
     membership, branches = recorder_branches(actor, company_id)
@@ -417,6 +434,7 @@ def _write_leave(*, actor, membership, branches, company_id, values, request=Non
                 )
             })
         _refuse_outside(branches, days, employee)
+        refuse_inactive_days(company_id, employee, [on for on, *_ in days])
 
         clashes = list(
             LeaveDay.objects.filter(

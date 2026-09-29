@@ -16,6 +16,7 @@ from employees.models import Employee
 from leaves import services as leave_services
 from organization import employee_actions as actions
 from organization import employee_detail_services
+from organization import employee_inactive as inactive
 from organization import employee_profile_info as info
 from organization.employee_detail_views import _may_record_leave, _profile
 from organization.views import _company_or_redirect
@@ -148,25 +149,36 @@ def employee_late(request, pk):
 @login_required
 @require_POST
 def employee_active(request, pk):
-    """Make inactive (Suspended), or active again."""
+    """Make inactive for a period (2026-09-29), or active again."""
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
     active = request.POST.get("active") == "1"
-    form = actions.InactiveForm(request.POST, auto_id="inactive_%s")
-    if active or form.is_valid():
+    form = inactive.InactiveForm(request.POST, auto_id="inactive_%s")
+    if active:
         try:
-            employee = actions.set_active(
-                actor=request.user, company_id=company_id, employee_id=pk, active=active,
-                reason="" if active else form.cleaned_data["reason"])
+            employee = inactive.make_active(actor=request.user, company_id=company_id,
+                                            employee_id=pk)
         except ValidationError as exc:
-            if active:
-                messages.error(request, " ".join(exc.messages))
-                return _back(pk)
+            messages.error(request, " ".join(exc.messages))
+        else:
+            messages.success(request, f"{employee.full_name} is active from today. Their "
+                                      "scans from today count again.")
+        return _back(pk)
+    if form.is_valid():
+        data = form.cleaned_data
+        try:
+            employee, period = inactive.make_inactive(
+                actor=request.user, company_id=company_id, employee_id=pk,
+                start_date=data["start_date"], end_date=data["end_date"], reason=data["reason"])
+        except ValidationError as exc:
             apply_service_errors(form, exc)
         else:
-            messages.success(request, f"{employee.full_name} is "
-                                      f"{'active again' if active else 'inactive (suspended)'}.")
+            until = (f"to {period.end_date:%d %b %Y}; active again by themselves the next day"
+                     if period.end_date else "until someone makes them active")
+            messages.success(request, f"{employee.full_name} is inactive from "
+                                      f"{period.start_date:%d %b %Y} {until}. Scans on those "
+                                      "days are blocked and not paid.")
             return _back(pk)
     return _profile(request, company_id, pk, bound={"inactive": form},
                     open_dialog="inactive-dialog")

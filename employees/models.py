@@ -350,3 +350,50 @@ class EmployeeDocument(TenantOwned, ActorTracked):
 
     def __str__(self):
         return f"{self.employee_id}: {self.title}"
+
+
+class EmployeeInactivePeriod(TenantOwned, ActorTracked):
+    """Days an employee is inactive (Nihal, 2026-09-29): from a first day,
+    to a last day or until someone makes them active again.
+
+    On those days their scans are kept but do not count (the punch reads
+    "Blocked: employee inactive"), the day is Inactive with nothing worked,
+    and no salary is paid for it. While a period covers today their status
+    is Suspended; after its last day they are active again by themselves
+    (``organization.employee_inactive``). A cancelled period never applied.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "In force"
+        CANCELLED = "cancelled", "Cancelled"
+
+    employee = models.ForeignKey(Employee, on_delete=models.PROTECT,
+                                 related_name="inactive_periods")
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=255)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    # What they were before (active or probation), given back when it ends.
+    previous_status = models.CharField(max_length=16, default="active")
+    ended_early_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="+",
+    )
+
+    class Meta:
+        db_table = "employees_inactive_period"
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(end_date__isnull=True)
+                | models.Q(end_date__gte=models.F("start_date")),
+                name="inactive_period_end_not_before_start",
+            ),
+        ]
+        indexes = [models.Index(fields=["company", "employee", "start_date"])]
+
+    def __str__(self):
+        return f"{self.employee_id}: inactive {self.start_date} - {self.end_date or 'open'}"
+
+    def covers(self, day):
+        return (self.status == self.Status.ACTIVE and self.start_date <= day
+                and (self.end_date is None or day <= self.end_date))
