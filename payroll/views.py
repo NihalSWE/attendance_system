@@ -399,9 +399,16 @@ def component_list(request):
                     request,
                     f"{component.name} added. Give it to people on their Edit employee page.")
                 return redirect("payroll:component_list")
+        # The project's server-side table: entries, search, sort, pages (2026-09-30).
+        page = paginate(
+            request, component_services.components(company_id).order_by("code"),
+            search=("code", "name", "description"),
+            order=("code", "name", "kind", "method", "status", None),
+        )
         return render(request, "payroll/components.html", {
             "form": form,
-            "components": list(component_services.components(company_id)),
+            "page": page,
+            "components": page.object_list,
         })
 
 

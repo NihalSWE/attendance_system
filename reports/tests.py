@@ -116,7 +116,7 @@ class AttendanceReportTests(ReportCase):
         result = page.context["result"]
         self.assertEqual(page.context["f"].first, _week_start(MONDAY))
         self.assertEqual(page.context["f"].first.weekday(), 5)     # Saturday
-        self.assertEqual(len(result.columns), 2 + 7 + 7)
+        self.assertEqual(len(result.columns), 2 + 7 + 12)
         codes = {row[1]: row[2:9] for row in result.rows}
         monday = (MONDAY - page.context["f"].first).days
         self.assertEqual(codes["Rahim"][monday], "LT")
@@ -126,7 +126,7 @@ class AttendanceReportTests(ReportCase):
 
     def test_monthly_has_every_day_of_the_month(self):
         result = self.open("monthly-attendance", **AUGUST).context["result"]
-        self.assertEqual(len(result.columns), 2 + 31 + 7)
+        self.assertEqual(len(result.columns), 2 + 31 + 12)
         self.assertTrue(result.grid)
 
     def test_the_monthly_pdf_is_compact_and_says_the_legend(self):
@@ -142,6 +142,33 @@ class AttendanceReportTests(ReportCase):
         self.assertEqual(detail[0][0], "Mon 10 Aug")
         absent = self.rows("custom-attendance", view="detail", status="absent", **RANGE)
         self.assertEqual(self.names(absent, at=2), ["Clerk"])
+
+    def test_times_out_of_the_office_and_for_how_long(self):
+        # Nihal, 2026-09-30: out twice, 10 and 30 minutes - 2 times, 0:40.
+        tuesday = MONDAY + datetime.timedelta(days=1)
+        for hour, minute in ((9, 0), (11, 0), (11, 10), (13, 0), (13, 30), (18, 0)):
+            self.punch(tuesday, hour, minute)
+        recalculate(self.company.pk, start=tuesday, end=tuesday)
+        on = {"on": tuesday.isoformat()}
+        rahim = next(row for row in self.rows("daily-attendance", **on) if row[1] == "Rahim")
+        self.assertEqual((rahim[5], rahim[6], rahim[10], rahim[11]), ("09:00", "18:00", 2, "0:40"))
+        self.assertEqual(self.summary("daily-attendance", **on)["Time out"], "0:40")
+        week = self.open("weekly-attendance", week_start=tuesday.isoformat()).context["result"]
+        labels = [column.label for column in week.columns]
+        row = next(row for row in week.rows if row[1] == "Rahim")
+        self.assertEqual((row[labels.index("Times out")], row[labels.index("Time out")]), (2, "0:40"))
+        totals = next(row for row in self.rows(
+            "custom-attendance", date_from=tuesday.isoformat(), date_to=tuesday.isoformat())
+            if row[1] == "Rahim")
+        self.assertIn("0:40", totals)
+
+    def test_the_page_draws_statuses_and_day_letters(self):
+        page = self.open("daily-attendance", **DAY)
+        self.assertContains(page, '<span class="badge badge--danger">Absent</span>', html=True)
+        self.assertContains(page, "report-kpi")
+        grid = self.open("weekly-attendance", week_start=MONDAY.isoformat())
+        self.assertContains(grid, 'report-code report-code--danger')
+        self.assertContains(grid, "No check-out")      # the legend, in words
 
     def test_a_range_too_long_is_shortened_and_said(self):
         page = self.open("custom-attendance", date_from="2026-01-01", date_to="2026-12-31")
@@ -272,7 +299,7 @@ class DataTableTests(ReportCase):
         page = self.open("daily-attendance", **DAY)
         self.assertContains(page, "data-server-table")
         self.assertEqual(page.context["server_table"]["orderable"],
-                         ",".join(str(i) for i in range(11)))
+                         ",".join(str(i) for i in range(13)))
 
     def test_a_draw_answers_as_datatables_asks(self):
         data = self.draw("daily-attendance", **DAY)

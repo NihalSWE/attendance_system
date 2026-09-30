@@ -208,6 +208,19 @@ def set_report_visibility(*, actor, company_id, employee_id, hidden):
 # --- the summaries, from the report builders ----------------------------------
 
 
+#: The monthly grid's total columns, in its order (reports.builders._grid).
+GRID_TOTALS = ["Present", "Late", "Half day", "Absent", "Leave", "Off", "Worked",
+               "Late (min)", "Early out (min)", "Times out", "Time out", "Overtime"]
+PROFILE_TOTALS = ["Present", "Late", "Half day", "Absent", "Leave", "Off", "Worked",
+                  "Times out", "Time out"]
+
+
+def _month_totals(values):
+    found = dict(zip(GRID_TOTALS, values)) if values else {}
+    return {label: found.get(label, "0:00" if label in ("Worked", "Time out") else 0)
+            for label in PROFILE_TOTALS}
+
+
 def month_summary(*, company, scope, employee, year, month):
     """This person's month - the Monthly attendance, absent and late reports
     for them alone: one row each (or none), read the reports' own way."""
@@ -229,8 +242,10 @@ def month_summary(*, company, scope, employee, year, month):
         "year": year, "month": month,
         # The grid's one line: a code per day, then the totals.
         "days": [(day, row[2 + i] if row else "") for i, day in enumerate(days)],
-        "totals": dict(zip(["Present", "Late", "Half day", "Absent", "Leave", "Off", "Worked"],
-                           row[2 + len(days):] if row else [0, 0, 0, 0, 0, 0, "0:00"])),
+        # The grid's totals, and how often and how long they were out of the
+        # office (2026-09-30); its late and early-out minutes and overtime are
+        # shown elsewhere on the profile.
+        "totals": _month_totals(row[2 + len(days):] if row else None),
         "absent_dates": absent.rows[0][5] if absent.rows else "",
         "late_dates": late.rows[0][7] if late.rows else "",
         "late_minutes": late.rows[0][5] if late.rows else 0,

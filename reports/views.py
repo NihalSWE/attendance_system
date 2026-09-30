@@ -19,6 +19,7 @@ from common.tenant import use_company
 from organization.access_services import branch_choices, people
 from organization.models import Department
 from organization.views import _company_or_redirect
+from reports import cells as report_cells
 from reports import filters as report_filters
 from reports.access import report_scope
 from reports.builders import Context
@@ -108,6 +109,8 @@ def report(request, slug):
         "report": report,
         "result": result,
         "page": page,
+        # Each cell drawn for the page: badges, day letters, faint zeros.
+        "cells": report_cells.rows(page.object_list, result.columns),
         "f": f,
         "described": described,
         "query": query.urlencode(),

@@ -5337,3 +5337,30 @@ for nothing - no hours, no attendance, no salary for those days.
 
 Tests: `organization/tests_profile_actions.py` (StatusTests, 12),
 `payroll/tests_proration.py` (InactiveDaysTests).
+
+### Reports: times out of the office; clearer pages; every list a DataTable — 2026-09-30
+
+Nihal: the attendance reports should show how many times someone left the
+office and for how long in all (four 10-minute breaks: 4 and 0:40), next to
+worked, late, early out and overtime; make the reports easier to read and
+more professional; every list with entries, search and pagination.
+
+- **Times out / Time out** (the day's `break_count` and `outside_minutes`:
+  leaving between the first and last scan): on Daily and Customize (every
+  day), as totals on Weekly, Monthly, Customize (per person) and Working
+  Hour, and in their summaries. The grids also gain Late (min), Early out
+  (min) and Overtime totals; In/Out read First in / Last out. The profile's
+  month shows Times out and Time out too.
+- **Page**: the period on top with Earlier/Later, filters on a band with a
+  primary Show, summary cards (Absent red, Late amber, Present green), a
+  note on what the columns mean, statuses as coloured badges, the grids'
+  letters as coloured squares with a legend in the same colours, zeros and
+  empty times faint, today's column marked, and the ID and name kept in
+  view while a month scrolls sideways (`reports/cells.py`,
+  `reports/static/reports/css/report.css`). Downloads keep the plain values.
+- **Lists**: Days to review (Previous/Next only) and Allowances and
+  deductions (no paging) are now server-side DataTables like the rest. The
+  other plain tables are detail panels or forms (a payslip, a device's
+  details, a profile section), not lists.
+
+Tests: `reports/tests.py` (+2; column counts updated).

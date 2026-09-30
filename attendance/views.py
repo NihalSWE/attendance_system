@@ -11,7 +11,6 @@ import datetime
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -588,12 +587,18 @@ def attendance_review(request):
     today = timezone.now().astimezone(month_view.zone(membership.company.timezone)).date()
     last_month_start = (today.replace(day=1) - datetime.timedelta(days=1)).replace(day=1)
     refresh(company_id, start=last_month_start, end=today)
-    rows = correction_services.review_queue(company_id, fixable)
-    paginator = Paginator(rows, 25)
-    page = paginator.get_page(request.GET.get("page"))
+    # The project's server-side table: entries, search, sort, pages (2026-09-30).
+    with use_company(company_id):
+        page = paginate(
+            request, correction_services.review_queryset(company_id, fixable),
+            search=("employee__first_name", "employee__last_name", "review_reason",
+                    "employee_assignment__department__name"),
+            order=(("employee__first_name", "employee__last_name"), "work_date",
+                   "review_reason", "first_in_at", None),
+        )
     return render(request, "attendance/review_list.html", {
         "page": page,
-        "total": paginator.count,
+        "total": request.server_table["total"],
         "still_in": access.still_in_for(request.user, company_id),
         "missed_scans_waiting": scan_requests.waiting_count(request.user, company_id),
         "still_in_hours": live_status.STILL_IN_ALERT_MINUTES // 60,

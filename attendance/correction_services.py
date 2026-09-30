@@ -425,17 +425,24 @@ def review_queue(company_id, branches=ALL_BRANCHES):
     came back after the shift and never scanned out. A day inside a finalised
     salary month is not listed — nothing can change it now.
     """
-    locked = locked_ranges(company_id)
     with use_company(company_id):
-        rows = list(access.scope(
-            AttendanceRecord.objects.select_related(
-                "employee", "shift", "employee_assignment__department",
-            )
-            .filter(review_status=ReviewStatus.NEEDS_REVIEW, is_open=False)
-            .order_by("work_date", "employee__first_name", "pk"),
-            branches,
-        ))
-    return [row for row in rows if not _is_locked(row.work_date, locked)]
+        return list(review_queryset(company_id, branches))
+
+
+def review_queryset(company_id, branches=ALL_BRANCHES):
+    """``review_queue`` as a queryset, for the Days to review table's search,
+    sort and pages (2026-09-30). Call inside the company's tenant context."""
+    queryset = access.scope(
+        AttendanceRecord.objects.select_related(
+            "employee", "shift", "employee_assignment__department",
+        )
+        .filter(review_status=ReviewStatus.NEEDS_REVIEW, is_open=False)
+        .order_by("work_date", "employee__first_name", "pk"),
+        branches,
+    )
+    for first, last in locked_ranges(company_id):
+        queryset = queryset.exclude(work_date__gte=first, work_date__lte=last)
+    return queryset
 
 
 def is_rule_check_out(record):
