@@ -106,8 +106,8 @@
                 {% if detail.ignored_count %}
                     <p class="t-faint">
                         {{ detail.ignored_count }} repeat
-                        scan{{ detail.ignored_count|pluralize }} ignored: a second
-                        read inside the duplicate window is the same arrival.
+                        scan{{ detail.ignored_count|pluralize }} ignored: scanned again
+                        only seconds after the scan before, so it is the same scan.
                     </p>
                 {% endif %}
             </div>

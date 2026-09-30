@@ -141,7 +141,9 @@ class CompanyAttendanceSettings(TenantOwned, ActorTracked):
         default=DeviceAttendanceScope.ASSIGNED_DEVICES,
     )
 
-    duplicate_punch_window_seconds = models.PositiveIntegerField(default=30)
+    # Scans less than this apart are one scan (Nihal, 2026-09-30: only under
+    # 5 seconds; 30 read a second scan 23-30 seconds later as a repeat too).
+    duplicate_punch_window_seconds = models.PositiveIntegerField(default=5)
     attendance_window_before_minutes = models.PositiveIntegerField(default=120)
     attendance_window_after_minutes = models.PositiveIntegerField(default=120)
     # A device outage is not proof of absence, so review is the default.

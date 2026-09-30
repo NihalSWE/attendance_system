@@ -120,6 +120,20 @@ class RepeatScanTests(TestCase):
         self.assertEqual(labels(day), ["check_in", "check_out"])
         self.assertEqual(len(day.dropped), 3)
 
+    def test_only_scans_under_five_seconds_apart_are_repeats(self):
+        """Nihal's day, 2026-09-30: with the 30-second window, 12:48:30 (30 s
+        after 12:48:00) and 12:48:53 (23 s after it) were dropped too. Under
+        5 seconds apart, only a scan 2 seconds after the one before is."""
+        moments = [at(12, 48, 0), at(12, 48, 30), at(12, 48, 53), at(12, 50, 1),
+                   at(12, 50, 53), at(12, 55, 34), at(12, 55, 36)]
+        day = pairing.build_day(moments, window_seconds=5)
+        self.assertEqual([moment for moment, _ in day.dropped], [at(12, 55, 36)])
+        self.assertEqual(len(day.kept), 6)
+
+    def test_exactly_the_window_apart_is_a_scan_of_its_own(self):
+        day = pairing.build_day([at(9), at(9, 0, 5), at(18)], window_seconds=5)
+        self.assertEqual(day.dropped, [])
+
     def test_a_zero_window_keeps_everything(self):
         day = pairing.build_day([at(9), at(9, 0, 1), at(18)], window_seconds=0)
         self.assertEqual(len(day.kept), 3)
