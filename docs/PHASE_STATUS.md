@@ -5370,3 +5370,25 @@ Tests: `reports/tests.py` (+2; column counts updated).
   their numbers: every sort sent, read or put in a download link is shifted
   by the SL column (`tables.js`, the Sort box, `export_links.js`). The report
   grids keep SL, Employee ID and Name in view.
+
+### Repeat scans: only under 5 seconds apart — 2026-09-30
+
+Nihal: a day showed 12:48:30 and 12:48:53 "Ignored" - 30 and 23 seconds after
+the scan before - when only scans under 5 seconds apart should be.
+
+- The day's pairing used the company's repeat window, 30 seconds by default,
+  counted from the scan before (ignored or not): 12:48:30 was 30 s after
+  12:48:00, and 12:48:53 23 s after 12:48:30. The 5-second rule of
+  2026-09-29 only marked punches as they arrived.
+- **Window 5 seconds**, and a repeat is *less than* it (the same "under 5
+  seconds" as on arrival): `CompanyAttendanceSettings.duplicate_punch_window_seconds`
+  default 5; companies still on the old default 30 moved to 5 (scheduling
+  0004), a company's own other value is kept. `pairing.drop_repeats` and
+  the arrival's review window compare strictly.
+- The day panel says why a scan was ignored in plain words.
+- Days already stored keep their old reading until worked out again:
+  `manage.py recalculate_attendance --since YYYY-MM-DD` (finalised months
+  are never touched); generating a month's salary also does it.
+
+Tests: `attendance/tests_pairing.py` (+2), ingestion and simulator tests
+updated to the 5-second rule.

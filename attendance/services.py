@@ -291,7 +291,7 @@ def _write_pairing(record, paired):
                 label=PunchAllocation.Label.IGNORED,
                 is_included=False,
                 exclusion_reason=PunchAllocation.ExclusionReason.DUPLICATE,
-                interpretation_note="Repeat scan inside the duplicate window.",
+                interpretation_note="Scanned again only seconds after the scan before.",
             )
         )
     PunchAllocation.objects.bulk_create(allocations)

@@ -42,7 +42,7 @@ INGESTING_STATUSES = (
 # is never snapshotted, so stored evidence cannot leak a device secret.
 SAFE_HEADERS = ("Content-Type", "Content-Length", "User-Agent", "Host", "Accept")
 
-DEFAULT_REPEAT_WINDOW_SECONDS = 30
+DEFAULT_REPEAT_WINDOW_SECONDS = 5
 
 # Scans by one person on one device less than this apart are one scan (Nihal,
 # 2026-09-29: "under 5 sec, if there are 2/3 or more, take only 1"). The
@@ -50,7 +50,8 @@ DEFAULT_REPEAT_WINDOW_SECONDS = 30
 # counts; each repeat is kept as evidence, marked confirmed_duplicate of the
 # scan before it and excluded - so a burst of presses is one scan however
 # long it runs, as long as each is under this after the one before. Five
-# seconds or more apart is left to the review window below, as before.
+# seconds or more apart is a scan of its own - unless a company has chosen a
+# longer repeat window, which marks such a scan for review.
 REPEAT_SCAN_SECONDS = 5
 
 
@@ -274,8 +275,9 @@ def _nearby_punch(*, device, punch, punched_at_utc, window_seconds):
             company_id=device.company_id,
             device=device,
             device_user_id=punch.device_user_id,
-            punched_at_utc__gte=punched_at_utc - delta,
-            punched_at_utc__lte=punched_at_utc + delta,
+            # Less than the window either side, as pairing reads a repeat.
+            punched_at_utc__gt=punched_at_utc - delta,
+            punched_at_utc__lt=punched_at_utc + delta,
         )
         .exclude(punched_at_utc=punched_at_utc)
         .order_by("id")

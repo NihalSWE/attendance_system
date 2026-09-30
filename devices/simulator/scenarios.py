@@ -126,24 +126,24 @@ def resend_new_stamp(anchor, serial, device_user_id="1"):
 
 
 def rapid_repeat(anchor, serial, device_user_id="1"):
-    """Two scans a few seconds apart: ambiguous, not provably duplicate."""
+    """Two scans three seconds apart: one scan pressed twice (2026-09-30)."""
     first = _day(anchor, 9, 0)
     return Scenario(
         name="rapid_repeat",
-        description="The same person scans twice, five seconds apart.",
+        description="The same person scans twice, three seconds apart.",
         batches=[
             Batch(
                 serial=serial,
                 stamp="4001",
                 rows=[
                     _row(device_user_id, first, CHECK_IN),
-                    _row(device_user_id, first + timedelta(seconds=5), CHECK_IN),
+                    _row(device_user_id, first + timedelta(seconds=3), CHECK_IN),
                 ],
             )
         ],
         expectation=(
-            "Both punches kept. The second is probable_duplicate for review: "
-            "closeness in time is not proof of duplication."
+            "Both punches kept as evidence. The second is confirmed_duplicate of "
+            "the first and excluded: scans under 5 seconds apart are one scan."
         ),
     )
 

@@ -118,13 +118,18 @@ def drop_repeats(moments, window_seconds):
     last one we kept. A terminal that re-reports every few seconds would
     otherwise slip a scan through as soon as one gap edged past the window,
     and that scan reads as a break-out — a stutter becomes a phantom break.
+
+    A scan is a repeat when it is *less than* the window after the one
+    before (Nihal, 2026-09-30: "under 5 seconds"); exactly the window apart
+    is a scan of its own - as the terminal's punches are judged on arrival
+    (devices.services.ingestion.REPEAT_SCAN_SECONDS).
     """
     kept, dropped = [], []
     window = datetime.timedelta(seconds=max(0, int(window_seconds or 0)))
     previous = None
     for moment in sorted(moments, key=lambda m: m[0] if isinstance(m, tuple) else m):
         at, punch_id = moment if isinstance(moment, tuple) else (moment, None)
-        if previous is not None and window and (at - previous) <= window:
+        if previous is not None and window and (at - previous) < window:
             dropped.append((at, punch_id))
         else:
             kept.append((at, punch_id))

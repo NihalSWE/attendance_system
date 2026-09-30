@@ -166,7 +166,7 @@ class AddScanTests(CorrectionTestCase):
     def test_a_scan_seconds_after_a_real_one_is_refused_as_a_repeat(self):
         self.punch(AUG_10, 9)
         with self.assertRaises(ValidationError) as caught:
-            self.add_scan(AUG_10, 9, 0, 10)
+            self.add_scan(AUG_10, 9, 0, 3)     # under 5 seconds (2026-09-30)
         self.assertIn("repeat", str(caught.exception))
 
     def test_a_scan_in_the_future_or_without_a_reason_is_refused(self):

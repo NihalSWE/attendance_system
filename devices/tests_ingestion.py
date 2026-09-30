@@ -218,10 +218,14 @@ class IngestionEndpointTests(TestCase):
         )
 
     def test_close_but_distinct_scans_are_flagged_for_review_not_excluded(self):
-        # 20 seconds apart, inside the default 30s repeat window: ambiguous,
-        # so it is marked reviewable rather than treated as a duplicate.
-        self._post_attlog(body="1\t2026-09-08 09:01:02\t0\t1\t0\t\t\n", stamp="1")
-        self._post_attlog(body="1\t2026-09-08 09:01:22\t0\t1\t0\t\t\n", stamp="2")
+        # 20 seconds apart, inside a company's chosen 30s repeat window:
+        # ambiguous, so it is marked reviewable rather than treated as a
+        # duplicate. (The default window is 5 seconds since 2026-09-30.)
+        from unittest import mock
+
+        with mock.patch("devices.services.ingestion._repeat_window_seconds", return_value=30):
+            self._post_attlog(body="1\t2026-09-08 09:01:02\t0\t1\t0\t\t\n", stamp="1")
+            self._post_attlog(body="1\t2026-09-08 09:01:22\t0\t1\t0\t\t\n", stamp="2")
 
         self.assertEqual(PunchEvent.all_objects.count(), 2)
         flagged = PunchEvent.all_objects.get(
@@ -262,14 +266,14 @@ class IngestionEndpointTests(TestCase):
         later = PunchEvent.all_objects.order_by("punched_at_utc").last()
         self.assertEqual(later.dedupe_status, PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE)
 
-    def test_five_seconds_apart_is_not_a_repeat_press(self):
-        # "Under 5 seconds": 5 s apart stays with the review window, as before.
+    def test_five_seconds_apart_is_a_scan_of_its_own(self):
+        # "Under 5 seconds" (2026-09-30): 5 s apart is two scans, both count.
         self._post_attlog(body=(
             "1\t2026-09-08 09:01:02\t0\t1\t0\t\t\n"
             "1\t2026-09-08 09:01:07\t0\t1\t0\t\t\n"
         ))
-        later = PunchEvent.all_objects.order_by("punched_at_utc").last()
-        self.assertEqual(later.dedupe_status, PunchEvent.DedupeStatus.PROBABLE_DUPLICATE)
+        self.assertEqual(
+            PunchEvent.all_objects.filter(dedupe_status=PunchEvent.DedupeStatus.UNIQUE).count(), 2)
 
     def test_repeats_are_per_person(self):
         # Two people scanning a second apart are two scans.

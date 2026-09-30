@@ -206,9 +206,10 @@ class PairedCalculationTests(TestCase):
         self.assertEqual(record.worked_minutes, 540)
 
     def test_a_repeat_scan_is_stored_as_ignored_not_dropped(self):
-        """The evidence stays visible; it just does not count."""
+        """The evidence stays visible; it just does not count. (Under 5
+        seconds apart since 2026-09-30.)"""
         self.punch(9)
-        self.punch(9, 0, 10)
+        self.punch(9, 0, 3)
         self.punch(18)
         record = self.run_month()
 

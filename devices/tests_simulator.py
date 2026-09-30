@@ -152,19 +152,20 @@ class SimulatorScenarioTests(TestCase):
             2,
         )
 
-    def test_rapid_repeat_is_reviewable_not_discarded(self):
+    def test_rapid_repeat_is_kept_but_counted_once(self):
+        # Under 5 seconds apart is one scan (2026-09-30): both stay as
+        # evidence, the second excluded as a repeat of the first.
         self._run("rapid_repeat")
         self.assertEqual(self._punches().count(), 2)
         self.assertEqual(
             self._punches()
-            .filter(dedupe_status=PunchEvent.DedupeStatus.PROBABLE_DUPLICATE)
+            .filter(dedupe_status=PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE)
             .count(),
             1,
         )
-        # Nothing was excluded as a duplicate on proximity alone.
         self.assertEqual(
             self._punches()
-            .filter(dedupe_status=PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE)
+            .filter(dedupe_status=PunchEvent.DedupeStatus.PROBABLE_DUPLICATE)
             .count(),
             0,
         )
