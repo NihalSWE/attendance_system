@@ -3,6 +3,10 @@
 {% block title %}
     {{ report.title }} · Attendance
 {% endblock %}
+{% block extra_css %}
+    {{ block.super }}
+    <link rel="stylesheet" href="{% static 'reports/css/report.css' %}">
+{% endblock %}
 {% block extra_js %}
     {{ block.super }}
     {# Downloads carry the table's search and sort, as on the other lists. #}
@@ -10,6 +14,7 @@
     </script>
 {% endblock %}
 {% block page %}
+<div class="report-page">
     <div class="crumbs">
         <a href="{% url 'dashboard' %}">
             Dashboard
@@ -35,21 +40,26 @@
         <div class="page__actions">
             {# The same view with ?format=: same permissions, period and filters. #}
             <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=xlsx" data-export data-report-download>
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 13l6 6M15 13l-6 6"/></svg>
                 Download Excel
             </a>
             <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=pdf" data-export data-report-download>
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15l3 3 3-3"/></svg>
                 Download PDF
             </a>
         </div>
     </div>
 
-    <div class="card">
-        <div class="card__head">
-            <h2>
-                {{ f.label }}
-            </h2>
+    <div class="card report-card">
+        <div class="card__head report-card__head">
+            <div class="report-period">
+                <span class="report-period__eyebrow">Showing</span>
+                <h2 class="report-period__label">
+                    {{ f.label }}
+                </h2>
+            </div>
             {% if earlier or later %}
-                <div class="row">
+                <div class="report-period__steps">
                     <a class="btn btn--ghost btn--sm" href="?{{ earlier }}" aria-label="The period before">
                         ‹ Earlier
                     </a>
@@ -200,7 +210,7 @@
                     {% endfor %}
                 </select>
             {% endif %}
-            <button class="btn btn--ghost" type="submit">
+            <button class="btn btn--primary" type="submit">
                 Show
             </button>
             <a class="btn btn--quiet" href="{% url report.url_name %}">
@@ -215,43 +225,54 @@
             </div>
         {% endif %}
         {% if result.summary %}
-            <div class="report-summary" data-report-summary>
+            <div class="report-kpis" data-report-summary>
                 {% for label, value in result.summary %}
-                    <div class="report-summary__item">
-                        <span class="report-summary__value">{{ value }}</span>
-                        <span class="report-summary__label">{{ label }}</span>
+                    <div class="report-kpi{% if label == 'Absent' and value %} report-kpi--danger{% elif label == 'Late' and value or label == 'Half day' and value %} report-kpi--warning{% elif label == 'Present' and value %} report-kpi--success{% elif label == 'Leave' and value %} report-kpi--info{% endif %}">
+                        <span class="report-kpi__value">{{ value }}</span>
+                        <span class="report-kpi__label">{{ label }}</span>
                     </div>
                 {% endfor %}
             </div>
         {% endif %}
-        {% if result.legend or result.note %}
-            <p class="t-faint report-notes">
-                {% if result.legend %}{{ result.legend }}{% endif %}
-                {% if result.legend and result.note %}<br>{% endif %}
-                {% if result.note %}{{ result.note }}{% endif %}
+        {% if result.legend_items %}
+            <ul class="report-legend" aria-label="What the letters mean">
+                {% for code, words, tone in result.legend_items %}
+                    <li><span class="report-code report-code--{{ tone }}">{{ code }}</span>{{ words }}</li>
+                {% endfor %}
+                <li><span class="report-code report-code--none">·</span>No record</li>
+            </ul>
+        {% elif result.legend %}
+            <p class="t-faint report-notes">{{ result.legend }}</p>
+        {% endif %}
+        {% if result.note %}
+            <p class="report-note">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+                <span>{{ result.note }}</span>
             </p>
         {% endif %}
         {% if server_table.total %}
             {# The project's server-side table: entries per page, search across #}
             {# every row, any column sorted, numbered pages (tables.js). #}
-            <div class="table-wrap">
-                <table class="table{% if result.grid %} table--grid{% endif %}" data-server-table data-report-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+            <div class="table-wrap report-table-wrap">
+                <table class="table report-table{% if result.grid %} table--grid report-table--grid{% endif %}" data-server-table data-report-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
                     <thead>
                         <tr>
                             {% for column in result.columns %}
-                                <th{% if column.numeric %} class="numeric"{% endif %}>
-                                    {{ column.label }}
+                                <th class="{% if column.numeric %}numeric{% endif %}{% if column.kind == 'code' %} report-day{% if column.today %} report-day--today{% endif %}{% endif %}">
+                                    {% if column.kind == "code" %}
+                                        <span class="report-day__head"><small>{{ column.label|slice:":2" }}</small>{{ column.label|slice:"3:" }}</span>
+                                    {% else %}
+                                        {{ column.label }}
+                                    {% endif %}
                                 </th>
                             {% endfor %}
                         </tr>
                     </thead>
                     <tbody>
-                        {% for row in page.object_list %}
+                        {% for row in cells %}
                             <tr>
-                                {% for value in row %}
-                                    <td{% if result.grid and forloop.counter > 2 %} class="numeric mono"{% endif %}>
-                                        {{ value }}
-                                    </td>
+                                {% for cell in row %}
+                                    <td{% if cell.css %} class="{{ cell.css }}"{% endif %}>{{ cell.html }}</td>
                                 {% endfor %}
                             </tr>
                         {% endfor %}
@@ -270,4 +291,5 @@
             </div>
         {% endif %}
     </div>
+</div>
 {% endblock %}

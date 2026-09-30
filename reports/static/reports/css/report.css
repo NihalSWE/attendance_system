@@ -1,0 +1,251 @@
+/* Reports (Nihal, 2026-09-30): easier to read at a glance - the period on
+   top, summary cards, a coloured legend, badges for statuses, coloured day
+   letters on the grids, faint zeros and a name column that stays put while
+   a month scrolls sideways. Palette tokens only. */
+
+.report-page .i {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.report-page .page__actions .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* The period. */
+.report-card__head {
+    align-items: center;
+    gap: var(--s3);
+}
+.report-period {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.report-period__eyebrow {
+    color: var(--faint);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+}
+.report-period__label {
+    margin: 0;
+    font-size: 17px;
+}
+.report-period__steps {
+    display: flex;
+    gap: var(--s2);
+    margin-left: auto;
+}
+
+/* The filters sit on a quiet band. */
+.report-card [data-report-filters] {
+    background: var(--surface-sunken);
+    border-bottom: 1px solid var(--border);
+}
+
+/* Summary cards. */
+.report-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+    gap: var(--s2);
+    padding: var(--s4) var(--s4) 0;
+}
+.report-kpi {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: var(--r);
+    box-shadow: var(--shadow-sm);
+}
+.report-kpi__value {
+    color: var(--text);
+    font-size: 19px;
+    font-weight: 700;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+.report-kpi__label {
+    color: var(--muted);
+    font-size: 11.5px;
+}
+.report-kpi--success { border-left-color: var(--success); }
+.report-kpi--warning { border-left-color: var(--warning); }
+.report-kpi--danger  { border-left-color: var(--danger); }
+.report-kpi--info    { border-left-color: var(--info); }
+.report-kpi--danger .report-kpi__value { color: var(--danger-ink); }
+
+/* The grid's legend: the same coloured letters as the table. */
+.report-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin: 0;
+    padding: var(--s3) var(--s4) 0;
+    list-style: none;
+    color: var(--muted);
+    font-size: 12px;
+}
+.report-legend li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* A note on what the columns mean. */
+.report-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: var(--s3) var(--s4) 0;
+    padding: 8px 12px;
+    color: var(--muted);
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+.report-note .i {
+    margin-top: 2px;
+    color: var(--faint);
+}
+
+/* The table. */
+.report-table-wrap {
+    margin-top: var(--s3);
+}
+.report-table td {
+    white-space: nowrap;
+}
+.report-table td.mono,
+.report-table td.numeric {
+    font-variant-numeric: tabular-nums;
+}
+.report-cell--empty {
+    color: var(--faint);
+}
+.report-table .badge {
+    white-space: nowrap;
+}
+
+/* A day's letter. */
+.report-code {
+    display: inline-grid;
+    place-items: center;
+    min-width: 26px;
+    height: 22px;
+    padding: 0 4px;
+    border-radius: var(--r-sm);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .02em;
+    background: var(--accent-soft);
+    color: var(--muted);
+}
+.report-code--success { background: var(--success-soft); color: var(--success-ink); }
+.report-code--warning { background: var(--warning-soft); color: var(--warning-ink); }
+.report-code--danger  { background: var(--danger-soft);  color: var(--danger-ink); }
+.report-code--info    { background: var(--info-soft);    color: var(--info-ink); }
+.report-code--neutral { background: var(--accent-soft);  color: var(--muted); }
+.report-code--none    { background: transparent; color: var(--faint); }
+
+/* The grids: one narrow column a day, today marked, names kept in view. */
+.report-table--grid th.report-day,
+.report-table--grid td.report-day {
+    padding-inline: 3px;
+    text-align: center;
+}
+.report-day__head {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.15;
+}
+.report-day__head small {
+    color: var(--faint);
+    font-size: 9px;
+}
+.report-table--grid th.report-day--today {
+    background: var(--accent-soft);
+    color: var(--text);
+}
+.report-table--grid td.report-day--today {
+    background: color-mix(in srgb, var(--accent-soft) 55%, transparent);
+}
+/* A day column sorts by clicking its header, without an arrow taking its width. */
+.report-table--grid th.report-day .dt-column-header {
+    justify-content: center;
+}
+.report-table--grid th.report-day .dt-column-order,
+.report-table--grid th.report-day::before,
+.report-table--grid th.report-day::after {
+    display: none;
+}
+.report-table--grid th:nth-child(1),
+.report-table--grid td:nth-child(1) {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 112px;
+    max-width: 112px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.report-table--grid th:nth-child(2),
+.report-table--grid td:nth-child(2) {
+    position: sticky;
+    left: 112px;
+    z-index: 2;
+    min-width: 140px;
+    box-shadow: 1px 0 0 var(--border);
+}
+.report-table--grid td:nth-child(1),
+.report-table--grid td:nth-child(2) {
+    background: var(--surface);
+}
+.report-table--grid tbody tr:nth-child(even) td:nth-child(1),
+.report-table--grid tbody tr:nth-child(even) td:nth-child(2) {
+    background: var(--zebra);
+}
+.report-table--grid tbody tr:hover td:nth-child(1),
+.report-table--grid tbody tr:hover td:nth-child(2) {
+    background: var(--row-hover);
+}
+.report-table--grid thead th:nth-child(1),
+.report-table--grid thead th:nth-child(2) {
+    background: var(--thead);
+    z-index: 3;
+}
+
+@media (max-width: 640px) {
+    .report-period__steps {
+        width: 100%;
+        margin-left: 0;
+    }
+    .report-period__steps .btn {
+        flex: 1;
+        justify-content: center;
+    }
+    .report-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    /* On a phone only the name stays put. */
+    .report-table--grid th:nth-child(1),
+    .report-table--grid td:nth-child(1) {
+        position: static;
+    }
+    .report-table--grid th:nth-child(2),
+    .report-table--grid td:nth-child(2) {
+        left: 0;
+        min-width: 110px;
+    }
+}

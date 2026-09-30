@@ -30,6 +30,23 @@ CODES = {S.PRESENT: "P", S.HALF_DAY: "HD", S.ABSENT: "A", S.LEAVE: "LV",
 LEGEND = ("P present · LT present, came late · HD half day · A absent · LV leave · "
           "H holiday · W weekly off · IN incomplete (no check-out) · IA inactive · "
           "blank: no record")
+#: The grid's letters, their words and colours, for the page's legend.
+LEGEND_ITEMS = [
+    ("P", "Present", "success"), ("LT", "Came late", "warning"), ("HD", "Half day", "warning"),
+    ("A", "Absent", "danger"), ("LV", "Leave", "info"), ("H", "Holiday", "info"),
+    ("W", "Weekly off", "neutral"), ("IN", "No check-out", "warning"),
+    ("IA", "Inactive", "neutral"),
+]
+CODE_TONE = {code: tone for code, _words, tone in LEGEND_ITEMS}
+#: A status word -> its colour, for "status" cells (attendance and leave).
+STATUS_TONE = {
+    "Present": "success", "Half day": "warning", "Incomplete": "warning", "Absent": "danger",
+    "Leave": "info", "Holiday": "info", "Weekly off": "neutral", "Inactive": "neutral",
+    "Approved": "success", "Approved automatically": "success", "Pending": "warning",
+    "Waiting for a decision": "warning", "Partially cancelled": "info", "Rejected": "danger",
+    "Cancelled": "neutral", "Withdrawn": "neutral", "Too short to pay": "neutral",
+    "Counted": "success", "Duplicate - not counted": "neutral",
+}
 
 
 @dataclass
@@ -37,6 +54,11 @@ class Column:
     label: str
     numeric: bool = False
     weight: float = 1
+    # How the page draws the cell (2026-09-30): "status" a coloured badge,
+    # "code" a day's letter on the grids, "number"/"duration" faint when zero.
+    # Downloads keep the plain values.
+    kind: str = ""
+    today: bool = False      # a grid's column for today
 
 
 @dataclass
@@ -48,6 +70,7 @@ class Result:
     note: str = ""
     grid: bool = False       # a day-by-day grid: compact type in the PDF
     empty: str = "Nothing for this period and these filters."
+    legend_items: list = field(default_factory=list)   # (code, words, tone) for the page
 
 
 @dataclass
@@ -163,20 +186,37 @@ def totals(days):
         "off": statuses[S.HOLIDAY] + statuses[S.WEEKLY_OFF],
         "late_days": sum(1 for record in working if record.late_minutes),
         "late_minutes": sum(record.late_minutes for record in working),
+        "early_out_minutes": sum(record.early_out_minutes for record in working),
         "worked": sum(record.worked_minutes for record in working),
+        # Out of the office between check-in and check-out (2026-09-30): how
+        # many times, and for how long in all - four 10-minute breaks, 0:40.
+        "times_out": sum(record.break_count for record in working),
+        "time_out": sum(record.outside_minutes for record in working),
         "expected": sum(expected_minutes(record) for record in working),
         "overtime": sum(record.calculated_overtime_minutes for record in days),
         "days_worked": len(working),
+        "inactive": statuses[S.INACTIVE],
     }
 
 
 def status_summary(days):
     statuses = Counter(record.attendance_status for record in days)
-    late = sum(1 for record in days if record.attendance_status in WORKING and record.late_minutes)
-    return [("Days", len(days)), ("Present", statuses[S.PRESENT] + statuses[S.INCOMPLETE]),
-            ("Late", late), ("Half day", statuses[S.HALF_DAY]), ("Absent", statuses[S.ABSENT]),
-            ("Leave", statuses[S.LEAVE]),
-            ("Holiday / weekly off", statuses[S.HOLIDAY] + statuses[S.WEEKLY_OFF])]
+    working = [record for record in days if record.attendance_status in WORKING]
+    late = sum(1 for record in working if record.late_minutes)
+    summary = [
+        ("Days", len(days)), ("Present", statuses[S.PRESENT] + statuses[S.INCOMPLETE]),
+        ("Late", late), ("Half day", statuses[S.HALF_DAY]), ("Absent", statuses[S.ABSENT]),
+        ("Leave", statuses[S.LEAVE]),
+        ("Holiday / weekly off", statuses[S.HOLIDAY] + statuses[S.WEEKLY_OFF]),
+    ]
+    if statuses[S.INACTIVE]:
+        summary.append(("Inactive", statuses[S.INACTIVE]))
+    summary += [
+        ("Worked", hm(sum(record.worked_minutes for record in working))),
+        ("Times out", sum(record.break_count for record in working)),
+        ("Time out", hm(sum(record.outside_minutes for record in working))),
+    ]
+    return summary
 
 
 PERSON = [Column("Employee ID", weight=1.1), Column("Name", weight=2)]
@@ -195,31 +235,50 @@ def _day_row(ctx, record, with_date=False):
         _branch(record), department(record), record.get_attendance_status_display(),
         clock(record.first_in_at, ctx.zone), clock(record.last_out_at, ctx.zone),
         hm(record.worked_minutes), record.late_minutes or 0,
-        record.early_out_minutes or 0, hm(record.calculated_overtime_minutes),
+        record.early_out_minutes or 0, record.break_count or 0, hm(record.outside_minutes),
+        hm(record.calculated_overtime_minutes),
     ]
 
 
 def _day_columns(with_date=False):
     return ([Column("Date", weight=1.1)] if with_date else []) + PERSON + PLACE + [
-        Column("Status", weight=1.1), Column("In", True), Column("Out", True),
-        Column("Worked", True), Column("Late (min)", True), Column("Early out (min)", True),
-        Column("Overtime", True),
+        Column("Status", weight=1.1, kind="status"), Column("First in", True, kind="clock"),
+        Column("Last out", True, kind="clock"), Column("Worked", True, kind="duration"),
+        Column("Late (min)", True, kind="number"),
+        Column("Early out (min)", True, kind="number"),
+        Column("Times out", True, 0.8, kind="number"),
+        Column("Time out", True, 0.8, kind="duration"),
+        Column("Overtime", True, kind="duration"),
     ]
+
+
+#: What the out-of-office columns mean, said under the table.
+OUT_NOTE = ("First in and Last out are the day's first and last scans. Times out: how often "
+            "they left between them; Time out: for how long in all (four 10-minute breaks "
+            "are 4 and 0:40). Worked leaves that time out.")
 
 
 def daily_attendance(ctx):
     days = list(records(ctx))
     return Result(columns=_day_columns(), rows=[_day_row(ctx, r) for r in days],
-                  summary=status_summary(days))
+                  summary=status_summary(days), note=OUT_NOTE)
 
 
 def _grid(ctx):
     f = ctx.filters
     days = list(records(ctx))
-    columns = PERSON + [Column(f"{day:%a}"[:2] + f" {day.day}", True, 0.55) for day in f.days] + [
-        Column("Present", True, 0.8), Column("Late", True, 0.7), Column("Half", True, 0.7),
-        Column("Absent", True, 0.8), Column("Leave", True, 0.8), Column("Off", True, 0.7),
-        Column("Worked", True, 0.9),
+    today = timezone.localdate()
+    columns = PERSON + [Column(f"{day:%a}"[:2] + f" {day.day}", True, 0.55, kind="code",
+                               today=day == today) for day in f.days] + [
+        Column("Present", True, 0.8, kind="number"), Column("Late", True, 0.7, kind="number"),
+        Column("Half", True, 0.7, kind="number"), Column("Absent", True, 0.8, kind="number"),
+        Column("Leave", True, 0.8, kind="number"), Column("Off", True, 0.7, kind="number"),
+        Column("Worked", True, 0.9, kind="duration"),
+        Column("Late (min)", True, 0.8, kind="number"),
+        Column("Early out (min)", True, 0.9, kind="number"),
+        Column("Times out", True, 0.8, kind="number"),
+        Column("Time out", True, 0.8, kind="duration"),
+        Column("Overtime", True, 0.9, kind="duration"),
     ]
     rows = []
     for first, own in by_employee(days):
@@ -227,9 +286,12 @@ def _grid(ctx):
         t = totals(own)
         rows.append(person(first) + [code_of(on.get(day)) for day in f.days] + [
             t["present"], t["late_days"], t["half_day"], t["absent"], t["leave"], t["off"],
-            hm(t["worked"])])
+            hm(t["worked"]), t["late_minutes"], t["early_out_minutes"], t["times_out"],
+            hm(t["time_out"]), hm(t["overtime"])])
     return Result(columns=columns, rows=rows, summary=status_summary(days), legend=LEGEND,
-                  grid=True)
+                  grid=True, legend_items=LEGEND_ITEMS,
+                  note="Late: days late. Times out and Time out: leaving the office between "
+                       "check-in and check-out, how often and for how long in all.")
 
 
 weekly_attendance = _grid
@@ -244,20 +306,29 @@ def custom_attendance(ctx):
     if ctx.filters.extra.get("view") == "detail":
         return Result(columns=_day_columns(with_date=True),
                       rows=[_day_row(ctx, r, with_date=True) for r in days],
-                      summary=status_summary(days))
+                      summary=status_summary(days), note=OUT_NOTE)
     rows = []
     for first, own in by_employee(days):
         t = totals(own)
         rows.append(person(first) + [_branch(first), department(first), len(own),
                     t["present"], t["late_days"], t["half_day"], t["absent"], t["leave"],
-                    t["off"], hm(t["worked"]), t["late_minutes"], hm(t["overtime"])])
+                    t["off"], hm(t["worked"]), t["late_minutes"], t["early_out_minutes"],
+                    t["times_out"], hm(t["time_out"]), hm(t["overtime"])])
     return Result(
         columns=PERSON + PLACE + [
-            Column("Days", True, 0.7), Column("Present", True, 0.8), Column("Late", True, 0.7),
-            Column("Half day", True, 0.8), Column("Absent", True, 0.8), Column("Leave", True, 0.8),
-            Column("Holiday / off", True, 0.9), Column("Worked", True, 0.9),
-            Column("Late (min)", True, 0.9), Column("Overtime", True, 0.9)],
-        rows=rows, summary=status_summary(days))
+            Column("Days", True, 0.7, kind="number"), Column("Present", True, 0.8, kind="number"),
+            Column("Late", True, 0.7, kind="number"), Column("Half day", True, 0.8, kind="number"),
+            Column("Absent", True, 0.8, kind="number"), Column("Leave", True, 0.8, kind="number"),
+            Column("Holiday / off", True, 0.9, kind="number"),
+            Column("Worked", True, 0.9, kind="duration"),
+            Column("Late (min)", True, 0.9, kind="number"),
+            Column("Early out (min)", True, 0.9, kind="number"),
+            Column("Times out", True, 0.8, kind="number"),
+            Column("Time out", True, 0.8, kind="duration"),
+            Column("Overtime", True, 0.9, kind="duration")],
+        rows=rows, summary=status_summary(days),
+        note="Late: days late. Times out and Time out: leaving the office between check-in "
+             "and check-out, how often and for how long in all.")
 
 
 # --- absent and late ------------------------------------------------------------
@@ -324,23 +395,32 @@ def monthly_late(ctx):
 
 def working_hours(ctx):
     days = list(records(ctx))
-    rows, all_worked, all_expected = [], 0, 0
+    rows, all_worked, all_expected, all_out = [], 0, 0, 0
     for first, own in by_employee(days):
         t = totals(own)
         if not t["days_worked"]:
             continue
         all_worked, all_expected = all_worked + t["worked"], all_expected + t["expected"]
+        all_out += t["time_out"]
         rows.append(person(first) + [_branch(first), department(first), t["days_worked"],
                     hm(t["expected"]), hm(t["worked"]), hm(t["worked"] - t["expected"]),
-                    hm(t["worked"] // t["days_worked"]), hm(t["overtime"])])
+                    hm(t["worked"] // t["days_worked"]), t["times_out"], hm(t["time_out"]),
+                    hm(t["overtime"])])
     return Result(columns=PERSON + PLACE + [
-        Column("Days worked", True, 0.9), Column("Shift hours", True), Column("Worked", True),
-        Column("Difference", True), Column("Average a day", True), Column("Overtime", True)],
+        Column("Days worked", True, 0.9, kind="number"),
+        Column("Shift hours", True, kind="duration"), Column("Worked", True, kind="duration"),
+        Column("Difference", True, kind="duration"),
+        Column("Average a day", True, kind="duration"),
+        Column("Times out", True, 0.8, kind="number"),
+        Column("Time out", True, 0.8, kind="duration"),
+        Column("Overtime", True, kind="duration")],
         rows=rows, summary=[("People", len(rows)), ("Worked", hm(all_worked)),
                             ("Shift hours", hm(all_expected)),
-                            ("Difference", hm(all_worked - all_expected))],
+                            ("Difference", hm(all_worked - all_expected)),
+                            ("Time out", hm(all_out))],
         note="Shift hours: each worked day's shift, less an unpaid break - as salary counts "
-             "it. Worked: time in the office, breaks out excluded.",
+             "it. Worked: time in the office, breaks out excluded. Times out and Time out: "
+             "leaving the office between check-in and check-out, how often and how long.",
         empty="Nobody worked in this period.")
 
 
@@ -356,9 +436,10 @@ def short_hours(ctx):
                 clock(r.last_out_at, ctx.zone), hm(expected), hm(r.worked_minutes),
                 hm(expected - r.worked_minutes)])
     return Result(columns=[Column("Date", weight=1.1)] + PERSON + [
-        Column("Branch", weight=1.3), Column("Status", weight=1.1), Column("In", True),
-        Column("Out", True), Column("Shift hours", True), Column("Worked", True),
-        Column("Short by", True)],
+        Column("Branch", weight=1.3), Column("Status", weight=1.1, kind="status"),
+        Column("First in", True, kind="clock"), Column("Last out", True, kind="clock"),
+        Column("Shift hours", True, kind="duration"), Column("Worked", True, kind="duration"),
+        Column("Short by", True, kind="duration")],
         rows=rows, summary=[("Short days", len(rows)), ("Short by, in all", hm(short))],
         note="Days with approved leave (a half day, say) are left out: that time was granted.",
         empty="Nobody worked less than their shift in this period.")
@@ -406,9 +487,10 @@ def overtime(ctx):
             clock(r.last_out_at, ctx.zone) if claim.open_from is None else "Not scanned out",
             hm(claim.minutes), hm(row.approved_minutes), hm(paid), labels.get(row.state, row.state)])
     return Result(columns=[Column("Date", weight=1.1)] + PERSON + [
-        Column("Branch", weight=1.3), Column("Status", weight=1), Column("Shift ends", True),
-        Column("Left", True), Column("Overtime", True), Column("Approved", True),
-        Column("Paid", True), Column("Decision", weight=1.5)],
+        Column("Branch", weight=1.3), Column("Status", weight=1, kind="status"),
+        Column("Shift ends", True), Column("Left", True),
+        Column("Overtime", True, kind="duration"), Column("Approved", True, kind="duration"),
+        Column("Paid", True, kind="duration"), Column("Decision", weight=1.5, kind="status")],
         rows=rows, summary=[("Days", len(rows)), ("Overtime", hm(totals_["minutes"])),
                             ("Approved", hm(totals_["approved"])), ("Paid", hm(totals_["paid"])),
                             ("Waiting", totals_["waiting"])],
@@ -484,7 +566,7 @@ def leave(ctx):
     return Result(columns=PERSON + [
         Column("Branch", weight=1.3), Column("Leave type", weight=1.2), Column("From", True),
         Column("To", True), Column("Days", True, 0.6), Column("Pay", weight=0.8),
-        Column("Status", weight=1), Column("Reason", weight=2.2)],
+        Column("Status", weight=1, kind="status"), Column("Reason", weight=2.2)],
         rows=rows,
         summary=[("Requests", len(rows))] + [
             (name, f"{_days(days)} day{'' if days == 1 else 's'}")
@@ -538,7 +620,7 @@ def entry_logs(ctx):
     return Result(columns=[
         Column("Date", weight=1.1), Column("Time", True), Column("Employee ID", weight=1.1),
         Column("Name", weight=2), Column("Device", weight=1.4), Column("Branch", weight=1.3),
-        Column("Method", weight=1), Column("Counted?", weight=2)],
+        Column("Method", weight=1), Column("Counted?", weight=2, kind="status")],
         rows=rows, summary=[("Scans", len(rows)), ("Counted", counted),
                             ("Not counted", len(rows) - counted)],
         note="Times are in the company's time zone. Employee ID is the number the terminal "
