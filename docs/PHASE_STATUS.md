@@ -5364,3 +5364,9 @@ more professional; every list with entries, search and pagination.
   details, a profile section), not lists.
 
 Tests: `reports/tests.py` (+2; column counts updated).
+- (Same day) **SL on every list**: the row's number across pages (26 on the
+  second page of 25), drawn first by `tables.js` on every server-side table
+  and by `platform.js` on the root's Companies. The server's columns keep
+  their numbers: every sort sent, read or put in a download link is shifted
+  by the SL column (`tables.js`, the Sort box, `export_links.js`). The report
+  grids keep SL, Employee ID and Name in view.

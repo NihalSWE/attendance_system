@@ -9,17 +9,32 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
     }
     table.querySelectorAll(".fallback-empty").forEach(element => element.remove());
+    // SL first, as on every list (2026-09-30); the server counts columns without it.
+    const sl = document.createElement("th");
+    sl.className = "numeric table-sl";
+    sl.textContent = "SL";
+    table.querySelector("thead th").before(sl);
+    table.querySelectorAll("tbody tr").forEach(row => row.prepend(document.createElement("td")));
     const escaped = DataTable.render.text();
     new DataTable(table, {
         serverSide: true,
         processing: true,
-        ajax: table.dataset.source,
+        ajax: {
+            url: table.dataset.source,
+            data: function (request) {
+                request.order = request.order.map(entry => ({...entry, column: entry.column - 1}));
+            },
+        },
         pageLength: 25,
         lengthMenu: [10, 25, 50, 100],
         search: {search: table.dataset.query || ""},
-        order: [[0, "asc"]],
+        order: [[1, "asc"]],
         autoWidth: false,
         columns: [
+            {
+                data: null, orderable: false, searchable: false, className: "numeric table-sl",
+                render: (_data, _type, _row, meta) => meta.settings._iDisplayStart + meta.row + 1,
+            },
             {data: "name", render: escaped},
             {data: "code", render: escaped},
             {

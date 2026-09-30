@@ -190,38 +190,43 @@
 .report-table--grid th.report-day::after {
     display: none;
 }
+/* SL, Employee ID and Name stay in view while a month scrolls sideways
+   (SL is the first column tables.js draws on every list, 2026-09-30). */
+.report-table--grid th:nth-child(-n+3),
+.report-table--grid td:nth-child(-n+3) {
+    position: sticky;
+    z-index: 2;
+}
 .report-table--grid th:nth-child(1),
 .report-table--grid td:nth-child(1) {
-    position: sticky;
     left: 0;
-    z-index: 2;
-    min-width: 112px;
-    max-width: 112px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    min-width: 44px;
+    max-width: 44px;
 }
 .report-table--grid th:nth-child(2),
 .report-table--grid td:nth-child(2) {
-    position: sticky;
-    left: 112px;
-    z-index: 2;
+    left: 44px;
+    min-width: 104px;
+    max-width: 104px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.report-table--grid th:nth-child(3),
+.report-table--grid td:nth-child(3) {
+    left: 148px;
     min-width: 140px;
     box-shadow: 1px 0 0 var(--border);
 }
-.report-table--grid td:nth-child(1),
-.report-table--grid td:nth-child(2) {
+.report-table--grid td:nth-child(-n+3) {
     background: var(--surface);
 }
-.report-table--grid tbody tr:nth-child(even) td:nth-child(1),
-.report-table--grid tbody tr:nth-child(even) td:nth-child(2) {
+.report-table--grid tbody tr:nth-child(even) td:nth-child(-n+3) {
     background: var(--zebra);
 }
-.report-table--grid tbody tr:hover td:nth-child(1),
-.report-table--grid tbody tr:hover td:nth-child(2) {
+.report-table--grid tbody tr:hover td:nth-child(-n+3) {
     background: var(--row-hover);
 }
-.report-table--grid thead th:nth-child(1),
-.report-table--grid thead th:nth-child(2) {
+.report-table--grid thead th:nth-child(-n+3) {
     background: var(--thead);
     z-index: 3;
 }
@@ -239,12 +244,12 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     /* On a phone only the name stays put. */
-    .report-table--grid th:nth-child(1),
-    .report-table--grid td:nth-child(1) {
+    .report-table--grid th:nth-child(-n+2),
+    .report-table--grid td:nth-child(-n+2) {
         position: static;
     }
-    .report-table--grid th:nth-child(2),
-    .report-table--grid td:nth-child(2) {
+    .report-table--grid th:nth-child(3),
+    .report-table--grid td:nth-child(3) {
         left: 0;
         min-width: 110px;
     }

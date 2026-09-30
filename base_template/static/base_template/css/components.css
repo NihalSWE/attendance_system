@@ -419,6 +419,16 @@ Table — spec §4. Row height lands near 38px: standard density.
     font-variant-numeric: tabular-nums;
     font-weight: 500;
 }
+/* SL: the row's number on every list (tables.js, 2026-09-30). */
+.table .table-sl {
+    width: 44px;
+    color: var(--muted);
+    text-align: center;
+    padding-inline: 8px;
+}
+.table th.table-sl .dt-column-header {
+    justify-content: center;
+}
 /* Sortable header — the indicator is ink, never a second colour. */
 .table th.is-sortable {
     cursor: pointer;
