@@ -259,7 +259,8 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
-#companies-table th:nth-child(4), #companies-table td:nth-child(4) {
+/* Employees: second from the end, with or without the SL column in front. */
+#companies-table th:nth-last-child(2), #companies-table td:nth-last-child(2) {
     width: 150px;
     text-align: right;
     padding-right: var(--s5);

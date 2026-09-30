@@ -25,7 +25,8 @@ document.addEventListener("click", function (event) {
         .forEach(key => url.searchParams.delete(key));
     url.searchParams.set("search[value]", api.search() || "");
     api.order().forEach(function (entry, index) {
-        const column = Array.isArray(entry) ? entry[0] : entry.column;
+        // Less the SL column tables.js puts first: the server counts without it.
+        const column = (Array.isArray(entry) ? entry[0] : entry.column) - 1;
         const dir = Array.isArray(entry) ? entry[1] : entry.dir;
         url.searchParams.set(`order[${index}][column]`, column);
         url.searchParams.set(`order[${index}][dir]`, dir);
