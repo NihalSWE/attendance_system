@@ -179,6 +179,10 @@ def getrequest(request):
     from webhooks.services import on_device_poll
 
     on_device_poll(device.company_id)
+    # A "Load employees" run whose thread stopped (a restart) carries on.
+    from devices.services import load_jobs
+
+    load_jobs.on_device_poll(device)
 
     body, issued = take_pending_commands(device)
     if issued:

@@ -323,6 +323,11 @@
                                             </span>
                                         {% endfor %}
                                     </div>
+                                    {% for d in r.device.removed %}
+                                        <div class="device-removed" title="User {{ d.pin }} is no longer on {{ d.name }}: it was deleted on the terminal. Send them again from the Employees list or the device's Users page.">
+                                            Removed on {{ d.name }}
+                                        </div>
+                                    {% endfor %}
                                     {% if r.device.fingerprint or r.device.face %}
                                         <div class="device-bio" title="Saved on the server, ready to copy to the company's other devices">
                                             {% if r.device.fingerprint %}Finger{% endif %}{% if r.device.fingerprint and r.device.face %} · {% endif %}{% if r.device.face %}Face{% endif %} saved

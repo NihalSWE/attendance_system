@@ -948,6 +948,13 @@ def unresolved_queue(request):
     })
 
 
+def _load_progress(device):
+    from devices.services import load_jobs
+
+    load_jobs.resume_if_stalled(device)
+    return load_jobs.progress(device)
+
+
 @login_required
 @company_user_required
 def device_users(request, public_id):
@@ -1041,6 +1048,8 @@ def device_users(request, public_id):
         "transfer_targets": mapping_service.transfer_targets(device) if user_writes else [],
         "waiting_count": waiting_count(device),
         "job": command_service.job_progress(device),
+        # "Load employees" prepares people in the background first.
+        "load": _load_progress(device),
         # A new or replaced device is filled from the company (Load employees).
         "branch_employee_count": len(mapping_service.branch_employees(device)) if user_writes else 0,
         "pending_commands": pending_summary(device),

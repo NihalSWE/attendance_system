@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from cryptography.fernet import Fernet
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -216,6 +216,31 @@ class RemovedFromDeviceTests(MappingCase):
         self.upload(USERS, cmdid=None)
         with use_company(self.company):
             self.assertFalse(any(r["removed_from_device"] for r in build_roster(self.device)))
+
+
+class DeletedOnTerminalBadgeTests(MappingCase):
+    """Nihal, 2026-10-01: someone deleted on the terminal still showed the
+    device on the Employees list; it should say "Not on any device" again."""
+
+    def test_list_and_profile_say_they_are_no_longer_on_the_device(self):
+        self.upload(USERS, cmdid="1")
+        with use_company(self.company):
+            mapping.import_users(actor=self.admin, device=self.device, pins=["445962", "445900"])
+            before = mapping.device_badges(self.company.pk, [self.moin.pk, self.ajay.pk])
+        self.assertEqual(before[self.moin.pk]["devices"], 1)
+        # Moin deleted on the terminal; the next "Refresh user list" lacks him.
+        self.upload("\n".join(line for line in USERS.splitlines() if "pin=445900" not in line) + "\n",
+                    cmdid="5")
+        with use_company(self.company):
+            after = mapping.device_badges(self.company.pk, [self.moin.pk, self.ajay.pk])
+        self.assertEqual((after[self.moin.pk]["devices"], after[self.moin.pk]["names"]), (0, []))
+        self.assertEqual(after[self.moin.pk]["removed"], [{"name": "Main Entrance", "pin": "445900"}])
+        self.assertEqual(after[self.ajay.pk]["devices"], 1)
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("employee_list")).content.decode()
+        self.assertIn("Removed on Main Entrance", page)
+        profile = self.client.get(reverse("organization:employee_detail", args=[self.moin.pk]))
+        self.assertContains(profile, "Removed on the terminal")
 
 
 class OutboxTests(MappingCase):
@@ -649,6 +674,121 @@ class JobProgressTests(MappingCase):
         self.assertIn('data-job-bar', page)
         answer = self.client.get(reverse("devices:device_job_progress", args=[self.device.public_id]))
         self.assertEqual(answer.json()["waiting"], 2)
+
+
+class LoadJobTests(MappingCase):
+    """Load employees onto this device runs in the background (2026-10-01:
+    250+ people in one request answered 500 on the live server)."""
+
+    def setUp(self):
+        super().setUp()
+        with use_company(self.company):
+            self.target = self.device_at(self.hq, "NYU0000000009", "Replacement")
+
+    def test_a_load_prepares_everyone_and_records_who_could_not_go(self):
+        from devices.services import load_jobs
+
+        with use_company(self.company):
+            job, started = load_jobs.start_load(actor=self.admin, device=self.target)
+        job.refresh_from_db()
+        self.assertTrue(started)
+        self.assertEqual((job.status, job.total, job.done_count, job.failed_count, job.remaining),
+                         ("done", 4, 3, 1, []))
+        self.assertEqual(job.failures[0][0], "Lettered")
+        self.assertIn("push_user:445962", self.outbox(self.target))
+        self.assertEqual(self.outbox(self.device), [])  # only the device asked for
+
+    def test_steps_a_second_click_and_resuming_a_stopped_run(self):
+        from unittest import mock
+
+        from devices.models import DeviceLoadJob
+        from devices.services import load_jobs
+
+        with mock.patch.object(load_jobs, "STEP", 2),                 mock.patch.object(load_jobs, "_launch") as launch, use_company(self.company):
+            job, _ = load_jobs.start_load(actor=self.admin, device=self.target)
+            launch.assert_called_once_with(job.pk)
+            self.assertTrue(load_jobs._step(job.pk))            # two prepared, two left
+            progress = load_jobs.progress(self.target)
+            self.assertEqual((progress["running"], progress["handled"], progress["total"]),
+                             (True, 2, 4))
+            again, started = load_jobs.start_load(actor=self.admin, device=self.target)
+            self.assertEqual((again.pk, started), (job.pk, False))
+            self.assertEqual(DeviceLoadJob.all_objects.filter(device=self.target).count(), 1)
+            # Its thread is alive (fresh heartbeat): nothing to resume.
+            self.assertFalse(load_jobs.resume_if_stalled(self.target))
+            # A restart stopped it: the heartbeat goes quiet and the next look resumes it.
+            DeviceLoadJob.all_objects.filter(pk=job.pk).update(
+                heartbeat_at=timezone.now() - datetime.timedelta(minutes=5))
+            self.assertTrue(load_jobs.resume_if_stalled(self.target))
+            self.assertEqual(launch.call_count, 2)
+            self.assertFalse(load_jobs._step(job.pk))           # the rest, and done
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.done_count + job.failed_count), ("done", 4))
+        self.assertIsNone(load_jobs.resume_if_stalled(self.target) or None)
+
+    def test_one_broken_person_does_not_stop_the_others(self):
+        from unittest import mock
+
+        from devices.services import load_jobs
+
+        real = mapping.send_employees
+
+        def flaky(*, actor, employees, only_device=None):
+            if any(e.pk == self.moin.pk for e in employees):
+                raise RuntimeError("boom")
+            return real(actor=actor, employees=employees, only_device=only_device)
+
+        with mock.patch.object(mapping, "send_employees", side_effect=flaky),                 self.assertLogs("devices.services.load_jobs", "ERROR"), use_company(self.company):
+            job, _ = load_jobs.start_load(actor=self.admin, device=self.target)
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.done_count, job.failed_count), ("done", 2, 2))
+        self.assertIn(["Moin", load_jobs.UNEXPECTED], job.failures)
+
+    def test_only_someone_who_manages_the_branch(self):
+        from django.core.exceptions import PermissionDenied
+
+        from devices.services import load_jobs
+
+        with use_company(self.company), self.assertRaises(PermissionDenied):
+            load_jobs.start_load(actor=self.manager, device=self.unit_device)
+
+    def test_the_card_and_the_endpoint_show_the_preparing(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("devices:device_load", args=[self.target.public_id]),
+                                    follow=True)
+        self.assertContains(response, "Employees prepared for Replacement")
+        self.assertContains(response, "<strong>Lettered</strong>")
+        load = self.client.get(reverse("devices:device_job_progress",
+                                       args=[self.target.public_id])).json()["load"]
+        self.assertEqual((load["running"], load["prepared"], load["failed"], load["total"]),
+                         (False, 3, 1, 4))
+
+
+@override_settings(DEVICE_LOAD_IN_BACKGROUND=True)
+class LoadInBackgroundTests(TransactionTestCase):
+    """The real path: the click commits, then a thread prepares everyone."""
+
+    setUp = MappingCase.setUp
+    device_at, member, employee, outbox = (
+        MappingCase.device_at, MappingCase.member, MappingCase.employee, MappingCase.outbox)
+
+    def test_the_click_returns_and_a_thread_does_the_work(self):
+        import threading
+
+        from devices.models import DeviceLoadJob
+
+        with use_company(self.company):
+            target = self.device_at(self.hq, "NYU0000000009", "Replacement")
+        self.client.force_login(self.admin)
+        response = self.client.post(reverse("devices:device_load", args=[target.public_id]),
+                                    follow=True)
+        self.assertContains(response, "They are prepared in the background")
+        for thread in threading.enumerate():
+            if thread.name.startswith("device-load-"):
+                thread.join(timeout=60)
+        job = DeviceLoadJob.all_objects.get(device=target)
+        self.assertEqual((job.status, job.done_count, job.failed_count), ("done", 3, 1))
+        self.assertIn("push_user:445962", self.outbox(target))
 
 
 class SavedSummaryTests(MappingCase):

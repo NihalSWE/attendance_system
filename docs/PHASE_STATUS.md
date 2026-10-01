@@ -5462,3 +5462,42 @@ a guide they can download says how to receive it.
   box keeps the saved one.
 
 Tests: `webhooks/tests.py` (33).
+
+### Load employees in the background; deleted on the terminal = not on the device — 2026-10-01
+
+- **Load employees onto this device** (Device users) with 250+ employees
+  answered 500 on the live server: everything was done inside the click and
+  ran past Gunicorn's time limit. Measured locally with 176 employees: 5.8 s
+  and 3,094 queries in one request.
+  - Faster: each person's placement is read once per run, the branch's
+    employees in one query, devices and permission once per branch, and on a
+    2.x device the user list once per run instead of once per person
+    (176 people: 3.2 s, 2,306 queries).
+  - In the background: the click writes a `DeviceLoadJob` (devices 0010) with
+    the list of employees and returns at once. A thread prepares them 25 at a
+    time (`devices/services/load_jobs.py`, each step one short transaction
+    holding the job row with `skip_locked`, so two threads never prepare the
+    same people), and the device starts collecting the first ones while the
+    rest are prepared. One person failing unexpectedly does not stop the
+    others: the step is retried one by one.
+  - Survives restarts: a job whose heartbeat is silent for 2 minutes is
+    picked up where it was, the next time the device checks in (once a
+    minute at most) or someone looks at its progress. A second click while
+    it runs does not start another.
+  - The progress card shows "Preparing employees for <device>: X of Y" with
+    who could not be sent and why, above the existing sending bar.
+  - Celery (suggested): not added. It needs Redis and a worker service kept
+    running beside the site; the job is in the database instead, and
+    `run_job` is the task a Celery worker would call if more work moves to
+    the background later.
+- **Deleted on the terminal**: an employee sent to a device and then deleted
+  on the terminal still showed that device on the Employees list. The link
+  is kept (their scans are still theirs), but a number missing from the
+  device's latest complete user list is now not counted: the list says
+  "Not on any device" with "Removed on <device>" under it, and the profile's
+  device table marks the row "Removed on the terminal". The SenseFace 2A
+  does not report a delete made on the terminal by itself; the next
+  **Refresh user list** on its Users page shows it.
+
+Tests: `devices/tests_mapping.py` (LoadJobTests, LoadInBackgroundTests,
+DeletedOnTerminalBadgeTests).
