@@ -5455,4 +5455,10 @@ a guide they can download says how to receive it.
   the queue. The first real test against erp25 answered 503 "Webhook secret
   is not configured on the server": the ERP had not loaded the key yet.
 
+- (Same day) **The saved key stays in its box**: Nihal expected the secret
+  key, once saved, to show as dots with the eye revealing it, not an empty
+  box. Both keys are now filled in (decrypted, password boxes) for the owner
+  and company admin; saving the same key again is not a change; an emptied
+  box keeps the saved one.
+
 Tests: `webhooks/tests.py` (33).

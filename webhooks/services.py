@@ -16,7 +16,8 @@ that it is given up and the page offers to send it again.
 
 Safety: only ``https://`` addresses, never one that resolves to a private or
 local network, no redirects followed, 10 seconds at most per request. The
-secrets are encrypted and never shown again; every change is audited.
+secrets are kept encrypted; on the page (owner and company admin only) they
+sit in their boxes as dots and the eye shows them. Every change is audited.
 """
 
 import base64
@@ -96,6 +97,13 @@ def new_secret():
     import secrets
 
     return secrets.token_hex(32)
+
+
+def _readable(token):
+    try:
+        return decrypt(token)
+    except WebhookError:
+        return None
 
 
 # --- reading ----------------------------------------------------------------
@@ -180,13 +188,25 @@ class WebhookSettingsForm(StyledFormMixin, forms.ModelForm):
     def __init__(self, *args, has_secret=False, has_signing_secret=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.has_secret = has_secret
+        # The saved keys stay in their boxes as dots; the eye shows them
+        # (Nihal, 2026-10-01). Only the owner and company admin open this page.
+        for name, token in (("secret", getattr(self.instance, "secret_encrypted", "")),
+                            ("signing_secret",
+                             getattr(self.instance, "signing_secret_encrypted", ""))):
+            self.fields[name].widget.render_value = True
+            if token and not self.is_bound and name not in self.initial:
+                try:
+                    self.initial[name] = decrypt(token)
+                except WebhookError:
+                    pass       # unreadable: the box stays empty, a new one replaces it
         self.fields["secret"].help_text = (
-            "Saved and hidden. Leave empty to keep it, or type a new one to replace it."
+            "Saved. Click the eye to see it. To change it, type or create a new one and Save."
             if has_secret else
-            "Your developer gives you this too. Your system uses it to know the attendance "
-            "really comes from us. (IGL ERP: ATTENDANCE_WEBHOOK_SECRET.)")
+            "Your developer gives you this - or press Create a secret key and give it to them. "
+            "Your system uses it to know the attendance really comes from us. "
+            "(IGL ERP: ATTENDANCE_WEBHOOK_SECRET.)")
         self.fields["signing_secret"].help_text = (
-            "Saved and hidden. Leave empty to keep it."
+            "Saved. Click the eye to see it; empty it and tick below to stop signing."
             if has_signing_secret else
             "Only if your developer gives you one. (IGL ERP: ATTENDANCE_WEBHOOK_SIGNING_SECRET.)")
         if not has_signing_secret:
@@ -234,6 +254,11 @@ def save_settings(*, actor, company_id, form):
         row.company = company
         secret = form.cleaned_data.get("secret") or ""
         signing = form.cleaned_data.get("signing_secret") or ""
+        # The boxes post the saved keys back: only a different one is a change.
+        if existing is not None and secret == _readable(existing.secret_encrypted):
+            secret = ""
+        if existing is not None and signing == _readable(existing.signing_secret_encrypted):
+            signing = ""
         row.secret_encrypted = encrypt(secret) if secret else (
             existing.secret_encrypted if existing else "")
         if form.cleaned_data.get("clear_signing_secret"):

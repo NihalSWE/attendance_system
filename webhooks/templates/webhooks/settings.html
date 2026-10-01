@@ -91,7 +91,7 @@
                                 <li>It is already filled in below. Press <strong>Save</strong> now, so it is kept.</li>
                                 <li>When your developer says it is in place, press <strong>Save and test connection</strong>.</li>
                             </ol>
-                            <span class="t-faint">Once saved it is hidden and never shown again - copy it now.</span>
+                            <span class="t-faint">After saving it stays in the Secret key box as dots - click the eye to see it again.</span>
                         </div>
                     </div>
                 {% endif %}
@@ -104,7 +104,7 @@
                     <button class="btn btn--ghost btn--sm" type="submit" name="action" value="generate" formnovalidate>
                         Create a secret key
                     </button>
-                    <span class="field__help">No secret key yet? Create one here and give it to your system's developer.</span>
+                    <span class="field__help">{% if saved.secret_encrypted %}Need a new one? Create it, Save, then give it to your system's developer - the old one stops working.{% else %}No secret key yet? Create one here and give it to your system's developer.{% endif %}</span>
                 </div>
                 <div>
                     <label class="check" for="{{ form.is_active.id_for_label }}">
