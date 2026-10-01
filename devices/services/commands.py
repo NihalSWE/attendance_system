@@ -333,6 +333,24 @@ def build_template_update(*, device_user_id, template, dialect=None):
 MAX_PENDING = 10
 
 
+def _last_command_id(device, data):
+    """The highest command number this device has been given.
+
+    The counter in ``state_data`` is the source, but never trusted below a
+    number already in the outbox: a check-in that once saved an old copy of
+    the row put it back (live, 2026-10-01 - every later write then collided
+    with an existing number and "Load employees" failed for 142 people). A
+    counter behind repairs itself on the next write.
+    """
+    from django.db.models import Max
+
+    from devices.models import DeviceOutboxCommand
+
+    highest = DeviceOutboxCommand.all_objects.filter(device=device).aggregate(
+        top=Max("command_id"))["top"] or 0
+    return max(int(data.get("last_command_id") or 0), highest)
+
+
 def _sync_state(device):
     state, _ = DeviceSyncState.all_objects.get_or_create(
         device=device, defaults={"company_id": device.company_id}
@@ -364,7 +382,7 @@ def queue_command(*, device, command_key, requested_by=None):
 
         # The id is echoed back by the device in its devicecmd result, which is
         # how a result is matched to the request that caused it.
-        next_id = int(data.get("last_command_id") or 0) + 1
+        next_id = _last_command_id(device, data) + 1
         entry = {
             "id": next_id,
             "key": command_key,
@@ -413,7 +431,7 @@ def queue_set_option(*, device, option_key, value, requested_by=None):
         if len(pending) >= MAX_PENDING:
             return None, "Too many commands are already queued for this device."
 
-        next_id = int(data.get("last_command_id") or 0) + 1
+        next_id = _last_command_id(device, data) + 1
         entry = {
             "id": next_id,
             "key": f"set_option:{option_key}",
@@ -775,7 +793,7 @@ def _queue_group(*, device, commands, requested_by=None):
                 f"This device already has {OUTBOX_LIMIT} writes waiting. Let it catch up first."
             )
         data = dict(state.state_data or {})
-        next_id = int(data.get("last_command_id") or 0)
+        next_id = _last_command_id(device, data)
         entries = []
         for key, body in commands:
             next_id += 1
@@ -872,7 +890,7 @@ def _queue_raw(*, device, key, body, requested_by=None):
         if len(pending) >= MAX_PENDING:
             return None, "Too many commands are already queued for this device."
 
-        next_id = int(data.get("last_command_id") or 0) + 1
+        next_id = _last_command_id(device, data) + 1
         entry = {
             "id": next_id,
             "key": key,
@@ -1005,7 +1023,18 @@ def take_pending_commands(device):
 
 def _take_refresh_queue(device):
     """The DeviceSyncState queue part of a check-in: ``(lines, entries)``."""
-    state = _sync_state(device)
+    if not (_sync_state(device).state_data or {}).get("pending_commands"):
+        return [], []
+    # Read and written under the row's lock: an unlocked copy saved back
+    # would undo whatever was queued meanwhile (2026-10-01).
+    with transaction.atomic():
+        lines, pending = _hand_over_refresh_queue(device)
+    _note_address_delivered(device, pending)
+    return lines, pending
+
+
+def _hand_over_refresh_queue(device):
+    state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
     data = dict(state.state_data or {})
     queued = list(data.get("pending_commands") or [])
     if not queued:
@@ -1046,7 +1075,10 @@ def _take_refresh_queue(device):
     state.state_data = data
     state.version = (state.version or 0) + 1
     state.save(update_fields=["state_data", "version", "updated_at"])
+    return lines, pending
 
+
+def _note_address_delivered(device, pending):
     # Handing the command over is step 3 of an address change: it is the only
     # moment we know the device has actually taken it.
     if any(
@@ -1058,8 +1090,6 @@ def _take_refresh_queue(device):
         server_address.note_command_delivered(
             device=device, command_ids={e["id"] for e in pending}
         )
-
-    return lines, pending
 
 
 def _take_outbox(device, room):

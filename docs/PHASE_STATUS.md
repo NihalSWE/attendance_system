@@ -5474,7 +5474,7 @@ Tests: `webhooks/tests.py` (33).
     2.x device the user list once per run instead of once per person
     (176 people: 3.2 s, 2,306 queries).
   - In the background: the click writes a `DeviceLoadJob` (devices 0010) with
-    the list of employees and returns at once. A thread prepares them 25 at a
+    the list of employees and returns at once. A thread prepares them 10 at a (25 at first)
     time (`devices/services/load_jobs.py`, each step one short transaction
     holding the job row with `skip_locked`, so two threads never prepare the
     same people), and the device starts collecting the first ones while the
@@ -5507,3 +5507,34 @@ Tests: `webhooks/tests.py` (33).
 
 Tests: `devices/tests_mapping.py` (LoadJobTests, LoadInBackgroundTests,
 DeletedOnTerminalBadgeTests).
+
+### Load employees: 142 of 272 "could not be sent" — a check-in undid the queue — 2026-10-01
+
+- Live, Healthy Chooice Shed - 1 (Female): 130 prepared, then every other
+  one "an unexpected error stopped this one". The error was
+  `IntegrityError: duplicate key ... uniq_outbox_device_command`.
+- Why: each write to a device takes the next number from a counter kept in
+  the device's sync row (`DeviceSyncState.state_data`). Every message the
+  device sends (check-ins, door state, punches) also updates that row, and
+  `_touch_sync_state` saved the *whole* row from a copy it had read without
+  the lock. While a load step held the row, the check-in waited, then wrote
+  its old copy back over the step's work: the counter went back, the next
+  write reused a number already taken and was refused, and as the refusal
+  is rolled back the counter never moved forward again - so everyone after
+  that point failed. It could happen before, but rarely; a long load with
+  the device checking in every second made it near certain.
+- Fixed:
+  - `_touch_sync_state` saves only its own health fields, never the queue.
+  - The refresh-queue hand-over (`_take_refresh_queue`) reads and writes the
+    row under its lock.
+  - Command numbers come from one place (`_last_command_id`), never below a
+    number already in the outbox, so a counter left behind (the live device
+    now) repairs itself on the next write.
+  - A load step is 10 people (was 25): it holds the device's row for less
+    time, so the device's check-ins wait less.
+  - An unexpected failure shows its error on the card itself.
+- To do on live after updating: press **Load employees onto this device**
+  again. People already on it are updated, not duplicated.
+
+Tests: `devices/tests_mapping.py` CommandCounterTests (both fail on the old
+code with the live error).

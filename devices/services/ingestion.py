@@ -414,7 +414,16 @@ def _touch_sync_state(*, device, message, punch_count, error_message=""):
         state.last_success_at = now
         state.consecutive_error_count = 0
     state.version += 1
-    state.save()
+    # Only these fields: the row also holds the device's command queue and
+    # counter, which a whole-row save from this (unlocked) copy would put
+    # back as they were when it was read - while "Load employees" was
+    # queuing, that undid its work and every later write failed (live,
+    # 2026-10-01).
+    state.save(update_fields=[
+        "last_message_received_at", "last_punch_received_at", "last_vendor_sequence",
+        "last_error_at", "last_error_message", "consecutive_error_count",
+        "last_success_at", "version", "updated_at",
+    ])
 
     BiometricDevice.all_objects.filter(pk=device.pk).update(
         last_seen_at=now, last_message_at=message.received_at

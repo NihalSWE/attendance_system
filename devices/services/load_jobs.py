@@ -36,8 +36,10 @@ from devices.services import mapping
 logger = logging.getLogger(__name__)
 
 #: People prepared per step: one short transaction each, so the device starts
-#: collecting the first ones while the rest are still being prepared.
-STEP = 25
+#: collecting the first ones while the rest are still being prepared. Short,
+#: because while a step queues it holds the device's sync row, which the
+#: device's own check-ins also write (25 -> 10, 2026-10-01).
+STEP = 10
 #: A running job whose heartbeat is older than this lost its thread.
 STALLED_AFTER = datetime.timedelta(minutes=2)
 #: A finished job stays on the card this long.
@@ -171,9 +173,12 @@ def _send(actor, device, people):
                 with transaction.atomic():
                     results.append(mapping.send_employees(actor=actor, employees=[person],
                                                           only_device=device))
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logger.exception("Device load: employee %s failed", person.pk)
-                results.append(mapping.SendResult(failed=[(person, device, UNEXPECTED)]))
+                # What went wrong, on the card itself, so nobody needs the
+                # server log to see it.
+                reason = f"{UNEXPECTED} ({type(exc).__name__}: {str(exc).strip()[:160]})"
+                results.append(mapping.SendResult(failed=[(person, device, reason)]))
     sent = {e.pk for result in results for e, _ in result.sent}
     failed = [[e.full_name, reason] for result in results for e, _, reason in result.failed
               if e.pk not in sent]

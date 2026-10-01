@@ -742,7 +742,8 @@ class LoadJobTests(MappingCase):
             job, _ = load_jobs.start_load(actor=self.admin, device=self.target)
         job.refresh_from_db()
         self.assertEqual((job.status, job.done_count, job.failed_count), ("done", 2, 2))
-        self.assertIn(["Moin", load_jobs.UNEXPECTED], job.failures)
+        [moin] = [reason for name, reason in job.failures if name == "Moin"]
+        self.assertEqual(moin, f"{load_jobs.UNEXPECTED} (RuntimeError: boom)")
 
     def test_only_someone_who_manages_the_branch(self):
         from django.core.exceptions import PermissionDenied
@@ -762,6 +763,60 @@ class LoadJobTests(MappingCase):
                                        args=[self.target.public_id])).json()["load"]
         self.assertEqual((load["running"], load["prepared"], load["failed"], load["total"]),
                          (False, 3, 1, 4))
+
+
+class CommandCounterTests(MappingCase):
+    """Live, 2026-10-01: Load employees prepared 130 people, then every other
+    one failed. A check-in from the device saved an old copy of its sync row
+    over the command counter, so each later write reused a number already
+    taken (uniq_outbox_device_command) and was refused."""
+
+    def counter(self):
+        from devices.models import DeviceSyncState
+
+        return DeviceSyncState.all_objects.get(device=self.device).state_data["last_command_id"]
+
+    def test_a_check_in_never_puts_the_counter_back(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from devices.models import DeviceSyncState
+        from devices.services.ingestion import _touch_sync_state
+
+        with use_company(self.company):
+            mapping.send_employees(actor=self.admin, employees=[self.new], only_device=self.device)
+            stale = DeviceSyncState.all_objects.get(device=self.device)   # read by a check-in...
+            mapping.send_employees(actor=self.admin, employees=[self.moin], only_device=self.device)
+            queued = self.counter()                                       # ...while more is queued
+            message = SimpleNamespace(received_at=timezone.now(), vendor_sequence="")
+            with mock.patch.object(DeviceSyncState.all_objects, "get_or_create",
+                                   return_value=(stale, False)):
+                _touch_sync_state(device=self.device, message=message, punch_count=0)
+            self.assertEqual(self.counter(), queued)
+            # The next write still works.
+            result = mapping.send_employees(actor=self.admin, employees=[self.ajay],
+                                            only_device=self.device)
+        self.assertEqual(result.failed, [])
+
+    def test_a_counter_already_behind_repairs_itself(self):
+        from django.db.models import Max
+
+        from devices.models import DeviceSyncState
+
+        with use_company(self.company):
+            mapping.send_employees(actor=self.admin, employees=[self.new, self.moin],
+                                   only_device=self.device)
+            highest = DeviceOutboxCommand.all_objects.filter(device=self.device).aggregate(
+                m=Max("command_id"))["m"]
+            state = DeviceSyncState.all_objects.get(device=self.device)
+            state.state_data = {**state.state_data, "last_command_id": 1}   # what live was left with
+            state.save(update_fields=["state_data"])
+            result = mapping.send_employees(actor=self.admin, employees=[self.ajay],
+                                            only_device=self.device)
+        self.assertEqual(result.failed, [])
+        ajay = DeviceOutboxCommand.all_objects.get(device=self.device, key="push_user:445962")
+        self.assertGreater(ajay.command_id, highest)
+        self.assertGreater(self.counter(), highest)
 
 
 @override_settings(DEVICE_LOAD_IN_BACKGROUND=True)
