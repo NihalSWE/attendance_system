@@ -87,6 +87,8 @@ INSTALLED_APPS = [
     'reports',
     'subscriptions',
     'auditlog',
+    # The ERP webhook: attendance pushed to a company's own system.
+    'webhooks',
     # Shared presentation app (no domain models/tables).
     'base_template',
 ]
@@ -132,6 +134,10 @@ TEMPLATES = [
 # be reached by a real server process.
 if sys.argv[1:2] == ['test']:
     PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
+
+# The ERP webhook sends in a background thread so a device or a page never
+# waits for a company's ERP. Tests send in the foreground, by calling it.
+WEBHOOK_SEND_IN_BACKGROUND = sys.argv[1:2] != ['test']
 
 
 WSGI_APPLICATION = 'config.wsgi.application'

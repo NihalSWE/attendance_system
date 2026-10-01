@@ -523,6 +523,11 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
         stale.delete()
 
     written["days"] = len(touched_ids)
+    # The ERP webhook (2026-10-01): check-ins and finished days go to the
+    # company's own system, when it has one set up. It never fails this.
+    from webhooks.services import note_days
+
+    note_days(company_id, touched_ids)
     return dict(written)
 
 

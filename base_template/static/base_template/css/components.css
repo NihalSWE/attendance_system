@@ -419,6 +419,92 @@ Table — spec §4. Row height lands near 38px: standard density.
     font-variant-numeric: tabular-nums;
     font-weight: 500;
 }
+/* ERP webhook (2026-10-01): the test result, its steps, Advanced, counts and guide. */
+.webhook-test p {
+    margin: 6px 0 0;
+}
+.webhook-test__title {
+    font-size: 15px;
+}
+.webhook-test__url {
+    font-size: 12px;
+    opacity: .8;
+}
+.webhook-steps {
+    margin: 0;
+    padding-left: 22px;
+    color: var(--muted);
+    list-style: decimal;
+}
+.webhook-steps li + li {
+    margin-top: 2px;
+}
+.webhook-advanced {
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background: var(--surface-sunken);
+}
+.webhook-advanced > summary {
+    padding: 10px 14px;
+    cursor: pointer;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 13px;
+}
+.webhook-advanced__body {
+    padding: 0 14px 14px;
+}
+.webhook-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+.webhook-guide .card__body {
+    max-width: 920px;
+    line-height: 1.6;
+}
+.webhook-guide__h2 {
+    margin: var(--s5) 0 0;
+    padding-top: var(--s4);
+    border-top: 1px solid var(--border);
+    font-size: 17px;
+}
+.webhook-guide__h2:first-of-type {
+    margin-top: 0;
+}
+.webhook-guide__h3 {
+    margin: var(--s3) 0 0;
+    font-size: 14px;
+}
+.webhook-guide__list {
+    margin: 0;
+    padding-left: 22px;
+    list-style: disc;
+}
+.webhook-guide__steps {
+    list-style: decimal;
+}
+.webhook-guide__list li + li {
+    margin-top: 4px;
+}
+.webhook-guide__steps li::marker {
+    font-weight: 700;
+}
+.webhook-guide__code {
+    margin: 0;
+    padding: var(--s3) var(--s4);
+    overflow-x: auto;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre;
+}
+.webhook-guide__key {
+    width: 32%;
+    font-weight: 600;
+}
 /* SL: the row's number on every list (tables.js, 2026-09-30). */
 .table .table-sl {
     width: 44px;
