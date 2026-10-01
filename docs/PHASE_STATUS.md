@@ -5486,6 +5486,12 @@ Tests: `webhooks/tests.py` (33).
     it runs does not start another.
   - The progress card shows "Preparing employees for <device>: X of Y" with
     who could not be sent and why, above the existing sending bar.
+  - Reading a device's users, fingerprints and faces (to copy them from
+    device A to device B) searched the text of every message the device ever
+    sent, heartbeats and punches included - nearly all of a busy device's
+    messages. Those kinds never hold user rows and are now skipped
+    (`device_roster.row_messages`; locally 466 messages searched -> 65). The
+    Device users page and the Employees list's device column gain the same.
   - Celery (suggested): not added. It needs Redis and a worker service kept
     running beside the site; the job is in the database instead, and
     `run_job` is the task a Celery worker would call if more work moves to

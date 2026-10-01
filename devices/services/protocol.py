@@ -74,7 +74,10 @@ def dialect(device):
     announced = settings.get("announced") or {}
     if announced.get("pushver"):
         return PUSH3 if uses_push3(announced["pushver"]) else ATT2
-    sent_2x = DeviceMessage.all_objects.filter(device=device).filter(
+    from devices.services.device_roster import NO_USER_ROWS
+
+    sent_2x = DeviceMessage.all_objects.filter(device=device).exclude(
+        message_type__in=NO_USER_ROWS).filter(
         Q(raw_payload_text__startswith="OPLOG ")
         | Q(raw_payload_text__startswith="USER PIN=")
         | Q(raw_payload_text__contains="\nUSER PIN=")

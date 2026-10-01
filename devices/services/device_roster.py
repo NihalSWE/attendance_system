@@ -39,6 +39,19 @@ PRIVILEGE_LABELS = {
 }
 
 
+#: Message kinds that never carry user, fingerprint, face or photo rows: the
+#: device's check-ins and door state (heartbeat) and its punches. On a busy
+#: device they are nearly all of its messages, so the user-list readers skip
+#: them instead of searching each one's text (2026-10-01: a live device with
+#: 250+ people and their fingers and faces).
+NO_USER_ROWS = (DeviceMessage.MessageType.HEARTBEAT, DeviceMessage.MessageType.PUNCH_BATCH)
+
+
+def row_messages(device):
+    """The device's messages that may hold user, template or photo rows."""
+    return DeviceMessage.all_objects.filter(device=device).exclude(message_type__in=NO_USER_ROWS)
+
+
 def _tabledata_rows(device, row_prefix):
     """Yield parsed rows from every stored upload of one table.
 
@@ -52,9 +65,7 @@ def _tabledata_rows(device, row_prefix):
     # historical evidence must still be readable. "Contains", because a 2.x
     # operation log mixes USER lines in among OPLOG lines.
     messages = (
-        DeviceMessage.all_objects.filter(
-            device=device, raw_payload_text__contains=row_prefix
-        )
+        row_messages(device).filter(raw_payload_text__contains=row_prefix)
         .order_by("received_at")
         .values_list("raw_payload_text", flat=True)
     )
@@ -96,7 +107,7 @@ def _removed_pins(device):
     marked there.
     """
     uploads = list(
-        DeviceMessage.all_objects.filter(device=device, raw_payload_text__contains="user ")
+        row_messages(device).filter(raw_payload_text__contains="user ")
         .order_by("received_at")
         .values_list("received_at", "payload_json", "raw_payload_text")
     )
