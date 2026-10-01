@@ -1,0 +1,77 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Webhook guide · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'webhooks:settings' %}">
+            ERP webhook
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Guide
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ title }}
+            </h1>
+            <p class="page__sub">
+                {{ company.name }} - Part 1 is for you, Part 2 for your developer.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="?format=md">
+                Download (Markdown)
+            </a>
+            <a class="btn btn--primary" href="?format=pdf">
+                Download (PDF)
+            </a>
+        </div>
+    </div>
+    <article class="card webhook-guide">
+        <div class="card__body stack">
+            {% for block in blocks %}
+                {% if block.0 == "h2" %}
+                    <h2 class="webhook-guide__h2">{{ block.1 }}</h2>
+                {% elif block.0 == "h3" %}
+                    <h3 class="webhook-guide__h3">{{ block.1 }}</h3>
+                {% elif block.0 == "p" %}
+                    <p>{{ block.1 }}</p>
+                {% elif block.0 == "note" %}
+                    <div class="alert alert--info">{{ block.1 }}</div>
+                {% elif block.0 == "list" %}
+                    <ul class="webhook-guide__list">
+                        {% for item in block.1 %}<li>{{ item }}</li>{% endfor %}
+                    </ul>
+                {% elif block.0 == "steps" %}
+                    <ol class="webhook-guide__list webhook-guide__steps">
+                        {% for item in block.1 %}<li>{{ item }}</li>{% endfor %}
+                    </ol>
+                {% elif block.0 == "code" %}
+                    <pre class="webhook-guide__code"><code>{{ block.1 }}</code></pre>
+                {% elif block.0 == "table" %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            {% if block.1.0 %}
+                                <thead><tr>{% for header in block.1 %}<th>{{ header }}</th>{% endfor %}</tr></thead>
+                            {% endif %}
+                            <tbody>
+                                {% for row in block.2 %}
+                                    <tr>{% for cell in row %}<td{% if forloop.first %} class="webhook-guide__key"{% endif %}>{{ cell }}</td>{% endfor %}</tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </article>
+{% endblock %}

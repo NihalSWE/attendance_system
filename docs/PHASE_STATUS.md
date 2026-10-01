@@ -5392,3 +5392,51 @@ the scan before - when only scans under 5 seconds apart should be.
 
 Tests: `attendance/tests_pairing.py` (+2), ingestion and simulator tests
 updated to the 5-second rule.
+
+### ERP webhook: attendance pushed to a company's own system — 2026-10-01
+
+Nihal (with his senior's `attendance-webhook.md`, the IGL ERP's receiving
+side): companies set up a webhook so their ERP gets attendance as it happens;
+a guide they can download says how to receive it.
+
+- **New app `webhooks`** (migration 0001): `WebhookSettings` (one per
+  company), `WebhookEvent` (the outbox and its history), `WebhookDayState`
+  (what was queued per employee-day).
+- **Organisation → ERP webhook** (owner/admin). The form asks only what is
+  needed (Nihal, same day): the address, the secret key, on/off. The rest is
+  behind "Advanced - only if your developer asks": signing secret
+  (`X-Webhook-Signature: sha256=<HMAC of the body>`), test address (default
+  address + `/ping`), employee field name (default `au_user_id`, value =
+  Employee ID), when to send, batch, send days from. The secret goes both
+  ways on every request (`X-Webhook-Secret` and `Authorization: Bearer`), so
+  nothing has to be chosen. Secrets encrypted, never shown again; changes
+  audited. **Save and test connection** / **Test connection**: a green
+  "Connected", or a red box naming the problem and what to do (wrong secret
+  key, nothing at that address, server not allowed, the receiver's error, no
+  answer in 10 s, server name not found, certificate, private network,
+  redirect...) - `services.diagnose`. Send waiting now, Send failed again,
+  and a server-side table of what was sent and what the receiver answered.
+- **What and when**: `attendance.services.recalculate` hands every day it
+  wrote to `note_days`. Default mode: a `check_in` event on the first counted
+  scan, a `check_out` event (with check_in) once the day is finished - breaks
+  are never a check-out, so an ERP that keeps the first check-in and treats a
+  day with a check-out as final stays right. "Every scan" mode: the latest
+  scan out after each scan. An assumed check-out (nobody scanned out) is
+  never sent; a corrected day goes as `update`; inactive days are not sent.
+  Times in the company's time zone, `YYYY-MM-DD HH:MM:SS`; `device_ip` is
+  the terminal's public address.
+- **Sending**: straight after the scan is saved, in a background thread;
+  retries at 1, 2, 5, 15, 30 min, 1, 3, 6, 12 h, then given up (Send failed
+  again). Retries and finished days ride on device check-ins (once a minute
+  per company) and `manage.py send_webhooks` (for a scheduler). A 2xx
+  answer's `results` list is followed per event (`failed` retried, `skipped`
+  not). https only, never a private/local address, no redirects, 10 s.
+- **Guide**: one source (`webhooks/guide.py`), filled in with the company's
+  settings and never its secrets - on screen, and downloaded as PDF and
+  Markdown. In plain words: Part 1 for the company (what it does, the two
+  things to get from the developer, the steps, every test message and what
+  to do), Part 2 for the developer (one table, the data, the fields, what
+  the address must do, the test address, retries, curl, PHP and Python
+  receivers, the IGL ERP's settings).
+
+Tests: `webhooks/tests.py` (27).

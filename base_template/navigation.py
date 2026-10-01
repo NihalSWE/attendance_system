@@ -113,6 +113,7 @@ COMPANY_MENUS = (
              "organization:designation_edit", "organization:designation_status"),
         item("Company profile", "organization:company_profile", manage=True),
         item("Email settings", "organization:mail_settings", manage=True),
+        item("ERP webhook", "webhooks:settings", "webhooks:guide", manage=True),
         item("Access", "organization:access", "organization:access_person", manage=True),
     )),
     ("devices", "Devices", (

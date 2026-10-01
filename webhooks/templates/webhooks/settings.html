@@ -1,0 +1,236 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    ERP webhook · Attendance
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        ERP webhook
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                ERP webhook
+            </h1>
+            <p class="page__sub">
+                Send your employees' attendance to your own system - ERP, payroll or HR
+                software - automatically: when they come in, and when their day is finished.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'webhooks:guide' %}">
+                Read the guide
+            </a>
+            <a class="btn btn--primary" href="{% url 'webhooks:guide' %}?format=pdf">
+                Download guide (PDF)
+            </a>
+        </div>
+    </div>
+
+    <div class="stack">
+        {% if test_result %}
+            <div class="alert {% if test_result.ok %}alert--success{% else %}alert--danger{% endif %} webhook-test" role="status" data-webhook-test>
+                <div>
+                    <strong class="webhook-test__title">
+                        {% if test_result.ok %}✓ {% else %}✕ {% endif %}{{ test_result.title }}
+                    </strong>
+                    {% if test_result.detail %}<p>{{ test_result.detail }}</p>{% endif %}
+                    {% if test_result.fix %}<p><strong>What to do:</strong> {{ test_result.fix }}</p>{% endif %}
+                    {% if test_result.url %}<p class="webhook-test__url">Tested: <span class="mono">{{ test_result.url }}</span></p>{% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        <form method="post" novalidate class="card">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="save">
+            <div class="card__head">
+                <h2>
+                    Connect your system
+                </h2>
+                {% if saved.is_active %}
+                    <span class="badge badge--success">Sending</span>
+                {% elif saved %}
+                    <span class="badge badge--neutral">Switched off</span>
+                {% else %}
+                    <span class="badge badge--neutral">Not set up</span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                <ol class="webhook-steps">
+                    <li>Paste the <strong>address</strong> and the <strong>secret key</strong> your developer gave you.</li>
+                    <li>Tick <strong>Send attendance to this address</strong>.</li>
+                    <li>Press <strong>Save and test connection</strong>. Green means it is working.</li>
+                </ol>
+                {% if form.non_field_errors %}
+                    <div class="alert alert--danger">
+                        {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+                <div class="grid grid--2">
+                    {% for field in form.main_fields %}
+                        {% include "leaves/includes/field.html" %}
+                    {% endfor %}
+                </div>
+                <div>
+                    <label class="check" for="{{ form.is_active.id_for_label }}">
+                        {{ form.is_active }}
+                        <span>{{ form.is_active.label }}</span>
+                    </label>
+                    <div class="field__help">{{ form.is_active.help_text }}</div>
+                    {% for error in form.is_active.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                </div>
+                <details class="webhook-advanced"{% if form.advanced_has_errors %} open{% endif %}>
+                    <summary>Advanced - only if your developer asks</summary>
+                    <div class="stack webhook-advanced__body">
+                        <div class="grid grid--2">
+                            {% for field in form.advanced_fields %}
+                                {% include "leaves/includes/field.html" %}
+                            {% endfor %}
+                        </div>
+                        {% if form.clear_signing_secret %}
+                            <label class="check" for="{{ form.clear_signing_secret.id_for_label }}">
+                                {{ form.clear_signing_secret }}
+                                <span>{{ form.clear_signing_secret.label }}</span>
+                            </label>
+                        {% endif %}
+                        <div>
+                            <label class="check" for="{{ form.batch.id_for_label }}">
+                                {{ form.batch }}
+                                <span>{{ form.batch.label }}</span>
+                            </label>
+                            <div class="field__help">{{ form.batch.help_text }}</div>
+                        </div>
+                    </div>
+                </details>
+            </div>
+            <div class="card__foot row">
+                <button class="btn btn--primary" type="submit" name="then" value="test">
+                    Save and test connection
+                </button>
+                <button class="btn btn--ghost" type="submit">
+                    Save
+                </button>
+            </div>
+        </form>
+
+        {% if saved %}
+            <div class="card" data-webhook-status>
+                <div class="card__head">
+                    <h2>
+                        Is it working?
+                    </h2>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="test">
+                        <button class="btn btn--ghost btn--sm" type="submit">Test connection</button>
+                    </form>
+                </div>
+                <div class="card__body stack">
+                    {% if saved.last_tested_at %}
+                        <p>
+                            {% if saved.last_test_ok %}
+                                <span class="badge badge--success">Last test: connected</span>
+                            {% else %}
+                                <span class="badge badge--danger">Last test: not connected</span>
+                            {% endif %}
+                            <span class="t-faint">{{ saved.last_tested_at|date:"j M Y, H:i" }}</span>
+                        </p>
+                        {% if not saved.last_test_ok %}<p class="t-muted">{{ saved.last_test_message }}</p>{% endif %}
+                    {% else %}
+                        <p class="t-faint">Not tested yet. Press Test connection.</p>
+                    {% endif %}
+                    <div class="webhook-counts">
+                        <span class="badge badge--success">{{ counts.sent }} received</span>
+                        <span class="badge badge--info">{{ counts.pending }} waiting</span>
+                        <span class="badge badge--warning">{{ counts.failed }} will be tried again</span>
+                        <span class="badge badge--danger">{{ counts.gave_up }} given up</span>
+                        <span class="badge badge--neutral">{{ counts.skipped }} refused by your system</span>
+                    </div>
+                    {% if saved.last_sent_at %}<p class="t-faint">Last received by your system: {{ saved.last_sent_at|date:"j M Y, H:i" }}.</p>{% endif %}
+                    <div class="row">
+                        {% if saved.is_active and counts.pending %}
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="send_now">
+                                <button class="btn btn--ghost" type="submit">Send waiting now</button>
+                            </form>
+                        {% endif %}
+                        {% if counts.failed or counts.gave_up %}
+                            <form method="post"
+                                  data-confirm-title="Send them again?"
+                                  data-confirm="Everything your system has not received is sent again now, and retried as before if it fails."
+                                  data-confirm-button="Send again">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="send_again">
+                                <button class="btn btn--primary" type="submit">Send failed again</button>
+                            </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    What was sent
+                </h2>
+                <span class="badge badge--neutral">{{ server_table.total }}</span>
+            </div>
+            {% if server_table.total %}
+                <div class="table-wrap">
+                    <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                        <thead>
+                            <tr>
+                                <th>Queued</th>
+                                <th>Employee</th>
+                                <th>Day</th>
+                                <th>Event</th>
+                                <th>Status</th>
+                                <th class="numeric">Tries</th>
+                                <th>What your system said</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for event in page.object_list %}
+                                <tr>
+                                    <td class="mono">{{ event.created_at|date:"j M, H:i:s" }}</td>
+                                    <td>
+                                        {{ event.employee.full_name }}
+                                        <div class="t-faint mono">{{ event.payload.check_in }}{% if event.payload.check_out %} → {{ event.payload.check_out }}{% endif %}</div>
+                                    </td>
+                                    <td>{{ event.work_date|date:"D j M" }}</td>
+                                    <td>{{ event.get_kind_display }}</td>
+                                    <td>
+                                        <span class="badge {% if event.status == Status.SENT %}badge--success{% elif event.status == Status.PENDING %}badge--info{% elif event.status == Status.FAILED %}badge--warning{% elif event.status == Status.GAVE_UP %}badge--danger{% else %}badge--neutral{% endif %}">
+                                            {{ event.get_status_display }}
+                                        </span>
+                                        {% if event.status == Status.FAILED %}
+                                            <div class="t-faint">Next try {{ event.next_attempt_at|date:"j M, H:i" }}</div>
+                                        {% endif %}
+                                    </td>
+                                    <td class="numeric">{{ event.attempts }}</td>
+                                    <td>
+                                        {% if event.last_status_code %}<span class="mono">{{ event.last_status_code }}</span> {% endif %}{{ event.last_message|default:"—" }}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% include "base_template/includes/table_pagination.html" %}
+            {% else %}
+                <div class="empty">
+                    <div class="empty__title">Nothing sent yet</div>
+                    <div class="empty__text">Once it is switched on, each check-in and finished day appears here with what your system answered.</div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+{% endblock %}

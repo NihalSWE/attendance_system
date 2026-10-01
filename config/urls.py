@@ -13,6 +13,8 @@ urlpatterns = [
     path("platform/", include("tenants.urls")),
     # which is our word, not the operator's -- but the views live in
     # organization/ with their models.
+    # Organisation → ERP webhook (its own app; listed before organization/).
+    path("organization/webhook/", include("webhooks.urls")),
     path("organization/", include("organization.urls")),
     path("shifts/", include("scheduling.urls")),
     path("leave/", include("leaves.urls")),

@@ -174,6 +174,11 @@ def getrequest(request):
     # A 2.x device does not re-send scans made while it could not reach us;
     # after a gap, ask it for them (devices/services/commands.py).
     catch_up_after_gap(device, note_poll(device, now), now)
+    # The ERP webhook: finished days' check-outs and retries ride on the
+    # device's own check-ins (at most once a minute, in the background).
+    from webhooks.services import on_device_poll
+
+    on_device_poll(device.company_id)
 
     body, issued = take_pending_commands(device)
     if issued:
