@@ -19,6 +19,9 @@ not implemented yet: they need an explicit operator confirmation path and an
 audit trail before anyone can fire them from a web page.
 """
 
+import contextlib
+import contextvars
+
 from django.db import transaction
 from django.utils import timezone
 
@@ -671,6 +674,32 @@ def push_to_device(device, device_user_id, name="", card="", role=0,
     return _queue_group(device=device, commands=commands, requested_by=requested_by)
 
 
+#: Within one batch (``user_rows_memo``) a device's user uploads are read once:
+#: writing 250 people to a 2.x device read every upload 250 times (2026-10-01).
+_USER_ROWS = contextvars.ContextVar("device_user_rows", default=None)
+
+
+@contextlib.contextmanager
+def user_rows_memo():
+    token = _USER_ROWS.set({}) if _USER_ROWS.get() is None else None
+    try:
+        yield
+    finally:
+        if token is not None:
+            _USER_ROWS.reset(token)
+
+
+def _user_rows(device):
+    from devices.services.device_roster import USER_PREFIXES, _rows
+
+    memo = _USER_ROWS.get()
+    if memo is None:
+        return list(_rows(device, USER_PREFIXES))
+    if device.pk not in memo:
+        memo[device.pk] = list(_rows(device, USER_PREFIXES))
+    return memo[device.pk]
+
+
 def _att2_user_defaults(device, device_user_id=None):
     """The group and time zone to write for a user on a 2.x device.
 
@@ -683,9 +712,7 @@ def _att2_user_defaults(device, device_user_id=None):
     Read from the raw uploads, not the roster, so this works outside a company
     context (and does not rebuild the whole roster for one lookup).
     """
-    from devices.services.device_roster import USER_PREFIXES, _rows
-
-    rows = list(_rows(device, USER_PREFIXES))
+    rows = _user_rows(device)
     if device_user_id is not None:
         own = [f for f in rows if (f.get("pin") or "").strip() == str(device_user_id)]
         # Latest upload last: their current group and time zone, not their first.

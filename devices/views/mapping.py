@@ -271,27 +271,48 @@ def employees_send(request):
 @login_required
 @company_user_required
 def device_load(request, public_id):
-    """Device users → Load employees onto this device (a new or replaced device)."""
+    """Device users → Load employees onto this device (a new or replaced device).
+
+    Only starts the job: the people are prepared in the background
+    (``load_jobs``), so 250+ employees no longer run the request past the
+    server's time limit (500 on the live server, 2026-10-01).
+    """
+    from devices.services import load_jobs
+
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
     back = redirect("devices:device_users", public_id=device.public_id)
     try:
-        result = mapping.load_device(actor=request.user, device=device)
+        job, started = load_jobs.start_load(actor=request.user, device=device)
     except (PermissionDenied, mapping.MappingError) as exc:
         messages.error(request, str(exc))
         return back
-    if result.sent:
-        with_bio = sum(1 for employee, _ in result.sent
-                       if any(mapping._source_templates(device, mapping.employee_id_for(employee))))
+    if not started:
+        messages.info(
+            request,
+            f"Already loading employees onto {device.name}: {job.done_count + job.failed_count} "
+            f"of {job.total} prepared. The card below follows it.",
+        )
+    elif not job.total:
+        messages.info(request, f"{device.branch.name} has no active employees to load.")
+    elif job.status == job.Status.RUNNING:
         messages.success(
             request,
-            f"Loading {len(result.sent)} employee(s) onto {device.name}: {with_bio} with their saved "
-            "fingerprint/face, the rest with Employee ID and name to enrol at the terminal. "
-            "The device takes a few per check-in; follow it under Commands and answers.",
+            f"Loading {job.total} employee(s) onto {device.name}. They are prepared in the "
+            f"background, {load_jobs.STEP} at a time, and the device collects them on its "
+            "check-ins — each with Employee ID and name, plus the card, fingerprint and face "
+            "the company keeps for them. The card below shows how far it is; you can leave this page.",
         )
-    elif not result.failed:
-        messages.info(request, f"{device.branch.name} has no active employees to load.")
-    for employee, _, reason in result.failed[:10]:
-        messages.warning(request, f"{employee.full_name}: {reason}")
+    else:
+        # Finished already (a small branch, or tests, which run it inline).
+        if job.done_count:
+            messages.success(
+                request,
+                f"Loading {job.done_count} employee(s) onto {device.name}: each with Employee ID "
+                "and name, plus the card, fingerprint and face the company keeps for them. "
+                "The device takes a few per check-in; follow it in the card below.",
+            )
+        for name, reason in job.failures[:10]:
+            messages.warning(request, f"{name}: {reason}")
     return back
 
 
@@ -336,8 +357,12 @@ def device_job_progress(request, public_id):
     """JSON for the progress card: how the device's queued writes are going."""
     from devices.services import commands as command_service
 
+    from devices.services import load_jobs
+
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
-    return JsonResponse(command_service.job_progress(device))
+    # Someone is watching: a load whose thread stopped carries on.
+    load_jobs.resume_if_stalled(device)
+    return JsonResponse({**command_service.job_progress(device), "load": load_jobs.progress(device)})
 
 
 @require_POST

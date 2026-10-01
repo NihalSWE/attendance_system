@@ -138,6 +138,9 @@ if sys.argv[1:2] == ['test']:
 # The ERP webhook sends in a background thread so a device or a page never
 # waits for a company's ERP. Tests send in the foreground, by calling it.
 WEBHOOK_SEND_IN_BACKGROUND = sys.argv[1:2] != ['test']
+# "Load employees onto this device" prepares people in a background thread
+# (250+ in one request ran past the server's time limit). Tests run it inline.
+DEVICE_LOAD_IN_BACKGROUND = sys.argv[1:2] != ['test']
 
 
 WSGI_APPLICATION = 'config.wsgi.application'

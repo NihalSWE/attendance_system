@@ -77,11 +77,34 @@
             </a>
         </div>
     </div>
-    <div class="job" data-job="{% url 'devices:device_job_progress' device.public_id %}"
-         {% if not job.total %}hidden{% endif %}>
+    <div class="job{% if job.running or load.running %} job--running{% endif %}"
+         data-job="{% url 'devices:device_job_progress' device.public_id %}"
+         data-job-device="{{ device.name }}"
+         {% if not job.total and not load %}hidden{% endif %}>
+        <div class="job__prep" data-job-prep {% if not load %}hidden{% endif %}>
+            <div class="job__head">
+                <span class="job__title" data-job-prep-title>
+                    {% if load.running %}Preparing employees for {{ device.name }}{% elif load.stopped %}Preparing stopped by an error{% else %}Employees prepared for {{ device.name }}{% endif %}
+                </span>
+                <span class="job__count"><span data-job-prep-count>{{ load.handled }}</span> of <span data-job-prep-total>{{ load.total }}</span></span>
+            </div>
+            <div class="job__bar job__bar--thin" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                 aria-valuenow="{{ load.percent|default:0 }}" data-job-prep-bar>
+                <span style="width: {{ load.percent|default:0 }}%"></span>
+            </div>
+            <div class="job__meta">
+                <span class="job__dot job__dot--done"></span><span data-job-prep-done>{{ load.prepared|default:0 }}</span> prepared
+                <span class="job__dot job__dot--bad"></span><span data-job-prep-failed>{{ load.failed|default:0 }}</span> could not be sent
+            </div>
+            <ul class="job__failures" data-job-prep-failures {% if not load.failures %}hidden{% endif %}>
+                {% for name, reason in load.failures %}<li><strong>{{ name }}</strong>: {{ reason }}</li>{% endfor %}
+                {% if load.more_failures %}<li class="t-faint">and {{ load.more_failures }} more</li>{% endif %}
+            </ul>
+        </div>
+        <div data-job-send {% if not job.total %}hidden{% endif %}>
         <div class="job__head">
             <span class="job__title" data-job-title>
-                {% if job.running %}Sending to {{ device.name }}{% else %}Finished sending to {{ device.name }}{% endif %}
+                {% if job.total and not job.running %}Finished sending to{% else %}Sending to{% endif %} {{ device.name }}
             </span>
             <span class="job__count"><span data-job-count>{{ job.done|add:job.refused }}</span> of <span data-job-total>{{ job.total }}</span></span>
         </div>
@@ -95,8 +118,10 @@
             <span class="job__dot job__dot--bad"></span><span data-job-refused>{{ job.refused }}</span> refused
             <span class="job__left" data-job-left></span>
         </div>
+        </div>
         <p class="job__note t-faint">
-            The device collects a few per check-in; you can leave this page and come back.
+            First the employees are prepared here, then the device collects them a few per
+            check-in; you can leave this page and come back.
         </p>
     </div>
     {% if saved_templates.people or saved_templates.formats %}

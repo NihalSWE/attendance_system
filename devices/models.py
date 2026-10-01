@@ -609,6 +609,43 @@ class DeviceOutboxCommand(TenantOwned):
         return f"{self.device_id}#{self.command_id} {self.key} ({self.status})"
 
 
+class DeviceLoadJob(TenantOwned):
+    """"Load employees onto this device", done in the background (Nihal,
+    2026-10-01: 250+ employees in one web request ran past the server's
+    time limit and answered 500).
+
+    The button only writes this row; ``devices.services.load_jobs`` works
+    through ``remaining`` 25 people at a time, putting each in the device's
+    outbox, and the device then collects the outbox as it always does. A job
+    stopped by a restart is picked up again from where it was."""
+
+    class Status(models.TextChoices):
+        RUNNING = "running", "Preparing"
+        DONE = "done", "Prepared"
+        FAILED = "failed", "Stopped by an error"
+
+    device = models.ForeignKey(BiometricDevice, on_delete=models.CASCADE,
+                               related_name="load_jobs")
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name="+")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.RUNNING)
+    total = models.PositiveIntegerField(default=0)
+    done_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    remaining = models.JSONField(default=list)        # employee ids still to prepare
+    failures = models.JSONField(default=list)         # [name, reason], the first 50
+    error = models.TextField(blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "devices_load_job"
+        indexes = [models.Index(fields=["device", "status"])]
+
+    def __str__(self):
+        return f"load {self.device_id}: {self.done_count + self.failed_count}/{self.total}"
+
+
 class DeviceSyncState(TenantOwned):
     """Current, mutable operational state for one device (not historical evidence).
 

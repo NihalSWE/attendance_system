@@ -69,11 +69,22 @@ def _zone(company):
         return zoneinfo.ZoneInfo("UTC")
 
 
+#: Within one batch (``_roster_memo``) each employee's placement is read once:
+#: a run over 250 people read it some 600 times (2026-10-01).
+_ASSIGNMENTS = contextvars.ContextVar("current_assignments", default=None)
+
+
 def current_assignment(employee):
-    return (
+    memo = _ASSIGNMENTS.get()
+    if memo is not None and employee.pk in memo:
+        return memo[employee.pk]
+    found = (
         employee.assignments.select_related("branch")
         .exclude(status="cancelled").order_by("-effective_from", "-pk").first()
     )
+    if memo is not None:
+        memo[employee.pk] = found
+    return found
 
 
 def employee_id_for(employee):
@@ -137,12 +148,17 @@ _ROSTERS = contextvars.ContextVar("device_rosters", default=None)
 
 @contextlib.contextmanager
 def _roster_memo():
+    """One batch: rosters, placements and a device's user rows read once."""
     token = _ROSTERS.set({}) if _ROSTERS.get() is None else None
+    placements = _ASSIGNMENTS.set({}) if _ASSIGNMENTS.get() is None else None
     try:
-        yield
+        with commands.user_rows_memo():
+            yield
     finally:
         if token is not None:
             _ROSTERS.reset(token)
+        if placements is not None:
+            _ASSIGNMENTS.reset(placements)
 
 
 def _roster(device):
@@ -738,16 +754,24 @@ def send_employees(*, actor, employees, only_device=None):
 
 
 def _send(actor, employees, result, only_device=None):
+    # Asked once per branch, not once per person (2026-10-01).
+    devices_of, allowed = {}, {}
     for employee in employees:
         assignment = current_assignment(employee)
         if assignment is None:
             result.failed.append((employee, None, "no placement"))
             continue
-        if not may_map(actor, employee.company_id, assignment.branch_id):
+        if assignment.branch_id not in allowed:
+            allowed[assignment.branch_id] = may_map(actor, employee.company_id,
+                                                    assignment.branch_id)
+        if not allowed[assignment.branch_id]:
             result.failed.append((employee, None, "not in a branch you may manage"))
             continue
-        devices = [d for d in branch_devices(employee.company_id, assignment.branch_id)
-                   if upload_supported(d) and (only_device is None or d.pk == only_device.pk)]
+        if assignment.branch_id not in devices_of:
+            devices_of[assignment.branch_id] = [
+                d for d in branch_devices(employee.company_id, assignment.branch_id)
+                if upload_supported(d) and (only_device is None or d.pk == only_device.pk)]
+        devices = devices_of[assignment.branch_id]
         if not devices:
             result.failed.append((employee, None, f"{assignment.branch.name} has no device that takes users"))
             continue
@@ -1083,21 +1107,44 @@ def _transfer(actor, source, target, pins):
     return result
 
 
-def device_badges(company_id, employee_ids):
-    """``{employee_id: {"devices": n, "names": [...], "fingerprint": bool, "face": bool}}``.
+def removed_on_terminal(device, memo=None):
+    """The numbers deleted on the terminal itself, as the Device users page
+    marks them (``removed_from_device``): absent from the device's latest
+    complete user list. A device does not report such a delete by itself; the
+    next "Refresh user list" shows it. ``memo`` (a dict) reads each device once.
+    """
+    from devices.services.device_roster import _removed_pins
 
-    ``names`` are the devices the employee is linked on, with their device number.
+    if memo is None:
+        return _removed_pins(device)
+    if device.pk not in memo:
+        memo[device.pk] = _removed_pins(device)
+    return memo[device.pk]
+
+
+def device_badges(company_id, employee_ids):
+    """``{employee_id: {"devices": n, "names": [...], "removed": [...], "fingerprint": bool,
+    "face": bool}}``.
+
+    ``names`` are the devices the employee is linked on, with their device
+    number. A link whose person was deleted on the terminal (Nihal,
+    2026-10-01) is not counted: it goes in ``removed``, so the list says "Not
+    on any device", as it did before they were sent there.
     """
     now = timezone.now()
-    badges = {pk: {"devices": 0, "names": [], "fingerprint": False, "face": False}
+    badges = {pk: {"devices": 0, "names": [], "removed": [], "fingerprint": False, "face": False}
               for pk in employee_ids}
-    pins = {}
+    pins, removed = {}, {}
     for enrollment in (
         DeviceEnrollment.all_objects.filter(company_id=company_id, employee_id__in=employee_ids)
         .exclude(enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED)
         .filter(effective_from__lte=now).exclude(effective_to__lte=now)
         .select_related("device").order_by("device__name")
     ):
+        if enrollment.device_user_id in removed_on_terminal(enrollment.device, removed):
+            badges[enrollment.employee_id]["removed"].append(
+                {"name": enrollment.device.name, "pin": enrollment.device_user_id})
+            continue
         badges[enrollment.employee_id]["devices"] += 1
         badges[enrollment.employee_id]["names"].append(
             {"name": enrollment.device.name, "pin": enrollment.device_user_id})
@@ -1130,14 +1177,26 @@ def upload_supported(device):
 
 
 def branch_employees(device):
-    """Active employees placed in the device's branch (who belong on it)."""
-    from employees.models import Employee
+    """Active employees placed in the device's branch (who belong on it).
 
-    return [
-        e for e in Employee.all_objects.filter(company_id=device.company_id)
-        .exclude(employment_status__in=["resigned", "terminated"]).order_by("first_name", "last_name")
-        if (a := current_assignment(e)) is not None and a.branch_id == device.branch_id
-    ]
+    Each one's current placement, as ``current_assignment`` picks it, read in
+    one query for the whole company rather than one per person (2026-10-01).
+    """
+    from employees.models import Employee, EmployeeAssignment
+
+    branch_of = {}
+    for employee_id, branch_id in (
+        EmployeeAssignment.all_objects.filter(company_id=device.company_id)
+        .exclude(status="cancelled").order_by("employee_id", "-effective_from", "-pk")
+        .values_list("employee_id", "branch_id")
+    ):
+        branch_of.setdefault(employee_id, branch_id)
+    ids = [pk for pk, branch_id in branch_of.items() if branch_id == device.branch_id]
+    return list(
+        Employee.all_objects.filter(company_id=device.company_id, pk__in=ids)
+        .exclude(employment_status__in=["resigned", "terminated"])
+        .order_by("first_name", "last_name")
+    )
 
 
 def load_device(*, actor, device):

@@ -1455,6 +1455,12 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     background: var(--warning-soft);
     color: var(--warning-ink);
 }
+/* Linked, but deleted on the terminal since (latest user list). */
+.device-removed {
+    margin-top: 4px;
+    color: var(--warning-ink);
+    font-size: 12px;
+}
 .device-bio {
     margin-top: 4px;
     color: var(--muted);
@@ -1601,6 +1607,22 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
 .job__dot--bad { background: var(--warning); }
 .job__left { margin-left: auto; }
 .job__note { margin: 8px 0 0; font-size: 12px; }
+/* "Load employees": preparing them here, before the device collects them. */
+.job__prep {
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+.job__bar--thin { height: 6px; }
+.job__failures {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    font-size: 12px;
+    color: var(--muted);
+    max-height: 140px;
+    overflow-y: auto;
+}
+.job__failures li { margin: 2px 0; overflow-wrap: anywhere; }
 @keyframes job-stripes { to { background-position: 18px 0; } }
 @media (prefers-reduced-motion: reduce) {
     .job--running .job__bar > span { animation: none; }

@@ -933,7 +933,12 @@
                         <tbody>
                             {% for row, form in device_rows %}
                                 <tr>
-                                    <td>{{ row.device.name }} <span class="t-faint">· {{ row.device.branch.name }}</span></td>
+                                    <td>
+                                        {{ row.device.name }} <span class="t-faint">· {{ row.device.branch.name }}</span>
+                                        {% if row.removed_on_terminal %}
+                                            <span class="badge badge--warning" title="Their user {{ row.device_user_id }} was deleted on the terminal, so they are not on this device now. Send them again from the Employees list or the device's Users page.">Removed on the terminal</span>
+                                        {% endif %}
+                                    </td>
                                     <td>{{ row.device_user_id }}</td>
                                     <td>{% if row.attendance_enabled %}<span class="badge badge--success">Yes</span>{% else %}<span class="badge badge--danger">No</span>{% endif %}</td>
                                     <td>{% if row.assigned_device_authorized %}Yes{% else %}No{% endif %}</td>

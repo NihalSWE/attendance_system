@@ -97,6 +97,13 @@ def _sections(request, company_id, page, bound):
         instance=row, auto_id=f"education_{row.pk}_%s")) for row in held["education"]]
     manages_devices = may_manage_devices(request.user, company_id)
     enrolled = employee_devices.current(company_id, employee)
+    # Someone deleted on the terminal keeps their link (their scans are still
+    # theirs), but the table says they are no longer on that device.
+    from devices.services.mapping import removed_on_terminal
+
+    gone = {}
+    for row in enrolled:
+        row.removed_on_terminal = row.device_user_id in removed_on_terminal(row.device, gone)
     device_rows = [(row, bound.get(f"device_{row.pk}") or employee_devices.DevicePermissionForm(
         instance=row, auto_id=f"device_{row.pk}_%s") if manages_devices else None)
         for row in enrolled]
