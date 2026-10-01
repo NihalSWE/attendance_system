@@ -16,6 +16,7 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
 from common.choices import DeviceAttendanceScope
+from common.tenant import get_current_company_id
 from common.forms import CompanyDateTimeField, StyledFormMixin, date_widget
 from devices.models import (
     BiometricDevice,
@@ -229,6 +230,7 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         anything to the device.
         """
         data = super().clean()
+        self._refuse_serial_of_another_company(data)
         self.requested_address = None
         if "server_address" not in self.fields:
             return data
@@ -262,6 +264,25 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
 
         self.requested_address = target
         return data
+
+    def _refuse_serial_of_another_company(self, data):
+        """One terminal, one company: the device sends only its serial, so the
+        same serial active in two companies is refused for both. Checked for a
+        new device and for an edit that makes a retired one active again."""
+        from devices.services.ingestion import INGESTING_STATUSES, serial_used_elsewhere
+
+        serial = data.get("serial_number")
+        status = data.get("status") or self.instance.status
+        company_id = self.instance.company_id or get_current_company_id()
+        if not serial or status not in INGESTING_STATUSES:
+            return
+        if serial_used_elsewhere(serial, company_id):
+            self.add_error(
+                "serial_number",
+                "This device is already registered to another company, and one device can "
+                "only send to one company. Ask them to retire or delete it there first, "
+                "or contact support.",
+            )
 
     def clean_serial_number(self):
         serial = (self.cleaned_data["serial_number"] or "").strip()

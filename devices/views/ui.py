@@ -348,8 +348,13 @@ def device_detail(request, public_id):
         ).count(),
     }
 
+    from devices.services.ingestion import INGESTING_STATUSES, serial_used_elsewhere
+
     return render(request, "devices/device_detail.html", {
         "device": device,
+        # Registered in another company too: the device is refused for both.
+        "serial_clash": device.status in INGESTING_STATUSES and serial_used_elsewhere(
+            device.serial_number, device.company_id, exact=True),
         "sync_state": sync_state,
         "setup_lines": setup_instructions.build(request, device, comm_key=comm_key),
         "endpoint_url": setup_instructions.full_endpoint(request),

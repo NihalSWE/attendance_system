@@ -57,6 +57,23 @@
         </div>
     </div>
 
+    {% if serial_clash %}
+        <div class="alert alert--danger" role="alert">
+            <div>
+                <strong>
+                    This device is refused: its serial number is also registered to another company.
+                </strong>
+                <p>
+                    The device sends only its serial number, so the server cannot tell which
+                    company its punches belong to, and refuses it for both rather than guess.
+                    Nothing is received until only one company has it. If it belongs here, ask
+                    the other company to retire or delete it (or contact support); if it does
+                    not, retire it here. It reconnects by itself on its next check-in.
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
     {% if comm_key %}
         <div class="alert alert--warning" role="alert">
             <div>

@@ -5538,3 +5538,22 @@ DeletedOnTerminalBadgeTests).
 
 Tests: `devices/tests_mapping.py` CommandCounterTests (both fail on the old
 code with the live error).
+
+### One device, one company: a serial active elsewhere is refused — 2026-10-01
+
+- A device added in a second company with the same serial stopped working in
+  both: a ZKTeco push device sends only its serial, so `authenticate_device`
+  cannot tell the companies apart and refuses it for both (by design - never
+  guess whose punches they are). But registering only checked the same
+  company, so nothing warned.
+- Registering a device, or making a retired one active again, now refuses a
+  serial that is active (pending, active or offline) in another company, in
+  any letter case, without naming that company
+  (`ingestion.serial_used_elsewhere`). A serial retired or suspended there
+  can be registered: a device handed over moves once the old company
+  retires it.
+- The device page of one already registered twice says in red why it is
+  refused and what to do (retire it in one company; it reconnects on its
+  next check-in).
+
+Tests: `devices/tests_ui.py` (4).
