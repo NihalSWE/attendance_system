@@ -85,6 +85,24 @@ class SettingsPageTests(WebhookCase):
         self.assertContains(page, "Save and test connection")
         self.assertNotIn("auth", form.fields)
 
+    def test_create_a_secret_key_shows_it_once_and_save_keeps_it(self):
+        # Nihal, 2026-10-01: the ERP's developer puts our key in its .env.
+        response = self.client.post(self.url, {
+            "action": ["save", "generate"], "url": URL, "employee_key": "au_user_id",
+            "mode": "arrive_leave", "batch": "on", "is_active": "on"})
+        self.assertEqual(response.status_code, 200)
+        key = response.context["new_secret"]
+        self.assertRegex(key, r"^[0-9a-f]{64}$")
+        self.assertContains(response, "Your new secret key")
+        self.assertContains(response, f"ATTENDANCE_WEBHOOK_SECRET={key}")
+        form = response.context["form"]
+        self.assertEqual((form.initial["url"], form.initial["secret"]), (URL, key))
+        self.assertFalse(WebhookSettings.all_objects.exists())      # nothing saved yet
+        self.save(secret=key)
+        row = WebhookSettings.all_objects.get(company=self.company)
+        self.assertEqual(services.decrypt(row.secret_encrypted), key)
+        self.assertNotContains(self.client.get(self.url), key)       # hidden from now on
+
     def test_save_and_test_shows_the_result_once(self):
         with mock.patch.object(services, "_call", Receiver()):
             response = self.save(then="test")

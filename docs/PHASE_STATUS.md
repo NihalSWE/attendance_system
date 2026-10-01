@@ -5439,4 +5439,11 @@ a guide they can download says how to receive it.
   the address must do, the test address, retries, curl, PHP and Python
   receivers, the IGL ERP's settings).
 
-Tests: `webhooks/tests.py` (27).
+- (Same day) **Create a secret key**: the ERP's developer wanted the key
+  from us to put in its .env. The button makes a 64-character random key,
+  shows it once with Copy and the exact .env line
+  (`ATTENDANCE_WEBHOOK_SECRET=...`), and fills it into the form with what was
+  typed; Save keeps it (encrypted, hidden from then on). The guide says the
+  key can come from either side.
+
+Tests: `webhooks/tests.py` (28).
