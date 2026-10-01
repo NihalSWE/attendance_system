@@ -101,7 +101,9 @@ class SettingsPageTests(WebhookCase):
         self.save(secret=key)
         row = WebhookSettings.all_objects.get(company=self.company)
         self.assertEqual(services.decrypt(row.secret_encrypted), key)
-        self.assertNotContains(self.client.get(self.url), key)       # hidden from now on
+        # From now on it is in the Secret key box, as dots.
+        self.assertContains(self.client.get(self.url),
+                            f'type="password" name="secret" value="{key}"')
 
     def test_save_and_test_shows_the_result_once(self):
         with mock.patch.object(services, "_call", Receiver()):
@@ -123,15 +125,25 @@ class SettingsPageTests(WebhookCase):
         self.assertEqual(services.decrypt(row.secret_encrypted), "s3cret")
         self.assertIsNotNone(row.send_from)            # from the day it was switched on
         page = self.client.get(self.url)
-        self.assertNotContains(page, "s3cret")
         self.assertContains(page, "Sending")
+        # Nihal, 2026-10-01: the saved key stays in its box, as dots (a password
+        # box), and the eye shows it.
+        self.assertContains(page, 'type="password" name="secret" value="s3cret"')
         entry = AuditLog.objects.get(action="webhook_settings.saved")
         self.assertTrue(entry.after_data["secret_changed"])
         self.assertNotIn("s3cret", json.dumps(entry.after_data))
-        # Saved again without a secret: the old one stays.
+        # Saved again as it is (the box posts the same key): not a change.
+        self.save()
+        self.assertFalse(AuditLog.objects.filter(action="webhook_settings.saved")
+                         .latest("pk").after_data["secret_changed"])
+        # Saved with the box emptied: the old one stays.
         self.save(secret="")
         self.assertEqual(services.decrypt(
             WebhookSettings.all_objects.get(company=self.company).secret_encrypted), "s3cret")
+        # A new one replaces it.
+        self.save(secret="n3w-key")
+        self.assertEqual(services.decrypt(
+            WebhookSettings.all_objects.get(company=self.company).secret_encrypted), "n3w-key")
 
     def test_only_https_and_a_secret_to_switch_on(self):
         response = self.save(url="http://erp.example.com/hook")
