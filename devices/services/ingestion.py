@@ -38,6 +38,29 @@ INGESTING_STATUSES = (
     BiometricDevice.Status.OFFLINE,
 )
 
+
+
+def serial_used_elsewhere(serial_number, company_id, *, exact=False):
+    """True when another company has a device with this serial that may send
+    data (not retired or suspended).
+
+    A ZKTeco push device sends only its serial, so a serial registered in two
+    companies cannot be told apart and ``authenticate_device`` refuses it for
+    both (2026-10-01: a device added in a second company stopped working in
+    the first). Registering must therefore refuse such a serial. ``exact``
+    asks what the device lookup itself sees (the device page's warning); the
+    registration check also catches a different spelling of case.
+    """
+    serial_number = (serial_number or "").strip()
+    if not serial_number:
+        return False
+    lookup = {"serial_number": serial_number} if exact else {"serial_number__iexact": serial_number}
+    return (
+        BiometricDevice.all_objects.filter(status__in=INGESTING_STATUSES, **lookup)
+        .exclude(company_id=company_id).exists()
+    )
+
+
 # Request headers worth keeping for diagnosis. Anything carrying a credential
 # is never snapshotted, so stored evidence cannot leak a device secret.
 SAFE_HEADERS = ("Content-Type", "Content-Length", "User-Agent", "Host", "Accept")

@@ -160,6 +160,56 @@ class DeviceScreenTests(TestCase):
             ).exists()
         )
 
+    def register(self, serial, status=BiometricDevice.Status.ACTIVE):
+        return self.client.post(reverse("devices:device_register"), {
+            "name": "Shared", "serial_number": serial, "branch": self.branch.pk,
+            "device_model": self.device_model.pk, "timezone": "Asia/Dhaka",
+            "status": status, "push_interval_seconds": 10, "error_delay_seconds": 30,
+        })
+
+    def test_a_serial_active_in_another_company_is_refused(self):
+        # 2026-10-01: a device added in a second company stopped working in both.
+        for serial in ("SN-B", "sn-b"):
+            response = self.register(serial)
+            self.assertContains(response, "already registered to another company")
+            self.assertNotContains(response, "B Front Door")   # never names theirs
+        self.assertEqual(BiometricDevice.all_objects.filter(serial_number__iexact="SN-B").count(), 1)
+
+    def test_a_serial_retired_in_another_company_can_be_registered(self):
+        # A device sold or handed over: once the old company retires it, it moves.
+        BiometricDevice.all_objects.filter(pk=self.other_device.pk).update(
+            status=BiometricDevice.Status.RETIRED)
+        self.register("SN-B")
+        self.assertTrue(BiometricDevice.all_objects.filter(
+            company=self.company, serial_number="SN-B").exists())
+
+    def test_a_retired_device_cannot_be_made_active_while_another_company_has_it(self):
+        with use_company(self.company):
+            mine = BiometricDevice.objects.create(
+                branch=self.branch, device_model=self.device_model, name="Old",
+                serial_number="SN-B", timezone="Asia/Dhaka",
+                status=BiometricDevice.Status.RETIRED)
+        response = self.client.post(reverse("devices:device_edit", args=[mine.public_id]), {
+            "name": "Old", "serial_number": "SN-B", "branch": self.branch.pk,
+            "device_model": self.device_model.pk, "timezone": "Asia/Dhaka",
+            "status": BiometricDevice.Status.ACTIVE, "push_interval_seconds": 10,
+            "error_delay_seconds": 30,
+        })
+        self.assertContains(response, "already registered to another company")
+        mine.refresh_from_db()
+        self.assertEqual(mine.status, BiometricDevice.Status.RETIRED)
+
+    def test_the_device_page_says_why_a_shared_serial_is_refused(self):
+        # One already registered twice (before this check existed).
+        with use_company(self.company):
+            BiometricDevice.objects.filter(pk=self.device.pk).update(serial_number="SN-B")
+        page = self.client.get(reverse("devices:device_detail", args=[self.device.public_id]))
+        self.assertContains(page, "its serial number is also registered to another company")
+        BiometricDevice.all_objects.filter(pk=self.other_device.pk).update(
+            status=BiometricDevice.Status.RETIRED)
+        page = self.client.get(reverse("devices:device_detail", args=[self.device.public_id]))
+        self.assertNotContains(page, "also registered to another company")
+
     def test_duplicate_serial_is_rejected_with_a_readable_message(self):
         response = self.client.post(reverse("devices:device_register"), {
             "name": "Clash",
