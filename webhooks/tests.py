@@ -351,6 +351,67 @@ class SendingTests(WebhookCase):
         self.assertEqual(receiver.calls, [])
 
 
+class SendATestTests(WebhookCase):
+    """Send a test (2026-10-01): a check-in and check-out typed in by hand for
+    one employee, sent now in the real format - before a device is connected."""
+
+    url = reverse("webhooks:settings")
+
+    def post(self, receiver, **values):
+        data = {"action": "send_test_event", "test-employee_code": "E1",
+                "test-work_date": "2026-10-01", "test-check_in": "09:02",
+                "test-check_out": "18:20", **values}
+        with mock.patch.object(services, "_call", receiver):
+            return self.client.post(self.url, data, follow=True)
+
+    def test_it_goes_in_the_real_format_and_says_what_the_receiver_did(self):
+        self.switch_on()
+        answer = json.dumps({"success": True, "results": [
+            {"au_user_id": "E1", "result": "created", "message": None}]})
+        receiver = Receiver(text=answer)
+        page = self.post(receiver)
+        self.assertContains(page, "Received")
+        self.assertContains(page, "a new attendance row was created")
+        sent = receiver.last["events"][0]
+        self.assertEqual((sent["au_user_id"], sent["check_in"], sent["check_out"]),
+                         ("E1", "2026-10-01 09:02:00", "2026-10-01 18:20:00"))
+        self.assertTrue(sent["test"])
+        self.assertEqual(receiver.calls[0]["headers"]["X-Webhook-Secret"], "s3cret")
+        event = self.events()[-1]
+        self.assertEqual((event.kind, event.status), ("test", "sent"))
+        # A test is never sent again by the queue.
+        self.assertEqual(services.deliver_due(self.company.pk), 0)
+
+    def test_a_skipped_test_says_why(self):
+        self.switch_on()
+        answer = json.dumps({"success": False, "results": [
+            {"au_user_id": "E1", "result": "skipped", "message": "Unknown au_user_id."}]})
+        page = self.post(Receiver(status=207, text=answer))
+        self.assertContains(page, "Your system received it but skipped it")
+        self.assertContains(page, "Unknown au_user_id.")
+
+    def test_the_receivers_refusal_is_explained(self):
+        self.switch_on()
+        page = self.post(Receiver(status=503, text='{"message":"Webhook secret is not configured"}'))
+        self.assertContains(page, "Your system is not ready")
+        self.assertContains(page, "Webhook secret is not configured")
+
+    def test_an_unknown_employee_id_is_refused_here(self):
+        self.switch_on()
+        receiver = Receiver()
+        page = self.post(receiver, **{"test-employee_code": "999"})
+        self.assertContains(page, "No employee has Employee ID 999")
+        self.assertEqual(receiver.calls, [])
+
+    def test_check_in_only(self):
+        self.switch_on()
+        receiver = Receiver()
+        self.post(receiver, **{"test-check_out": ""})
+        sent = receiver.last["events"][0]
+        self.assertEqual(sent["event"], "check_in")
+        self.assertNotIn("check_out", sent)
+
+
 class GuideTests(WebhookCase):
     def test_the_guide_on_screen_and_downloaded(self):
         self.switch_on(employee_key="au_user_id")

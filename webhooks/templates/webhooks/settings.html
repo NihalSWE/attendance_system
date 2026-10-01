@@ -205,6 +205,36 @@
             </div>
         {% endif %}
 
+        {% if saved %}
+            <form method="post" novalidate class="card" id="send-test">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="send_test_event">
+                <div class="card__head">
+                    <h2>
+                        Send a test
+                    </h2>
+                </div>
+                <div class="card__body stack">
+                    <p class="t-muted">
+                        No device connected yet? Type a check-in (and a check-out) for one employee
+                        and send it now, exactly as real attendance is sent. The result shows here
+                        and in What was sent. <strong>Your system saves it as real attendance</strong> for
+                        that employee and day - use a test employee or a test day.
+                    </p>
+                    <div class="grid grid--2">
+                        {% for field in test_form %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="card__foot row">
+                    <button class="btn btn--primary" type="submit">
+                        Send test now
+                    </button>
+                </div>
+            </form>
+        {% endif %}
+
         <div class="card">
             <div class="card__head">
                 <h2>
