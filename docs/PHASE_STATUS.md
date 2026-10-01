@@ -5446,4 +5446,13 @@ a guide they can download says how to receive it.
   typed; Save keeps it (encrypted, hidden from then on). The guide says the
   key can come from either side.
 
-Tests: `webhooks/tests.py` (28).
+- (Same day) **Send a test**: with no device connected yet (localhost),
+  type an Employee ID, a day, a check-in and an optional check-out and send
+  them now, in the real format (marked `"test": true`). The result box says
+  what the receiver did - created, updated, unchanged, skipped (with its
+  message, e.g. an unknown au_user_id) - or explains its refusal. Kept in
+  What was sent as "Test (sent by hand)" (webhooks 0002); never re-sent by
+  the queue. The first real test against erp25 answered 503 "Webhook secret
+  is not configured on the server": the ERP had not loaded the key yet.
+
+Tests: `webhooks/tests.py` (33).

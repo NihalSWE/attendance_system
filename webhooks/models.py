@@ -67,6 +67,9 @@ class WebhookEvent(TenantOwned):
         CHECK_IN = "check_in", "Check-in"
         CHECK_OUT = "check_out", "Check-out"
         UPDATE = "update", "Changed"
+        # Sent by hand from the page, with times typed in (2026-10-01): to try
+        # the connection with real data before a device is connected.
+        TEST = "test", "Test (sent by hand)"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Waiting to be sent"

@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
 from django.shortcuts import redirect
+from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
 
@@ -44,6 +45,16 @@ def webhook_settings(request):
     )
     if action == "test":
         return _tested(request, company_id)
+    test_form = services.TestEventForm(
+        request.POST if action == "send_test_event" else None,
+        initial={"work_date": timezone.localdate()}, prefix="test")
+    if action == "send_test_event" and test_form.is_valid():
+        data = test_form.cleaned_data
+        result = services.send_test_event(
+            actor=request.user, company_id=company_id, employee_code=data["employee_code"],
+            work_date=data["work_date"], check_in=data["check_in"], check_out=data["check_out"])
+        request.session[TEST_RESULT] = {**result.as_dict(), "kind": "event"}
+        return redirect("webhooks:settings")
     new_secret = ""
     if action == "generate":
         # Create a secret key here, for the company to give its system (Nihal,
@@ -99,6 +110,7 @@ def webhook_settings(request):
             # Shown once, right after a test (2026-10-01).
             "test_result": request.session.pop(TEST_RESULT, None),
             "new_secret": new_secret,
+            "test_form": test_form,
             "page": page,
             "counts": services.counts(company_id),
             "ping_url": services.ping_url(saved) if saved else "",

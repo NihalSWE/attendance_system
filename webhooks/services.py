@@ -465,6 +465,118 @@ def test_connection(*, actor, company_id):
     return result
 
 
+class TestEventForm(StyledFormMixin, forms.Form):
+    """A check-in and check-out typed in by hand, sent as real attendance - to
+    try the whole way to the ERP before a device is connected (2026-10-01)."""
+
+    employee_code = forms.CharField(
+        label="Employee ID", max_length=64,
+        help_text="An employee of this company. Your system must know the same ID.")
+    work_date = forms.DateField(label="Day", widget=date_widget("Choose a day"))
+    check_in = forms.TimeField(label="Check-in", input_formats=["%H:%M", "%H:%M:%S"],
+                               widget=forms.TextInput(attrs={
+                                   "placeholder": "HH:MM", "maxlength": 8,
+                                   "autocomplete": "off", "data-timepicker": ""}))
+    check_out = forms.TimeField(label="Check-out (optional)", required=False,
+                                input_formats=["%H:%M", "%H:%M:%S"],
+                                widget=forms.TextInput(attrs={
+                                    "placeholder": "HH:MM", "maxlength": 8,
+                                    "autocomplete": "off", "data-timepicker": ""}))
+
+    def clean(self):
+        data = super().clean()
+        if data.get("check_in") and data.get("check_out") and data["check_out"] <= data["check_in"]:
+            self.add_error("check_out", "The check-out must be after the check-in.")
+        return data
+
+
+def send_test_event(*, actor, company_id, employee_code, work_date, check_in, check_out=None):
+    """Send one check-in (and check-out) typed in by hand, now, in the same
+    format as the real ones; keep it in What was sent; return a TestResult
+    with what the receiver did with it."""
+    from employees.models import EmployeeAssignment
+    from tenants.models import Company
+
+    membership = require_structure_manager(actor, company_id)
+    row = settings_for(company_id)
+    if row is None or not row.url or not row.secret_encrypted:
+        return TestResult(False, "Nothing saved yet",
+                          fix="Save the address and the secret key first.")
+    code = (employee_code or "").strip()
+    assignment = (EmployeeAssignment.all_objects.select_related("employee")
+                  .filter(company_id=company_id, employee_code=code)
+                  .exclude(status="cancelled").order_by("-effective_from").first())
+    if assignment is None:
+        return TestResult(False, f"No employee has Employee ID {code}",
+                          fix="Use the Employee ID of one of this company's employees.")
+    company = Company.objects.get(pk=company_id)
+    zone = company_zone(company)
+    first = datetime.datetime.combine(work_date, check_in, tzinfo=zone)
+    last = datetime.datetime.combine(work_date, check_out, tzinfo=zone) if check_out else None
+    now = timezone.now()
+    with use_company(company_id):
+        event = WebhookEvent(company_id=company_id, employee=assignment.employee,
+                             work_date=work_date, kind=WebhookEvent.Kind.TEST, payload={},
+                             next_attempt_at=now, status=Status.SKIPPED)
+        payload = {
+            "event": "check_out" if last else "check_in",
+            "event_id": str(event.event_id),
+            row.employee_key: code,
+            "employee_name": assignment.employee.full_name,
+            "work_date": work_date.isoformat(),
+            "check_in": first.strftime(TIME_FORMAT),
+        }
+        if last is not None:
+            payload["check_out"] = last.strftime(TIME_FORMAT)
+        payload.update({"timezone": str(zone), "company": company.code, "test": True})
+        event.payload = payload
+        body = json.dumps({"events": [payload]} if row.batch else payload,
+                          separators=(",", ":")).encode()
+        try:
+            status, text = _call(row.url, method="POST", body=body, headers=_headers(row, body))
+        except WebhookError as exc:
+            result = diagnose(url=row.url, error=exc)
+            status = None
+        else:
+            result = _test_answer(row.url, status, text, code, row.employee_key)
+        event.attempts, event.last_attempt_at, event.last_status_code = 1, now, status
+        event.status = Status.SENT if result.ok else Status.SKIPPED
+        event.sent_at = now if result.ok else None
+        event.last_message = f"{result.title}. {result.detail}"[:500]
+        event.save()
+        record_company_event(actor=actor, membership=membership, company=membership.company,
+                             action="webhook.test_event_sent", obj=event,
+                             after={"payload": payload, "ok": result.ok,
+                                    "result": event.last_message})
+    return result
+
+
+def _test_answer(url, status, text, code, key):
+    """A TestResult for the receiver's answer to a test event: what it did
+    with it (created, updated, unchanged, skipped) when it says."""
+    if not 200 <= status < 300:
+        return diagnose(url=url, status=status, text=text)
+    [result] = _results(text, 1)
+    outcome = str((result or {}).get("result", "")).lower()
+    said = str((result or {}).get("message") or "")
+    if outcome == "skipped":
+        return TestResult(False, "Your system received it but skipped it",
+                          f"It said: {said}" if said else "",
+                          f"Usually your system does not know {key} {code}. Check the same "
+                          "Employee ID exists there, or read its message above.", url)
+    if outcome == "failed":
+        return TestResult(False, "Your system received it but could not save it",
+                          f"It said: {said}" if said else "",
+                          "Send it again; if it keeps failing, your developer can see why in "
+                          "its logs.", url)
+    words = {"created": "a new attendance row was created",
+             "updated": "the attendance row was updated",
+             "unchanged": "nothing needed changing (already there, or the day is complete)"}
+    done = words.get(outcome, "it was accepted")
+    return TestResult(True, "Received", f"Your system answered {status}: {done}."
+                      + (f" It said: {said}" if said else ""), "", url)
+
+
 def send_test(*, actor, company_id):
     """``test_connection`` that raises WebhookError when it did not pass."""
     result = test_connection(actor=actor, company_id=company_id)
