@@ -81,13 +81,16 @@ def blocks(row, company):
             "can send again at any time.",
         ]),
 
-        ("h3", "What you need from your developer"),
-        ("p", "Only two things. Ask whoever looks after your ERP or software for:"),
+        ("h3", "What you need"),
+        ("p", "Only two things:"),
         ("table", ["You need", "What it looks like"], [
-            ["1. The webhook address", "A web address starting with https://, for example "
+            ["1. The webhook address", "From your developer: a web address starting with "
+                                       "https://, for example "
                                        "https://erp.example.com/api/webhook/attendance"],
-            ["2. The secret key", "A long password, for example 7f3a9c1e5b... Your system uses "
-                                  "it to know the attendance really comes from us."],
+            ["2. The secret key", "A long password, for example 05a2a487... Your system uses it "
+                                  "to know the attendance really comes from us. Either your "
+                                  "developer gives you one, or you press \"Create a secret key\" "
+                                  "on our page and give it to them."],
         ]),
         ("p", "Your developer finds everything they need in Part 2 of this guide - just send "
               "it to them."),
@@ -97,9 +100,11 @@ def blocks(row, company):
             "Sign in as the owner or company admin.",
             "Open Organisation → ERP webhook.",
             "Paste the address into \"Your system's webhook address\".",
-            "Paste the secret key into \"Secret key\".",
-            "Tick \"Send attendance to this address\".",
-            "Press \"Save and test connection\".",
+            "Secret key: paste the one your developer gave you - or press \"Create a secret "
+            "key\", copy it and send it to your developer (for the IGL ERP it goes in its .env "
+            "file as ATTENDANCE_WEBHOOK_SECRET).",
+            "Tick \"Send attendance to this address\" and press \"Save\".",
+            "When your developer says the key is in place, press \"Save and test connection\".",
             "A green box saying \"Connected\" means it works. You are done.",
         ]),
         ("p", "Leave the \"Advanced\" section closed unless your developer asks you to change "
@@ -223,8 +228,10 @@ def blocks(row, company):
 
         ("h3", "9. If your system is the IGL ERP"),
         ("p", "It already takes this format. Address: https://<erp>/api/webhook/attendance. "
-              "Secret key: ATTENDANCE_WEBHOOK_SECRET from its .env (and "
-              "ATTENDANCE_WEBHOOK_SIGNING_SECRET as the signing secret, if set). Keep the "
+              "Secret key: the same value as ATTENDANCE_WEBHOOK_SECRET in its .env - the "
+              "company can create one on our page and send it to you to put there; reload "
+              "the ERP's config afterwards (php artisan config:clear). The signing secret is "
+              "ATTENDANCE_WEBHOOK_SIGNING_SECRET, if set. Keep the "
               "employee field au_user_id and \"When they come in, and when their day is "
               "finished\". If ATTENDANCE_WEBHOOK_IPS is set, add our server's address to it."),
     ]

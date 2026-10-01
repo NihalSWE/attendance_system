@@ -1,6 +1,12 @@
 {% extends "base_template/base.html" %}
+{% load static %}
 {% block title %}
     ERP webhook · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'webhooks/js/webhook.js' %}">
+    </script>
 {% endblock %}
 {% block page %}
     <div class="crumbs">
@@ -72,10 +78,33 @@
                         {% for error in form.non_field_errors %}{{ error }}{% endfor %}
                     </div>
                 {% endif %}
+                {% if new_secret %}
+                    <div class="alert alert--success webhook-secret" data-new-secret>
+                        <div class="stack">
+                            <strong>Your new secret key</strong>
+                            <div class="webhook-secret__row">
+                                <code class="webhook-secret__key" id="new-secret">{{ new_secret }}</code>
+                                <button class="btn btn--ghost btn--sm" type="button" data-copy="#new-secret">Copy</button>
+                            </div>
+                            <ol class="webhook-steps">
+                                <li>Give this key to your system's developer. For the IGL ERP it goes in the ERP's <span class="mono">.env</span> file as <span class="mono">ATTENDANCE_WEBHOOK_SECRET={{ new_secret }}</span></li>
+                                <li>It is already filled in below. Press <strong>Save</strong> now, so it is kept.</li>
+                                <li>When your developer says it is in place, press <strong>Save and test connection</strong>.</li>
+                            </ol>
+                            <span class="t-faint">Once saved it is hidden and never shown again - copy it now.</span>
+                        </div>
+                    </div>
+                {% endif %}
                 <div class="grid grid--2">
                     {% for field in form.main_fields %}
                         {% include "leaves/includes/field.html" %}
                     {% endfor %}
+                </div>
+                <div class="webhook-generate">
+                    <button class="btn btn--ghost btn--sm" type="submit" name="action" value="generate" formnovalidate>
+                        Create a secret key
+                    </button>
+                    <span class="field__help">No secret key yet? Create one here and give it to your system's developer.</span>
                 </div>
                 <div>
                     <label class="check" for="{{ form.is_active.id_for_label }}">

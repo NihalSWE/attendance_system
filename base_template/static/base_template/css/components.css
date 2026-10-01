@@ -430,6 +430,40 @@ Table — spec §4. Row height lands near 38px: standard density.
     font-size: 12px;
     opacity: .8;
 }
+.webhook-generate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+}
+.webhook-secret__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.webhook-secret__key {
+    padding: 6px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-size: 13px;
+    word-break: break-all;
+    user-select: all;
+}
+.webhook-secret .webhook-steps {
+    color: inherit;
+}
+.webhook-secret,
+.webhook-secret .stack {
+    min-width: 0;
+}
+.webhook-secret__key,
+.webhook-secret .mono {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    word-break: break-all;
+}
 .webhook-steps {
     margin: 0;
     padding-left: 22px;

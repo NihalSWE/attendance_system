@@ -91,6 +91,13 @@ def decrypt(token):
                            "changed). Enter it again under Organisation → ERP webhook.") from exc
 
 
+def new_secret():
+    """A secret key for the company to give its system: 64 random hex characters."""
+    import secrets
+
+    return secrets.token_hex(32)
+
+
 # --- reading ----------------------------------------------------------------
 
 

@@ -44,6 +44,22 @@ def webhook_settings(request):
     )
     if action == "test":
         return _tested(request, company_id)
+    new_secret = ""
+    if action == "generate":
+        # Create a secret key here, for the company to give its system (Nihal,
+        # 2026-10-01: the ERP's developer puts our key in its .env). Shown once,
+        # filled into the form with what was typed; Save keeps it.
+        new_secret = services.new_secret()
+        typed = {name: request.POST.get(name, "") for name in ("url", "ping_url",
+                 "employee_key", "mode", "send_from")}
+        typed.update({name: request.POST.get(name) == "on"
+                      for name in ("is_active", "batch")})
+        form = services.WebhookSettingsForm(
+            instance=saved, initial={**typed, "secret": new_secret},
+            has_secret=bool(saved and saved.secret_encrypted),
+            has_signing_secret=bool(saved and saved.signing_secret_encrypted),
+        )
+        form.fields["secret"].widget.render_value = True
     if action == "send_again":
         again = services.send_again(actor=request.user, company_id=company_id)
         messages.success(request, f"{again} event(s) will be sent again now." if again
@@ -82,6 +98,7 @@ def webhook_settings(request):
             "saved": saved,
             # Shown once, right after a test (2026-10-01).
             "test_result": request.session.pop(TEST_RESULT, None),
+            "new_secret": new_secret,
             "page": page,
             "counts": services.counts(company_id),
             "ping_url": services.ping_url(saved) if saved else "",
