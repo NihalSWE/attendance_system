@@ -13,7 +13,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 width: "100%",
                 // A short fixed list needs no search box; a long or
                 // database-backed one does.
-                minimumResultsForSearch: count > 8 ? 0 : Infinity,
+                // data-search="always": a search box however short the list.
+                minimumResultsForSearch: ($el.data("search") === "always" || count > 8) ? 0 : Infinity,
                 closeOnSelect: !$el.prop("multiple"),
                 placeholder: $el.data("placeholder") || null,
                 allowClear: !$el.prop("required") && !$el.prop("multiple")

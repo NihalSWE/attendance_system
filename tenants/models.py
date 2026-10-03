@@ -84,6 +84,19 @@ class Company(TimeStamped, ActorTracked):
             self.phone = normalize_bd_phone(self.phone)
         except ValidationError as exc:
             raise ValidationError({"phone": exc.messages})
+        # One company per email and per phone number (Nihal, 2026-10-03).
+        # Here, so every way a company is saved checks it: Create company,
+        # Edit company and the company's own profile.
+        others = Company.objects.exclude(pk=self.pk) if self.pk else Company.objects.all()
+        taken = {}
+        if self.email:
+            self.email = self.email.strip()
+            if others.filter(email__iexact=self.email).exists():
+                taken["email"] = "Another company already uses this email. Use another."
+        if self.phone and others.filter(phone=self.phone).exists():
+            taken["phone"] = "Another company already uses this phone number. Use another."
+        if taken:
+            raise ValidationError(taken)
 
 
 class Feature(TimeStamped):

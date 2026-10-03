@@ -314,6 +314,41 @@ def device_register(request):
 
 @login_required
 @company_user_required
+def serial_check(request):
+    """Register / Edit device: is this serial free? Asked as it is typed
+    (Nihal, 2026-10-03). Says the same as saving would."""
+    from devices.forms import serial_taken_message
+    from devices.services.ingestion import serial_owner_elsewhere
+
+    serial = (request.GET.get("serial") or "").strip()
+    if not serial:
+        return JsonResponse({"ok": True, "message": ""})
+    mine = BiometricDevice.objects.filter(serial_number__iexact=serial)
+    device = request.GET.get("device") or ""
+    if device:
+        mine = mine.exclude(public_id=device) if _is_uuid(device) else mine
+    same = mine.first()
+    if same is not None:
+        return JsonResponse({"ok": False, "message": (
+            f"This serial number is already used by {same.name} in this company.")})
+    owner = serial_owner_elsewhere(serial, request.company_id)
+    if owner:
+        return JsonResponse({"ok": False, "message": serial_taken_message(owner)})
+    return JsonResponse({"ok": True, "message": "This serial number is free."})
+
+
+def _is_uuid(value):
+    import uuid
+
+    try:
+        uuid.UUID(str(value))
+    except ValueError:
+        return False
+    return True
+
+
+@login_required
+@company_user_required
 def device_detail(request, public_id):
     device = get_object_or_404(
         BiometricDevice.objects.select_related("branch", "device_model__vendor"),
@@ -1560,23 +1595,25 @@ def device_connection_test(request, public_id):
         started = timezone.now()
         url = reverse("devices:device_detail", args=[device.public_id])
         command_id = None
-        if request.POST.get("with_command"):
-            entry = queue_command(
-                device=device, command_key=connection.TEST_COMMAND,
-                requested_by=request.user,
+        # Always with the harmless command (2026-10-03: the tick is gone) -
+        # it proves the device takes commands, not only that it calls in. A
+        # device whose protocol has no such command is tested by its check-in.
+        entry = queue_command(
+            device=device, command_key=connection.TEST_COMMAND,
+            requested_by=request.user,
+        )
+        if entry is None:
+            # Already queued and not yet picked up: follow that one.
+            entry = next(
+                (e for e in pending_summary(device)
+                 if e.get("key") == connection.TEST_COMMAND),
+                None,
             )
-            if entry is None:
-                # Already queued and not yet picked up: follow that one.
-                entry = next(
-                    (e for e in pending_summary(device)
-                     if e.get("key") == connection.TEST_COMMAND),
-                    None,
-                )
-            if entry is not None:
-                command_id = entry["id"]
-                _audit(request, "device.command_queued", device, after={
-                    "command": entry["body"], "purpose": "connection test",
-                })
+        if entry is not None:
+            command_id = entry["id"]
+            _audit(request, "device.command_queued", device, after={
+                "command": entry["body"], "purpose": "connection test",
+            })
         return redirect(f"{url}?{_test_query(started, command_id)}#connection")
 
     started = _parse_instant(request.GET.get("since"))

@@ -670,14 +670,21 @@ class ServerAddressScreenTests(ServerAddressTestCase):
         response = self.client.get(reverse("devices:device_register"))
         self.assertNotIn("server_address", response.context["form"].fields)
 
-    def test_changing_the_address_without_confirming_is_refused(self):
-        response = self.client.post(
-            reverse("devices:device_edit", args=[self.device.public_id]),
-            self._edit_post(server_address=f"https://{NEW_HOST}"),
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("server_address_confirmed", response.context["form"].errors)
-        self.assertEqual(DeviceServerAddressChange.all_objects.count(), 0)
+    def test_no_tick_is_needed_to_change_the_address(self):
+        # Nihal, 2026-10-03: the "I understand the risk" tick is gone; the
+        # warning is in the field's help, and the address is still checked
+        # before the device is told anything.
+        page = self.client.get(reverse("devices:device_edit", args=[self.device.public_id]))
+        self.assertNotIn("server_address_confirmed", page.context["form"].fields)
+        original = server_address._run_probe
+        try:
+            server_address._run_probe = lambda address, token, fetch=None: (True, "")
+            self.client.post(reverse("devices:device_edit", args=[self.device.public_id]),
+                             self._edit_post(server_address=f"https://{NEW_HOST}"))
+        finally:
+            server_address._run_probe = original
+        self.assertEqual(DeviceServerAddressChange.all_objects.get().status,
+                         DeviceServerAddressChange.Status.QUEUED)
 
     def test_saving_the_form_without_touching_the_address_changes_nothing(self):
         response = self.client.post(

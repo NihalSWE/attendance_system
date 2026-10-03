@@ -185,10 +185,13 @@ class PageTests(ConnectionTestCase):
         page = self.client.get(response["Location"].split("#")[0])
         self.assertContains(page, "Waiting for the device to check in")
 
-    def test_a_test_with_a_command_queues_a_harmless_one(self):
+    def test_every_test_queues_a_harmless_command(self):
+        # Nihal, 2026-10-03: no tick - every test sends it and waits for it.
         from devices.services.commands import pending_summary
 
-        response = self.client.post(self.test_url, {"with_command": "1"})
+        page = self.client.get(self.detail)
+        self.assertNotContains(page, 'name="with_command"')
+        response = self.client.post(self.test_url)
         [entry] = pending_summary(self.device)
         self.assertEqual(entry["key"], "query_options")
         self.assertIn(f"&command={entry['id']}", response["Location"])

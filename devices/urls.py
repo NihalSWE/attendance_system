@@ -41,6 +41,7 @@ ingestion_urlpatterns = [
 ui_urlpatterns = [
     path("devices/", ui.device_list, name="device_list"),
     path("devices/register/", ui.device_register, name="device_register"),
+    path("devices/serial-check/", ui.serial_check, name="serial_check"),
     path("devices/connection/", ui.device_connections, name="device_connections"),
     path("devices/<uuid:public_id>/", ui.device_detail, name="device_detail"),
     path("devices/<uuid:public_id>/edit/", ui.device_edit, name="device_edit"),

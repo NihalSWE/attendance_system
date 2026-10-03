@@ -13,6 +13,7 @@ import secrets
 
 from django import forms
 from django.contrib.auth.hashers import make_password
+from django.urls import reverse
 from django.utils import timezone
 
 from common.choices import DeviceAttendanceScope
@@ -54,6 +55,13 @@ def _periods_overlap(start_a, end_a, start_b, end_b):
     if end_b is not None and end_b <= start_a:
         return False
     return True
+
+
+def serial_taken_message(company_name):
+    """The same words on the page as it is typed and on saving."""
+    return (f"This serial number is already used by {company_name}. One device can only "
+            "send to one company: ask them to retire or delete it there first, or "
+            "contact support.")
 
 
 class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
@@ -102,23 +110,6 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         required=False, initial=True, label="Push punches in real time",
         help_text="When off, the device only uploads on its timed interval.",
     )
-    push_protocol = forms.ChoiceField(
-        required=False,
-        label="Push protocol",
-        choices=(
-            ("auto", "As the device announces"),
-            ("2", "Attendance push 2.x (SenseFace 3A)"),
-            ("3", "PushSDK 3.x (SenseFace 2A)"),
-        ),
-        initial="auto",
-        help_text=(
-            "Leave on “As the device announces”. Set it by hand when a device "
-            "was registered before this server knew it — a device that stays "
-            "registered never announces again, and the wrong choice makes it "
-            "refuse commands (the SenseFace 3A answers the 3.x form with -1004). "
-            "Restart the terminal after changing it; if it stops sending, switch back."
-        ),
-    )
     installed_at = CompanyDateTimeField(
         required=False,
         label="Installed at",
@@ -133,19 +124,14 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
             "Where the device sends its data, for example "
             "https://attendance.example.com or 192.168.1.20:8000. Changing "
             "this is checked before the device is told anything, and only "
-            "saved once the device has connected at the new address."
+            "saved once the device has connected at the new address. The device "
+            "can only be reached while it points here: at an address it cannot "
+            "reach, someone has to type the old one back in at the terminal."
         ),
     )
-    server_address_confirmed = forms.BooleanField(
-        required=False,
-        label="I understand the risk of changing the server address",
-        help_text=(
-            "The device can only be reached while it is pointing here. If it "
-            "switches to an address it cannot reach, no one can fix it from "
-            "this screen — someone has to walk to the terminal and type the "
-            "old address back in."
-        ),
-    )
+
+    # Branch, name, model, then serial (Nihal, 2026-10-03); the rest after.
+    field_order = ("branch", "name", "device_model", "serial_number")
 
     class Meta:
         model = BiometricDevice
@@ -171,13 +157,20 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
             # Nothing to repoint yet. The address is typed into the terminal
             # during commissioning, and the detail page states what to type.
             del self.fields["server_address"]
-            del self.fields["server_address_confirmed"]
         # Tenant-scoped querysets: the manager already filters by the active
         # company, so another tenant's branches can never appear in the list.
         self.fields["branch"].queryset = Branch.objects.order_by("name")
         self.fields["device_model"].queryset = DeviceModel.objects.filter(
             is_active=True
         ).select_related("vendor").order_by("vendor__name", "name")
+        # A search box however short the list (forms.js reads it).
+        self.fields["device_model"].widget.attrs["data-search"] = "always"
+        # The page checks the serial as it is typed (device_form.js).
+        self.fields["serial_number"].widget.attrs.update({
+            "data-serial-check": reverse("devices:serial_check"),
+            "data-device": str(self.instance.public_id) if self.instance.pk else "",
+            "autocomplete": "off",
+        })
 
         if self.instance.pk:
             settings = self.instance.settings or {}
@@ -188,7 +181,6 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
                 # address has to be typed on the terminal (N8 part 4); the
                 # service refuses it too, so this is the courtesy, not the guard.
                 self.fields["server_address"].disabled = True
-                self.fields["server_address_confirmed"].disabled = True
                 self.fields["server_address"].help_text = (
                     server_address.NEVER_CONNECTED_MESSAGE
                 )
@@ -197,7 +189,6 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
                 # decide what the device's address is, so the control is
                 # closed rather than left to fail on submit.
                 self.fields["server_address"].disabled = True
-                self.fields["server_address_confirmed"].disabled = True
                 self.fields["server_address"].help_text = (
                     "A change is already in progress. Wait for it to finish "
                     "on the device page before starting another."
@@ -209,7 +200,6 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
                 "error_delay_seconds", 30
             )
             self.fields["realtime"].initial = settings.get("realtime", True)
-            self.fields["push_protocol"].initial = settings.get("push_protocol", "auto")
             if self.instance.authentication_secret_hash:
                 self.fields["comm_key"].help_text = (
                     "This device has a key: it is refused unless it sends that key "
@@ -254,14 +244,6 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
 
         if saved is not None and saved.matches(target):
             return data
-        if not data.get("server_address_confirmed"):
-            self.add_error(
-                "server_address_confirmed",
-                "Tick this to confirm you understand what a wrong server "
-                "address does to the device.",
-            )
-            return data
-
         self.requested_address = target
         return data
 
@@ -269,20 +251,16 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         """One terminal, one company: the device sends only its serial, so the
         same serial active in two companies is refused for both. Checked for a
         new device and for an edit that makes a retired one active again."""
-        from devices.services.ingestion import INGESTING_STATUSES, serial_used_elsewhere
+        from devices.services.ingestion import INGESTING_STATUSES, serial_owner_elsewhere
 
         serial = data.get("serial_number")
         status = data.get("status") or self.instance.status
         company_id = self.instance.company_id or get_current_company_id()
         if not serial or status not in INGESTING_STATUSES:
             return
-        if serial_used_elsewhere(serial, company_id):
-            self.add_error(
-                "serial_number",
-                "This device is already registered to another company, and one device can "
-                "only send to one company. Ask them to retire or delete it there first, "
-                "or contact support.",
-            )
+        owner = serial_owner_elsewhere(serial, company_id)
+        if owner:
+            self.add_error("serial_number", serial_taken_message(owner))
 
     def clean_serial_number(self):
         serial = (self.cleaned_data["serial_number"] or "").strip()
@@ -302,7 +280,8 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
             "push_interval_seconds": self.cleaned_data.get("push_interval_seconds") or 10,
             "error_delay_seconds": self.cleaned_data.get("error_delay_seconds") or 30,
             "realtime": bool(self.cleaned_data.get("realtime")),
-            "push_protocol": self.cleaned_data.get("push_protocol") or "auto",
+            # No longer on the form (2026-10-03): what was set stays.
+            "push_protocol": (device.settings or {}).get("push_protocol") or "auto",
         }
 
         # Returned to the view so it can be shown exactly once.

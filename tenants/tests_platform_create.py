@@ -100,12 +100,14 @@ class MobileNumberTests(CreateCase):
     """11-digit Bangladesh mobile numbers only (Nihal, 2026-09-28)."""
 
     def test_typed_any_usual_way_it_is_kept_one_way(self):
-        for typed in ("01712345678", "+8801712345678", "8801712345678"):
+        # Three numbers: one company per phone number (2026-10-03).
+        for typed, kept in (("01712345671", "8801712345671"),
+                            ("+8801712345672", "8801712345672"),
+                            ("8801712345673", "8801712345673")):
             with self.subTest(typed=typed):
                 self.post(phone=typed, email=f"{typed[-4:]}{len(typed)}@acme.test",
                           name=f"Acme {typed}")
-                self.assertEqual(Company.objects.get(name=f"Acme {typed}").phone,
-                                 "8801712345678")
+                self.assertEqual(Company.objects.get(name=f"Acme {typed}").phone, kept)
 
     def test_anything_else_is_refused_and_nothing_is_made(self):
         for typed in ("0171234567", "017123456789", "01212345678", "0212345678"):
@@ -117,6 +119,23 @@ class MobileNumberTests(CreateCase):
     def test_blank_is_allowed(self):
         self.post(phone="+88")
         self.assertEqual(Company.objects.get(name="Acme Company").phone, "")
+
+    def test_one_company_per_email_and_per_phone(self):
+        # Nihal, 2026-10-03.
+        self.post()
+        # A new company's email is its administrator's login too: refused
+        # by the account check first.
+        page = self.post(name="Second", email="OWNER@acme.test", phone="01999000000")
+        self.assertContains(page, "This email already belongs to an account")
+        page = self.post(name="Third", email="third@acme.test", phone="+8801711000000")
+        self.assertContains(page, "Another company already uses this phone number")
+        self.assertEqual(Company.objects.filter(name__in=["Second", "Third"]).count(), 0)
+        other = Company.objects.create(code="OTHER", slug="other", name="Other Co",
+                                       email="other@other.test", phone="8801888000000")
+        page = self.client.post(reverse("platform:company_edit", args=[other.public_id]),
+                                {"name": "Other Co", "email": "owner@acme.test",
+                                 "phone": "01888000000", "address": ""})
+        self.assertContains(page, "Another company already uses this email")
 
     def test_edit_company_checks_it_too(self):
         self.post()
