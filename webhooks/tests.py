@@ -535,6 +535,55 @@ class QuietAndAfterShiftTests(WebhookCase):
         self.assertEqual(thread.call_count, 1)
 
 
+class ScansInBetweenTests(WebhookCase):
+    """The switch "Also send the scans in between" (Nihal, 2026-10-03): off,
+    only the check-in and the check-out go (IGL); on, every scan in between
+    goes too, once, as break_out / break_in - never as a check-out, which
+    would close the day in the ERP."""
+
+    def at(self, hour, minute=0):
+        return datetime.datetime(2026, 8, 10, hour, minute, tzinfo=DHAKA)
+
+    def scan(self, hour, minute, now):
+        self.punch(MONDAY, hour, minute)
+        recalculate(self.company.pk, start=MONDAY, end=MONDAY, now=now)
+
+    def day(self):
+        self.scan(9, 0, self.at(9, 30))
+        self.scan(13, 0, self.at(13, 30))
+        self.scan(14, 0, self.at(14, 30))
+        self.scan(18, 5, self.at(19))
+
+    def test_off_sends_only_the_check_in_and_the_check_out(self):
+        self.switch_on()
+        self.day()
+        self.assertEqual([(e.kind, e.payload.get("check_out")) for e in self.events()],
+                         [("check_in", None), ("check_out", "2026-08-10 18:05:00")])
+
+    def test_on_sends_each_scan_in_between_once_and_in_order(self):
+        self.switch_on(send_breaks=True)
+        self.day()
+        recalculate(self.company.pk, start=MONDAY, end=MONDAY, now=self.at(19, 30))  # again
+        events = self.events()
+        self.assertEqual([e.kind for e in events],
+                         ["check_in", "break_out", "break_in", "check_out"])
+        went_out = events[1].payload
+        self.assertEqual(went_out["punch_time"], "2026-08-10 13:00:00")
+        self.assertNotIn("check_in", went_out)                  # can never close the day
+        self.assertNotIn("check_out", went_out)
+        self.assertEqual(events[2].payload["punch_time"], "2026-08-10 14:00:00")
+
+    def test_the_switch_is_saved_from_the_page(self):
+        self.switch_on()
+        page = self.client.get(reverse("webhooks:settings"))
+        self.assertContains(page, "Also send the scans in between (breaks)")
+        self.client.post(reverse("webhooks:settings"), {
+            "action": "save", "url": URL, "is_active": "on", "send_breaks": "on",
+            "secret": "s3cret", "employee_key": "au_user_id", "mode": "arrive_leave",
+            "batch": "on", "send_from": "2026-08-01"})
+        self.assertTrue(WebhookSettings.all_objects.get(company=self.company).send_breaks)
+
+
 class GuideTests(WebhookCase):
     def test_the_guide_on_screen_and_downloaded(self):
         self.switch_on(employee_key="au_user_id")

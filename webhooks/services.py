@@ -163,10 +163,12 @@ class WebhookSettingsForm(StyledFormMixin, forms.ModelForm):
 
     class Meta:
         model = WebhookSettings
-        fields = ("url", "is_active", "ping_url", "employee_key", "mode", "batch", "send_from")
+        fields = ("url", "is_active", "send_breaks", "ping_url", "employee_key", "mode", "batch",
+                  "send_from")
         labels = {
             "url": "Your system's webhook address",
             "is_active": "Send attendance to this address",
+            "send_breaks": "Also send the scans in between (breaks)",
             "ping_url": "Test address",
             "employee_key": "Employee field name",
             "mode": "When to send",
@@ -178,6 +180,11 @@ class WebhookSettingsForm(StyledFormMixin, forms.ModelForm):
                    "https://erp.example.com/api/webhook/attendance",
             "is_active": "Untick to stop sending. Nothing is lost: what is waiting goes when "
                          "you tick it again.",
+            "send_breaks": "Off: only the check-in (first scan) and the check-out (first scan "
+                           "out after the shift ends) are sent - what the IGL ERP wants. On: "
+                           "every scan in between - out for a break, back in - is sent too, as "
+                           "its own break_out / break_in event. It never closes the day in "
+                           "your system: only the check-out does.",
             "ping_url": "Only if your developer gives you one. Empty: the address above "
                         "followed by /ping.",
             "employee_key": "Only if your developer asks. The IGL ERP uses au_user_id.",
@@ -215,7 +222,8 @@ class WebhookSettingsForm(StyledFormMixin, forms.ModelForm):
             del self.fields["clear_signing_secret"]
 
     def main_fields(self):
-        return [self[name] for name in self.fields if name not in ADVANCED + ("is_active",)]
+        return [self[name] for name in self.fields
+                if name not in ADVANCED + ("is_active", "send_breaks")]
 
     def advanced_fields(self):
         return [self[name] for name in ADVANCED
@@ -294,7 +302,8 @@ def _snapshot(row):
     return {"url": row.url, "ping_url": row.ping_url, "auth": row.auth,
             "employee_key": row.employee_key, "mode": row.mode, "batch": row.batch,
             "send_from": row.send_from.isoformat() if row.send_from else "",
-            "is_active": row.is_active, "signed": bool(row.signing_secret_encrypted)}
+            "is_active": row.is_active, "send_breaks": row.send_breaks,
+            "signed": bool(row.signing_secret_encrypted)}
 
 
 # --- the address ----------------------------------------------------------------
@@ -652,6 +661,23 @@ def _device_ips(record_ids):
     }
 
 
+def _between_scans(record_ids):
+    """``{record id: [(instant, kind), ...]}``: each day's counted scans
+    between its check-in and its check-out - out for a break, back in - in
+    time order."""
+    from attendance.models import PunchAllocation
+
+    found = {}
+    for record_id, at, label in PunchAllocation.all_objects.filter(
+        attendance_record_id__in=record_ids, is_included=True,
+        label__in=(PunchAllocation.Label.BREAK_OUT, PunchAllocation.Label.BREAK_IN),
+    ).order_by("event_at").values_list("attendance_record_id", "event_at", "label"):
+        found.setdefault(record_id, []).append(
+            (at, WebhookEvent.Kind.BREAK_OUT if label == PunchAllocation.Label.BREAK_OUT
+             else WebhookEvent.Kind.BREAK_IN))
+    return found
+
+
 def _latest_outs(record_ids):
     """``{record id: instant}``: each day's latest counted scan out so far - a
     day still running keeps no check-out of its own yet."""
@@ -742,6 +768,7 @@ def _note(company_id, row, record_ids):
     }
     latest = (_latest_outs([r.pk for r in records if r.is_open])
               if row.mode == WebhookSettings.Mode.EVERY_SCAN else {})
+    between = _between_scans([r.pk for r in records]) if row.send_breaks else {}
     zone = None
     changed = []
     for record in records:
@@ -754,7 +781,11 @@ def _note(company_id, row, record_ids):
         check_in, check_out = _wanted(record, row.mode, latest.get(record.pk))
         state = states.get((record.employee_id, record.work_date))
         sent = (state.check_in, state.check_out) if state else (None, None)
-        if (check_in, check_out) == sent or (sent[1] is not None and check_out is None):
+        done = set(state.breaks_sent) if state else set()
+        breaks = [(at, label) for at, label in between.get(record.pk, ())
+                  if at.isoformat() not in done]
+        same = (check_in, check_out) == sent or (sent[1] is not None and check_out is None)
+        if same and not breaks:
             # Nothing new (a check-out once sent is not taken back). Said
             # once per change in what they did, not at every rebuild.
             if debugging(row):
@@ -762,7 +793,7 @@ def _note(company_id, row, record_ids):
                 debug_note(row, "not_queued", None,
                            _nothing_new(who, code, row, record, sent, zone), {})
             continue
-        changed.append((record, code, who, check_in, check_out, state, sent))
+        changed.append((record, code, who, check_in, check_out, state, sent, same, breaks))
     if not changed:
         return 0
 
@@ -772,29 +803,50 @@ def _note(company_id, row, record_ids):
     now = timezone.now()
     queued = 0
     with transaction.atomic():
-        for record, code, who, check_in, check_out, state, sent in changed:
-            if sent == (None, None):
-                kind = WebhookEvent.Kind.CHECK_OUT if check_out else WebhookEvent.Kind.CHECK_IN
-            elif sent[0] == check_in and sent[1] is None:
-                kind = WebhookEvent.Kind.CHECK_OUT
-            else:
-                kind = WebhookEvent.Kind.UPDATE
-            event = WebhookEvent(company_id=company_id, employee_id=record.employee_id,
-                                 work_date=record.work_date, kind=kind, payload={},
-                                 next_attempt_at=now)
-            ip = ips.get((record.pk, check_out)) or ips.get((record.pk, check_in)) or ""
-            event.payload = _payload(event, row, company, zone, record, code, check_in,
-                                     check_out, ip)
-            event.save()
-            debug_note(row, "queued", None,
-                       f"{who} ({code}): {event.get_kind_display().lower()} queued; it is "
-                       "sent next.", {"payload": event.payload})
+        for record, code, who, check_in, check_out, state, sent, same, breaks in changed:
+            main = None
+            if not same:
+                if sent == (None, None):
+                    kind = (WebhookEvent.Kind.CHECK_OUT if check_out
+                            else WebhookEvent.Kind.CHECK_IN)
+                elif sent[0] == check_in and sent[1] is None:
+                    kind = WebhookEvent.Kind.CHECK_OUT
+                else:
+                    kind = WebhookEvent.Kind.UPDATE
+                main = WebhookEvent(company_id=company_id, employee_id=record.employee_id,
+                                    work_date=record.work_date, kind=kind, payload={},
+                                    next_attempt_at=now)
+                ip = ips.get((record.pk, check_out)) or ips.get((record.pk, check_in)) or ""
+                main.payload = _payload(main, row, company, zone, record, code, check_in,
+                                        check_out, ip)
+            # In the order they happened: the day's first notice (its check-in)
+            # before the breaks, a check-out after them.
+            first = main is not None and (sent == (None, None)
+                                          or main.kind == WebhookEvent.Kind.CHECK_IN)
+            events = [main] if first else []
+            for at, label in breaks:
+                event = WebhookEvent(company_id=company_id, employee_id=record.employee_id,
+                                     work_date=record.work_date, kind=label, payload={},
+                                     next_attempt_at=now)
+                event.payload = _break_payload(event, row, company, zone, record, code, at,
+                                               ips.get((record.pk, at), ""))
+                events.append(event)
+            if main is not None and not first:
+                events.append(main)
+            for event in events:
+                event.save()
+                debug_note(row, "queued", None,
+                           f"{who} ({code}): {event.get_kind_display().lower()} queued; it is "
+                           "sent next.", {"payload": event.payload})
             if state is None:
                 state = WebhookDayState(company_id=company_id, employee_id=record.employee_id,
                                         work_date=record.work_date)
-            state.check_in, state.check_out = check_in, check_out
+            if not same:
+                state.check_in, state.check_out = check_in, check_out
+            state.breaks_sent = sorted(set(state.breaks_sent or [])
+                                       | {at.isoformat() for at, _ in breaks})
             state.save()
-            queued += 1
+            queued += len(events)
     if queued:
         transaction.on_commit(lambda: send_soon(company_id))
     return queued
@@ -817,6 +869,24 @@ def _nothing_new(who, code, row, record, sent, zone):
     elif sent[1] and record.is_open and not record.last_out_at:
         reason = " They scanned back in after it; the next scan out is sent as the new check-out."
     return f"{who} ({code}): nothing new - {told}.{reason}"
+
+
+def _break_payload(event, row, company, zone, record, code, at, ip):
+    """A scan in between: no check_in or check_out field, so it can never
+    open or close the day in the receiver - only its own time."""
+    payload = {
+        "event": event.kind,
+        "event_id": str(event.event_id),
+        row.employee_key: code,
+        "employee_name": record.employee.full_name,
+        "work_date": record.work_date.isoformat(),
+        "punch_time": at.astimezone(zone).strftime(TIME_FORMAT),
+    }
+    if ip:
+        payload["device_ip"] = ip
+    payload["timezone"] = str(zone)
+    payload["company"] = company.code
+    return payload
 
 
 def _payload(event, row, company, zone, record, code, check_in, check_out, ip):
@@ -887,6 +957,7 @@ def start_debug(*, actor, company_id):
                   "switched on (the tests still work)."),
                {"url": row.url, "test_url": ping_url(row), "switched_on": row.is_active,
                 "mode": row.mode, "one_request_for_several": row.batch,
+                "scans_in_between": row.send_breaks,
                 "employee_key": row.employee_key,
                 "send_from": row.send_from.isoformat() if row.send_from else None})
     return row

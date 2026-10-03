@@ -5651,3 +5651,20 @@ Live test, shift 09:00-11:05, three people scanning, debug messages on.
 
 Tests: `attendance/tests_pairing.py` AfterTheShiftTests (3),
 `webhooks/tests.py` QuietAndAfterShiftTests (4).
+
+### ERP webhook: on/off switch for the scans in between — 2026-10-03
+
+- IGL wants only the check-in (first scan) and the check-out (the scan out
+  after the shift's end); the scans in between ignored. Others may want them.
+  New switch on the webhook page, **Also send the scans in between (breaks)**
+  (`WebhookSettings.send_breaks`, webhooks 0005), off by default.
+- Off: as before - check-in, then check-out (first scan out at or after the
+  shift's end, or the last one when the day closes).
+- On: each scan between check-in and check-out (labelled Break-out /
+  Break-in by the pairing) is sent once (`WebhookDayState.breaks_sent`), in
+  the order they happened, as its own `break_out` / `break_in` event with
+  `punch_time` and **no** check_in / check_out - the IGL ERP finalises a day
+  at its first check_out, so a break must never be sent as one.
+- The guide explains the new events (and whether this company sends them).
+
+Tests: `webhooks/tests.py` ScansInBetweenTests (3).

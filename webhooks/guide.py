@@ -51,6 +51,10 @@ TEST_MESSAGES = [
 
 def blocks(row, company):
     """The guide for this company: ``row`` is its WebhookSettings (or None)."""
+    return [block for block in _blocks(row, company) if block != ("p", "")]
+
+
+def _blocks(row, company):
     key = row.employee_key if row else "au_user_id"
     url = row.url if row else "https://your-erp.example.com/api/webhook/attendance"
     ping = (row.ping_url or url.rstrip("/") + "/ping") if row else url.rstrip("/") + "/ping"
@@ -60,6 +64,11 @@ def blocks(row, company):
     batch = row.batch if row else True
     arrived = _example(key, zone, code, "check_in", check_out=False)
     finished = _example(key, zone, code, "check_out")
+    breaks = bool(row and row.send_breaks)
+    went_out = {"event": "break_out", "event_id": "5c1d2e3f-7a8b-4c9d-8e0f-1a2b3c4d5e6f",
+                key: "445909", "employee_name": "Rahim Uddin", "work_date": "2026-10-01",
+                "punch_time": "2026-10-01 13:05:12", "device_ip": "27.147.177.102",
+                "timezone": zone, "company": code}
     return [
         ("note", f"In short: {company.name}'s attendance system sends every employee's "
                  "check-in and check-out to your own system (ERP, payroll or HR software) "
@@ -150,6 +159,14 @@ def blocks(row, company):
         ("code", json.dumps(arrived, indent=2)),
         ("p", "When their day is finished (event check_out - it carries check_in too):"),
         ("code", json.dumps(finished, indent=2)),
+        ("p", "The scans in between (out for a break, back in) are sent too - the company "
+              "switched on \"Also send the scans in between\". Each is an event of its own, "
+              "break_out or break_in, with punch_time and no check_in or check_out, so it never "
+              "opens or closes the day:" if breaks else
+              "Scans in between (out for a break, back in) are not sent: only the check-in and "
+              "the check-out. The company can switch them on (\"Also send the scans in "
+              "between\"); they then come as break_out / break_in events with a punch_time."),
+        ("code", json.dumps(went_out, indent=2)) if breaks else ("p", ""),
         ("p", "Several at once, as one request:" if batch else
               "Each event comes in a request of its own, exactly as above."),
         ("code", json.dumps({"events": [arrived, finished]}, indent=2)) if batch else
@@ -159,7 +176,9 @@ def blocks(row, company):
         ("h3", "3. The fields"),
         ("table", ["Field", "Meaning"], [
             ["event", "check_in - they came in. check_out - their day has a check-out. "
-                      "update - a day already sent was corrected; use its values."],
+                      "update - a day already sent was corrected; use its values. "
+                      "break_out / break_in - a scan in between (only when the company "
+                      "sends them)."],
             ["event_id", "Unique per event and the same on every retry - use it to ignore "
                          "a repeat."],
             [key, "The employee's Employee ID. Match your employee on this."],
@@ -167,7 +186,10 @@ def blocks(row, company):
             ["work_date", "The attendance day. A night shift's check-out after midnight "
                           "belongs to the day the shift started."],
             ["check_in", "The first scan of the day."],
-            ["check_out", "The last scan out. Not present on a check_in event."],
+            ["check_out", "The check-out: their first scan out after the shift's end (or "
+                          "the last scan out, once the day is over). Not present on a "
+                          "check_in event."],
+            ["punch_time", "Only on break_out / break_in: when that scan was."],
             ["device_ip", "The public address of the device that took the scan, when known."],
             ["timezone", "The time zone of check_in and check_out."],
             ["company", "The company's code in our system."],
