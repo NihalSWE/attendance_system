@@ -82,6 +82,9 @@
                 </span>
             </div>
         </div>
+        <p class="cal-totals__note">
+            <strong>Worked (paid): {{ detail.worked }}</strong> - time inside the shift hours{% if detail.paid_break %}, plus the {{ detail.paid_break }} min paid break{% endif %}. In office is the real time inside.
+        </p>
 
         {% if detail.scans %}
             <div>

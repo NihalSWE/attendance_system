@@ -211,6 +211,12 @@ class AttendanceRecord(TenantOwned):
     # shift grants one. This is what payroll reads, and it is no longer simply
     # last_out - first_in: time spent outside on a break is not worked.
     worked_minutes = models.PositiveIntegerField(default=0)
+    # The real time inside: the sessions added up, early arrival and time
+    # after the shift included, no paid break added - what "In office" shows
+    # (2026-10-03; it had shown worked_minutes, which counts for pay). Null on
+    # days worked out before it existed: they show worked_minutes until
+    # rebuilt.
+    in_office_minutes = models.PositiveIntegerField(null=True, blank=True)
     # Check-in to check-out, breaks included. The figure a person recognises as
     # "how long I was at work today".
     total_minutes = models.PositiveIntegerField(default=0)

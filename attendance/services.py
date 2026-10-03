@@ -122,6 +122,7 @@ def _measurements(day):
         "first_in_at": day.first_in_at,
         "last_out_at": day.last_out_at,
         "worked_minutes": day.worked_minutes,
+        "in_office_minutes": day.in_office_minutes,
         "total_minutes": day.total_minutes,
         "break_minutes": day.outside_minutes,
         "outside_minutes": day.outside_minutes,
@@ -146,6 +147,8 @@ def _outside_during_shift(day, scheduled_start, scheduled_end):
     for earlier, later in zip(day.sessions, day.sessions[1:]):
         if earlier.ended_at is None:
             continue
+        if day.has_check_out and day.last_out_at and earlier.ended_at >= day.last_out_at:
+            continue              # back in after the check-out: not a break
         start = max(earlier.ended_at, scheduled_start)
         end = min(later.started_at, scheduled_end)
         if end > start:

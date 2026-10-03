@@ -54,6 +54,14 @@ ALLOCATION_LABEL = {
 }
 
 
+def inside_minutes(record):
+    """The real time inside (2026-10-03), or - on a day worked out before it
+    was kept - the worked minutes it used to show."""
+    if record.in_office_minutes is not None:
+        return record.in_office_minutes
+    return record.worked_minutes or 0
+
+
 def zone(name):
     try:
         return zoneinfo.ZoneInfo(name or "UTC")
@@ -138,6 +146,11 @@ class Day:
 
     @property
     def in_office(self):
+        return hours_and_minutes(inside_minutes(self.record)) if self.record else ""
+
+    @property
+    def worked(self):
+        """What counts for pay: inside the shift hours, plus the paid break."""
         return hours_and_minutes(self.record.worked_minutes) if self.record else ""
 
     @property
@@ -230,12 +243,14 @@ def summarise(days):
         "holiday": 0, "weekly_off": 0, "incomplete": 0, "half_day": 0, "inactive": 0,
     }
     worked = 0
+    inside = 0
     S = AttendanceRecord.AttendanceStatus
     for day in days:
         record = day.record
         if record is None:
             continue
         worked += record.worked_minutes or 0
+        inside += inside_minutes(record)
         if record.attendance_status == S.PRESENT:
             counts["present"] += 1
         elif record.attendance_status == S.HALF_DAY:
@@ -254,7 +269,8 @@ def summarise(days):
             counts["inactive"] += 1
         if record.late_minutes:
             counts["late"] += 1
-    counts["in_office"] = hours_and_minutes(worked)
+    counts["in_office"] = hours_and_minutes(inside)
+    counts["worked"] = hours_and_minutes(worked)
     return counts
 
 
@@ -303,7 +319,10 @@ def build_day_detail(*, record, company_timezone):
         "check_in": day.check_in,
         "check_out": day.check_out,
         "total": hours_and_minutes(record.total_minutes),
-        "in_office": hours_and_minutes(record.worked_minutes),
+        "in_office": hours_and_minutes(inside_minutes(record)),
+        "worked": hours_and_minutes(record.worked_minutes),
+        "paid_break": getattr(shift, "default_break_minutes", 0)
+        if shift and getattr(shift, "break_is_paid", False) else 0,
         "outside": hours_and_minutes(record.outside_minutes),
         "break_count": record.break_count,
         "shift_name": shift.name if shift else "",

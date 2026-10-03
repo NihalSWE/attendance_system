@@ -411,3 +411,12 @@ button.cal__row:focus-visible {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
+
+/* Worked (paid), under the day's totals (2026-10-03). */
+.cal-totals__note {
+    margin: 8px 0 0;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+.cal-totals__note strong { color: var(--text); font-weight: 600; }
