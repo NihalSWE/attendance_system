@@ -164,12 +164,23 @@ class AttendanceSettingsForm(StyledFormMixin, forms.ModelForm):
 
     class Meta:
         model = CompanyAttendanceSettings
-        fields = ("shift_mode", "company_shift", "missing_punch_policy")
+        fields = ("shift_mode", "company_shift", "missing_punch_policy",
+                  "punch_pairing_strategy")
         labels = {
             "shift_mode": "How shifts are assigned",
             "missing_punch_policy": "When a punch is missing",
+            "punch_pairing_strategy": "Check-in and check-out",
         }
         help_texts = {
+            "punch_pairing_strategy": (
+                "Alternate: every scan counts - out and back in is a break, and the "
+                "first scan out after the shift's end is the check-out. First and last: "
+                "the first scan is the check-in and the last one the check-out; scans in "
+                "between are not counted. The check-out is decided when the shift ends "
+                "(the latest scan by then, even if they left early; a later scan takes "
+                "over), and worked time is check-in to check-out less the shift's break "
+                "unless the break is paid. Changing it applies to days worked out from now."
+            ),
             "missing_punch_policy": (
                 "A day with an IN but no OUT. Review required marks it for "
                 "checking; Treat as absent counts it as an absent day."

@@ -134,7 +134,14 @@ class CompanyAttendanceSettings(TenantOwned, ActorTracked):
         related_name="companies_using_as_single_shift",
     )
 
-    punch_pairing_strategy = models.CharField(max_length=32, default="alternating")
+    class PairingStrategy(models.TextChoices):
+        ALTERNATING = "alternating", "Scans alternate in and out - breaks are measured"
+        FIRST_LAST = "first_last", "First scan is the check-in, last scan the check-out"
+
+    # How a day's scans are read (2026-10-03: "first and last" added, for
+    # companies that only want the check-in and the check-out).
+    punch_pairing_strategy = models.CharField(
+        max_length=32, choices=PairingStrategy.choices, default=PairingStrategy.ALTERNATING)
     device_attendance_scope = models.CharField(
         max_length=32,
         choices=DeviceAttendanceScope.choices,

@@ -534,6 +534,24 @@ class QuietAndAfterShiftTests(WebhookCase):
         last = self.events()[-1]
         self.assertEqual((last.kind, last.payload["check_out"]), ("update", "2026-08-10 19:00:00"))
 
+    def test_first_and_last_scan_sends_an_early_leave_when_the_shift_ends(self):
+        from scheduling import services as schedule
+
+        schedule.update_attendance_settings(
+            actor=self.admin, company_id=self.company.pk,
+            values={"company_shift": self.shift, "missing_punch_policy": "review_required",
+                    "punch_pairing_strategy": "first_last"})
+        self.switch_on()
+        self.punch(MONDAY, 9, 0)
+        self.punch(MONDAY, 15, 0)
+        recalculate(self.company.pk, start=MONDAY, end=MONDAY,
+                    now=datetime.datetime(2026, 8, 10, 17, tzinfo=DHAKA))
+        self.assertEqual([e.kind for e in self.events()], ["check_in"])
+        recalculate(self.company.pk, start=MONDAY, end=MONDAY,
+                    now=datetime.datetime(2026, 8, 10, 18, 1, tzinfo=DHAKA))
+        last = self.events()[-1]
+        self.assertEqual((last.kind, last.payload["check_out"]), ("check_out", "2026-08-10 15:00:00"))
+
     def test_out_before_the_end_is_a_break_and_sends_no_check_out(self):
         self.switch_on()
         self.work((9, 0), (13, 0), now=datetime.datetime(2026, 8, 10, 14, tzinfo=DHAKA))

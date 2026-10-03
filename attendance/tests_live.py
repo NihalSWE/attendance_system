@@ -193,6 +193,36 @@ class OpenAndClosedTests(LiveTestCase):
         self.assertEqual(self.record(day).attendance_status, "absent")
 
 
+class FirstAndLastScanLiveTests(LiveTestCase):
+    """The setting on a real day: an early leaver's last scan is their
+    check-out once the shift has ended, and goes to the ERP then."""
+
+    def setUp(self):
+        super().setUp()
+        schedule.update_attendance_settings(
+            actor=self.admin, company_id=self.company.pk,
+            values={"company_shift": self.shift, "missing_punch_policy": "review_required",
+                    "punch_pairing_strategy": "first_last"},
+        )
+
+    def test_early_leave_is_the_check_out_once_the_shift_has_ended(self):
+        day = datetime.date(2026, 8, 10)
+        self.punch(day, 9)
+        self.punch(day, 13)
+        self.punch(day, 15)
+        recalculate(self.company.pk, start=day, end=day,
+                    now=datetime.datetime(2026, 8, 10, 17, tzinfo=DHAKA))
+        stored = self.record(day)
+        self.assertEqual((stored.attendance_status, stored.last_out_at), ("incomplete", None))
+        recalculate(self.company.pk, start=day, end=day,
+                    now=datetime.datetime(2026, 8, 10, 18, 1, tzinfo=DHAKA))
+        stored = self.record(day)
+        self.assertTrue(stored.is_open)
+        self.assertEqual(stored.last_out_at, datetime.datetime(2026, 8, 10, 15, tzinfo=DHAKA))
+        self.assertEqual(stored.attendance_status, "half_day")   # 6h, under the 400 min full day
+        self.assertEqual((stored.break_count, stored.early_out_minutes), (0, 180))
+
+
 class ArrivalTriggersTests(LiveTestCase):
     """A punch rebuilds its own days, without anybody asking."""
 

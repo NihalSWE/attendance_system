@@ -5760,3 +5760,31 @@ Nihal's list:
 
 Tests: `devices/tests_ui.py` (3), `devices/tests_connection.py`,
 `devices/tests_server_address.py`, `tenants/tests_platform_create.py`.
+
+### Setting: first scan is the check-in, last scan the check-out — 2026-10-03
+
+- Nihal's senior: take only the check-in and the check-out; the last scan
+  is the check-out. With scans read as alternating in/out, one forgotten scan
+  turns the day around (out 13:00, forgot to scan back in, left 18:05: 18:05
+  read as an *in*, check-out 13:00), and an early leaver had no check-out
+  until the day closed next morning.
+- New choice on Shifts → Attendance settings, **Check-in and check-out**
+  (`CompanyAttendanceSettings.punch_pairing_strategy`, the unused field now
+  with choices, scheduling 0005): *Scans alternate in and out* (default, as
+  before) or *First scan is the check-in, last scan the check-out*.
+- First and last (`pairing._first_and_last`): scans in between are kept on
+  the day as "Between (not counted)" - no breaks, no time out of office. The
+  check-out is decided when the shift's scheduled end passes: the latest scan
+  by then, even if they left early; a later scan takes over (the webhook sends
+  it as an update). Worked = check-in to check-out within the shift, less the
+  shift's break unless it is paid (way (b)). The two scans go through the
+  usual rules, so late, early out, overtime and "no check-out" at the close
+  are unchanged. The day is judged at once ("Checked out; this can still
+  change until the day closes") and its check-out goes to the ERP within a
+  minute of the shift's end (the device check-in refresh).
+- `_classify_working_day`: an open day with a check-out is judged at once -
+  one condition for both rules.
+
+Tests: `attendance/tests_pairing.py` FirstAndLastScanTests (6),
+`attendance/tests_live.py` FirstAndLastScanLiveTests, `webhooks/tests.py`,
+`scheduling/tests_screens.py` (the setting, posted).

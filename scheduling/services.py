@@ -56,7 +56,8 @@ SHIFT_FIELDS = (
     "overtime_after_minutes",
 )
 EMPLOYEE_SHIFT_FIELDS = ("employee", "shift", "first_day", "last_day", "reason")
-SETTINGS_FIELDS = ("shift_mode", "company_shift", "missing_punch_policy")
+SETTINGS_FIELDS = ("shift_mode", "company_shift", "missing_punch_policy",
+                   "punch_pairing_strategy")
 DEPARTMENT_SHIFT_FIELDS = ("department", "shift", "effective_from")
 WEEKLY_OFF_FIELDS = ("branch", "weekdays", "is_paid", "effective_from")
 # What a single stored rule records, for its audit snapshot.
