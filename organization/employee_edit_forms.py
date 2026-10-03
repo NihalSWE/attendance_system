@@ -57,7 +57,8 @@ class PlacementForm(StyledFormMixin, forms.Form):
         label="From",
         help_text=(
             "A later date keeps the old placement as history. The date the current "
-            "placement started corrects it instead."
+            "placement started corrects it instead; so does an earlier date, when it is "
+            "their first placement."
         ),
         widget=_date("Select date"),
     )
@@ -114,7 +115,8 @@ class SalaryForm(StyledFormMixin, forms.Form):
         label="From",
         help_text=(
             "A later date keeps the old salary as history. The date the current "
-            "salary started corrects it instead."
+            "salary started corrects it instead; so does an earlier date, when it is "
+            "their first salary (not before they were placed)."
         ),
         widget=_date("Select date"),
     )

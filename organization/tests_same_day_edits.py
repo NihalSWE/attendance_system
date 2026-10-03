@@ -90,16 +90,30 @@ class PlacementTests(SameDayCase):
         self.assertEqual(rows[0].department, self.department)
         self.assertEqual(rows[0].effective_from, self.placement.effective_from)
 
-    def test_a_day_before_the_placement_is_still_refused(self):
-        with self.assertRaises(ValidationError):
-            change_placement(actor=self.admin, company_id=self.company.pk,
-                             employee_id=self.imported.pk, values={
-                                 "branch": self.hq, "department": self.department,
-                                 "designation": self.designation, "employee_code": "777",
-                                 "effective_at": self.midnight - datetime.timedelta(days=1),
-                                 "reason": "",
-                             })
-        self.assertEqual(self.placements()[0].department.code, mapping.UNASSIGNED_CODE)
+    def place(self, starts, department=None):
+        return change_placement(actor=self.admin, company_id=self.company.pk,
+                                employee_id=self.imported.pk, values={
+                                    "branch": self.hq, "department": department or self.department,
+                                    "designation": self.designation, "employee_code": "777",
+                                    "effective_at": starts, "reason": "",
+                                })
+
+    def test_their_first_placement_can_start_earlier(self):
+        # Added today, working there since 1 Jun 2023 (Nihal, 2026-10-03).
+        since = _start_of(datetime.date(2023, 6, 1), self.company)
+        self.place(since)
+        (row,) = self.placements()                        # moved back, no history line
+        self.assertEqual((row.effective_from, row.department), (since, self.department))
+
+    def test_with_history_before_it_an_earlier_day_is_still_refused(self):
+        tomorrow = _start_of(self.today + datetime.timedelta(days=1), self.company)
+        self.place(tomorrow)                              # a transfer: two rows now
+        with self.assertRaises(ValidationError) as caught:
+            self.place(self.midnight - datetime.timedelta(days=1))
+        # The company's own date, not UTC (midnight in Dhaka is the day before in UTC).
+        self.assertIn(f"started on {self.today + datetime.timedelta(days=1):%d %b %Y}",
+                      str(caught.exception))
+        self.assertEqual(len(self.placements()), 2)
 
     def test_from_the_edit_page(self):
         self.client.force_login(self.admin)
@@ -132,6 +146,16 @@ class SalaryTests(SameDayCase):
         with self.assertRaises(ValidationError):
             self.salary(self.midnight - datetime.timedelta(days=1))
         self.assertEqual(self.salaries(), [])
+
+    def test_their_first_salary_can_start_earlier_but_not_before_the_placement(self):
+        later = _start_of(self.today + datetime.timedelta(days=5), self.company)
+        self.salary(later)
+        self.salary(self.midnight)                        # back to the placement day
+        (pay,) = self.salaries()
+        self.assertEqual(pay.effective_from, self.placement.effective_from)
+        with self.assertRaises(ValidationError) as caught:
+            self.salary(self.midnight - datetime.timedelta(days=1))
+        self.assertIn(f"placed on {self.today:%d %b %Y}", str(caught.exception))
 
     def test_changing_that_salary_the_same_day_corrects_it(self):
         self.salary(self.midnight)
