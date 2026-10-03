@@ -155,6 +155,30 @@ class OpenAndClosedTests(LiveTestCase):
                           .values_list("label", flat=True))
         self.assertEqual(labels, ["check_in", "check_out"])
 
+    def test_checked_out_after_the_shift_is_judged_before_the_day_closes(self):
+        # Nihal, 2026-10-03: checked out after the shift's end, still "In
+        # progress" half an hour later. Judged now; still open, so a later
+        # scan is taken into account.
+        day = datetime.date(2026, 8, 10)
+        self.punch(day, 9)
+        self.punch(day, 18, 5)
+        now = datetime.datetime(2026, 8, 10, 18, 30, tzinfo=DHAKA)
+        recalculate(self.company.pk, start=day, end=day, now=now)
+        stored = self.record(day)
+        self.assertTrue(stored.is_open)
+        self.assertEqual((stored.attendance_status, stored.payable_fraction),
+                         ("present", Decimal("1")))
+        self.assertIn("Checked out", stored.note)
+
+    def test_out_before_the_shift_ends_is_still_in_progress(self):
+        day = datetime.date(2026, 8, 10)
+        self.punch(day, 9)
+        self.punch(day, 17)
+        now = datetime.datetime(2026, 8, 10, 18, 30, tzinfo=DHAKA)
+        recalculate(self.company.pk, start=day, end=day, now=now)
+        stored = self.record(day)
+        self.assertEqual((stored.attendance_status, stored.note), ("incomplete", "In progress."))
+
     def test_a_working_day_with_no_scans_is_not_absent_until_it_ends(self):
         """"Not in yet" is not a record: nothing is claimed about the day."""
         day = datetime.date(2026, 8, 10)

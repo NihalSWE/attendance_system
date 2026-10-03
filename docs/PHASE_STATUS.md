@@ -5718,3 +5718,18 @@ test_back_in_after_the_check_out_keeps_it_and_leaving_again_updates_it.
 
 Tests: `attendance/tests_pairing.py` AfterTheCheckOutTests (+1 changed case),
 `webhooks/tests.py` (day panel totals).
+
+### A day checked out after the shift is judged at once — 2026-10-03
+
+- Shift 09:00-12:50, everybody checked out at 12:51-12:53; at 13:21 every
+  page still said Incomplete / "In progress." A day closes at the next
+  shift's start (or 24 hours), and until then nothing was decided.
+- Now (`_classify_working_day`), a day that is still open but has a check-out
+  at or after the shift's end gets its real status (Present / Half day /
+  Absent by the shift's minutes, late minutes as usual), with the note
+  "Checked out; this can still change until the day closes." It stays open
+  (`is_open`), so a later scan is taken into account, overtime and payroll
+  still wait for it to close, and the review checks run at close as before.
+  Without such a check-out it is still "In progress."
+
+Tests: `attendance/tests_live.py` (2).
