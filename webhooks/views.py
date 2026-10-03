@@ -3,8 +3,9 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods
@@ -71,6 +72,16 @@ def webhook_settings(request):
             has_signing_secret=bool(saved and saved.signing_secret_encrypted),
         )
         form.fields["secret"].widget.render_value = True
+    if action in ("debug_on", "debug_off"):
+        # Debug messages for 15 minutes (2026-10-03), shown on this page.
+        try:
+            if action == "debug_on":
+                services.start_debug(actor=request.user, company_id=company_id)
+            else:
+                services.stop_debug(actor=request.user, company_id=company_id)
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+        return redirect(reverse("webhooks:settings") + "#webhook-debug")
     if action == "send_again":
         again = services.send_again(actor=request.user, company_id=company_id)
         messages.success(request, f"{again} event(s) will be sent again now." if again
@@ -115,7 +126,20 @@ def webhook_settings(request):
             "counts": services.counts(company_id),
             "ping_url": services.ping_url(saved) if saved else "",
             "Status": WebhookEvent.Status,
+            "debug": services.debug_state(company_id),
+            "debug_minutes": services.DEBUG_MINUTES,
         })
+
+
+@login_required
+@require_http_methods(["GET"])
+def webhook_debug(request):
+    """The debug messages as JSON, for the page to show as they come."""
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return JsonResponse({"active": False, "seconds_left": 0, "entries": []})
+    require_structure_manager(request.user, company_id)
+    return JsonResponse(services.debug_state(company_id), json_dumps_params={"ensure_ascii": False})
 
 
 @login_required

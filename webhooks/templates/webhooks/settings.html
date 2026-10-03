@@ -206,6 +206,63 @@
         {% endif %}
 
         {% if saved %}
+            {# Debug messages for 15 minutes (2026-10-03): everything, as words and as JSON. #}
+            <div class="card webhook-debug" id="webhook-debug"
+                 data-debug-url="{% url 'webhooks:debug' %}"
+                 data-debug-active="{% if debug.active %}1{% else %}0{% endif %}">
+                <div class="card__head">
+                    <h2>
+                        Debug messages
+                    </h2>
+                    {% if debug.active %}
+                        <span class="badge badge--warning" data-debug-left
+                              data-seconds="{{ debug.seconds_left }}">On</span>
+                    {% endif %}
+                    <form method="post">
+                        {% csrf_token %}
+                        {% if debug.active %}
+                            <input type="hidden" name="action" value="debug_off">
+                            <button class="btn btn--ghost btn--sm" type="submit">Stop and clear</button>
+                        {% else %}
+                            <input type="hidden" name="action" value="debug_on">
+                            <button class="btn btn--primary btn--sm" type="submit">
+                                Show debug messages ({{ debug_minutes }} min)
+                            </button>
+                        {% endif %}
+                    </form>
+                </div>
+                <div class="card__body stack">
+                    {% if debug.active %}
+                        <p class="t-muted">
+                            Everything the webhook does now is shown here as it happens - each
+                            check-in or check-out queued (or why not), each send with the exact
+                            request and your system's whole answer, each test - success or not.
+                            The secret key is never shown. They disappear when the time is up.
+                        </p>
+                        <div class="row webhook-debug__views" role="group" aria-label="Show as">
+                            <button class="btn btn--sm btn--primary" type="button" data-debug-view="messages" aria-pressed="true">Messages</button>
+                            <button class="btn btn--sm btn--ghost" type="button" data-debug-view="json" aria-pressed="false">JSON</button>
+                            <button class="btn btn--sm btn--ghost" type="button" data-debug-copy hidden>Copy JSON</button>
+                        </div>
+                        <div class="webhook-debug__list" data-debug-list aria-live="polite"></div>
+                        <pre class="webhook-debug__json" data-debug-json hidden></pre>
+                        <p class="t-faint" data-debug-empty>
+                            Nothing yet. Press Test connection or Send a test, or wait for a scan.
+                        </p>
+                        {{ debug|json_script:"webhook-debug-data" }}
+                    {% else %}
+                        <p class="t-muted">
+                            See exactly what goes to your system and what it answers. Press the
+                            button: for {{ debug_minutes }} minutes every event queued, every
+                            send and every test is shown here - as a message and as JSON - and
+                            then cleared.
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% if saved %}
             <form method="post" novalidate class="card" id="send-test">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="send_test_event">

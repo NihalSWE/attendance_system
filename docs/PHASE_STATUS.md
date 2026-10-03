@@ -5599,3 +5599,24 @@ Tests: `organization/tests_same_day_edits.py` (14).
   current one started, not today's: after saving 1 Jun 2023 the box still
   said 3 Oct 2026, which looked as if the save had not worked. Saved as it
   is, that date only corrects; a later date adds history as before.
+
+### ERP webhook: debug messages for 15 minutes — 2026-10-03
+
+- Nihal wanted to see everything the webhook does, as messages and as JSON,
+  on the same page, temporarily. **Show debug messages (15 min)** on
+  Organisation → ERP webhook turns them on (`WebhookSettings.debug_until`,
+  webhooks 0003); **Stop and clear** ends them early.
+- Kept meanwhile (`WebhookDebugEntry`), success or not: each check-in or
+  check-out queued, and why one was not (webhook switched off, before Send
+  from, no Employee ID, nothing new, a check-out already sent); each send
+  with the exact request (headers with the secret key hidden), the
+  receiver's whole answer (status, meaning, body), time taken and each
+  event's outcome; each Test connection and Send a test, with the error and
+  its code when there was no answer.
+- The page shows them live (every 3 s, `webhooks:debug` JSON) with a
+  countdown, as **Messages** (each with its JSON) or all as **JSON** with
+  Copy. When the 15 minutes end they are deleted and the card switches off.
+- Never in the way of sending: a debug message that cannot be kept is logged
+  and skipped. Owner and company admin only, like the rest of the page.
+
+Tests: `webhooks/tests.py` DebugMessagesTests (4).

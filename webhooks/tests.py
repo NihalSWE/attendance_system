@@ -20,7 +20,8 @@ from attendance.tests_live import DHAKA, LiveTestCase
 from auditlog.models import AuditLog
 from common.tenant import use_company
 from webhooks import services
-from webhooks.models import WebhookDayState, WebhookEvent, WebhookSettings
+from webhooks.models import (WebhookDayState, WebhookDebugEntry, WebhookEvent,
+                             WebhookSettings)
 
 MONDAY = datetime.date(2026, 8, 10)
 AFTER = datetime.datetime(2026, 8, 12, 12, tzinfo=DHAKA)       # Monday long finished
@@ -422,6 +423,72 @@ class SendATestTests(WebhookCase):
         sent = receiver.last["events"][0]
         self.assertEqual(sent["event"], "check_in")
         self.assertNotIn("check_out", sent)
+
+
+class DebugMessagesTests(WebhookCase):
+    """Debug messages for 15 minutes (Nihal, 2026-10-03): everything the
+    webhook does, success or not, shown on the page as words and as JSON."""
+
+    url = reverse("webhooks:settings")
+
+    def state(self):
+        response = self.client.get(reverse("webhooks:debug"))
+        return response, response.json()
+
+    def test_everything_is_shown_with_the_request_and_answer_but_never_the_key(self):
+        self.switch_on()
+        page = self.client.post(self.url, {"action": "debug_on"}, follow=True)
+        self.assertContains(page, "Stop and clear")
+        self.work((9, 0), (18, 0))                                       # queued
+        answer = json.dumps({"success": True, "results": [
+            {"au_user_id": "E1", "result": "created", "message": None}]})
+        with mock.patch.object(services, "_call", Receiver(text=answer)):
+            services.deliver_due(self.company.pk)                        # sent, received
+        failing = mock.Mock(side_effect=services.WebhookError("No answer.", code="timeout"))
+        with mock.patch.object(services, "_call", failing):
+            services.test_connection(actor=self.admin, company_id=self.company.pk)  # failed
+        response, state = self.state()
+        self.assertTrue(state["active"])
+        self.assertGreater(state["seconds_left"], 14 * 60)
+        whats = [(e["what"], e["ok"]) for e in state["entries"]]
+        self.assertEqual(whats[:3], [("Test connection", False), ("Sent to your system", True),
+                                     ("Queued", None)])
+        sent = state["entries"][1]["detail"]
+        self.assertEqual(sent["request"]["body"]["events"][0]["au_user_id"], "E1")
+        self.assertEqual(sent["response"]["status"], 200)
+        self.assertEqual(sent["response"]["body"]["results"][0]["result"], "created")
+        self.assertEqual(sent["events"][0]["result"], "created")
+        self.assertEqual(sent["request"]["headers"]["X-Webhook-Secret"], services.HIDDEN)
+        self.assertEqual(state["entries"][0]["detail"]["error"]["code"], "timeout")
+        self.assertNotIn("s3cret", response.content.decode())
+
+    def test_after_15_minutes_they_are_gone(self):
+        self.switch_on()
+        services.start_debug(actor=self.admin, company_id=self.company.pk)
+        self.assertTrue(WebhookDebugEntry.all_objects.filter(company=self.company).exists())
+        WebhookSettings.all_objects.filter(company=self.company).update(
+            debug_until=datetime.datetime(2026, 1, 1, tzinfo=DHAKA))
+        _, state = self.state()
+        self.assertEqual((state["active"], state["entries"]), (False, []))
+        self.assertFalse(WebhookDebugEntry.all_objects.filter(company=self.company).exists())
+        page = self.client.get(self.url)
+        self.assertContains(page, "Show debug messages (15 min)")
+
+    def test_stop_clears_them_and_nothing_is_kept_while_off(self):
+        self.switch_on()
+        self.client.post(self.url, {"action": "debug_on"})
+        self.client.post(self.url, {"action": "debug_off"})
+        self.assertFalse(WebhookDebugEntry.all_objects.filter(company=self.company).exists())
+        self.work((9, 0), (18, 0))
+        self.assertEqual(len(self.events()), 1)                          # still queued
+        self.assertFalse(WebhookDebugEntry.all_objects.filter(company=self.company).exists())
+
+    def test_switched_off_says_why_nothing_is_queued(self):
+        self.switch_on(is_active=False)
+        services.start_debug(actor=self.admin, company_id=self.company.pk)
+        self.work((9, 0), (18, 0))
+        _, state = self.state()
+        self.assertIn("switched off, so nothing was queued", state["entries"][0]["message"])
 
 
 class GuideTests(WebhookCase):
