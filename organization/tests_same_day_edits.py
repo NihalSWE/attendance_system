@@ -104,6 +104,11 @@ class PlacementTests(SameDayCase):
         self.place(since)
         (row,) = self.placements()                        # moved back, no history line
         self.assertEqual((row.effective_from, row.department), (since, self.department))
+        # The page then shows that date in the box, not today's.
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("organization:employee_edit", args=[self.imported.pk]))
+        self.assertEqual(page.context["placement"].initial["placement_from"],
+                         datetime.date(2023, 6, 1))
 
     def active(self):
         return sorted((r for r in self.placements() if r.status != "cancelled"),
