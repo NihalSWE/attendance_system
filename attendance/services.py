@@ -193,7 +193,17 @@ def _classify_working_day(shift, settings, day, *, scheduled_start=None,
             minutes,
         )
 
-    if not day.is_closed:
+    checked_out = (
+        # Out after the shift's end: their day is over though it has not
+        # closed yet (that waits for the next shift, or 24 hours). It is
+        # judged now, and judged again if they scan once more (Nihal,
+        # 2026-10-03: checked out 12:51 on a shift ending 12:50, still
+        # "In progress" at 13:21).
+        not day.is_closed and day.has_check_out and not day.check_out_by_rule
+        and scheduled_end is not None and day.last_out_at is not None
+        and day.last_out_at >= scheduled_end
+    )
+    if not day.is_closed and not checked_out:
         # Still running. Nothing is decided, and nothing is paid on a guess.
         minutes["note"] = "In progress."
         return (
@@ -242,6 +252,8 @@ def _classify_working_day(shift, settings, day, *, scheduled_start=None,
             f"{day.break_count} break{'s' if day.break_count > 1 else ''}, "
             f"{day.outside_minutes} min outside."
         )
+    if checked_out:
+        notes.append("Checked out; this can still change until the day closes.")
     minutes["note"] = " ".join(notes)[:255]
     if flag_unusual:
         reason = unusual_reason(shift, day, scheduled_start, scheduled_end)
