@@ -180,6 +180,7 @@ class DeviceScreenTests(TestCase):
         # no push protocol and no "I understand the risk" tick.
         form = self.client.get(reverse("devices:device_register")).context["form"]
         self.assertEqual(list(form.fields)[:4], ["branch", "name", "device_model", "serial_number"])
+        self.assertEqual(form.fields["name"].label, "Device name")
         self.assertEqual(form.fields["device_model"].widget.attrs.get("data-search"), "always")
         self.assertNotIn("push_protocol", form.fields)
         edit = self.client.get(reverse("devices:device_edit", args=[self.device.public_id]))
