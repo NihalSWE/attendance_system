@@ -61,6 +61,20 @@ def serial_used_elsewhere(serial_number, company_id, *, exact=False):
     )
 
 
+def serial_owner_elsewhere(serial_number, company_id):
+    """The name of another company where this serial is active, or None
+    (Nihal, 2026-10-03: say who has it, so the right company can retire it)."""
+    serial_number = (serial_number or "").strip()
+    if not serial_number:
+        return None
+    found = (
+        BiometricDevice.all_objects.select_related("company")
+        .filter(status__in=INGESTING_STATUSES, serial_number__iexact=serial_number)
+        .exclude(company_id=company_id).first()
+    )
+    return found.company.name if found else None
+
+
 # Request headers worth keeping for diagnosis. Anything carrying a credential
 # is never snapshotted, so stored evidence cannot leak a device secret.
 SAFE_HEADERS = ("Content-Type", "Content-Length", "User-Agent", "Host", "Accept")

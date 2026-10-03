@@ -5733,3 +5733,30 @@ Tests: `attendance/tests_pairing.py` AfterTheCheckOutTests (+1 changed case),
   Without such a check-out it is still "In progress."
 
 Tests: `attendance/tests_live.py` (2).
+
+### Register device, Test connection, unique company contacts — 2026-10-03
+
+Nihal's list:
+1. **Field order:** Branch, Name, Device model, Serial number first
+   (`BiometricDeviceForm.field_order`).
+2. **Serial already used:** checked as it is typed (`devices:serial_check`,
+   `device_form.js`, device managers only) and on saving: "already used by
+   <device> in this company", or "already used by <company>" for an active
+   device of another company - naming the company, as asked, so the right
+   one can retire it.
+3. **Device model:** select2 with a search box however short the list
+   (`data-search="always"`, read by forms.js).
+4. **Test connection:** always sends the harmless command (re-send settings)
+   and waits for its answer; the tick is gone. A device whose protocol has no
+   such command is tested by its check-in, as before.
+5. **Push protocol** removed from the form; a value set earlier is kept.
+6. **"I understand the risk of changing the server address"** removed; the
+   warning is in the address field's help, and the address is still probed
+   before the device is told anything.
+7. **One company per email and per phone number** (`Company.clean`): Create
+   company, Edit company and the company's own profile refuse one another
+   company already uses. A new company's email is also its administrator's
+   login, so "already belongs to an account" usually answers first.
+
+Tests: `devices/tests_ui.py` (3), `devices/tests_connection.py`,
+`devices/tests_server_address.py`, `tenants/tests_platform_create.py`.

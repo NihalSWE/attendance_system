@@ -171,9 +171,45 @@ class DeviceScreenTests(TestCase):
         # 2026-10-01: a device added in a second company stopped working in both.
         for serial in ("SN-B", "sn-b"):
             response = self.register(serial)
-            self.assertContains(response, "already registered to another company")
+            self.assertContains(response, "already used by Company B")
             self.assertNotContains(response, "B Front Door")   # never names theirs
         self.assertEqual(BiometricDevice.all_objects.filter(serial_number__iexact="SN-B").count(), 1)
+
+    def test_the_form_order_search_and_what_it_no_longer_asks(self):
+        # Nihal, 2026-10-03: branch, name, model, serial; a searchable model;
+        # no push protocol and no "I understand the risk" tick.
+        form = self.client.get(reverse("devices:device_register")).context["form"]
+        self.assertEqual(list(form.fields)[:4], ["branch", "name", "device_model", "serial_number"])
+        self.assertEqual(form.fields["device_model"].widget.attrs.get("data-search"), "always")
+        self.assertNotIn("push_protocol", form.fields)
+        edit = self.client.get(reverse("devices:device_edit", args=[self.device.public_id]))
+        self.assertNotIn("push_protocol", edit.context["form"].fields)
+        self.assertNotIn("server_address_confirmed", edit.context["form"].fields)
+
+    def test_a_push_protocol_set_before_survives_a_save(self):
+        BiometricDevice.all_objects.filter(pk=self.device.pk).update(
+            settings={"push_protocol": "2"})
+        self.client.post(reverse("devices:device_edit", args=[self.device.public_id]), {
+            "name": "Front Door", "serial_number": "SN-A", "branch": self.branch.pk,
+            "device_model": self.device_model.pk, "timezone": "Asia/Dhaka",
+            "status": BiometricDevice.Status.ACTIVE, "push_interval_seconds": 10,
+            "error_delay_seconds": 30})
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.settings["push_protocol"], "2")
+
+    def test_the_serial_is_checked_as_it_is_typed(self):
+        url = reverse("devices:serial_check")
+        self.assertEqual(self.client.get(url, {"serial": "SN-NEW"}).json(),
+                         {"ok": True, "message": "This serial number is free."})
+        mine = self.client.get(url, {"serial": "sn-a"}).json()
+        self.assertEqual((mine["ok"], mine["message"]),
+                         (False, "This serial number is already used by Front Door in this company."))
+        # Editing that device itself: its own serial is fine.
+        self.assertTrue(self.client.get(url, {"serial": "SN-A",
+                                              "device": str(self.device.public_id)}).json()["ok"])
+        other = self.client.get(url, {"serial": "SN-B"}).json()
+        self.assertFalse(other["ok"])
+        self.assertIn("already used by Company B", other["message"])
 
     def test_a_serial_retired_in_another_company_can_be_registered(self):
         # A device sold or handed over: once the old company retires it, it moves.
@@ -195,7 +231,7 @@ class DeviceScreenTests(TestCase):
             "status": BiometricDevice.Status.ACTIVE, "push_interval_seconds": 10,
             "error_delay_seconds": 30,
         })
-        self.assertContains(response, "already registered to another company")
+        self.assertContains(response, "already used by Company B")
         mine.refresh_from_db()
         self.assertEqual(mine.status, BiometricDevice.Status.RETIRED)
 

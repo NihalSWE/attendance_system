@@ -1891,3 +1891,8 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
 @media (prefers-reduced-motion: reduce) {
     .switch__track, .switch__thumb { transition: none; }
 }
+
+/* Register / Edit device: the serial number checked as it is typed. */
+.serial-check:empty { display: none; }
+.serial-check--taken { color: var(--danger); font-weight: 600; }
+.serial-check--free { color: var(--success); }

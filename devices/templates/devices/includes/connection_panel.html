@@ -74,12 +74,9 @@
     {% if device.status != "retired" %}
         <form class="card__foot conn-foot" method="post" action="{% url 'devices:device_connection_test' device.public_id %}">
             {% csrf_token %}
-            <label class="check" for="conn-with-command">
-                <input class="check__input" type="checkbox" id="conn-with-command" name="with_command" value="1">
-                <span>
-                    Also send a harmless command and wait for its answer
-                </span>
-            </label>
+            <span class="t-faint conn-foot__note">
+                Waits for the device's next check-in and sends it a harmless command (re-send its settings), to see it answer.
+            </span>
             <button class="btn btn--primary" type="submit">
                 {% if connection_test %}Test again{% else %}Test connection{% endif %}
             </button>

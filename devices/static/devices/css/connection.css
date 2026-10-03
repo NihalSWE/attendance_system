@@ -91,3 +91,8 @@ Device connection: the live badge, the test panel, the stopped-device alert
         width: 100%;
     }
 }
+
+.conn-foot__note {
+    flex: 1 1 260px;
+    font-size: 13px;
+}
