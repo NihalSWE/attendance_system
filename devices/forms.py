@@ -139,6 +139,7 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
             "name", "serial_number", "branch", "device_model",
             "external_device_id", "timezone", "installed_at", "status",
         )
+        labels = {"name": "Device name"}
         help_texts = {
             "serial_number": (
                 "Exactly as printed on the device. It is how an inbound push is "
