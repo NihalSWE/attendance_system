@@ -40,6 +40,10 @@ class WebhookSettings(TenantOwned, ActorTracked):
     mode = models.CharField(max_length=16, choices=Mode.choices, default=Mode.ARRIVE_AND_LEAVE)
     # Several events in one request, {"events": [...]}; off: one per request.
     batch = models.BooleanField(default=True)
+    # Off: only the check-in (first scan) and the check-out (first scan out
+    # after the shift ends, or when the day closes). On: every scan in between
+    # goes too, as break_out / break_in events of their own (Nihal, 2026-10-03).
+    send_breaks = models.BooleanField(default=False)
     # Days before this are never sent: switching on does not replay history.
     send_from = models.DateField(null=True, blank=True)
     last_tested_at = models.DateTimeField(null=True, blank=True)
@@ -76,6 +80,8 @@ class WebhookEvent(TenantOwned):
         # Sent by hand from the page, with times typed in (2026-10-01): to try
         # the connection with real data before a device is connected.
         TEST = "test", "Test (sent by hand)"
+        BREAK_OUT = "break_out", "Out for a break"
+        BREAK_IN = "break_in", "Back from a break"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Waiting to be sent"
@@ -119,6 +125,9 @@ class WebhookDayState(TenantOwned):
     work_date = models.DateField()
     check_in = models.DateTimeField(null=True, blank=True)
     check_out = models.DateTimeField(null=True, blank=True)
+    # The scans in between already queued (ISO instants), when the company
+    # sends them (WebhookSettings.send_breaks): each goes once.
+    breaks_sent = models.JSONField(default=list, blank=True)
 
     class Meta:
         db_table = "webhooks_day_state"

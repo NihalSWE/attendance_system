@@ -65,7 +65,7 @@ def webhook_settings(request):
         typed = {name: request.POST.get(name, "") for name in ("url", "ping_url",
                  "employee_key", "mode", "send_from")}
         typed.update({name: request.POST.get(name) == "on"
-                      for name in ("is_active", "batch")})
+                      for name in ("is_active", "send_breaks", "batch")})
         form = services.WebhookSettingsForm(
             instance=saved, initial={**typed, "secret": new_secret},
             has_secret=bool(saved and saved.secret_encrypted),

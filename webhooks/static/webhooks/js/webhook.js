@@ -155,3 +155,14 @@ document.addEventListener("DOMContentLoaded", function () {
             .catch(function () { /* the next tick tries again */ });
     }, 3000);
 });
+
+/* The on/off switch says On or Off as it is flipped (2026-10-03). */
+document.addEventListener("change", function (event) {
+    const box = event.target.closest(".switch input[type=checkbox]");
+    if (!box) return;
+    const state = box.closest(".switch").querySelector("[data-switch-state]");
+    if (!state) return;
+    state.textContent = box.checked ? "On" : "Off";
+    state.classList.toggle("badge--success", box.checked);
+    state.classList.toggle("badge--neutral", !box.checked);
+});

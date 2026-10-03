@@ -114,6 +114,16 @@
                     <div class="field__help">{{ form.is_active.help_text }}</div>
                     {% for error in form.is_active.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
                 </div>
+                {# The scans in between (2026-10-03): off sends only check-in and check-out. #}
+                <div class="webhook-switch">
+                    <label class="switch" for="{{ form.send_breaks.id_for_label }}">
+                        {{ form.send_breaks }}
+                        <span class="switch__track" aria-hidden="true"><span class="switch__thumb"></span></span>
+                        <span class="switch__label">{{ form.send_breaks.label }}</span>
+                        <span class="badge {% if form.send_breaks.value %}badge--success{% else %}badge--neutral{% endif %}" data-switch-state>{% if form.send_breaks.value %}On{% else %}Off{% endif %}</span>
+                    </label>
+                    <div class="field__help">{{ form.send_breaks.help_text }}</div>
+                </div>
                 <details class="webhook-advanced"{% if form.advanced_has_errors %} open{% endif %}>
                     <summary>Advanced - only if your developer asks</summary>
                     <div class="stack webhook-advanced__body">
