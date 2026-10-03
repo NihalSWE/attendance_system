@@ -10,8 +10,9 @@ upload batch, and never taken from the terminal's own IN/OUT keys.
 **Open or closed.** A day is open until it closes: the employee's next shift
 start, or 24 hours after this shift started, whichever comes first. While it is
 open a trailing OUT is a **break-out**, not a check-out — somebody out at lunch
-at 13:00 is on a break, not gone — and a trailing IN means still in. Only when
-the day closes does a trailing OUT become the **check-out**; a day that closes
+at 13:00 is on a break, not gone — and a trailing IN means still in. A
+trailing OUT becomes the **check-out** when the day closes, or as soon as it
+is at or after the shift's scheduled end (2026-10-03); a day that closes
 on an IN takes the shift's scheduled end as its check-out and goes to review.
 
 **Minutes are measured against the shift, not against the scans.**
@@ -137,12 +138,18 @@ def drop_repeats(moments, window_seconds):
     return kept, dropped
 
 
-def label_scans(kept, *, is_closed):
+def label_scans(kept, *, is_closed, scheduled_end=None):
     """Alternate IN/OUT across the whole stream and name each scan.
 
     ``is_closed`` is what decides whether a trailing OUT is the check-out or
     just the latest break-out. Getting that wrong is not cosmetic: it turns
     somebody's lunch into the end of their working day.
+
+    A trailing OUT at or after the shift's scheduled end is the check-out
+    straight away, even while the day is still open: nobody goes to lunch
+    after their shift is over (Nihal, 2026-10-03: out at 11:06 on a shift
+    ending 11:05 showed "Break-out" until the next morning, and the ERP got
+    no check-out). If they come back in, the next OUT takes its place.
     """
     scans = []
     for index, (at, punch_id) in enumerate(kept):
@@ -159,7 +166,8 @@ def label_scans(kept, *, is_closed):
         scan.label = "break_in" if scan.direction == "in" else "break_out"
     scans[0].label = "check_in"
 
-    if is_closed and scans[-1].direction == "out":
+    after_shift = scheduled_end is not None and scans[-1].at >= scheduled_end
+    if scans[-1].direction == "out" and (is_closed or after_shift):
         scans[-1].label = "check_out"
     return scans
 
@@ -184,7 +192,7 @@ def build_day(
     that separates a finished day from one in progress hangs off it.
     """
     kept, dropped = drop_repeats(moments, window_seconds)
-    scans = label_scans(kept, is_closed=is_closed)
+    scans = label_scans(kept, is_closed=is_closed, scheduled_end=scheduled_end)
     day = Day(kept=scans, dropped=dropped, is_closed=is_closed)
     if not scans:
         return day

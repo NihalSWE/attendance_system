@@ -273,3 +273,31 @@ class PaidBreakTests(TestCase):
     def test_a_paid_break_never_credits_a_day_with_no_break(self):
         day = pairing.build_day([at(9), at(17)], break_minutes=60, break_is_paid=True)
         self.assertEqual(day.worked_minutes, 480)
+
+
+class AfterTheShiftTests(TestCase):
+    """Out after the shift's end is the check-out at once, open day or not
+    (Nihal, 2026-10-03: out at 11:06 on a shift ending 11:05 said Break-out
+    until the next morning)."""
+
+    def day(self, *scans):
+        return pairing.build_day(list(scans), scheduled_start=at(9), scheduled_end=at(11, 5),
+                                 is_closed=False)
+
+    def test_out_after_the_end_is_the_check_out(self):
+        day = self.day(at(9, 27), at(11, 6, 38))
+        self.assertEqual(labels(day), ["check_in", "check_out"])
+        self.assertEqual((day.last_out_at, day.total_minutes), (at(11, 6, 38), 99))
+
+    def test_out_before_the_end_is_still_a_break(self):
+        day = self.day(at(9, 27), at(10, 25))
+        self.assertEqual(labels(day), ["check_in", "break_out"])
+        self.assertIsNone(day.last_out_at)
+
+    def test_coming_back_in_makes_it_a_break_and_the_next_out_the_check_out(self):
+        day = self.day(at(9, 27), at(11, 6), at(11, 20))
+        self.assertEqual(labels(day), ["check_in", "break_out", "break_in"])
+        self.assertIsNone(day.last_out_at)
+        day = self.day(at(9, 27), at(11, 6), at(11, 20), at(11, 40))
+        self.assertEqual(labels(day)[-1], "check_out")
+        self.assertEqual(day.last_out_at, at(11, 40))

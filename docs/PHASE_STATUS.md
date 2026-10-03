@@ -5620,3 +5620,34 @@ Tests: `organization/tests_same_day_edits.py` (14).
   and skipped. Owner and company admin only, like the rest of the page.
 
 Tests: `webhooks/tests.py` DebugMessagesTests (4).
+
+### Webhook on live: check-out after the shift, and far fewer checks — 2026-10-03
+
+Live test, shift 09:00-11:05, three people scanning, debug messages on.
+
+- **"Break-out" after 11:05.** A day stays open until the next shift starts
+  or 24 hours after this one began, and while open a trailing scan out was
+  always a break-out - so a scan at 11:06 waited until 09:00 next day to be
+  the check-out, and the ERP (When to send: arrive and leave) got no check-out
+  until then. Now a trailing scan out **at or after the shift's scheduled
+  end** is the check-out at once (`pairing.label_scans`), with its time and
+  total; the webhook sends it straight away. If they come back in, it becomes
+  a break again and the next scan out is sent as the new check-out
+  (`update`). Before the shift's end a scan out is still a break. The day
+  stays Incomplete / In progress until it closes; nothing is paid on a guess.
+- **"Nothing new" every few seconds.** The webhook was not sending old punches
+  again - every line said *not queued*. But every screen that shows
+  attendance rebuilds today for everybody first, and each rebuild asked the
+  webhook about every person; the device check-in refresh, meant to be once a
+  minute, ran once a minute *per server worker* (the cache is each worker's
+  own). Now:
+  - the check-in refresh is claimed in the database (`polled_at`, webhooks
+    0004): once a minute per company, whatever the number of workers;
+  - queuing compares first and does the rest (device addresses, saving) only
+    for days that changed;
+  - a debug message that would repeat is not written again in the same 15
+    minutes, and "nothing new" says what the receiver has and, while a day is
+    open, when its check-out will go - so it appears once per change.
+
+Tests: `attendance/tests_pairing.py` AfterTheShiftTests (3),
+`webhooks/tests.py` QuietAndAfterShiftTests (4).

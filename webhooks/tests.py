@@ -491,6 +491,50 @@ class DebugMessagesTests(WebhookCase):
         self.assertIn("switched off, so nothing was queued", state["entries"][0]["message"])
 
 
+class QuietAndAfterShiftTests(WebhookCase):
+    """Nihal, 2026-10-03: a scan out after the shift's end is sent as the
+    check-out straight away; the debug list says "nothing new" once per
+    change, not at every rebuild; the device check-in refresh runs once a
+    minute for the company, whichever worker it reaches."""
+
+    EVENING = datetime.datetime(2026, 8, 10, 19, tzinfo=DHAKA)   # shift 9-18 over, day open
+
+    def test_out_after_the_shift_goes_as_the_check_out_before_the_day_closes(self):
+        self.switch_on()
+        self.work((9, 0), (18, 5), now=self.EVENING)
+        [event] = self.events()
+        self.assertEqual((event.kind, event.payload["check_out"]),
+                         ("check_out", "2026-08-10 18:05:00"))
+
+    def test_out_before_the_end_is_a_break_and_sends_no_check_out(self):
+        self.switch_on()
+        self.work((9, 0), (13, 0), now=datetime.datetime(2026, 8, 10, 14, tzinfo=DHAKA))
+        [event] = self.events()
+        self.assertEqual(event.kind, "check_in")
+        self.assertNotIn("check_out", event.payload)
+
+    def test_nothing_new_is_said_once_not_at_every_rebuild(self):
+        self.switch_on()
+        services.start_debug(actor=self.admin, company_id=self.company.pk)
+        self.work((9, 0), (13, 0), now=datetime.datetime(2026, 8, 10, 14, tzinfo=DHAKA))
+        for _ in range(3):
+            recalculate(self.company.pk, start=MONDAY, end=MONDAY,
+                        now=datetime.datetime(2026, 8, 10, 14, tzinfo=DHAKA))
+        nothing_new = WebhookDebugEntry.all_objects.filter(
+            company=self.company, message__contains="nothing new")
+        self.assertEqual(nothing_new.count(), 1)
+        self.assertIn("after the shift ends (18:00)", nothing_new.get().message)
+
+    def test_the_check_in_refresh_runs_once_a_minute_across_workers(self):
+        from django.test import override_settings
+
+        self.switch_on()
+        with override_settings(WEBHOOK_SEND_IN_BACKGROUND=True),                 mock.patch.object(services.threading, "Thread") as thread:
+            services.on_device_poll(self.company.pk)
+            services.on_device_poll(self.company.pk)      # another worker, same minute
+        self.assertEqual(thread.call_count, 1)
+
+
 class GuideTests(WebhookCase):
     def test_the_guide_on_screen_and_downloaded(self):
         self.switch_on(employee_key="au_user_id")
