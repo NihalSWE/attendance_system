@@ -334,3 +334,50 @@ class AfterTheCheckOutTests(TestCase):
         self.assertEqual(day.total_minutes, 71)                 # 10:51 -> 12:02
         self.assertEqual(day.in_office_minutes, 17)              # really inside
         self.assertEqual(day.worked_minutes, 20)                 # 15 in the shift + 5 paid
+
+
+class FirstAndLastScanTests(TestCase):
+    """The company setting "first scan is the check-in, last scan the
+    check-out" (Nihal, 2026-10-03): scans in between do not count, the
+    check-out is decided at the shift's end, worked = check-in to check-out in
+    the shift less the unpaid break."""
+
+    def day(self, *scans, closed=False, over=True, paid=False):
+        return pairing.build_day(list(scans), scheduled_start=at(9), scheduled_end=at(18),
+                                 break_minutes=60, break_is_paid=paid, grace_out_minutes=10,
+                                 is_closed=closed, first_last=True, shift_over=over)
+
+    def test_a_normal_day(self):
+        day = self.day(at(9), at(13), at(14), at(18, 5))
+        self.assertEqual(labels(day), ["check_in", "ignored", "ignored", "check_out"])
+        self.assertEqual((day.last_out_at, day.break_count, day.outside_minutes),
+                         (at(18, 5), 0, 0))
+        self.assertEqual(day.worked_minutes, 540 - 60)          # 09:00-18:00 less the break
+        self.assertEqual(day.total_minutes, 545)
+
+    def test_a_paid_break_is_not_taken_off(self):
+        self.assertEqual(self.day(at(9), at(18, 5), paid=True).worked_minutes, 540)
+
+    def test_a_forgotten_scan_does_not_turn_the_day_around(self):
+        # Out for lunch, never scanned back in, scanned on leaving.
+        day = self.day(at(9), at(13), at(18, 5))
+        self.assertEqual(day.last_out_at, at(18, 5))
+        self.assertEqual(labels(day), ["check_in", "ignored", "check_out"])
+
+    def test_early_leave_waits_for_the_shift_to_end(self):
+        day = self.day(at(9), at(15), over=False)
+        self.assertEqual(labels(day), ["check_in", "ignored"])
+        self.assertIsNone(day.last_out_at)
+        day = self.day(at(9), at(15))                          # 18:00 has passed
+        self.assertEqual((labels(day), day.last_out_at), (["check_in", "check_out"], at(15)))
+        self.assertEqual(day.early_out_minutes, 180)
+        self.assertEqual(day.worked_minutes, 360 - 60)
+
+    def test_a_later_scan_takes_over_as_the_check_out(self):
+        day = self.day(at(9), at(15), at(18, 30))
+        self.assertEqual(day.last_out_at, at(18, 30))
+        self.assertEqual(day.early_out_minutes, 0)
+
+    def test_one_scan_closes_by_rule_as_before(self):
+        day = self.day(at(9), closed=True)
+        self.assertTrue(day.check_out_by_rule)

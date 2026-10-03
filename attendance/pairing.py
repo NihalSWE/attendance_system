@@ -192,13 +192,29 @@ def build_day(
     grace_out_minutes=0,
     overtime_after_minutes=0,
     is_closed=True,
+    first_last=False,
+    shift_over=False,
 ):
     """Pair one employee-day. ``moments`` is datetimes or (datetime, punch id).
 
     ``is_closed`` says whether the day's close time has passed; the caller
     works that out from the shift (see ``attendance.day_window``). Everything
     that separates a finished day from one in progress hangs off it.
+
+    ``first_last``: the company's rule is "first scan is the check-in, last
+    scan the check-out" (``_first_and_last``); ``shift_over`` says whether
+    the shift's scheduled end has passed, which is when that check-out is
+    decided.
     """
+    if first_last:
+        return _first_and_last(
+            moments, window_seconds=window_seconds, break_minutes=break_minutes,
+            break_is_paid=break_is_paid, scheduled_start=scheduled_start,
+            scheduled_end=scheduled_end, grace_in_minutes=grace_in_minutes,
+            grace_out_minutes=grace_out_minutes,
+            overtime_after_minutes=overtime_after_minutes,
+            is_closed=is_closed, shift_over=shift_over,
+        )
     kept, dropped = drop_repeats(moments, window_seconds)
     scans = label_scans(kept, is_closed=is_closed, scheduled_end=scheduled_end)
     day = Day(kept=scans, dropped=dropped, is_closed=is_closed)
@@ -288,6 +304,55 @@ def build_day(
         grace_out_minutes=grace_out_minutes,
         overtime_after_minutes=overtime_after_minutes,
     )
+    return day
+
+
+BETWEEN_NOTE = "Between check-in and check-out: not counted"
+
+
+def _first_and_last(moments, *, window_seconds, break_minutes, break_is_paid,
+                    scheduled_start, scheduled_end, grace_in_minutes, grace_out_minutes,
+                    overtime_after_minutes, is_closed, shift_over):
+    """The company's rule "first scan is the check-in, last scan the
+    check-out" (Nihal, 2026-10-03; a company setting).
+
+    Scans in between are not counted - kept on the day, labelled ignored - so
+    a forgotten scan cannot turn the day around. The check-out is decided
+    once the shift's end has passed: then the latest scan so far is it, even
+    if they left early; a later scan takes over. Before that the day is
+    still running. Worked time is check-in to check-out within the shift,
+    less the shift's break unless the break is paid.
+
+    The two scans that count go through the usual rules, so lateness, early
+    leaving, overtime and a day closing with no check-out work as always.
+    """
+    kept, dropped = drop_repeats(moments, window_seconds)
+    decided = is_closed or shift_over
+    ends = [kept[0], kept[-1]] if len(kept) > 1 and decided else kept[:1]
+    middle = kept[1:-1] if len(ends) == 2 else kept[1:]
+    # A check-out decided at the shift's end is labelled as a closed day
+    # would label it; the day itself stays open until it closes.
+    day = build_day(
+        ends, window_seconds=0, break_minutes=break_minutes, break_is_paid=break_is_paid,
+        scheduled_start=scheduled_start, scheduled_end=scheduled_end,
+        grace_in_minutes=grace_in_minutes, grace_out_minutes=grace_out_minutes,
+        overtime_after_minutes=overtime_after_minutes,
+        is_closed=is_closed or len(ends) == 2,
+    )
+    day.is_closed = is_closed
+    day.dropped = dropped
+    if day.has_check_out and not day.check_out_by_rule and not break_is_paid and break_minutes:
+        day.worked_minutes = max(0, day.worked_minutes - int(break_minutes))
+    if middle:
+        counted = list(day.kept)
+        between = [Scan(at=at, punch_event_id=punch_id, direction="ignored", label="ignored",
+                        note=BETWEEN_NOTE) for at, punch_id in middle]
+        day.kept = sorted(counted + between, key=lambda scan: scan.at)
+        for session in day.sessions:
+            if session.in_index is not None:
+                session.in_index = day.kept.index(counted[session.in_index])
+            if session.out_index is not None:
+                session.out_index = day.kept.index(counted[session.out_index])
     return day
 
 

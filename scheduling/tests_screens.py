@@ -333,6 +333,19 @@ class CalendarScreenTests(CalendarBase):
         self.assertEqual(shift.code, "DAY")
         self.assertEqual(shift.scheduled_minutes, 540)
 
+    def test_choosing_first_and_last_scan_on_the_settings_page(self):
+        shift = self._shift()
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("scheduling:attendance_settings_edit"))
+        self.assertContains(page, "Check-in and check-out")
+        self.client.post(reverse("scheduling:attendance_settings_edit"), {
+            "shift_mode": "company_single_shift", "company_shift": shift.pk,
+            "missing_punch_policy": "review_required", "punch_pairing_strategy": "first_last"})
+        from scheduling.models import CompanyAttendanceSettings
+
+        self.assertEqual(CompanyAttendanceSettings.all_objects.get(company=self.company)
+                         .punch_pairing_strategy, "first_last")
+
     def test_editing_one_time_keeps_the_other(self):
         # 2026-10-03: the edit page showed 09:00:00, which the HH:MM box then
         # refused - change only the start, and the end was "invalid".

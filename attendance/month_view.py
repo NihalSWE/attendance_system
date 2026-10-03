@@ -17,6 +17,7 @@ from access_control.branch_access import ALL_BRANCHES
 from django.db.models import Q
 
 from attendance.models import AttendanceRecord
+from attendance.pairing import BETWEEN_NOTE
 
 # Monday first, as the spec asks and as the rest of the project's calendars do.
 WEEKDAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -52,6 +53,15 @@ ALLOCATION_LABEL = {
     "check_out": "Check-out",
     "ignored": "Ignored",
 }
+
+
+def _first_last(record):
+    from scheduling.models import CompanyAttendanceSettings
+
+    return CompanyAttendanceSettings.all_objects.filter(
+        company_id=record.company_id,
+        punch_pairing_strategy=CompanyAttendanceSettings.PairingStrategy.FIRST_LAST,
+    ).exists()
 
 
 def inside_minutes(record):
@@ -292,6 +302,8 @@ def build_day_detail(*, record, company_timezone):
         else:
             source = device.name if device else ""
         label = ALLOCATION_LABEL.get(allocation.label, allocation.label)
+        if allocation.label == "ignored" and allocation.interpretation_note == BETWEEN_NOTE:
+            label = "Between (not counted)"     # "first and last scan" (2026-10-03)
         if checked_out and allocation.is_included and allocation.label == "break_in":
             # A scan after the check-out is not a break (2026-10-03).
             label = "Back in after check-out"
@@ -323,6 +335,12 @@ def build_day_detail(*, record, company_timezone):
         "worked": hours_and_minutes(record.worked_minutes),
         "paid_break": getattr(shift, "default_break_minutes", 0)
         if shift and getattr(shift, "break_is_paid", False) else 0,
+        # "First and last scan": worked is check-in to check-out in the
+        # shift, less the unpaid break.
+        "first_last": any(s["label"] == "Between (not counted)" for s in scans)
+        or _first_last(record),
+        "unpaid_break": getattr(shift, "default_break_minutes", 0)
+        if shift and not getattr(shift, "break_is_paid", False) else 0,
         "outside": hours_and_minutes(record.outside_minutes),
         "break_count": record.break_count,
         "shift_name": shift.name if shift else "",

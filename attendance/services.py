@@ -194,14 +194,13 @@ def _classify_working_day(shift, settings, day, *, scheduled_start=None,
         )
 
     checked_out = (
-        # Out after the shift's end: their day is over though it has not
-        # closed yet (that waits for the next shift, or 24 hours). It is
-        # judged now, and judged again if they scan once more (Nihal,
-        # 2026-10-03: checked out 12:51 on a shift ending 12:50, still
-        # "In progress" at 13:21).
+        # Checked out though the day has not closed yet (that waits for the
+        # next shift, or 24 hours): judged now, and judged again if they scan
+        # once more (Nihal, 2026-10-03: checked out 12:51 on a shift ending
+        # 12:50, still "In progress" at 13:21). An open day only has a
+        # check-out once the shift's end has passed: a scan out after it, or
+        # - with "first and last scan" - the latest scan when it passed.
         not day.is_closed and day.has_check_out and not day.check_out_by_rule
-        and scheduled_end is not None and day.last_out_at is not None
-        and day.last_out_at >= scheduled_end
     )
     if not day.is_closed and not checked_out:
         # Still running. Nothing is decided, and nothing is paid on a guess.
@@ -638,7 +637,7 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         fraction = leave.balance_units
         note = f"{_part_label(leave)} leave ({_pay_word(leave)})"
         if day_punches:
-            paired = _pair(day_punches, window, settings, is_closed)
+            paired = _pair(day_punches, window, settings, is_closed, now)
             status, punch_status, _, minutes = _classify_working_day(
                 window.shift, settings, paired, flag_unusual=False,
             )
@@ -687,7 +686,7 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         # Somebody came in on their day off. The day keeps its holiday status
         # and pay; the scans are recorded so the work is visible and A9 can
         # decide what it is worth.
-        paired = _pair(day_punches, window, settings, is_closed)
+        paired = _pair(day_punches, window, settings, is_closed, now)
         values.update(
             attendance_status=(
                 AttendanceRecord.AttendanceStatus.HOLIDAY if info.kind == HOLIDAY
@@ -704,7 +703,7 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         if not day_punches and not is_closed:
             # "Not in yet": the shift has not finished, so nobody is absent.
             return None
-        paired = _pair(day_punches, window, settings, is_closed)
+        paired = _pair(day_punches, window, settings, is_closed, now)
         status, punch_status, fraction, minutes = _classify_working_day(
             window.shift, settings, paired,
             scheduled_start=window.scheduled_start, scheduled_end=window.scheduled_end,
@@ -803,8 +802,10 @@ def _status_from_fix(fix):
     }
 
 
-def _pair(day_punches, window, settings, is_closed):
+def _pair(day_punches, window, settings, is_closed, now=None):
     shift = window.shift
+    first_last = (getattr(settings, "punch_pairing_strategy", "")
+                  == CompanyAttendanceSettings.PairingStrategy.FIRST_LAST)
     return pairing.build_day(
         day_punches,
         window_seconds=settings.duplicate_punch_window_seconds,
@@ -816,6 +817,8 @@ def _pair(day_punches, window, settings, is_closed):
         grace_out_minutes=getattr(shift, "grace_out_minutes", 0),
         overtime_after_minutes=getattr(shift, "overtime_after_minutes", 0),
         is_closed=is_closed,
+        first_last=first_last,
+        shift_over=bool(now and window.scheduled_end and now >= window.scheduled_end),
     )
 
 
