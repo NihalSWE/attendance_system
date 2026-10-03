@@ -17,10 +17,12 @@ to a branch where they have it too); salary — the owner/company admin, or
 anyone with ``salary.prepare`` in that branch.
 """
 
+import datetime
 from zoneinfo import ZoneInfo
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 
 from auditlog.services import record_company_event
 from common.services import create_validated
@@ -159,14 +161,67 @@ def _day(moment, company):
     return f"{moment.astimezone(zone):%d %b %Y}"
 
 
-def _earlier_row(model, employee, current):
-    """The row before ``current`` in the history, if any. Call inside the
-    company's context."""
-    return (
-        model.objects.filter(employee=employee, effective_from__lt=current.effective_from)
-        .exclude(pk=current.pk).exclude(status__in=["cancelled", "draft"])
-        .order_by("-effective_from").first()
+def _override_from(model, employee, current, starts, company, field):
+    """The latest save wins (Nihal, 2026-10-03): ``current`` will start on
+    ``starts``, earlier than it does now, and whatever the history held from
+    that date gives way to it.
+
+    Rows starting on or after ``starts`` are cancelled - kept, for the audit
+    trail, but no longer read by attendance or payroll - and a row running on
+    that date ends there. Never reaches into a finalised payroll: settled pay
+    is not rewritten. Call inside the company's context, before moving
+    ``current``. Returns what changed, for the audit row.
+    """
+    from payroll.models import PayrollRecord, PayrollRun
+
+    first_day = starts.astimezone(ZoneInfo(getattr(company, "timezone", None) or "UTC")).date()
+    finalised = (
+        PayrollRecord.objects.filter(
+            employee=employee, payroll_run__status=PayrollRun.Status.POSTED,
+            payroll_run__payroll_period__end_date__gte=first_day,
+        ).select_related("payroll_run__payroll_period")
+        .order_by("-payroll_run__payroll_period__end_date").first()
     )
+    if finalised is not None:
+        period = finalised.payroll_run.payroll_period
+        raise ValidationError({field: (
+            f"Salary up to {period.end_date:%d %b %Y} ({period.name}) is already finalised; "
+            f"a change can start on {period.end_date + datetime.timedelta(days=1):%d %b %Y} "
+            "at the earliest."
+        )})
+    others = (
+        model.objects.filter(employee=employee).exclude(pk=current.pk)
+        .exclude(status__in=["cancelled", "draft"])
+    )
+    cancelled, ended = [], []
+    for row in others.filter(effective_from__gte=starts):
+        row.status = "cancelled"
+        row.save(update_fields=["status", "updated_at"])
+        cancelled.append(row.pk)
+    for row in others.filter(effective_from__lt=starts).filter(
+        Q(effective_to__isnull=True) | Q(effective_to__gt=starts)
+    ):
+        row.effective_to = starts
+        row.status = "ended"
+        row.save(update_fields=["effective_to", "status", "updated_at"])
+        ended.append(row.pk)
+    return {"cancelled": cancelled, "ended_early": ended}
+
+
+def _rebuild_attendance(company_id, employee, starts, company):
+    """Attendance days from ``starts`` point at the placement that now covers
+    them (a cancelled one no longer does). Days before the joining date are
+    not counted anyway, and days in a finalised payroll are left alone."""
+    from attendance.services import recalculate
+    from organization.employee_detail_services import company_today
+
+    zone = ZoneInfo(getattr(company, "timezone", None) or "UTC")
+    first = starts.astimezone(zone).date()
+    if employee.joining_date and employee.joining_date > first:
+        first = employee.joining_date
+    today = company_today(company)
+    if first <= today:
+        recalculate(company_id, employee_ids=[employee.pk], start=first, end=today)
 
 
 @transaction.atomic
@@ -189,21 +244,12 @@ def change_placement(*, actor, company_id, employee_id, values):
             "designation_id": current.designation_id, "employee_code": current.employee_code,
             "effective_from": current.effective_from.isoformat(),
         }
+        overridden = None
         if starts < current.effective_from:
-            # Earlier than the current placement: only their first placement
-            # can move back (someone added today who has worked there since
-            # 2023, Nihal 2026-10-03). With history before it, the two would
-            # overlap, so that stays refused.
-            earlier = _earlier_row(EmployeeAssignment, employee, current)
-            if earlier is not None:
-                raise ValidationError({
-                    "placement_from": (
-                        f"The current placement started on "
-                        f"{_day(current.effective_from, membership.company)}, after their "
-                        f"previous one (from {_day(earlier.effective_from, membership.company)}); "
-                        "a change cannot start before it."
-                    )
-                })
+            # Earlier than the current placement: the latest save wins, from
+            # that date (someone added today who has worked there since 2023).
+            overridden = _override_from(EmployeeAssignment, employee, current, starts,
+                                        membership.company, "placement_from")
             current.effective_from = starts
         correction = starts == current.effective_from
         if correction:
@@ -234,8 +280,11 @@ def change_placement(*, actor, company_id, employee_id, values):
                 "employee_code": assignment.employee_code,
                 "effective_from": assignment.effective_from.isoformat(),
                 "correction": correction,
+                **({"overrode": overridden} if overridden else {}),
             },
         )
+        if overridden is not None:
+            _rebuild_attendance(company_id, employee, starts, membership.company)
     return assignment
 
 
@@ -260,19 +309,10 @@ def change_salary(*, actor, company_id, employee_id, values):
             "pay_basis": current.pay_basis, "base_rate": str(current.base_rate),
             "effective_from": current.effective_from.isoformat(),
         }
+        overridden = None
         if starts < current.effective_from:
-            # As for the placement: only the first salary can move back, and
+            # As for the placement: the latest save wins from that date -
             # never before they were placed (no attendance to pay before it).
-            earlier = _earlier_row(EmployeeCompensation, employee, current)
-            if earlier is not None:
-                raise ValidationError({
-                    "salary_from": (
-                        f"The current salary started on "
-                        f"{_day(current.effective_from, membership.company)}, after their "
-                        f"previous one (from {_day(earlier.effective_from, membership.company)}); "
-                        "a change cannot start before it."
-                    )
-                })
             placed = first_placement(employee)
             if placed is not None:
                 # The day they were placed means from the placement.
@@ -284,7 +324,11 @@ def change_salary(*, actor, company_id, employee_id, values):
                         "the salary cannot start before that."
                     )
                 })
-            current.effective_from = starts = min(starts, current.effective_from)
+            starts = min(starts, current.effective_from)
+            if starts < current.effective_from:
+                overridden = _override_from(EmployeeCompensation, employee, current, starts,
+                                            membership.company, "salary_from")
+                current.effective_from = starts
         if starts == current.effective_from:
             current.pay_basis = values["pay_basis"]
             current.base_rate = values["base_rate"]
@@ -305,6 +349,7 @@ def change_salary(*, actor, company_id, employee_id, values):
             after={
                 "pay_basis": compensation.pay_basis, "base_rate": str(compensation.base_rate),
                 "effective_from": compensation.effective_from.isoformat(),
+                **({"overrode": overridden} if overridden else {}),
             },
         )
     return compensation

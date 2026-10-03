@@ -5576,3 +5576,22 @@ Tests: `devices/tests_ui.py` (4).
   change the joining date under Details when they joined earlier.
 
 Tests: `organization/tests_same_day_edits.py` (3 new, 1 rewritten).
+
+### Edit employee: the latest save wins — 2026-10-03 (later the same day)
+
+- On live the first fix still refused 1 Jun 2023 for this employee: they had
+  two placements (1 Oct and 3 Oct - an earlier save had added the second).
+  Nihal: when the admin saves a new update, it overrides the old ones.
+- Placement and salary (`_override_from`): an earlier date than the current
+  row (or the date it started) applies the new values from that date. Rows
+  starting on or after it are **cancelled** (kept, in the audit row as
+  `overrode`, no longer read by attendance or payroll); a row running on that
+  date ends there. A later date still keeps the old one as history.
+- Never into a finalised payroll: "Salary up to 31 Aug 2026 (Aug 2026) is
+  already finalised; a change can start on 01 Sep 2026 at the earliest."
+- A salary still never starts before they were placed.
+- After an earlier placement date, the employee's attendance from that date
+  (or the joining date, if later) to today is rebuilt, so no day points at a
+  cancelled placement (3 years for one person: 0.8 s locally).
+
+Tests: `organization/tests_same_day_edits.py` (14).

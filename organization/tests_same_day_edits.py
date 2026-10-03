@@ -105,15 +105,45 @@ class PlacementTests(SameDayCase):
         (row,) = self.placements()                        # moved back, no history line
         self.assertEqual((row.effective_from, row.department), (since, self.department))
 
-    def test_with_history_before_it_an_earlier_day_is_still_refused(self):
+    def active(self):
+        return sorted((r for r in self.placements() if r.status != "cancelled"),
+                      key=lambda r: r.effective_from)
+
+    def test_an_earlier_date_replaces_the_history_from_then(self):
+        # The latest save wins (Nihal, 2026-10-03): a change saved for today,
+        # then "since 1 Jun 2023" - the history from 2023 gives way to it.
         tomorrow = _start_of(self.today + datetime.timedelta(days=1), self.company)
         self.place(tomorrow)                              # a transfer: two rows now
+        since = _start_of(datetime.date(2023, 6, 1), self.company)
+        self.place(since)
+        (row,) = self.active()
+        self.assertEqual((row.effective_from, row.effective_to), (since, None))
+        self.assertEqual(len(self.placements()), 2)       # the old one is kept, cancelled
+
+    def test_a_date_inside_the_history_ends_the_row_running_then(self):
+        later = _start_of(self.today + datetime.timedelta(days=5), self.company)
+        self.place(later)
+        middle = _start_of(self.today + datetime.timedelta(days=2), self.company)
+        self.place(middle, department=self.department)
+        first, current = self.active()
+        self.assertEqual((first.effective_to, current.effective_from), (middle, middle))
+
+    def test_never_into_a_finalised_payroll(self):
+        from payroll.models import PayrollPeriod, PayrollRecord, PayrollRun
+
+        with use_company(self.company):
+            period = PayrollPeriod.objects.create(
+                company=self.company, name="Aug 2026", start_date=datetime.date(2026, 8, 1),
+                end_date=datetime.date(2026, 8, 31))
+            run = PayrollRun.objects.create(company=self.company, payroll_period=period,
+                                            status=PayrollRun.Status.POSTED)
+            PayrollRecord.objects.create(company=self.company, payroll_run=run,
+                                         employee=self.imported)
         with self.assertRaises(ValidationError) as caught:
-            self.place(self.midnight - datetime.timedelta(days=1))
-        # The company's own date, not UTC (midnight in Dhaka is the day before in UTC).
-        self.assertIn(f"started on {self.today + datetime.timedelta(days=1):%d %b %Y}",
-                      str(caught.exception))
-        self.assertEqual(len(self.placements()), 2)
+            self.place(_start_of(datetime.date(2026, 8, 15), self.company))
+        self.assertIn("already finalised; a change can start on 01 Sep 2026", str(caught.exception))
+        self.assertEqual(self.placements()[0].effective_from, self.placement.effective_from)
+        self.place(_start_of(datetime.date(2026, 9, 1), self.company))   # after it: fine
 
     def test_from_the_edit_page(self):
         self.client.force_login(self.admin)
@@ -156,6 +186,14 @@ class SalaryTests(SameDayCase):
         with self.assertRaises(ValidationError) as caught:
             self.salary(self.midnight - datetime.timedelta(days=1))
         self.assertIn(f"placed on {self.today:%d %b %Y}", str(caught.exception))
+
+    def test_an_earlier_salary_date_replaces_the_history_from_then(self):
+        self.salary(_start_of(self.today + datetime.timedelta(days=3), self.company))
+        self.salary(_start_of(self.today + datetime.timedelta(days=6), self.company), "30000")
+        self.salary(self.midnight, "25000")               # back to the placement day
+        active = [p for p in self.salaries() if p.status != "cancelled"]
+        self.assertEqual([(p.effective_from, p.base_rate) for p in active],
+                         [(self.placement.effective_from, Decimal("25000"))])
 
     def test_changing_that_salary_the_same_day_corrects_it(self):
         self.salary(self.midnight)
