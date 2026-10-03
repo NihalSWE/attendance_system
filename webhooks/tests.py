@@ -506,6 +506,29 @@ class QuietAndAfterShiftTests(WebhookCase):
         self.assertEqual((event.kind, event.payload["check_out"]),
                          ("check_out", "2026-08-10 18:05:00"))
 
+    def test_back_in_after_the_check_out_keeps_it_and_leaving_again_updates_it(self):
+        # Live, 2026-10-03: out after the shift (sent as the check-out), in
+        # again a minute later - the check-out must stay, not become a break.
+        from attendance.models import AttendanceRecord
+        from attendance.month_view import build_day_detail
+
+        self.switch_on()
+        evening = lambda h, m: datetime.datetime(2026, 8, 10, h, m, tzinfo=DHAKA)  # noqa: E731
+        for hour, minute, now in ((9, 0, evening(9, 30)), (18, 2, evening(18, 3)),
+                                  (18, 4, evening(18, 5))):
+            self.punch(MONDAY, hour, minute)
+            recalculate(self.company.pk, start=MONDAY, end=MONDAY, now=now)
+        self.assertEqual([e.kind for e in self.events()], ["check_in", "check_out"])
+        with use_company(self.company):
+            record = AttendanceRecord.objects.get(work_date=MONDAY)
+            scans = build_day_detail(record=record, company_timezone="Asia/Dhaka")["scans"]
+        self.assertEqual([s["label"] for s in scans],
+                         ["Check-in", "Check-out", "Back in after check-out"])
+        self.punch(MONDAY, 19, 0)                       # leaves again
+        recalculate(self.company.pk, start=MONDAY, end=MONDAY, now=evening(19, 5))
+        last = self.events()[-1]
+        self.assertEqual((last.kind, last.payload["check_out"]), ("update", "2026-08-10 19:00:00"))
+
     def test_out_before_the_end_is_a_break_and_sends_no_check_out(self):
         self.switch_on()
         self.work((9, 0), (13, 0), now=datetime.datetime(2026, 8, 10, 14, tzinfo=DHAKA))

@@ -294,10 +294,26 @@ class AfterTheShiftTests(TestCase):
         self.assertEqual(labels(day), ["check_in", "break_out"])
         self.assertIsNone(day.last_out_at)
 
-    def test_coming_back_in_makes_it_a_break_and_the_next_out_the_check_out(self):
+    def test_coming_back_in_keeps_the_check_out_and_the_next_out_takes_over(self):
+        # Out 11:06 after the 11:05 end, back in 11:20: 11:06 stays the
+        # check-out (it is not a break); out again 11:40 is the new one.
         day = self.day(at(9, 27), at(11, 6), at(11, 20))
+        self.assertEqual(labels(day), ["check_in", "check_out", "break_in"])
+        self.assertEqual(day.last_out_at, at(11, 6))
+        day = self.day(at(9, 27), at(11, 6), at(11, 20), at(11, 40))
+        self.assertEqual(labels(day), ["check_in", "break_out", "break_in", "check_out"])
+        self.assertEqual(day.last_out_at, at(11, 40))
+
+    def test_back_in_after_a_break_during_the_shift_is_still_a_break(self):
+        day = self.day(at(9, 27), at(10, 25), at(10, 32))
         self.assertEqual(labels(day), ["check_in", "break_out", "break_in"])
         self.assertIsNone(day.last_out_at)
-        day = self.day(at(9, 27), at(11, 6), at(11, 20), at(11, 40))
-        self.assertEqual(labels(day)[-1], "check_out")
-        self.assertEqual(day.last_out_at, at(11, 40))
+
+    def test_the_live_day(self):
+        # Ajay, 2026-10-03, shift 09:00-12:00.
+        day = pairing.build_day([at(10, 51, 33), at(11, 6, 38), at(12, 0, 39), at(12, 2, 51),
+                                 at(12, 4, 8)], scheduled_start=at(9), scheduled_end=at(12),
+                                is_closed=False)
+        self.assertEqual(labels(day), ["check_in", "break_out", "break_in", "check_out",
+                                       "break_in"])
+        self.assertEqual(day.last_out_at, at(12, 2, 51))

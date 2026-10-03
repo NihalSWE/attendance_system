@@ -5682,3 +5682,20 @@ Tests: `webhooks/tests.py` ScansInBetweenTests (3).
   also accept HH:MM:SS, from a page opened before the fix.
 
 Tests: `scheduling/tests_screens.py` test_editing_one_time_keeps_the_other.
+
+### The check-out stays when they scan in again after it — 2026-10-03
+
+- Live, shift 09:00-12:00: out 12:02:51 was the check-out (and went to the
+  ERP); a scan in at 12:04:08 turned it back into a "Break-out" and showed
+  12:04 as "Break-in". The earlier fix made a scan out after the shift's end
+  the check-out only while it was the last scan.
+- Now (`pairing.label_scans`), a scan out at or after the shift's end stays
+  the check-out when they scan in again after it - what a closed day already
+  did (`build_day`: "the OUT that ended the shift is the check-out"). A later
+  scan out takes over as the check-out (the webhook sends it as an update).
+  A scan out during the shift followed by one in is still a break.
+- The day panel names a scan in after the check-out "Back in after
+  check-out", not "Break-in".
+
+Tests: `attendance/tests_pairing.py` (3 new/changed), `webhooks/tests.py`
+test_back_in_after_the_check_out_keeps_it_and_leaving_again_updates_it.
