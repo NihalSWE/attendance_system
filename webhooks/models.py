@@ -49,6 +49,9 @@ class WebhookSettings(TenantOwned, ActorTracked):
     # Debug messages are kept, and shown on the page, until then (15 minutes
     # from the button; Nihal, 2026-10-03). Null: off.
     debug_until = models.DateTimeField(null=True, blank=True)
+    # The last device check-in that finished days and sent what was due: at
+    # most once a minute per company, across every server worker.
+    polled_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "webhooks_settings"

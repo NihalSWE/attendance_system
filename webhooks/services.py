@@ -40,9 +40,9 @@ from urllib.parse import urlsplit
 
 from django import forms
 from django.conf import settings
-from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import connection, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from auditlog.services import record_company_event
@@ -673,9 +673,11 @@ def _wanted(record, mode, latest_out=None):
     if record.first_in_at is None:
         return None, None
     if record.is_open:
-        if mode == WebhookSettings.Mode.ARRIVE_AND_LEAVE:
-            return record.first_in_at, None
-        out = latest_out
+        # Arrive and leave: an open day has a check-out only once they scanned
+        # out after the shift's end - not a break, their check-out
+        # (attendance.pairing.label_scans, 2026-10-03). Every scan: the latest.
+        out = (record.last_out_at if mode == WebhookSettings.Mode.ARRIVE_AND_LEAVE
+               else latest_out)
     else:
         out = None if record.check_out_by_rule else record.last_out_at
     if out is None or out <= record.first_in_at:
@@ -706,25 +708,30 @@ def note_days(company_id, record_ids):
 
 
 def _note(company_id, row, record_ids):
+    """Queue what changed on these days.
+
+    Called after every attendance rebuild - and every screen that shows
+    attendance rebuilds today first, for everybody - so it is asked far more
+    often than anything changes (2026-10-03: four times a minute with three
+    people scanning). It therefore compares first and does the work only for
+    the days that changed; the rest cost one comparison each.
+    """
     from attendance.models import AttendanceRecord
     from tenants.models import Company
 
-    company = Company.objects.get(pk=company_id)
-    zone = company_zone(company)
-    records = list(
-        AttendanceRecord.all_objects.select_related("employee", "employee_assignment")
-        .filter(pk__in=list(record_ids), company_id=company_id)
-        .exclude(attendance_status=AttendanceRecord.AttendanceStatus.INACTIVE)
-        .exclude(first_in_at__isnull=True)
-    )
+    records = AttendanceRecord.all_objects.filter(
+        pk__in=list(record_ids), company_id=company_id,
+    ).exclude(attendance_status=AttendanceRecord.AttendanceStatus.INACTIVE).exclude(
+        first_in_at__isnull=True)
     if row.send_from:
-        before = [r for r in records if r.work_date < row.send_from]
-        if before:
-            debug_note(row, "not_queued", None,
-                       f"{len(before)} day(s) before {row.send_from:%d %b %Y} (Send from) "
-                       "were not queued.",
-                       {"days": [f"{r.employee.full_name} {r.work_date}" for r in before[:20]]})
-        records = [r for r in records if r.work_date >= row.send_from]
+        if debugging(row):
+            before = records.filter(work_date__lt=row.send_from).count()
+            if before:
+                debug_note(row, "not_queued", None,
+                           f"{before} day(s) before {row.send_from:%d %b %Y} (Send from) are "
+                           "not sent.", {"send_from": row.send_from.isoformat()})
+        records = records.filter(work_date__gte=row.send_from)
+    records = list(records.select_related("employee", "employee_assignment"))
     if not records:
         return 0
     states = {
@@ -733,32 +740,39 @@ def _note(company_id, row, record_ids):
             company_id=company_id, employee_id__in={r.employee_id for r in records},
             work_date__in={r.work_date for r in records})
     }
-    ips = _device_ips([r.pk for r in records])
     latest = (_latest_outs([r.pk for r in records if r.is_open])
               if row.mode == WebhookSettings.Mode.EVERY_SCAN else {})
+    zone = None
+    changed = []
+    for record in records:
+        code = _code(record)
+        who = f"{record.employee.full_name} on {record.work_date:%d %b %Y}"
+        if not code:
+            debug_note(row, "not_queued", None,
+                       f"{who}: not sent - they have no Employee ID.", {})
+            continue
+        check_in, check_out = _wanted(record, row.mode, latest.get(record.pk))
+        state = states.get((record.employee_id, record.work_date))
+        sent = (state.check_in, state.check_out) if state else (None, None)
+        if (check_in, check_out) == sent or (sent[1] is not None and check_out is None):
+            # Nothing new (a check-out once sent is not taken back). Said
+            # once per change in what they did, not at every rebuild.
+            if debugging(row):
+                zone = zone or company_zone(record.employee.company)
+                debug_note(row, "not_queued", None,
+                           _nothing_new(who, code, row, record, sent, zone), {})
+            continue
+        changed.append((record, code, who, check_in, check_out, state, sent))
+    if not changed:
+        return 0
+
+    company = Company.objects.get(pk=company_id)
+    zone = company_zone(company)
+    ips = _device_ips([record.pk for record, *_ in changed])
     now = timezone.now()
     queued = 0
     with transaction.atomic():
-        for record in records:
-            code = _code(record)
-            who = f"{record.employee.full_name} on {record.work_date:%d %b %Y}"
-            if not code:
-                debug_note(row, "not_queued", None,
-                           f"{who}: not queued - they have no Employee ID to send.", {})
-                continue
-            check_in, check_out = _wanted(record, row.mode, latest.get(record.pk))
-            state = states.get((record.employee_id, record.work_date))
-            sent = (state.check_in, state.check_out) if state else (None, None)
-            if (check_in, check_out) == sent:
-                debug_note(row, "not_queued", None,
-                           f"{who} ({code}): nothing new - your system already has this "
-                           "check-in/check-out.", {})
-                continue
-            if sent[1] is not None and check_out is None:
-                debug_note(row, "not_queued", None,
-                           f"{who} ({code}): a check-out was already sent and is not taken "
-                           "back.", {})
-                continue      # a check-out once sent is not taken back
+        for record, code, who, check_in, check_out, state, sent in changed:
             if sent == (None, None):
                 kind = WebhookEvent.Kind.CHECK_OUT if check_out else WebhookEvent.Kind.CHECK_IN
             elif sent[0] == check_in and sent[1] is None:
@@ -784,6 +798,25 @@ def _note(company_id, row, record_ids):
     if queued:
         transaction.on_commit(lambda: send_soon(company_id))
     return queued
+
+
+def _nothing_new(who, code, row, record, sent, zone):
+    """Why a day sent nothing this time, in words that change only when what
+    they did changes - so a debug message appears once per change."""
+    def at(moment):
+        return moment.astimezone(zone).strftime("%H:%M:%S") if moment else ""
+
+    told = f"your system has the check-in {at(sent[0])}" if sent[0] else "nothing sent yet"
+    if sent[1]:
+        told += f" and the check-out {at(sent[1])}"
+    reason = ""
+    if (record.is_open and not sent[1] and row.mode == WebhookSettings.Mode.ARRIVE_AND_LEAVE
+            and record.scheduled_end_at):
+        reason = (f" Their check-out goes when they scan out after the shift ends "
+                  f"({at(record.scheduled_end_at)[:5]}); a scan out before that is a break.")
+    elif sent[1] and record.is_open and not record.last_out_at:
+        reason = " They scanned back in after it; the next scan out is sent as the new check-out."
+    return f"{who} ({code}): nothing new - {told}.{reason}"
 
 
 def _payload(event, row, company, zone, record, code, check_in, check_out, ip):
@@ -877,6 +910,9 @@ def debug_note(row, what, ok, message, detail=None):
     try:
         if not debugging(row):
             return
+        if ok is None and WebhookDebugEntry.all_objects.filter(
+                company_id=row.company_id, what=what, message=message[:2000]).exists():
+            return        # said already in this window: once per change, not per rebuild
         WebhookDebugEntry.all_objects.create(company_id=row.company_id, what=what, ok=ok,
                                              message=message[:2000], detail=detail or {})
     except Exception:  # noqa: BLE001 - a debug message is never worth a failed send
@@ -1088,9 +1124,17 @@ def on_device_poll(company_id):
     whose shift has ended (their check-outs go) and send what is due."""
     if not getattr(settings, "WEBHOOK_SEND_IN_BACKGROUND", True):
         return
-    if active_settings(company_id) is None:
+    row = active_settings(company_id)
+    if row is None:
         return
-    if not cache.add(f"webhook-poll:{company_id}", True, 60):
+    # Once a minute for the company, whichever server worker the device
+    # reaches: the cache was each worker's own, so several workers each
+    # rebuilt everybody's day every minute (2026-10-03).
+    now = timezone.now()
+    claimed = WebhookSettings.all_objects.filter(pk=row.pk).filter(
+        Q(polled_at__isnull=True) | Q(polled_at__lte=now - datetime.timedelta(seconds=60))
+    ).update(polled_at=now)
+    if not claimed:
         return
 
     def run():
