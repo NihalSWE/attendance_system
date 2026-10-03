@@ -524,6 +524,11 @@ class QuietAndAfterShiftTests(WebhookCase):
             scans = build_day_detail(record=record, company_timezone="Asia/Dhaka")["scans"]
         self.assertEqual([s["label"] for s in scans],
                          ["Check-in", "Check-out", "Back in after check-out"])
+        with use_company(self.company):
+            detail = build_day_detail(record=record, company_timezone="Asia/Dhaka")
+        self.assertEqual((detail["break_count"], detail["outside"]), (0, "0h 0m"))
+        self.assertEqual(detail["in_office"], "9h 2m")              # 09:00 -> 18:02
+        self.assertNotEqual(detail["worked"], "")
         self.punch(MONDAY, 19, 0)                       # leaves again
         recalculate(self.company.pk, start=MONDAY, end=MONDAY, now=evening(19, 5))
         last = self.events()[-1]

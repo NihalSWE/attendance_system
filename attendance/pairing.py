@@ -255,14 +255,20 @@ def build_day(
 
     day.in_office_minutes = sum(s.minutes for s in day.sessions)
 
-    # Breaks: the gaps between one session ending and the next beginning.
+    closing_scan = next((s for s in reversed(scans) if s.label == "check_out"), None)
+
+    # Breaks: the gaps between one session ending and the next beginning -
+    # up to the check-out. Coming back in after checking out is not a break
+    # (Nihal, 2026-10-03: out 12:02 after the shift, in 12:04, counted as a
+    # second break and in the time out of office).
     for earlier, later in zip(day.sessions, day.sessions[1:]):
         if earlier.ended_at is None:
+            continue
+        if closing_scan is not None and earlier.ended_at >= closing_scan.at:
             continue
         day.outside_minutes += _minutes(earlier.ended_at, later.started_at)
         day.break_count += 1
 
-    closing_scan = next((s for s in reversed(scans) if s.label == "check_out"), None)
     if closing_scan is not None:
         day.last_out_at = closing_scan.at
         day.has_check_out = True

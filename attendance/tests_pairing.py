@@ -213,8 +213,10 @@ class PaidBreakTests(TestCase):
             ([at(9), at(17, 30), at(19, 15), at(21, 15)], 540, 105, 120),
             ([at(9), at(13), at(14), at(18), at(19, 15), at(21, 15)], 540, 135, 120),
             ([at(9), at(11), at(12, 30), at(14), at(15), at(18)], 510, 150, 0),
-            # An open overtime session does not turn its preceding gap into pay.
-            ([at(9), at(18), at(19, 15)], 540, 75, 0),
+            # An open overtime session does not turn its preceding gap into pay
+            # - and that gap, after the check-out, is not a break either
+            # (2026-10-03).
+            ([at(9), at(18), at(19, 15)], 540, 0, 0),
         )
         for scans, regular, outside, overtime in cases:
             with self.subTest(scans=scans):
@@ -317,3 +319,18 @@ class AfterTheShiftTests(TestCase):
         self.assertEqual(labels(day), ["check_in", "break_out", "break_in", "check_out",
                                        "break_in"])
         self.assertEqual(day.last_out_at, at(12, 2, 51))
+
+
+class AfterTheCheckOutTests(TestCase):
+    """Nihal, 2026-10-03: back in after the check-out is not a break, and "In
+    office" is the real time inside, kept apart from what counts for pay."""
+
+    def test_the_gap_after_the_check_out_is_not_a_break(self):
+        # Ajay's live day, shift 09:00-12:00 with a 5 minute paid break.
+        day = pairing.build_day([at(10, 51, 33), at(11, 6, 38), at(12, 0, 39), at(12, 2, 51),
+                                 at(12, 4, 8)], scheduled_start=at(9), scheduled_end=at(12),
+                                break_minutes=5, break_is_paid=True, is_closed=False)
+        self.assertEqual((day.break_count, day.outside_minutes), (1, 54))
+        self.assertEqual(day.total_minutes, 71)                 # 10:51 -> 12:02
+        self.assertEqual(day.in_office_minutes, 17)              # really inside
+        self.assertEqual(day.worked_minutes, 20)                 # 15 in the shift + 5 paid

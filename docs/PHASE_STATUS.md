@@ -5699,3 +5699,22 @@ Tests: `scheduling/tests_screens.py` test_editing_one_time_keeps_the_other.
 
 Tests: `attendance/tests_pairing.py` (3 new/changed), `webhooks/tests.py`
 test_back_in_after_the_check_out_keeps_it_and_leaving_again_updates_it.
+
+### Day totals: no break after the check-out; In office is the real time inside — 2026-10-03
+
+- Back in after the check-out was counted as a break and in Out of office
+  (Ajay: 2 breaks / 55m out; really 1 break, 54m). Gaps from the check-out on
+  are not breaks now (`pairing.build_day`, and the long-outside review check).
+  The test case "open overtime after 18:00" now has 0 outside (was 75): that
+  gap is after the check-out. Pay is unchanged.
+- "In office" showed `worked_minutes` - what counts for pay: time inside the
+  shift hours plus the paid break - so it never matched the scans (Ajay: 17m
+  inside, shown 20m = 15 + 5 paid). New `AttendanceRecord.in_office_minutes`
+  (attendance 0009): the real time inside, kept with the day so the calendar
+  box, the day panel, the month summary, My attendance and the export agree.
+  The day panel and Fix this day add **Worked (paid)** under the totals,
+  saying what it is. Days worked out before this keep showing the old figure
+  until rebuilt (`recalculate_attendance --since`).
+
+Tests: `attendance/tests_pairing.py` AfterTheCheckOutTests (+1 changed case),
+`webhooks/tests.py` (day panel totals).
