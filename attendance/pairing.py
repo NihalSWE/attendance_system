@@ -169,6 +169,14 @@ def label_scans(kept, *, is_closed, scheduled_end=None):
     after_shift = scheduled_end is not None and scans[-1].at >= scheduled_end
     if scans[-1].direction == "out" and (is_closed or after_shift):
         scans[-1].label = "check_out"
+    elif (scans[-1].direction == "in" and len(scans) > 1 and scheduled_end is not None
+          and scans[-2].at >= scheduled_end):
+        # Back in after scanning out past the shift's end: that scan out stays
+        # their check-out, as a closed day already keeps it (build_day) - it
+        # was not a break (Nihal, 2026-10-03: out 12:02 on a shift ending
+        # 12:00, in again 12:04, and the check-out turned into a break-out).
+        # A later scan out takes over as the check-out.
+        scans[-2].label = "check_out"
     return scans
 
 

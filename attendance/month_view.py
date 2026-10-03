@@ -265,6 +265,7 @@ def build_day_detail(*, record, company_timezone):
     """
     tz = zone(company_timezone)
     scans = []
+    checked_out = False
     for allocation in record.allocations.select_related(
         "punch_event__device"
     ).order_by("sequence_number"):
@@ -274,9 +275,14 @@ def build_day_detail(*, record, company_timezone):
             source = "Added by hand"
         else:
             source = device.name if device else ""
+        label = ALLOCATION_LABEL.get(allocation.label, allocation.label)
+        if checked_out and allocation.is_included and allocation.label == "break_in":
+            # A scan after the check-out is not a break (2026-10-03).
+            label = "Back in after check-out"
+        checked_out = checked_out or (allocation.is_included and allocation.label == "check_out")
         scans.append({
             "time": allocation.event_at.astimezone(tz).strftime("%H:%M:%S"),
-            "label": ALLOCATION_LABEL.get(allocation.label, allocation.label),
+            "label": label,
             "device": source,
             "is_manual": bool(allocation.attendance_correction_id),
             "is_included": allocation.is_included,
