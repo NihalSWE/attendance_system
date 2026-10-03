@@ -5595,3 +5595,7 @@ Tests: `organization/tests_same_day_edits.py` (3 new, 1 rewritten).
   cancelled placement (3 years for one person: 0.8 s locally).
 
 Tests: `organization/tests_same_day_edits.py` (14).
+- (Same day) The placement and salary **From** boxes show the date the
+  current one started, not today's: after saving 1 Jun 2023 the box still
+  said 3 Oct 2026, which looked as if the save had not worked. Saved as it
+  is, that date only corrects; a later date adds history as before.

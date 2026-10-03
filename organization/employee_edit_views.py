@@ -125,7 +125,12 @@ def edit_sections(request, company_id, pk, *, back):
                 "department": assignment.department_id if assignment else None,
                 "designation": assignment.designation_id if assignment else None,
                 "employee_code": assignment.employee_code if assignment else "",
-                "placement_from": today,
+                # The date it holds, like every other box here (Nihal,
+                # 2026-10-03: saved 1 Jun 2023, the box showed today). Saved
+                # as it is, that date only corrects; a later one adds history.
+                "placement_from": (
+                    _local_date(assignment.effective_from, company) if assignment else today
+                ),
             },
         )
         # No salary yet (e.g. created from a device's users): the first one
@@ -138,7 +143,8 @@ def edit_sections(request, company_id, pk, *, back):
                 "pay_basis": compensation.pay_basis if compensation else "monthly",
                 "base_rate": compensation.base_rate if compensation else None,
                 "salary_from": (
-                    _local_date(placed.effective_from, company) if placed else today
+                    _local_date(compensation.effective_from, company) if compensation
+                    else _local_date(placed.effective_from, company) if placed else today
                 ),
             },
         )
