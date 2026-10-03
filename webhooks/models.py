@@ -46,6 +46,9 @@ class WebhookSettings(TenantOwned, ActorTracked):
     last_test_ok = models.BooleanField(null=True, blank=True)
     last_test_message = models.CharField(max_length=500, blank=True)
     last_sent_at = models.DateTimeField(null=True, blank=True)
+    # Debug messages are kept, and shown on the page, until then (15 minutes
+    # from the button; Nihal, 2026-10-03). Null: off.
+    debug_until = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "webhooks_settings"
@@ -120,3 +123,18 @@ class WebhookDayState(TenantOwned):
             models.UniqueConstraint(fields=["employee", "work_date"],
                                     name="uniq_webhook_day_state"),
         ]
+
+
+class WebhookDebugEntry(TenantOwned):
+    """One thing the webhook did while debug messages were on: an event
+    queued, a send with its request and the receiver's whole answer, a test.
+    Deleted when the 15 minutes end. The secret key is never stored here."""
+
+    what = models.CharField(max_length=32)
+    ok = models.BooleanField(null=True)          # None: information, neither
+    message = models.TextField()
+    detail = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "webhooks_debug_entry"
+        indexes = [models.Index(fields=["company", "created_at"])]

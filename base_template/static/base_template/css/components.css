@@ -1812,3 +1812,41 @@ tr.is-picked > td { background: var(--accent-soft) !important; }
     background: var(--surface-sunken);
     outline: none;
 }
+
+/* ERP webhook: debug messages, 15 minutes (2026-10-03). */
+.webhook-debug__views { gap: 6px; }
+.webhook-debug__list { display: flex; flex-direction: column; gap: 10px; }
+.debug-entry {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: var(--r-md, 8px);
+    background: var(--surface);
+}
+.debug-entry--ok { border-left-color: var(--success); }
+.debug-entry--fail { border-left-color: var(--danger); }
+.debug-entry__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+.debug-entry__head time { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.debug-entry__message { margin: 6px 0 0; overflow-wrap: anywhere; }
+.debug-entry details { margin-top: 6px; }
+.debug-entry summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.webhook-debug__json,
+.debug-entry pre {
+    margin: 6px 0 0;
+    padding: 10px 12px;
+    max-height: 420px;
+    overflow: auto;
+    border-radius: var(--r-md, 8px);
+    background: var(--surface-sunken);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}

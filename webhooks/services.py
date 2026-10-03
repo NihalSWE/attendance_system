@@ -30,6 +30,7 @@ import logging
 import socket
 import ssl
 import threading
+import time
 import uuid
 import zoneinfo
 from dataclasses import dataclass
@@ -48,7 +49,8 @@ from auditlog.services import record_company_event
 from common.forms import StyledFormMixin, date_widget
 from common.tenant import use_company
 from organization.services import require_structure_manager
-from webhooks.models import WebhookDayState, WebhookEvent, WebhookSettings
+from webhooks.models import (WebhookDayState, WebhookDebugEntry, WebhookEvent,
+                             WebhookSettings)
 
 logger = logging.getLogger(__name__)
 
@@ -473,12 +475,14 @@ def test_connection(*, actor, company_id):
                           fix="Enter the secret key your developer gave you, then Save and test.")
     url = ping_url(row)
     try:
-        status, text = _call(url, method="GET", body=b"", headers=_headers(row, b""))
+        status, text, trace = _traced_call(url, method="GET", body=b"",
+                                           headers=_headers(row, b""))
     except WebhookError as exc:
-        result = diagnose(url=url, error=exc)
+        result, trace = diagnose(url=url, error=exc), getattr(exc, "trace", {})
     else:
         result = diagnose(url=url, status=status, text=text)
     summary = f"{result.title}. {result.detail} {result.fix}".strip()
+    debug_note(row, "test_connection", result.ok, summary, trace)
     with transaction.atomic(), use_company(company_id):
         row.last_tested_at, row.last_test_ok = timezone.now(), result.ok
         row.last_test_message = summary[:500]
@@ -558,12 +562,15 @@ def send_test_event(*, actor, company_id, employee_code, work_date, check_in, ch
         body = json.dumps({"events": [payload]} if row.batch else payload,
                           separators=(",", ":")).encode()
         try:
-            status, text = _call(row.url, method="POST", body=body, headers=_headers(row, body))
+            status, text, trace = _traced_call(row.url, method="POST", body=body,
+                                               headers=_headers(row, body))
         except WebhookError as exc:
-            result = diagnose(url=row.url, error=exc)
+            result, trace = diagnose(url=row.url, error=exc), getattr(exc, "trace", {})
             status = None
         else:
             result = _test_answer(row.url, status, text, code, row.employee_key)
+        debug_note(row, "test_event", result.ok,
+                   f"{result.title}. {result.detail} {result.fix}".strip(), trace)
         event.attempts, event.last_attempt_at, event.last_status_code = 1, now, status
         event.status = Status.SENT if result.ok else Status.SKIPPED
         event.sent_at = now if result.ok else None
@@ -683,8 +690,14 @@ def note_days(company_id, record_ids):
     if not record_ids:
         return 0
     try:
-        row = active_settings(company_id)
+        row = settings_for(company_id)
         if row is None:
+            return 0
+        if not row.is_active:
+            debug_note(row, "not_queued", None,
+                       f"Attendance changed on {len(record_ids)} day(s), but the webhook is "
+                       "switched off, so nothing was queued.",
+                       {"attendance_days": len(record_ids)})
             return 0
         return _note(company_id, row, record_ids)
     except Exception:  # noqa: BLE001 - attendance must not fail on the webhook
@@ -705,6 +718,12 @@ def _note(company_id, row, record_ids):
         .exclude(first_in_at__isnull=True)
     )
     if row.send_from:
+        before = [r for r in records if r.work_date < row.send_from]
+        if before:
+            debug_note(row, "not_queued", None,
+                       f"{len(before)} day(s) before {row.send_from:%d %b %Y} (Send from) "
+                       "were not queued.",
+                       {"days": [f"{r.employee.full_name} {r.work_date}" for r in before[:20]]})
         records = [r for r in records if r.work_date >= row.send_from]
     if not records:
         return 0
@@ -722,14 +741,23 @@ def _note(company_id, row, record_ids):
     with transaction.atomic():
         for record in records:
             code = _code(record)
+            who = f"{record.employee.full_name} on {record.work_date:%d %b %Y}"
             if not code:
+                debug_note(row, "not_queued", None,
+                           f"{who}: not queued - they have no Employee ID to send.", {})
                 continue
             check_in, check_out = _wanted(record, row.mode, latest.get(record.pk))
             state = states.get((record.employee_id, record.work_date))
             sent = (state.check_in, state.check_out) if state else (None, None)
             if (check_in, check_out) == sent:
+                debug_note(row, "not_queued", None,
+                           f"{who} ({code}): nothing new - your system already has this "
+                           "check-in/check-out.", {})
                 continue
             if sent[1] is not None and check_out is None:
+                debug_note(row, "not_queued", None,
+                           f"{who} ({code}): a check-out was already sent and is not taken "
+                           "back.", {})
                 continue      # a check-out once sent is not taken back
             if sent == (None, None):
                 kind = WebhookEvent.Kind.CHECK_OUT if check_out else WebhookEvent.Kind.CHECK_IN
@@ -744,6 +772,9 @@ def _note(company_id, row, record_ids):
             event.payload = _payload(event, row, company, zone, record, code, check_in,
                                      check_out, ip)
             event.save()
+            debug_note(row, "queued", None,
+                       f"{who} ({code}): {event.get_kind_display().lower()} queued; it is "
+                       "sent next.", {"payload": event.payload})
             if state is None:
                 state = WebhookDayState(company_id=company_id, employee_id=record.employee_id,
                                         work_date=record.work_date)
@@ -773,6 +804,143 @@ def _payload(event, row, company, zone, record, code, check_in, check_out, ip):
     return payload
 
 
+# --- debug messages (Nihal, 2026-10-03) ----------------------------------------------
+#
+# A button on the page turns them on for 15 minutes: everything the webhook
+# does meanwhile - each event queued (or why not), each send with the exact
+# request and the receiver's whole answer, each test, success or not - is kept
+# and shown on the page as a message and as JSON. When the 15 minutes end (or
+# Stop), they are deleted. The secret key never appears in them.
+
+DEBUG_MINUTES = 15
+DEBUG_KEEP = 300                 # entries shown at most
+SECRET_HEADERS = ("X-Webhook-Secret", "Authorization")
+HIDDEN = "(secret key, hidden)"
+DEBUG_WHAT = {
+    "queued": "Queued", "send": "Sent to your system", "test_connection": "Test connection",
+    "test_event": "Send a test", "not_queued": "Not queued", "debug": "Debug",
+}
+
+
+def debugging(row):
+    return bool(row is not None and row.debug_until and row.debug_until > timezone.now())
+
+
+def _end_debug_if_over(row):
+    """The 15 minutes are over: the messages go, and the switch goes off."""
+    if row is not None and row.debug_until and row.debug_until <= timezone.now():
+        WebhookDebugEntry.all_objects.filter(company_id=row.company_id).delete()
+        WebhookSettings.all_objects.filter(pk=row.pk).update(debug_until=None)
+        row.debug_until = None
+
+
+def start_debug(*, actor, company_id):
+    membership = require_structure_manager(actor, company_id)
+    row = settings_for(company_id)
+    if row is None:
+        raise WebhookError("Save the webhook first.")
+    with transaction.atomic():
+        WebhookDebugEntry.all_objects.filter(company_id=company_id).delete()
+        row.debug_until = timezone.now() + datetime.timedelta(minutes=DEBUG_MINUTES)
+        WebhookSettings.all_objects.filter(pk=row.pk).update(debug_until=row.debug_until)
+        record_company_event(actor=actor, membership=membership, company=membership.company,
+                             action="webhook.debug_started", obj=row,
+                             after={"until": row.debug_until.isoformat()})
+    debug_note(row, "debug", None,
+               f"Debug messages on for {DEBUG_MINUTES} minutes. "
+               + ("The webhook is switched on: scans are queued and sent as they happen."
+                  if row.is_active else
+                  "The webhook is switched OFF: nothing is queued or sent until it is "
+                  "switched on (the tests still work)."),
+               {"url": row.url, "test_url": ping_url(row), "switched_on": row.is_active,
+                "mode": row.mode, "one_request_for_several": row.batch,
+                "employee_key": row.employee_key,
+                "send_from": row.send_from.isoformat() if row.send_from else None})
+    return row
+
+
+def stop_debug(*, actor, company_id):
+    membership = require_structure_manager(actor, company_id)
+    row = settings_for(company_id)
+    if row is None:
+        return
+    with transaction.atomic():
+        WebhookDebugEntry.all_objects.filter(company_id=company_id).delete()
+        WebhookSettings.all_objects.filter(pk=row.pk).update(debug_until=None)
+        record_company_event(actor=actor, membership=membership, company=membership.company,
+                             action="webhook.debug_stopped", obj=row, after={})
+
+
+def debug_note(row, what, ok, message, detail=None):
+    """Keep one debug message, when they are on. Never stands in the way of
+    the webhook itself."""
+    try:
+        if not debugging(row):
+            return
+        WebhookDebugEntry.all_objects.create(company_id=row.company_id, what=what, ok=ok,
+                                             message=message[:2000], detail=detail or {})
+    except Exception:  # noqa: BLE001 - a debug message is never worth a failed send
+        logger.exception("Webhook: debug message not kept")
+
+
+def debug_state(company_id):
+    """What the page shows: on or off, time left, and the messages, newest first."""
+    row = settings_for(company_id)
+    _end_debug_if_over(row)
+    if not debugging(row):
+        return {"active": False, "seconds_left": 0, "entries": []}
+    zone = company_zone(row.company)
+    rows = (WebhookDebugEntry.all_objects.filter(company_id=company_id)
+            .order_by("-created_at", "-pk")[:DEBUG_KEEP])
+    return {
+        "active": True,
+        "seconds_left": max(0, int((row.debug_until - timezone.now()).total_seconds())),
+        "entries": [{
+            "id": entry.pk,
+            "at": entry.created_at.astimezone(zone).strftime(TIME_FORMAT),
+            "what": DEBUG_WHAT.get(entry.what, entry.what),
+            "ok": entry.ok,
+            "message": entry.message,
+            "detail": entry.detail,
+        } for entry in rows],
+    }
+
+
+def _shown_headers(headers):
+    return {k: (HIDDEN if k in SECRET_HEADERS else v) for k, v in headers.items()}
+
+
+def _as_json(text):
+    try:
+        return json.loads(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _traced_call(url, *, method, body, headers):
+    """``_call``, plus a ``trace`` of the exact request and the whole answer
+    for the debug messages: ``(status, text, trace)``. A WebhookError carries
+    its trace too."""
+    started = time.monotonic()
+    request = {"method": method, "url": url, "headers": _shown_headers(headers),
+               "body": _as_json(body.decode()) if body else None}
+    try:
+        status, text = _call(url, method=method, body=body, headers=headers)
+    except WebhookError as exc:
+        exc.trace = {"request": request,
+                     "error": {"code": getattr(exc, "code", ""),
+                               "message": " ".join(exc.messages)},
+                     "took_ms": int((time.monotonic() - started) * 1000)}
+        raise
+    answer = _as_json(text)
+    return status, text, {
+        "request": request,
+        "response": {"status": status, "meaning": _explain(status),
+                     "body": answer if answer is not None else text[:20000]},
+        "took_ms": int((time.monotonic() - started) * 1000),
+    }
+
+
 # --- sending -----------------------------------------------------------------------
 
 
@@ -781,6 +949,7 @@ def deliver_due(company_id, *, limit=MAX_EVENTS):
     row = active_settings(company_id)
     if row is None:
         return 0
+    _end_debug_if_over(row)
     received = 0
     with transaction.atomic():
         events = list(
@@ -801,16 +970,25 @@ def _send(row, group):
     body = json.dumps({"events": payloads} if row.batch else payloads[0],
                       separators=(",", ":")).encode()
     now = timezone.now()
+    who = ", ".join(f"{e.payload.get(row.employee_key, '?')} {e.kind}" for e in group[:10])
     try:
-        status, text = _call(row.url, method="POST", body=body, headers=_headers(row, body))
+        status, text, trace = _traced_call(row.url, method="POST", body=body,
+                                           headers=_headers(row, body))
     except WebhookError as exc:
         _retry(group, now, None, " ".join(exc.messages))
+        debug_note(row, "send", False,
+                   f"Not received ({who}): {' '.join(exc.messages)} It will be tried again.",
+                   getattr(exc, "trace", {}))
         return 0
     if not 200 <= status < 300:
         _retry(group, now, status, f"Answered {status}: {_explain(status)} {text[:200]}".strip())
+        debug_note(row, "send", False,
+                   f"Not received ({who}): your system answered {status} - {_explain(status)} "
+                   "It will be tried again.", trace)
         return 0
     results = _results(text, len(group))
     received = 0
+    outcomes = []
     for event, result in zip(group, results):
         outcome = str((result or {}).get("result", "")).lower()
         message = str((result or {}).get("message") or "")[:500]
@@ -826,8 +1004,16 @@ def _send(row, group):
             received += 1
         event.save(update_fields=["status", "attempts", "last_attempt_at", "last_status_code",
                                   "last_message", "sent_at", "next_attempt_at", "updated_at"])
+        outcomes.append({"event_id": str(event.event_id),
+                         "employee": event.payload.get(row.employee_key), "event": event.kind,
+                         "result": outcome or "received", "status_here": event.get_status_display(),
+                         "message": event.last_message})
     if received:
         WebhookSettings.all_objects.filter(pk=row.pk).update(last_sent_at=now)
+    debug_note(row, "send", received == len(group),
+               f"Sent {len(group)} event(s) ({who}): {received} received"
+               + (f", {len(group) - received} not" if received < len(group) else "")
+               + f". Your system answered {status}.", {**trace, "events": outcomes})
     return received
 
 

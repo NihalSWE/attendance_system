@@ -7,4 +7,5 @@ app_name = "webhooks"
 urlpatterns = [
     path("", views.webhook_settings, name="settings"),
     path("guide/", views.webhook_guide, name="guide"),
+    path("debug/", views.webhook_debug, name="debug"),
 ]
