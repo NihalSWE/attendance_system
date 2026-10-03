@@ -512,12 +512,12 @@ class TestEventForm(StyledFormMixin, forms.Form):
         help_text="An employee of this company. Your system must know the same ID.")
     work_date = forms.DateField(label="Day", widget=date_widget("Choose a day"))
     check_in = forms.TimeField(label="Check-in", input_formats=["%H:%M", "%H:%M:%S"],
-                               widget=forms.TextInput(attrs={
+                               widget=forms.TimeInput(format="%H:%M", attrs={
                                    "placeholder": "HH:MM", "maxlength": 8,
                                    "autocomplete": "off", "data-timepicker": ""}))
     check_out = forms.TimeField(label="Check-out (optional)", required=False,
                                 input_formats=["%H:%M", "%H:%M:%S"],
-                                widget=forms.TextInput(attrs={
+                                widget=forms.TimeInput(format="%H:%M", attrs={
                                     "placeholder": "HH:MM", "maxlength": 8,
                                     "autocomplete": "off", "data-timepicker": ""}))
 

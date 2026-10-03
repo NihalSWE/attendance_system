@@ -25,11 +25,16 @@ def _time_field(label, help_text):
     # A text box rather than <input type="time">: the browser draws its own
     # clock control for that, which the design does not allow. data-timepicker
     # adds the project time picker (timepicker.js); typing still works.
+    # TimeInput, not TextInput: only TimeInput applies the format, so a saved
+    # 09:00 came back as "09:00:00", which the box (HH:MM, 5 characters) then
+    # refused on the next save - every untouched time "invalid" (2026-10-03).
+    # Seconds are still accepted, from a page opened before that fix.
     return forms.TimeField(
         label=label,
-        input_formats=["%H:%M", "%H.%M"],
+        input_formats=["%H:%M", "%H.%M", "%H:%M:%S"],
         help_text=help_text,
-        widget=forms.TextInput(
+        widget=forms.TimeInput(
+            format="%H:%M",
             attrs={
                 "placeholder": "HH:MM", "maxlength": 5, "inputmode": "numeric",
                 "autocomplete": "off", "data-timepicker": "",
@@ -102,8 +107,6 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["start_time"].widget.format = "%H:%M"
-        self.fields["end_time"].widget.format = "%H:%M"
         for name in self.OPTIONAL_MINUTES:
             self.fields[name].required = False
         # "The break is paid" only means something once there is a break.
