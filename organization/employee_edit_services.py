@@ -152,6 +152,23 @@ def _on_the_day(starts, began, company):
     return starts
 
 
+def _day(moment, company):
+    """``moment`` as the company's own date, for messages. Rows are stored in
+    UTC, so midnight on 3 Oct in Dhaka printed as "02 Oct" (2026-10-03)."""
+    zone = ZoneInfo(getattr(company, "timezone", None) or "UTC")
+    return f"{moment.astimezone(zone):%d %b %Y}"
+
+
+def _earlier_row(model, employee, current):
+    """The row before ``current`` in the history, if any. Call inside the
+    company's context."""
+    return (
+        model.objects.filter(employee=employee, effective_from__lt=current.effective_from)
+        .exclude(pk=current.pk).exclude(status__in=["cancelled", "draft"])
+        .order_by("-effective_from").first()
+    )
+
+
 @transaction.atomic
 def change_placement(*, actor, company_id, employee_id, values):
     """New branch / department / designation / code from a date."""
@@ -173,12 +190,21 @@ def change_placement(*, actor, company_id, employee_id, values):
             "effective_from": current.effective_from.isoformat(),
         }
         if starts < current.effective_from:
-            raise ValidationError({
-                "placement_from": (
-                    f"The current placement started on {current.effective_from:%d %b %Y}; "
-                    "a change cannot start before it."
-                )
-            })
+            # Earlier than the current placement: only their first placement
+            # can move back (someone added today who has worked there since
+            # 2023, Nihal 2026-10-03). With history before it, the two would
+            # overlap, so that stays refused.
+            earlier = _earlier_row(EmployeeAssignment, employee, current)
+            if earlier is not None:
+                raise ValidationError({
+                    "placement_from": (
+                        f"The current placement started on "
+                        f"{_day(current.effective_from, membership.company)}, after their "
+                        f"previous one (from {_day(earlier.effective_from, membership.company)}); "
+                        "a change cannot start before it."
+                    )
+                })
+            current.effective_from = starts
         correction = starts == current.effective_from
         if correction:
             # A correction: fix the current row instead of adding history.
@@ -235,12 +261,30 @@ def change_salary(*, actor, company_id, employee_id, values):
             "effective_from": current.effective_from.isoformat(),
         }
         if starts < current.effective_from:
-            raise ValidationError({
-                "salary_from": (
-                    f"The current salary started on {current.effective_from:%d %b %Y}; "
-                    "a change cannot start before it."
-                )
-            })
+            # As for the placement: only the first salary can move back, and
+            # never before they were placed (no attendance to pay before it).
+            earlier = _earlier_row(EmployeeCompensation, employee, current)
+            if earlier is not None:
+                raise ValidationError({
+                    "salary_from": (
+                        f"The current salary started on "
+                        f"{_day(current.effective_from, membership.company)}, after their "
+                        f"previous one (from {_day(earlier.effective_from, membership.company)}); "
+                        "a change cannot start before it."
+                    )
+                })
+            placed = first_placement(employee)
+            if placed is not None:
+                # The day they were placed means from the placement.
+                starts = _on_the_day(starts, placed.effective_from, membership.company)
+            if placed is not None and starts < placed.effective_from:
+                raise ValidationError({
+                    "salary_from": (
+                        f"They were placed on {_day(placed.effective_from, membership.company)}; "
+                        "the salary cannot start before that."
+                    )
+                })
+            current.effective_from = starts = min(starts, current.effective_from)
         if starts == current.effective_from:
             current.pay_basis = values["pay_basis"]
             current.base_rate = values["base_rate"]
@@ -288,7 +332,7 @@ def _set_first_salary(membership, employee, values, actor):
         if placed is not None and starts < placed.effective_from:
             raise ValidationError({
                 "salary_from": (
-                    f"They were placed on {placed.effective_from:%d %b %Y}; "
+                    f"They were placed on {_day(placed.effective_from, membership.company)}; "
                     "the salary cannot start before that."
                 )
             })

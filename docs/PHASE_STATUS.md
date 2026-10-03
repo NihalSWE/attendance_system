@@ -5557,3 +5557,22 @@ code with the live error).
   next check-in).
 
 Tests: `devices/tests_ui.py` (4).
+
+### Edit employee: a first placement or salary can start earlier — 2026-10-03
+
+- An employee added on 3 Oct who has worked there since 1 Jun 2023 could not
+  have that date: any date before the current placement was refused ("The
+  current placement started on 02 Oct 2026; a change cannot start before
+  it"). The message also showed the wrong day - the row is stored in UTC and
+  midnight on 3 Oct in Dhaka is 2 Oct there.
+- Now an earlier date corrects the start of their **first** placement (no
+  history before it) in place, with whatever else was changed. With history
+  before it, the two would overlap, so it is still refused - with both dates.
+- The same for the first salary, never before they were placed (the day they
+  were placed means from the placement).
+- Messages give the company's own date (`_day`).
+- Unchanged: days before the joining date are not counted in attendance or
+  salary, so moving a placement back does not create absences before it;
+  change the joining date under Details when they joined earlier.
+
+Tests: `organization/tests_same_day_edits.py` (3 new, 1 rewritten).
