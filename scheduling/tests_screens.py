@@ -333,6 +333,30 @@ class CalendarScreenTests(CalendarBase):
         self.assertEqual(shift.code, "DAY")
         self.assertEqual(shift.scheduled_minutes, 540)
 
+    def test_editing_one_time_keeps_the_other(self):
+        # 2026-10-03: the edit page showed 09:00:00, which the HH:MM box then
+        # refused - change only the start, and the end was "invalid".
+        shift = self._shift()
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("scheduling:shift_edit", args=[shift.pk]))
+        self.assertContains(page, 'value="09:00"')
+        self.assertContains(page, 'value="18:00"')
+        self.assertNotContains(page, '09:00:00')
+        form = page.context["form"]
+        data = {name: form[name].value() for name in form.fields}
+        data = {k: ("on" if v is True else "" if v in (None, False) else v)
+                for k, v in data.items()}
+        data["start_time"] = "08:30"                     # the end left as the page showed it
+        data["end_time"] = form["end_time"].as_widget().split('value="')[1].split('"')[0]
+        response = self.client.post(reverse("scheduling:shift_edit", args=[shift.pk]), data)
+        self.assertEqual(response.status_code, 302)
+        shift.refresh_from_db()
+        self.assertEqual((shift.start_time.strftime("%H:%M"), shift.end_time.strftime("%H:%M")),
+                         ("08:30", "18:00"))
+        data["end_time"] = "18:00:00"                    # a page opened before the fix
+        response = self.client.post(reverse("scheduling:shift_edit", args=[shift.pk]), data)
+        self.assertEqual(response.status_code, 302)
+
     def test_an_end_before_the_start_is_a_night_shift(self):
         # No "ends on the next day" box: the times say it.
         self.client.force_login(self.admin)

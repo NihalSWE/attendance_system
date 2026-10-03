@@ -116,7 +116,10 @@ def time_widget():
     Not ``type="time"``: the browser draws its own clock for that, which the
     design does not allow (UI_AND_ONBOARDING_CONVENTIONS.md).
     """
-    return forms.TextInput(
+    # TimeInput so a saved time shows as HH:MM; a TextInput ignores the
+    # format and showed "09:00:00", too long for the box (2026-10-03).
+    return forms.TimeInput(
+        format="%H:%M",
         attrs={
             "placeholder": "HH:MM",
             "maxlength": 5,

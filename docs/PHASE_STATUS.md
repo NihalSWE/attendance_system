@@ -5668,3 +5668,17 @@ Tests: `attendance/tests_pairing.py` AfterTheShiftTests (3),
 - The guide explains the new events (and whether this company sends them).
 
 Tests: `webhooks/tests.py` ScansInBetweenTests (3).
+
+### Edit shift: times show as HH:MM — 2026-10-03
+
+- Edit shift showed a saved time as `09:00:00`; the box takes HH:MM (5
+  characters), so changing only the start made the untouched end "invalid"
+  until it was typed again as 18:00 - and after saving it showed seconds
+  again. The box was a `TextInput`, which ignores the HH:MM format the form
+  set; only `TimeInput` applies it.
+- The shift times, the shared time box (`common.forms.time_widget`: leave
+  hours, payroll's "They left at", every date-and-time picker) and the
+  webhook's Send a test now use `TimeInput(format="%H:%M")`. The shift times
+  also accept HH:MM:SS, from a page opened before the fix.
+
+Tests: `scheduling/tests_screens.py` test_editing_one_time_keeps_the_other.
