@@ -5847,3 +5847,19 @@ the first password hasher (old hashes upgrade at the next login, panel or API).
   (`/api/docs/postman.json`) signs each request in its pre-request script.
 
 Tests: `api/tests/` (94).
+
+### API — two-step login by email — 2026-10-04
+
+At the senior's request: the authenticator app stays the main way; a 6-digit
+code by email is the second. `POST /auth/two-step/setup` takes
+`method: app | email` (changing the way needs a current code and a confirm);
+`POST /auth/login/two-step/email-code` (at login) and
+`POST /auth/two-step/email-code` (logged in) send a code. Codes: 10 minutes,
+once, 5 wrong tries, one email a minute, hash only, on the session
+(`api/core/email_codes.py`). Sent through the company's mail account or the
+server's; with DEBUG and neither, printed in the console. The challenge now
+lasts 10 minutes. Code checks commit their own bookkeeping (authenticator
+steps and recovery codes claimed atomically). Migration `api.0003_two_step_email`.
+Swagger describes the API's authentication (`api/core/schema.py`).
+
+Tests: `api/tests/` (101).

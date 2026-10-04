@@ -104,9 +104,12 @@ class LoginView(ApiView):
             "refresh_token (swapped for a new pair before the access token expires, valid 30 "
             "days, works once) and the signing_secret (signs every request; never sent again). "
             "session_id is the X-Key-Id of your signed requests.\n\n"
-            "When two-step login is on, the answer is only {two_step_required: true, "
-            "challenge, challenge_expires_in}: send the challenge and the authenticator code to "
-            "POST /api/v1/auth/login/two-step within 5 minutes.\n\n"
+            "When two-step login is on, the answer is only the challenge fields: send the "
+            "challenge and a code to POST /api/v1/auth/login/two-step within 10 minutes. "
+            "methods says which codes work: the authenticator app (the main way), a code by "
+            "email (ask for it with POST /api/v1/auth/login/two-step/email-code - or, for a "
+            "login set up with email codes, it is already sent: see email_sent_to) and a "
+            "recovery code.\n\n"
             "An owner or company administrator without two-step login gets "
             "two_step_setup_required: true - until they set it up, only two-step setup and "
             "logout work. 5 wrong passwords in 15 minutes lock the login for 15 minutes (10 in "
@@ -134,12 +137,12 @@ class LoginTwoStepView(ApiView):
         summary="The challenge and the authenticator code in; the tokens out.",
         what_it_does=[
             "Finishes a login that answered two_step_required: true.",
-            "Takes the 6-digit authenticator code or one recovery code.",
+            "Takes the 6-digit authenticator code, the code sent by email, or one recovery code.",
         ],
         description=(
             "Send the challenge from POST /api/v1/auth/login with the current code from the "
-            "authenticator app, within 5 minutes. A recovery code works once; each "
-            "authenticator code also works once. Wrong codes count toward the same lockout as "
+            "authenticator app (or the code emailed by POST /api/v1/auth/login/two-step/email-code), "
+            "within 10 minutes. Every code works once. Wrong codes count toward the same lockout as "
             "wrong passwords. The answer is the same as a login without two-step."
         ),
         roles=["Anyone with a company login"], auth="public",
@@ -153,6 +156,41 @@ class LoginTwoStepView(ApiView):
         data = s.TwoStepLoginSerializer(data=request.data)
         data.is_valid(raise_exception=True)
         return Response(logins.login_two_step(request, **data.validated_data))
+
+
+class LoginEmailCodeView(ApiView):
+    permission_classes = [Public]
+    authentication_classes = []
+    throttle_scope = "login"
+
+    @endpoint(
+        id="auth-login-two-step-email-code", area=AREA, title="Log in: send the code by email",
+        summary="The challenge in; a 6-digit code goes to the login's email.",
+        what_it_does=[
+            "Emails a two-step code for this login - instead of the authenticator app.",
+            "Then send that code to the two-step step, as with the app's code.",
+        ],
+        description=(
+            "For when the phone is not at hand, or the login uses email codes (their first "
+            "code is sent at login already - use this to send another). Works for apps and "
+            "browser frontends alike: finish with POST /api/v1/auth/login/two-step or "
+            "POST /api/v1/auth/web/login/two-step.\n\n"
+            "The code works once, for 10 minutes, and stops after 5 wrong tries. One email a "
+            "minute. It is sent through the company's mail account (Organisation -> Email "
+            "settings) or the server's; with neither, the answer is email_not_available."
+        ),
+        roles=["Anyone with a company login, in the middle of logging in"], auth="public",
+        sample_auth="none",
+        request=s.ChallengeSerializer, response=s.EmailCodeSentSerializer,
+        request_example={"challenge": "ch_Jk3…"},
+        response_example={"email_sent_to": "r***@example.com", "email_expires_in": 600},
+        errors=["validation_error", "unknown_field", "challenge_expired", "login_locked",
+                "email_not_available", "email_not_sent", "rate_limited", "server_error"],
+    )
+    def post(self, request):
+        data = s.ChallengeSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        return Response(logins.email_code_for_challenge(request, data.validated_data["challenge"]))
 
 
 class RefreshView(ApiView):
@@ -372,7 +410,7 @@ class MeView(ApiView):
         response_example={
             "email": "rahim@example.com", "name": "Rahim Uddin",
             "companies": [{"id": 12, "name": "Acme Ltd", "role": "company_admin"}],
-            "two_step": {"enabled": True, "required": True},
+            "two_step": {"enabled": True, "method": "app", "required": True},
             "session": {"id": "ses_q7Hc2LkP9xWm", "client_type": "mobile",
                         "access_expires_at": "2026-10-04T10:25:00Z"}},
         errors=["not_authenticated", "invalid_token", "token_expired", "session_ended",
@@ -381,13 +419,15 @@ class MeView(ApiView):
     )
     def get(self, request):
         user, session = request.user, request.api_session
+        two_step = logins.two_step_on(user)
         companies = [{"id": m.company_id, "name": m.company.name, "role": m.role}
                      for m in get_active_memberships(user).select_related("company")
                      .order_by("company__name")]
         return Response(s.MeSerializer({
             "email": user.email, "name": user.get_full_name() or user.email,
             "companies": companies,
-            "two_step": {"enabled": logins.two_step_on(user) is not None,
+            "two_step": {"enabled": two_step is not None,
+                         "method": two_step.method if two_step else None,
                          "required": logins.must_use_two_step(user)},
             "session": {"id": session.public_id, "client_type": session.client_type,
                         "access_expires_at": session.access_expires_at},
@@ -626,22 +666,56 @@ class TwoStepSetupView(ApiView):
 
     @endpoint(
         id="auth-two-step-setup", area=AREA, title="Set up two-step login",
-        summary="A new authenticator secret, to scan as a QR code.",
-        what_it_does=["Starts two-step login: answers the secret and an otpauth:// link.",
-                      "Nothing changes until it is confirmed with a code."],
-        description=("Show otpauth_url as a QR code; the person scans it with an authenticator "
-                     "app (Google Authenticator, Microsoft Authenticator, Authy, …), then sends "
-                     "the 6-digit code it shows to POST /api/v1/auth/two-step/confirm. Required "
-                     "for owners and company administrators."),
+        summary="Start two-step login - with the authenticator app, or with codes by email.",
+        what_it_does=[
+            'method "app" (the main way): answers a secret and an otpauth:// link to scan.',
+            'method "email": emails a code instead - for someone who does not want an app.',
+            "Nothing changes until it is confirmed with a code.",
+        ],
+        description=(
+            "app: show otpauth_url as a QR code; the person scans it with an authenticator app "
+            "(Google Authenticator, Microsoft Authenticator, Authy, …), then sends the 6-digit "
+            "code it shows to POST /api/v1/auth/two-step/confirm.\n\n"
+            "email: a code is emailed now; send it to POST /api/v1/auth/two-step/confirm. From "
+            "then on every login emails a code. Needs a mail account on the server or the "
+            "company (Organisation -> Email settings).\n\n"
+            "Already on? This changes the way: send a current code as well. The new way takes "
+            "over when it is confirmed. Required for owners and company administrators; a code "
+            "by email also works at login for those who use the app."),
         roles=["A logged-in person (app or web)"],
-        response=s.TwoStepSetupSerializer,
-        response_example={"secret": "JBSWY3DPEHPK3PXP",
+        request=s.TwoStepSetupInputSerializer, response=s.TwoStepSetupSerializer,
+        request_example={"method": "app"},
+        response_example={"method": "app", "secret": "JBSWY3DPEHPK3PXP",
                           "otpauth_url": "otpauth://totp/Attendance%20Management:rahim%40example.com"
                                          "?secret=JBSWY3DPEHPK3PXP&issuer=Attendance%20Management"},
         errors=TWO_STEP_ERRORS,
     )
     def post(self, request):
-        return Response(logins.two_step_setup(request, request.user))
+        data = s.TwoStepSetupInputSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        return Response(logins.two_step_setup(request, request.api_session,
+                                              **data.validated_data))
+
+
+class TwoStepEmailCodeView(ApiView):
+    permission_classes = [IsPerson]
+    throttle_scope = "login"
+    allowed_during_two_step_setup = True
+
+    @endpoint(
+        id="auth-two-step-email-code", area=AREA, title="Send me a code by email",
+        summary="Emails a two-step code to the logged-in person.",
+        what_it_does=["Emails a 6-digit code, for the two-step requests that need a code."],
+        description=("Use the code to confirm email setup, change the way, turn two-step login "
+                     "off or get new recovery codes - wherever a code from the app is asked "
+                     "for. It works once, for 10 minutes; one email a minute."),
+        roles=["A logged-in person who has started or set up two-step login"],
+        response=s.EmailCodeSentSerializer,
+        response_example={"email_sent_to": "r***@example.com", "email_expires_in": 600},
+        errors=TWO_STEP_ERRORS + ["email_not_available", "email_not_sent"],
+    )
+    def post(self, request):
+        return Response(logins.email_code_for_session(request, request.api_session))
 
 
 class TwoStepConfirmView(ApiView):
@@ -651,21 +725,25 @@ class TwoStepConfirmView(ApiView):
 
     @endpoint(
         id="auth-two-step-confirm", area=AREA, title="Confirm two-step login",
-        summary="The first code from the app turns two-step login on.",
-        what_it_does=["Turns two-step login on.",
+        summary="The first code of the new way turns two-step login on.",
+        what_it_does=["Turns two-step login on - or completes a change of way.",
                       "Answers 10 recovery codes - shown once."],
-        description=("From now on every login asks for the authenticator code. Keep the "
-                     "recovery codes somewhere safe: each logs in once if the phone is lost."),
+        description=("Send the code from the authenticator app (method app) or the code that was "
+                     "emailed (method email). From now on every login asks for a code. Keep the "
+                     "recovery codes somewhere safe: each logs in once if the phone or the email "
+                     "is out of reach."),
         roles=["A logged-in person (app or web)"],
-        request=s.CodeSerializer, response=s.RecoveryCodesSerializer,
+        request=s.CodeSerializer, response=s.TwoStepOnSerializer,
         request_example={"code": "492013"},
-        response_example={"recovery_codes": ["3f9a1c2e-7b4d5e6f", "a81c03d4-55e2f9b0"]},
+        response_example={"method": "app",
+                          "recovery_codes": ["3f9a1c2e-7b4d5e6f", "a81c03d4-55e2f9b0"]},
         errors=TWO_STEP_ERRORS,
     )
     def post(self, request):
         data = s.CodeSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        return Response(logins.two_step_confirm(request, request.user, data.validated_data["code"]))
+        return Response(logins.two_step_confirm(request, request.api_session,
+                                                data.validated_data["code"]))
 
 
 class TwoStepDisableView(ApiView):
@@ -686,7 +764,7 @@ class TwoStepDisableView(ApiView):
     def post(self, request):
         data = s.DisableTwoStepSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        logins.two_step_disable(request, request.user, data.validated_data["password"],
+        logins.two_step_disable(request, request.api_session, data.validated_data["password"],
                                 data.validated_data["code"])
         return Response({"detail": "Two-step login is off."})
 
@@ -697,7 +775,7 @@ class RecoveryCodesView(ApiView):
 
     @endpoint(
         id="auth-two-step-recovery-codes", area=AREA, title="New recovery codes",
-        summary="A code from the app in; 10 new recovery codes out.",
+        summary="A code (app or email) in; 10 new recovery codes out.",
         what_it_does=["Replaces the recovery codes - the old ones stop working."],
         description="Use it when the codes ran low or may have been seen by someone.",
         roles=["A logged-in person with two-step login on"],
@@ -709,7 +787,7 @@ class RecoveryCodesView(ApiView):
     def post(self, request):
         data = s.CodeSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        return Response(logins.two_step_recovery_codes(request, request.user,
+        return Response(logins.two_step_recovery_codes(request, request.api_session,
                                                        data.validated_data["code"]))
 
 

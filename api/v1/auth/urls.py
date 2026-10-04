@@ -5,6 +5,8 @@ from api.v1.auth import views
 urlpatterns = [
     path("auth/login", views.LoginView.as_view(), name="auth_login"),
     path("auth/login/two-step", views.LoginTwoStepView.as_view(), name="auth_login_two_step"),
+    path("auth/login/two-step/email-code", views.LoginEmailCodeView.as_view(),
+         name="auth_login_two_step_email_code"),
     path("auth/refresh", views.RefreshView.as_view(), name="auth_refresh"),
     path("auth/logout", views.LogoutView.as_view(), name="auth_logout"),
     path("auth/web/csrf", views.WebCsrfView.as_view(), name="auth_web_csrf"),
@@ -21,6 +23,8 @@ urlpatterns = [
     path("auth/password/forgot", views.PasswordForgotView.as_view(), name="auth_password_forgot"),
     path("auth/password/reset", views.PasswordResetView.as_view(), name="auth_password_reset"),
     path("auth/two-step/setup", views.TwoStepSetupView.as_view(), name="auth_two_step_setup"),
+    path("auth/two-step/email-code", views.TwoStepEmailCodeView.as_view(),
+         name="auth_two_step_email_code"),
     path("auth/two-step/confirm", views.TwoStepConfirmView.as_view(),
          name="auth_two_step_confirm"),
     path("auth/two-step/disable", views.TwoStepDisableView.as_view(),

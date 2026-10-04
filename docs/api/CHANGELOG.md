@@ -2,6 +2,20 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-04 — Two-step login by email
+
+- **New:** codes by email as the second way of two-step login, beside the
+  authenticator app (still the main way). `POST /api/v1/auth/two-step/setup`
+  takes `{"method": "app" | "email"}`; a login set up with email gets its code
+  emailed at each login.
+- **New:** `POST /api/v1/auth/login/two-step/email-code` — at login, a code by
+  email instead of the app. `POST /api/v1/auth/two-step/email-code` — the same
+  when logged in (confirm, change the way, turn off, recovery codes).
+- **Changed:** the login's two-step answer also has `methods` (and
+  `email_sent_to` when a code was emailed); the challenge now lasts
+  10 minutes; *Who am I* shows `two_step.method`; confirm answers `method`.
+- **New errors:** `email_not_available`, `email_not_sent`.
+
 ## 2026-10-04 — Phase 1: security & login
 
 - **New — apps:** `POST /api/v1/auth/login`, `/login/two-step`, `/refresh`,

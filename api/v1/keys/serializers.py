@@ -59,10 +59,10 @@ class KeySerializer(serializers.Serializer):
         source="previous_valid_until", allow_null=True,
         help_text="After a rotation: until when the old secret still works.")
 
-    def get_created_by(self, key):
+    def get_created_by(self, key) -> str | None:
         return key.created_by.email if key.created_by else None
 
-    def get_revoked(self, key):
+    def get_revoked(self, key) -> bool:
         return key.revoked_at is not None
 
 

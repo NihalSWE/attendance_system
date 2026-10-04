@@ -393,7 +393,10 @@ Python, PHP, JavaScript, Kotlin, Swift, C#) · `06-security.md` (the whole of
 Part 2, for the senior and for auditors) · `07-postman.md` (testing with the
 Postman collection, `/api/docs/postman.json`, which signs every request).
 
-**Status: DONE 2026-10-04.**
+**Status: DONE 2026-10-04.** Added the same day, at the senior's request:
+two-step codes **by email** as the second way (the authenticator app stays the
+main one) — email-only setup for those who do not want an app, and an email
+code at login for app users without their phone.
 
 ### Phase 2 — Company & branches
 
