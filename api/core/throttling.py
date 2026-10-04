@@ -16,6 +16,8 @@ SCOPES = {
     "public": "Endpoints that need no login, such as ping. Counted per address.",
     "read": "Reading data: lists and single records.",
     "write": "Creating, changing and actions.",
+    "login": "Logging in, two-step codes, password reset, the signature test. Counted "
+             "per address; wrong passwords also lock the login for a while.",
 }
 
 

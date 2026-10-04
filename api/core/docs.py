@@ -83,7 +83,11 @@ class EndpointDoc:
     paginated: bool = False
     request_example: object = None
     response_example: object = None
-    auth: str = "login"     # "public", or "login" (phase 1: token / signature / key)
+    auth: str = "login"     # "public", or "login" (a session or an API key)
+    # How the request example authenticates: "none", "app" (token + signature,
+    # or an API key), "app-refresh" (signature only), "web" (cookies + CSRF).
+    # Empty: "none" for public endpoints, "app" otherwise.
+    sample_auth: str = ""
     # Filled in by the registry:
     method: str = ""
     path: str = ""

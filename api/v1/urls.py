@@ -6,4 +6,6 @@ app_name = "v1"
 
 urlpatterns = [
     path("", include("api.v1.system.urls")),
+    path("", include("api.v1.auth.urls")),
+    path("", include("api.v1.keys.urls")),
 ]

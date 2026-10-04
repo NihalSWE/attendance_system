@@ -283,7 +283,7 @@ CSRF_FAILURE_VIEW = 'base_template.views.csrf_failure'
 # Deny by default: an endpoint is open only to whoever it names. JSON only;
 # errors in one shape (api/core/errors.py); lists paged, 100 at most.
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [],      # phase 1 adds tokens and signatures
+    'DEFAULT_AUTHENTICATION_CLASSES': ['api.core.auth.ApiAuthentication'],
     'DEFAULT_PERMISSION_CLASSES': ['api.core.permissions.DenyAll'],
     'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
     'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.JSONParser'],
@@ -294,6 +294,7 @@ REST_FRAMEWORK = {
         'public': '60/minute',
         'read': '300/minute',
         'write': '120/minute',
+        'login': '10/minute',
     },
     'EXCEPTION_HANDLER': 'api.core.errors.exception_handler',
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -330,3 +331,31 @@ CORS_ALLOW_HEADERS = (
     'accept', 'authorization', 'content-type', 'x-csrftoken', 'x-company',
     'idempotency-key', 'x-key-id', 'x-timestamp', 'x-nonce', 'x-signature',
 )
+
+# Logging in to the API (docs/api/00-PLAN.md, Part 2).
+API_ACCESS_MINUTES = env.int('API_ACCESS_MINUTES', default=10)
+API_REFRESH_DAYS = env.int('API_REFRESH_DAYS', default=30)
+# Proxies in front of the server (nginx on the live server: 1), so the API
+# reads the caller's real address from X-Forwarded-For - and only the part
+# our own proxy added. 0: the connection's address.
+API_PROXY_COUNT = env.int('API_PROXY_COUNT', default=0)
+# Web frontend cookies: Secure unless DEBUG; SameSite Strict, or None when the
+# frontend is on another site (then HTTPS is required).
+API_COOKIE_SECURE = env.bool('API_COOKIE_SECURE', default=not DEBUG)
+API_COOKIE_SAMESITE = env('API_COOKIE_SAMESITE', default='Strict')
+# Password reset email: the frontend's page, with {token} where the code goes,
+# e.g. https://app.example.com/reset?token={token}. Empty: the code is emailed.
+API_PASSWORD_RESET_URL = env('API_PASSWORD_RESET_URL', default='')
+# A browser frontend allowed by CORS may also send the CSRF token.
+CSRF_TRUSTED_ORIGINS = list(CSRF_TRUSTED_ORIGINS) + list(CORS_ALLOWED_ORIGINS)
+
+# Argon2 first: the strongest of Django's password hashers. Passwords saved
+# with the older ones upgrade on their next login. Tests use a fast hasher.
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',
+    'django.contrib.auth.hashers.ScryptPasswordHasher',
+]
+if sys.argv[1:2] == ['test']:
+    PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher'] + PASSWORD_HASHERS

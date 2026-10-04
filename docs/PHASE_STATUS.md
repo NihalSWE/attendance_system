@@ -5815,3 +5815,35 @@ changed (one line in `SelfServiceGate`: `/api/` is the API's to check).
   or a view that leaves its permission to the default.
 
 Tests: `api/tests/` (31).
+
+### API phase 1 — security & login — 2026-10-04
+
+Per `docs/api/00-PLAN.md` Part 2. Panels unchanged, except that Argon2 is now
+the first password hasher (old hashes upgrade at the next login, panel or API).
+
+- Logins: apps (`/api/v1/auth/login`, two-step, refresh, logout) with opaque
+  tokens (SHA-256 stored; access 10 min, refresh 30 days rotated with reuse
+  detection) and every request HMAC-signed with the session's secret; browser
+  frontends (`/auth/web/*`) with HttpOnly cookies + CSRF; API keys for machines
+  (`/api/v1/api-keys`: scopes, IP allow-list, expiry, rotate with ≤ 24 h grace,
+  revoke; a key acts as its creator and stops if they stop managing the company).
+- Signing (`api/core/signing.py`): method, path, sorted query, Unix-seconds
+  timestamp (± 5 min), nonce (used once, `api_used_nonce`), body SHA-256.
+  `POST /auth/signature-test` explains a wrong signature.
+- Me, my sessions, staff sessions (admins), password change / forgot / reset,
+  two-step login (TOTP + 10 recovery codes) required for owners and company
+  administrators (`two_step_setup_required` until set up).
+- Lockout: 5 wrong in 15 min → 15 min; 10 in 1 h → 1 h; 20 per address in
+  15 min. A password change anywhere ends that login's API sessions.
+- New tables (migration `api.0002_logins_keys`): sessions, API keys, used
+  nonces, two-step, login attempts, password resets. Secrets encrypted with a
+  key derived from `SECRET_KEY`.
+- Settings / `.env`: `API_PROXY_COUNT` (1 behind nginx), `API_COOKIE_SECURE`,
+  `API_COOKIE_SAMESITE`, `API_PASSWORD_RESET_URL`, `API_ACCESS_MINUTES`,
+  `API_REFRESH_DAYS`; rate scope `login` 10/minute. Packages argon2-cffi, PyOTP.
+- Documentation: guides *Logging in & signing*, *Security*, *Testing with
+  Postman*; request examples sign in all 8 languages (the Python one is run by
+  the tests); a Postman collection generated from the endpoint declarations
+  (`/api/docs/postman.json`) signs each request in its pre-request script.
+
+Tests: `api/tests/` (94).

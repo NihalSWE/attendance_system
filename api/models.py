@@ -28,3 +28,142 @@ class IdempotencyRecord(models.Model):
 
     def __str__(self):
         return f"{self.caller} {self.key} -> {self.status_code}"
+
+
+class ApiSession(models.Model):
+    """One login: a person on one device (docs/api/00-PLAN.md, 2.3).
+
+    The access token (10 minutes) and refresh token (30 days) are stored only
+    as SHA-256 digests. The refresh token changes on every use; the one before
+    is kept so that if it is ever presented again - someone copied it - the
+    whole session ends. Mobile and desktop sessions also get a signing secret
+    (stored encrypted) and must sign every request with it.
+    """
+
+    class ClientType(models.TextChoices):
+        MOBILE = "mobile", "Mobile app"
+        DESKTOP = "desktop", "Desktop app"
+        WEB = "web", "Web frontend (cookies)"
+
+    class State(models.TextChoices):
+        TWO_STEP = "two_step", "Waiting for the two-step code"
+        ACTIVE = "active", "Active"
+        ENDED = "ended", "Ended"
+
+    public_id = models.CharField(max_length=40, unique=True)            # "ses_…"
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE,
+                             related_name="api_sessions")
+    client_type = models.CharField(max_length=10, choices=ClientType.choices)
+    device_name = models.CharField(max_length=120, blank=True)
+    state = models.CharField(max_length=10, choices=State.choices, default=State.ACTIVE)
+    # Must set up two-step login before anything else (owners and admins).
+    needs_two_step_setup = models.BooleanField(default=False)
+    access_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    access_expires_at = models.DateTimeField(null=True, blank=True)
+    refresh_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    refresh_expires_at = models.DateTimeField(null=True, blank=True)
+    previous_refresh_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    rotated_at = models.DateTimeField(null=True, blank=True)
+    challenge_hash = models.CharField(max_length=64, blank=True, db_index=True)
+    challenge_expires_at = models.DateTimeField(null=True, blank=True)
+    signing_secret_encrypted = models.TextField(blank=True)
+    # A fingerprint of the password when the session began: a new password
+    # (here or in the panels) ends every older session.
+    password_fingerprint = models.CharField(max_length=32)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    last_ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    ended_reason = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        db_table = "api_session"
+        indexes = [models.Index(fields=["user", "state"])]
+
+    def __str__(self):
+        return f"{self.public_id} {self.user_id} {self.client_type} {self.state}"
+
+
+class ApiKey(models.Model):
+    """A company's key for a machine - an ERP, another server, another make of
+    device (docs/api/00-PLAN.md, 2.4). Every request is signed with its
+    secret. It can never do more than the person who created it, and only
+    what its scopes allow."""
+
+    public_id = models.CharField(max_length=40, unique=True)            # "ak_…"
+    company = models.ForeignKey("tenants.Company", on_delete=models.CASCADE,
+                                related_name="api_keys")
+    name = models.CharField(max_length=120)
+    secret_encrypted = models.TextField()
+    # After a rotation the old secret still works until this moment.
+    previous_secret_encrypted = models.TextField(blank=True)
+    previous_valid_until = models.DateTimeField(null=True, blank=True)
+    scopes = models.JSONField(default=list)
+    allowed_ips = models.JSONField(default=list, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey("accounts.User", null=True, on_delete=models.SET_NULL,
+                                   related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    last_used_ip = models.GenericIPAddressField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "api_key"
+
+    def __str__(self):
+        return f"{self.public_id} {self.name}"
+
+
+class UsedNonce(models.Model):
+    """A signed request's nonce, kept 10 minutes: the same one again is a replay."""
+
+    owner = models.CharField(max_length=40)          # the session or key public id
+    nonce = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "api_used_nonce"
+        constraints = [models.UniqueConstraint(fields=["owner", "nonce"],
+                                               name="uniq_api_nonce_owner")]
+
+
+class TwoStep(models.Model):
+    """A person's authenticator-app (TOTP) secret and recovery codes."""
+
+    user = models.OneToOneField("accounts.User", on_delete=models.CASCADE,
+                                related_name="api_two_step")
+    secret_encrypted = models.TextField()
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    recovery_hashes = models.JSONField(default=list, blank=True)     # unused codes
+    last_used_step = models.BigIntegerField(default=0)                # a code works once
+
+    class Meta:
+        db_table = "api_two_step"
+
+
+class LoginAttempt(models.Model):
+    """Every login try, for the lockout and the audit trail."""
+
+    email = models.CharField(max_length=254, db_index=True)
+    ip = models.GenericIPAddressField(null=True, blank=True, db_index=True)
+    succeeded = models.BooleanField(default=False)
+    reason = models.CharField(max_length=40, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "api_login_attempt"
+
+
+class PasswordReset(models.Model):
+    """A single-use password reset, valid 30 minutes."""
+
+    user = models.ForeignKey("accounts.User", on_delete=models.CASCADE, related_name="+")
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "api_password_reset"

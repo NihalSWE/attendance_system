@@ -18,6 +18,11 @@ urlpatterns = [
         name="swagger"),
     # Our own documentation site (docs/api/00-PLAN.md, Part 4).
     path("docs/", docs.guide, {"page": "getting-started"}, name="docs"),
+    path("docs/authentication/", docs.guide, {"page": "authentication"},
+         name="docs_authentication"),
+    path("docs/postman/", docs.guide, {"page": "postman"}, name="docs_postman"),
+    path("docs/postman.json", docs.postman, name="docs_postman_collection"),
+    path("docs/security/", docs.guide, {"page": "security"}, name="docs_security"),
     path("docs/conventions/", docs.guide, {"page": "conventions"}, name="docs_conventions"),
     path("docs/changelog/", docs.guide, {"page": "changelog"}, name="docs_changelog"),
     path("docs/errors/", docs.errors, name="docs_errors"),

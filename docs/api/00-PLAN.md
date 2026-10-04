@@ -59,7 +59,7 @@ may use it.
 | Package | Why |
 |---|---|
 | `djangorestframework` | the API framework |
-| `djangorestframework-simplejwt` | access / refresh tokens, rotation, blacklist |
+| *(no JWT package)* | tokens are opaque random values, only their SHA-256 stored (built in phase 1): a session ends at once, nothing stays valid until it expires |
 | `drf-spectacular` | OpenAPI 3 schema (feeds our docs site) and the Swagger link |
 | `django-cors-headers` | which web frontends may call the API |
 | `argon2-cffi` | Argon2 password hashing (stronger than the default) |
@@ -92,7 +92,7 @@ Each signed request carries four headers:
 
 ```
 X-Key-Id:    <API key ID, or the session ID for an app>
-X-Timestamp: 2026-10-04T10:15:00Z
+X-Timestamp: 1791100800            (Unix seconds)
 X-Nonce:     <random value, never used twice>
 X-Signature: hex( HMAC-SHA256( secret, canonical request ) )
 ```
@@ -126,12 +126,14 @@ says exactly which part of a signature is wrong.
 - **Two-step login (authenticator app, TOTP):** **required** for the platform
   owner, company owners and company admins; any user may switch it on.
   10 single-use **recovery codes** for a lost phone.
-- **Tokens:** access token **10 minutes**; refresh token **30 days**, **rotated
-  on every use** — the old one is blacklisted. **Reuse detection:** if an old
-  refresh token is ever presented again, that whole session is ended at once
-  (it means someone copied it).
-- **Session secret** (mobile/desktop): issued at login, **renewed with every
-  refresh**, stored by the app in the system's secure storage (Android
+- **Tokens:** opaque random values (only their SHA-256 is stored); access
+  token **10 minutes**; refresh token **30 days**, **rotated on every use**.
+  **Reuse detection:** if an old refresh token is ever presented again, that
+  whole session is ended at once (it means someone copied it) — except within
+  60 seconds, a retry after a lost answer.
+- **Session secret** (mobile/desktop): issued **once, at login**, kept for the
+  session's life (a refresh is itself signed with it, so it is never sent
+  again), stored by the app in the system's secure storage (Android
   Keystore, iOS Keychain, Windows Credential Manager); deleted on logout.
 - **Sessions:** every login is a session (device name, client type, IP, last
   used). A person sees theirs and can sign any of them out; a company admin can
@@ -374,7 +376,7 @@ Paths are under `/api/v1`.
 | Group | Endpoints |
 |---|---|
 | Login | `POST /auth/login` · `POST /auth/login/two-step` (the code, when required) · `POST /auth/refresh` · `POST /auth/logout` |
-| Browser frontend | `POST /auth/web/login` · `POST /auth/web/refresh` · `POST /auth/web/logout` · `GET /auth/web/csrf` (cookie mode) |
+| Browser frontend | `GET /auth/web/csrf` · `POST /auth/web/login` · `POST /auth/web/login/two-step` · `POST /auth/web/refresh` (cookie mode; log out with `POST /auth/logout`) |
 | Me | `GET /auth/me` (who I am, my companies and role in each, two-step status) |
 | Sessions | `GET /auth/sessions` · `DELETE /auth/sessions/{id}` · `POST /auth/sessions/sign-out-others` · `GET /company/sessions` · `DELETE /company/sessions/{id}` (admin, for staff) |
 | Password | `POST /auth/password/change` · `POST /auth/password/forgot` · `POST /auth/password/reset` |
@@ -388,7 +390,10 @@ the password hashers.
 
 Guide: `02-authentication.md` (each client type step by step; signing code in
 Python, PHP, JavaScript, Kotlin, Swift, C#) · `06-security.md` (the whole of
-Part 2, for the senior and for auditors).
+Part 2, for the senior and for auditors) · `07-postman.md` (testing with the
+Postman collection, `/api/docs/postman.json`, which signs every request).
+
+**Status: DONE 2026-10-04.**
 
 ### Phase 2 — Company & branches
 

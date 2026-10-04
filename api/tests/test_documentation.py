@@ -86,3 +86,35 @@ class DocumentationTests(SimpleTestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for endpoint_id in ids:
             reverse("api:docs_endpoint", args=[endpoint_id])
+
+
+class PostmanCollectionTests(SimpleTestCase):
+    """The Postman collection (docs/api/07-postman.md) has every endpoint."""
+
+    def test_the_collection_has_every_endpoint_and_signs_the_right_ones(self):
+        from api.core.registry import endpoints
+        from api.core.samples import mode_of
+
+        response = self.client.get("/api/docs/postman.json")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment", response["Content-Disposition"])
+        data = response.json()
+        self.assertIn("v2.1.0", data["info"]["schema"])
+        items = {}
+        for folder in data["item"]:
+            for item in folder["item"]:
+                items[item["name"]] = item
+        docs = endpoints()
+        self.assertEqual(len(items), len(docs))
+        for doc in docs:
+            headers = {h["key"] for h in items[doc.title]["request"]["header"]}
+            signed = mode_of(doc) in ("app", "app-refresh")
+            self.assertEqual("X-Signature" in headers, signed, doc.id)
+        login = items["Log in (apps)"]
+        self.assertIn("{{email}}", login["request"]["body"]["raw"])
+        self.assertEqual(login["event"][0]["listen"], "test")
+        self.assertIn("X-Signature", "\n".join(data["event"][0]["script"]["exec"]))
+
+    def test_the_guide_pages_open(self):
+        for path in ("/api/docs/authentication/", "/api/docs/security/", "/api/docs/postman/"):
+            self.assertEqual(self.client.get(path).status_code, 200, path)

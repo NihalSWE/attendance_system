@@ -114,7 +114,12 @@ class ErrorShapeTests(TestCase):
 
     def test_an_endpoint_that_names_no_permission_is_closed(self):
         response = self.client.get("/api-test/denied")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 401)            # not logged in
+        self.assertEqual(self.error(response)["code"], "not_authenticated")
+        self.client.force_authenticate(User.objects.create_user(email="d@example.test",
+                                                                password="pw-12345678"))
+        response = self.client.get("/api-test/denied")
+        self.assertEqual(response.status_code, 403)            # logged in, still closed
         self.assertEqual(self.error(response)["code"], "permission_denied")
 
     def test_an_unknown_api_address_is_not_found_html_free(self):
