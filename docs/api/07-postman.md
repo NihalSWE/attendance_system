@@ -14,6 +14,14 @@ again after an update to get the new endpoints.
 A collection *Attendance Management API v1* appears, with one folder per part
 of the API (*Logging in*, …).
 
+> **Testing a server on your own computer** (`http://localhost:8000`,
+> `http://127.0.0.1:8000`)? Postman **in the web browser** cannot reach it.
+> It answers *"Cloud agent error: cannot send request"* or *"localhost request
+> not supported"*, and the request never arrives at the server. Use the
+> **Postman desktop app**, or install the **Postman Desktop Agent** and choose
+> it in the agent selector (bottom right of the Postman web page). A server on
+> the internet (e.g. `https://attendance.example.com`) works from any of them.
+
 ## 2. Set your login
 
 Click the collection's name → the **Variables** tab:
@@ -101,6 +109,7 @@ checking a browser frontend's calls.
 
 | Answer | What to do |
 |---|---|
+| no answer, *"Cloud agent error"* / *"localhost request not supported"* | Postman on the web cannot reach your computer — use the desktop app or the Desktop Agent (see step 1) |
 | `not_authenticated` / `signature_required` | run **Log in (apps)** first; check `key_id` and `secret` are filled |
 | `token_expired` | run **Refresh the tokens (apps)** |
 | `invalid_token` / `session_ended` | log in again |
