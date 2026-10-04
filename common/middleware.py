@@ -89,6 +89,10 @@ class SelfServiceGate:
         from accounts.models import CompanyMembership
 
         request.self_service = False
+        if request.path.startswith("/api/"):
+            # The API checks every caller itself, the panels' own way
+            # (docs/api/00-PLAN.md); its documentation is public.
+            return None
         user = getattr(request, "user", None)
         company_id = getattr(request, "company_id", None)
         if user is None or not user.is_authenticated or user.is_superuser or not company_id:

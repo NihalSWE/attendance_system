@@ -1,0 +1,36 @@
+{# One level of a field tree; nested objects open with the plus button. #}
+<ul class="fields">
+    {% for node in nodes %}
+        <li class="field-node{% if node.children %} has-children{% endif %}">
+            <div class="field-node__head">
+                {% if node.children %}
+                    <button class="field-node__toggle" type="button" aria-expanded="false" aria-label="Show the fields inside {{ node.name }}" data-field-toggle>
+                        <span aria-hidden="true">+</span>
+                    </button>
+                {% else %}
+                    <span class="field-node__spacer" aria-hidden="true"></span>
+                {% endif %}
+                <code class="field-node__name">{{ node.name }}</code>
+                <span class="field-node__type">{{ node.type }}</span>
+                {% if node.required %}<span class="tag tag--required">required</span>{% endif %}
+                {% if node.children %}<span class="tag">{{ node.children|length }} field{{ node.children|length|pluralize }}</span>{% endif %}
+            </div>
+            <div class="field-node__body">
+                <p>{{ node.description }}</p>
+                {% if node.choices %}
+                    <p class="field-node__choices">One of:
+                        {% for choice in node.choices %}<code>{{ choice.value }}</code>{% if choice.label != choice.value %} ({{ choice.label }}){% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}
+                    </p>
+                {% endif %}
+                {% if node.details %}
+                    <p class="field-node__details">{{ node.details|join:" · " }}</p>
+                {% endif %}
+            </div>
+            {% if node.children %}
+                <div class="field-node__children" hidden>
+                    {% include "api/docs/_fields.html" with nodes=node.children %}
+                </div>
+            {% endif %}
+        </li>
+    {% endfor %}
+</ul>

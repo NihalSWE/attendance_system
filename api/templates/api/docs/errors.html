@@ -1,0 +1,25 @@
+{% extends "api/docs/base.html" %}
+{% block content %}
+    <article class="endpoint">
+        <h1>Error reference</h1>
+        <p class="endpoint__summary">Every error the API can return, with what it means and how to fix it.</p>
+        {% if intro %}<div class="prose">{{ intro }}</div>{% endif %}
+        <h2>The shape of every error</h2>
+        <div class="code-block"><button class="copy" type="button" data-copy-next>Copy</button><pre><code>{{ shape }}</code></pre></div>
+        <nav class="error-index" aria-label="All errors">
+            {% for group in groups %}
+                <p><strong>{{ group.title }}:</strong>
+                    {% for error in group.errors %}<a href="#error-{{ error.code }}"><code>{{ error.code }}</code></a>{% if not forloop.last %}, {% endif %}{% endfor %}
+                </p>
+            {% endfor %}
+        </nav>
+        {% for group in groups %}
+            <section class="endpoint__section">
+                <h2>{{ group.title }}</h2>
+                <div class="error-list">
+                    {% for error in group.errors %}{% include "api/docs/_error.html" %}{% endfor %}
+                </div>
+            </section>
+        {% endfor %}
+    </article>
+{% endblock %}

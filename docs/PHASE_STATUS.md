@@ -5788,3 +5788,30 @@ Tests: `devices/tests_ui.py` (3), `devices/tests_connection.py`,
 Tests: `attendance/tests_pairing.py` FirstAndLastScanTests (6),
 `attendance/tests_live.py` FirstAndLastScanLiveTests, `webhooks/tests.py`,
 `scheduling/tests_screens.py` (the setting, posted).
+
+### API phase 0 — foundation & documentation site — 2026-10-04
+
+The REST API's base, per `docs/api/00-PLAN.md` (v4). The panels are not
+changed (one line in `SelfServiceGate`: `/api/` is the API's to check).
+
+- New app `api` (`api/core/`, `api/v1/<area>/`, `api/docs_site/`), packages
+  djangorestframework, drf-spectacular, django-cors-headers, Markdown.
+- Deny by default (`DenyAll`); one error shape with a reference = `X-Request-Id`
+  (`api/core/errors.py`, the error catalogue: 13 errors); paging (≤ 100);
+  `StrictSerializer` (unknown fields refused); rate limits per kind counted in
+  the database cache (`CACHES["api"]`, `createcachetable`); `Idempotency-Key`
+  (`api_idempotency_record`, 24 h, per caller); the `X-Company` rule
+  (`api/core/company.py`, wired in phase 1); CORS for listed frontends only
+  (`API_CORS_ORIGINS`).
+- `GET /api/v1/ping`.
+- The documentation site `/api/docs/` (nomadly-style): menu, endpoint pages
+  generated from each endpoint's `@endpoint` declaration and its serializers
+  (nested fields opened with +, Expand / Collapse all), request examples in 8
+  languages, response example, the endpoint's errors with fix and example;
+  error reference, rate limits, getting started, conventions, changelog
+  (the guide pages are `docs/api/*.md`). Swagger at `/api/swagger/`, schema at
+  `/api/v1/schema/`.
+- The documentation test fails on an undocumented endpoint, field or error,
+  or a view that leaves its permission to the default.
+
+Tests: `api/tests/` (31).

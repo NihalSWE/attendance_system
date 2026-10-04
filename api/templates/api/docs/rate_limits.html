@@ -1,0 +1,28 @@
+{% extends "api/docs/base.html" %}
+{% block content %}
+    <article class="endpoint">
+        <h1>Rate limits</h1>
+        <p class="endpoint__summary">How many requests each kind of endpoint takes in a minute.</p>
+        <div class="prose">
+            <p>Every endpoint belongs to one kind, shown on its page. Requests are counted per
+                logged-in person or API key; endpoints that need no login are counted per address.
+                Going over answers <code>429 rate_limited</code> with a <code>Retry-After</code>
+                header: wait that many seconds, then try again.</p>
+        </div>
+        <div class="table-scroll">
+            <table class="params">
+                <thead><tr><th>Kind</th><th>Limit</th><th>What it covers</th></tr></thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr><td><code>{{ row.scope }}</code></td><td>{{ row.rate }}</td><td>{{ row.meaning }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="prose">
+            <p>Tips: page through lists instead of asking for everything; prefer the ERP webhook over
+                asking again and again whether something changed; on <code>429</code>, never retry at
+                once in a loop.</p>
+        </div>
+    </article>
+{% endblock %}
