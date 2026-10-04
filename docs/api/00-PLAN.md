@@ -1,8 +1,12 @@
 # API plan — the whole project, phase by phase
 
-**Version 3 — 2026-10-04.** Agreed with Nihal and his senior:
-- an API for **everything** the website does, A to Z, including everything
-  between the software and the devices;
+**Version 4 — 2026-10-04.** Agreed with Nihal and his senior:
+- an API for **everything** the company, branch and employee panels do, A to
+  Z, including everything between the software and the devices;
+- **no API for the root (platform)**: the root is the main owner, is never
+  created through the software, and keeps its own panel;
+- **panels and API side by side**: a company can work in the panels, through
+  the API, or both — the same data and the same rules either way;
 - used by a **mobile app, a desktop app, a React/Vue frontend and the ERP**;
 - **strong security** — clear and understandable, but never weakened to be
   simpler;
@@ -18,6 +22,22 @@ it is called done.
 ---
 
 ## Part 1 — How the API is built
+
+### 1.0 Panels and API, side by side
+
+The software has three panels, and the API mirrors them:
+
+| Panel (today) | Who | The API for the same people |
+|---|---|---|
+| **Company panel** | owner, company admin | everything they can do in the panel |
+| **Branch panel** | branch manager, line manager | the same, limited to their branches / team, exactly as in the panel |
+| **Employee panel** ("me") | every employee with a login | their own profile, attendance, missed scans, leave, payslips |
+
+Nothing moves from the panels to the API: each company chooses to use the
+panels, the API, or both. A person has the **same permissions** in both —
+the API uses the panels' own permission checks. The root (platform) has no
+API; it keeps its panel. Each endpoint's documentation says which panel roles
+may use it.
 
 ### 1.1 One app, one pattern
 
@@ -40,7 +60,7 @@ it is called done.
 |---|---|
 | `djangorestframework` | the API framework |
 | `djangorestframework-simplejwt` | access / refresh tokens, rotation, blacklist |
-| `drf-spectacular` | OpenAPI 3 schema, Swagger UI, ReDoc |
+| `drf-spectacular` | OpenAPI 3 schema (feeds our docs site) and the Swagger link |
 | `django-cors-headers` | which web frontends may call the API |
 | `argon2-cffi` | Argon2 password hashing (stronger than the default) |
 | `pyotp` | two-step login (authenticator app codes) |
@@ -137,8 +157,8 @@ says exactly which part of a signature is wrong.
 ### 2.5 What each caller may do (authorisation)
 
 - **Deny by default:** every endpoint states who may use it; nothing is open
-  unless it says so (only `ping`, `login`, password reset and the docs login
-  page are public).
+  unless it says so (only `ping`, `login`, password reset and the documentation
+  site are public).
 - **The website's own permission rules**, unchanged: the role (owner, company
   admin, manager, employee), branch access (`can()`), the special permissions
   (`employees.edit`, `salary.prepare`, …). The API uses the very same checks.
@@ -228,46 +248,93 @@ change signs out everywhere.
 
 ## Part 4 — Documentation, built with the code
 
-1. **Reference, generated from the code (OpenAPI 3):** summary, who may use
-   it, scopes, parameters, request and response examples and every error, for
-   every endpoint. Shown as **Swagger UI** (`/api/docs/`, try it live) and
-   **ReDoc** (`/api/redoc/`); the schema at `/api/v1/schema/` also produces a
-   **Postman collection**. The docs pages require a login on the live server.
-2. **Guide, written by hand (`docs/api/`):** one page per phase, in plain
-   words — what the area is, its flows step by step, a table of every
-   endpoint, copy-paste examples, and the errors you will meet.
-3. **Changelog (`docs/api/CHANGELOG.md`):** every endpoint added or changed,
-   by date and phase.
+### 4.1 Our own documentation site
 
-**"Done" for an endpoint, in one commit:** view + serializer · permission ·
-tests (incl. security tests) · OpenAPI annotation with examples · guide line ·
-changelog line. **A test fails the build if any endpoint has no
-documentation or no permission declared**, so nothing can be skipped.
+A custom documentation site at **`/api/docs/`**, in the style the senior chose
+(like nomadly.cloud/api/docs). **Swagger UI stays as an extra link**
+(`/api/swagger/`), plus the raw OpenAPI schema (`/api/v1/schema/`) and a
+Postman collection.
 
----
+**Layout:** a menu on the left grouped by area (Start here · Company &
+branches · Employees · Shifts · Devices · Attendance · Leave · Salary · My
+account · Reports · Reference), the page in the middle, previous / next at
+the bottom.
+
+**Every endpoint has its own page with:**
+
+1. **Title and one-line summary**, the **method + path** with a copy button,
+   and **who may use it** (company admin / branch manager / employee / API
+   key scope).
+2. **What it does** — a few plain bullets — and its **rate limit**.
+3. **Description** — the rules in plain words (e.g. "an earlier date replaces
+   the history from that date; never reaches into a finalised payroll").
+4. **Request parameters — you send:** a table of *name · required · in
+   (path / query / header / body) · type · description*. **Nested objects and
+   lists open with a ⊕ plus icon** to show the fields inside, level by level,
+   with **Expand all / Collapse all**. Allowed values, formats, limits and
+   defaults are written on each field.
+5. **Request example:** the full request, ready to copy, in **cURL, JavaScript,
+   Python, PHP, Kotlin, Swift, C# and Dart** — each one doing the complete
+   login / signing, not just the HTTP call — plus the example JSON body.
+6. **Response fields — you receive:** the same nested ⊕ tree for the
+   response.
+7. **Response example:** real-looking example data for the success answer.
+8. **Errors this endpoint can return:** each with its **code**, **HTTP
+   status**, **title**, **what it means**, **how to fix it** and an **example
+   response** — and a link to the full error reference.
+
+**Reference pages:** Getting started · Logging in & request signing (every
+client type, step by step) · Conventions (IDs, times, lists, company header)
+· **Error reference — every error message of the whole API on one page**,
+grouped, each with its meaning, fix and example · Rate limits · Webhooks ·
+Security · Changelog.
+
+### 4.2 One source, so the site can never drift from the code
+
+The pages are **generated from the code**, not written separately:
+- descriptions, examples, rate limits, roles and the errors an endpoint
+  returns are declared **on the endpoint** itself;
+- every field's explanation is written **on the field** (in the serializer),
+  so the nested ⊕ trees are always exactly what the endpoint accepts and
+  returns;
+- every error lives in **one error catalogue** (`api/core/errors.py`: code,
+  status, title, meaning, fix, example) — the error reference page and each
+  endpoint's error list both come from it, and the API answers with exactly
+  those codes.
+
+The plain-language **guide pages** for each area (`docs/api/`, the flows step
+by step) are written by hand alongside.
+
+### 4.3 "Done" — checked by tests
+
+An endpoint is done only when, in the same commit, it has: view + serializer
+· permission · tests (incl. security tests) · summary, description, "what it
+does", example request and response · an explanation on **every** field ·
+its error list · its guide line · its changelog line. **A test fails the build
+if any endpoint, any field or any error is missing its documentation**, so
+nothing can be forgotten.
 
 ## Part 5 — The phases at a glance
 
 | # | Phase | When it is done, the API can… | ≈ endpoints |
 |---|---|---|---|
-| 0 | **Foundation** | answer `ping`; errors, paging, versioning, company header, rate limits, docs site and the documentation checks in place | 3 |
+| 0 | **Foundation & documentation site** | answer `ping`; errors, paging, versioning, company header, rate limits; the custom docs site (menu, endpoint pages, nested ⊕ fields, multi-language examples, error reference) and its tests; Swagger link | 3 |
 | 1 | **Security & login** | log people in (tokens, signing, cookies, two-step), sessions, passwords; API keys with HMAC | 28 |
-| 2 | **Root (platform)** | manage companies, status, features, administrators | 15 |
-| 3 | **Company & branches** | company profile, branches, departments, designations, access rules | 30 |
-| 4 | **Employees** | everything on the employee pages, creation to end of employment | 45 |
-| 5 | **Shifts & calendar** | shifts, attendance settings, weekly offs, holidays | 20 |
-| 6 | **Devices — setup** | register, edit, retire devices; connection and test; device rules | 15 |
-| 7 | **Devices — data flow (device ⇄ software)** | everything the device sends, everything sent to it, every process between; punch push for other devices | 40 |
-| 8 | **Attendance** | daily list, calendar, day detail, corrections, missed scans, review, exports | 20 |
-| 9 | **Leave** | types, policies, balances, records, requests, approvals | 20 |
-| 10 | **Salary (payroll)** | runs, settings, components, penalties, payslips, overtime, LFA | 30 |
-| 11 | **The employee's own app ("me")** | everything an employee / approver does for themself | 25 |
-| 12 | **Reports & dashboard** | every report as data and Excel / PDF; dashboard figures | 15 |
-| 13 | **Integrations & finish** | ERP webhook, audit log; final review of all docs; Postman collection | 15 |
+| 2 | **Company & branches** | company profile, branches, departments, designations, access rules | 30 |
+| 3 | **Employees** | everything on the employee pages, creation to end of employment | 45 |
+| 4 | **Shifts & calendar** | shifts, attendance settings, weekly offs, holidays | 20 |
+| 5 | **Devices — setup** | register, edit, retire devices; connection and test; device rules | 15 |
+| 6 | **Devices — data flow (device ⇄ software)** | everything the device sends, everything sent to it, every process between; punch push for other devices | 40 |
+| 7 | **Attendance** | daily list, calendar, day detail, corrections, missed scans, review, exports | 20 |
+| 8 | **Leave** | types, policies, balances, records, requests, approvals | 20 |
+| 9 | **Salary (payroll)** | runs, settings, components, penalties, payslips, overtime, LFA | 30 |
+| 10 | **Employee panel ("me")** | everything an employee / approver does for themself | 25 |
+| 11 | **Reports & dashboard** | every report as data and Excel / PDF; dashboard figures | 15 |
+| 12 | **Integrations & finish** | ERP webhook, audit log; final review of all docs; Postman collection | 15 |
 
-About **320 endpoints**. Order: foundation → security → root → company →
-branch → employee → what builds on employees → the employee's own app →
-reports → integrations.
+About **305 endpoints**. Order: foundation → security → company → branch →
+employee → what builds on employees → the employee panel → reports →
+integrations. (No root/platform phase: the root keeps its own panel.)
 
 ---
 
@@ -275,7 +342,7 @@ reports → integrations.
 
 Paths are under `/api/v1`.
 
-### Phase 0 — Foundation
+### Phase 0 — Foundation & documentation site
 
 **Goal:** the base every phase stands on. No login yet (only `ping` is open).
 
@@ -284,9 +351,18 @@ Paths are under `/api/v1`.
   ordering and search helpers; the `X-Company` resolver (wired to auth in
   phase 1); `Idempotency-Key` support; rate-limit framework; strict JSON
   parsing and body-size limits; secure headers and CORS configuration.
-- OpenAPI schema, Swagger UI, ReDoc; the **"every endpoint documented and has a
-  permission" test**.
-- Endpoints: `GET /ping` · `GET /schema` · `GET /docs` (+ ReDoc).
+- **The documentation site (Part 4):** the layout and menu, the endpoint page
+  (method/path with copy, what it does, rate limit, description, request
+  parameters, nested ⊕ field trees with Expand / Collapse all, request
+  examples in cURL / JavaScript / Python / PHP / Kotlin / Swift / C# / Dart,
+  response fields and example, the endpoint's errors), the **error catalogue
+  and error reference page**, rate limits page, previous / next. Built once;
+  every later endpoint page is generated by it.
+- OpenAPI schema, **Swagger link**; the **documentation tests** (every
+  endpoint, field and error documented; every endpoint declares its
+  permission).
+- Endpoints: `GET /ping` · `GET /schema` · the docs site `/api/docs/` ·
+  Swagger `/api/swagger/`.
 - Guide: `01-getting-started.md` · `03-conventions.md` · `04-errors.md` ·
   `05-how-the-api-is-built.md` (for the team: the pattern, how to add an
   endpoint step by step) · `CHANGELOG.md`.
@@ -314,19 +390,7 @@ Guide: `02-authentication.md` (each client type step by step; signing code in
 Python, PHP, JavaScript, Kotlin, Swift, C#) · `06-security.md` (the whole of
 Part 2, for the senior and for auditors).
 
-### Phase 2 — Root (platform)
-
-| Group | Endpoints |
-|---|---|
-| Companies | `GET /platform/companies` · `POST /platform/companies` (with administrator) · `GET /platform/companies/{id}` · `PATCH /platform/companies/{id}` |
-| Status | `POST /platform/companies/{id}/status` |
-| Features | `GET /platform/features` · `POST /platform/companies/{id}/features` |
-| Members | `GET /platform/companies/{id}/members` · `POST /platform/companies/{id}/administrators` · `PATCH /platform/companies/{id}/members/{id}` |
-| Overview | `GET /platform/dashboard` |
-
-Guide: `10-platform.md`.
-
-### Phase 3 — Company & branches
+### Phase 2 — Company & branches
 
 | Group | Endpoints |
 |---|---|
@@ -339,7 +403,7 @@ Guide: `10-platform.md`.
 
 Guide: `20-company-and-branches.md`.
 
-### Phase 4 — Employees
+### Phase 3 — Employees
 
 | Group | Endpoints |
 |---|---|
@@ -357,7 +421,7 @@ Guide: `20-company-and-branches.md`.
 
 Guide: `30-employees.md`.
 
-### Phase 5 — Shifts & calendar
+### Phase 4 — Shifts & calendar
 
 | Group | Endpoints |
 |---|---|
@@ -370,7 +434,7 @@ Guide: `30-employees.md`.
 
 Guide: `40-shifts-and-calendar.md`.
 
-### Phase 6 — Devices: setup
+### Phase 5 — Devices: setup
 
 | Group | Endpoints |
 |---|---|
@@ -382,7 +446,7 @@ Guide: `40-shifts-and-calendar.md`.
 
 Guide: `50-devices-setup.md`.
 
-### Phase 7 — Devices: data flow (device ⇄ software)
+### Phase 6 — Devices: data flow (device ⇄ software)
 
 How it works (explained in the guide with a diagram): the terminal calls the
 server every few seconds on its own; each call **uploads** what is new (scans,
@@ -410,7 +474,7 @@ Guide: `60-devices-data-flow.md` — the flow end to end, every status
 explained, and how to follow one scan from the terminal to the report and the
 ERP.
 
-### Phase 8 — Attendance
+### Phase 7 — Attendance
 
 | Group | Endpoints |
 |---|---|
@@ -422,7 +486,7 @@ ERP.
 
 Guide: `70-attendance.md` (incl. how a day is worked out).
 
-### Phase 9 — Leave
+### Phase 8 — Leave
 
 | Group | Endpoints |
 |---|---|
@@ -434,7 +498,7 @@ Guide: `70-attendance.md` (incl. how a day is worked out).
 
 Guide: `80-leave.md`.
 
-### Phase 10 — Salary (payroll)
+### Phase 9 — Salary (payroll)
 
 | Group | Endpoints |
 |---|---|
@@ -448,7 +512,7 @@ Guide: `80-leave.md`.
 
 Guide: `90-salary.md`.
 
-### Phase 11 — The employee's own app ("me")
+### Phase 10 — Employee panel ("me")
 
 | Group | Endpoints |
 |---|---|
@@ -462,7 +526,7 @@ Guide: `90-salary.md`.
 
 Guide: `100-employee-app.md` (building the mobile app's screens).
 
-### Phase 12 — Reports & dashboard
+### Phase 11 — Reports & dashboard
 
 | Group | Endpoints |
 |---|---|
@@ -471,7 +535,7 @@ Guide: `100-employee-app.md` (building the mobile app's screens).
 
 Guide: `110-reports.md`.
 
-### Phase 13 — Integrations & finish
+### Phase 12 — Integrations & finish
 
 | Group | Endpoints |
 |---|---|
