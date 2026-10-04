@@ -21,8 +21,12 @@ server and for anyone reviewing it. How to log in is in
 - **Passwords** are stored with **Argon2** (old hashes are upgraded at the
   next login). Wrong passwords lock the login and the address for a while
   (`login_locked` with `Retry-After`).
-- **Two-step login** (TOTP) is required for owners and company
-  administrators. Each code works once; recovery codes are stored hashed.
+- **Two-step login** is required for owners and company administrators on
+  the API. The main way is an authenticator app (TOTP); the second is a
+  6-digit code by email (10 minutes, once, 5 wrong tries, one email a minute,
+  only its hash stored). Each code works once; recovery codes are stored
+  hashed. Changing the way needs a current code. An email code is only as safe
+  as the mailbox — the app is recommended.
 - **Tokens are random values, not JWTs.** The server keeps only their
   SHA-256, so a stolen database does not give working tokens, and a session
   can be ended **at once** (nothing stays valid until it expires).

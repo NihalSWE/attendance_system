@@ -66,6 +66,12 @@ class ApiSession(models.Model):
     rotated_at = models.DateTimeField(null=True, blank=True)
     challenge_hash = models.CharField(max_length=64, blank=True, db_index=True)
     challenge_expires_at = models.DateTimeField(null=True, blank=True)
+    # A two-step code sent by email to this session (api/core/email_codes.py):
+    # only its hash, until when it works, when it was sent, wrong tries.
+    email_code_hash = models.CharField(max_length=64, blank=True)
+    email_code_expires_at = models.DateTimeField(null=True, blank=True)
+    email_code_sent_at = models.DateTimeField(null=True, blank=True)
+    email_code_tries = models.PositiveSmallIntegerField(default=0)
     signing_secret_encrypted = models.TextField(blank=True)
     # A fingerprint of the password when the session began: a new password
     # (here or in the panels) ends every older session.
@@ -130,11 +136,20 @@ class UsedNonce(models.Model):
 
 
 class TwoStep(models.Model):
-    """A person's authenticator-app (TOTP) secret and recovery codes."""
+    """A person's two-step login: the way (authenticator app, the main one, or
+    codes by email) and the recovery codes."""
+
+    class Method(models.TextChoices):
+        APP = "app", "Authenticator app"
+        EMAIL = "email", "Code by email"
 
     user = models.OneToOneField("accounts.User", on_delete=models.CASCADE,
                                 related_name="api_two_step")
-    secret_encrypted = models.TextField()
+    method = models.CharField(max_length=10, choices=Method.choices, default=Method.APP)
+    secret_encrypted = models.TextField(blank=True)                   # the app's; empty for email
+    # Changing the way: the new one waits here until it is confirmed with a code.
+    pending_method = models.CharField(max_length=10, choices=Method.choices, blank=True)
+    pending_secret_encrypted = models.TextField(blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     recovery_hashes = models.JSONField(default=list, blank=True)     # unused codes
     last_used_step = models.BigIntegerField(default=0)                # a code works once

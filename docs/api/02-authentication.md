@@ -53,14 +53,28 @@ in plain files or in the code.
 | `refresh_token` | swapped for a new pair | 30 days, **works once** |
 | `signing_secret` | signs every request; **never sent** | the whole session — shown only now |
 
-**If `two_step_required` is true**, the answer has only `challenge` and
-`challenge_expires_in`. Ask the person for the 6-digit code from their
-authenticator app (or a recovery code) and send, within 5 minutes:
+**If `two_step_required` is true**, the answer has only the challenge and
+`methods` — the ways this login can pass:
+
+```json
+{"two_step_required": true, "challenge": "ch_…", "challenge_expires_in": 600,
+ "methods": ["app", "email", "recovery_code"]}
+```
+
+Ask the person for a code and send it, within 10 minutes:
 
 ```
 POST /api/v1/auth/login/two-step
 {"challenge": "ch_…", "code": "123456"}
 ```
+
+- `app` — the 6-digit code from their authenticator app (the main way).
+- `email` — show a button *"Email me a code instead"*:
+  `POST /api/v1/auth/login/two-step/email-code` with `{"challenge": "ch_…"}`
+  emails a 6-digit code; send it the same way. For a login **set up with email
+  codes**, the first code is already sent: the answer has `email_sent_to`
+  (e.g. `r***@example.com`).
+- `recovery_code` — one of the 10 recovery codes.
 
 The answer is the same as above.
 
@@ -248,19 +262,51 @@ line by line — the difference is the bug.
 
 ## Two-step login
 
-Owners and company administrators **must** use two-step login; everyone else
-may. Until an owner or administrator has set it up, their session answers
-`two_step_setup_required` for everything except setting it up and logging out.
+Owners and company administrators **must** use two-step login on the API (any
+app: mobile, desktop or a browser frontend); everyone else may. The web panels
+are not affected. Until an owner or administrator has set it up, their session
+answers `two_step_setup_required` for everything except *Who am I*, the
+two-step requests and logging out.
 
-1. `POST /api/v1/auth/two-step/setup` → a `secret` and an `otpauth_url`. Show
-   the URL as a QR code; the person scans it with an authenticator app (Google
-   Authenticator, Microsoft Authenticator, …).
-2. `POST /api/v1/auth/two-step/confirm` with the 6-digit code → it is on, and
-   the answer has **10 recovery codes** (shown once — for a lost phone).
-3. From now on, logging in asks for a code.
+There are two ways:
 
-New recovery codes: `POST /api/v1/auth/two-step/recovery-codes` (the old ones
-stop). Turn it off (not allowed for owners and administrators):
+| Way | How it works | For |
+|---|---|---|
+| **Authenticator app** (`app`, the main way) | an app on the phone (Google Authenticator, Microsoft Authenticator, Authy, …) shows a new 6-digit code every 30 seconds; works offline | everyone — recommended |
+| **Code by email** (`email`) | each login emails a 6-digit code, valid 10 minutes, once | someone who does not want an app |
+
+People who use the app can **also** get a code by email at login, when the
+phone is not at hand. Email codes need a mail account — the company's
+(*Organisation → Email settings*) or the server's; without one they are not
+offered (`email_not_available`).
+
+**Setting it up with the app:**
+
+1. `POST /api/v1/auth/two-step/setup` with `{"method": "app"}` (or no body) →
+   a `secret` and an `otpauth_url`. Show the URL as a QR code; the person scans
+   it (or types the secret) in the authenticator app.
+2. `POST /api/v1/auth/two-step/confirm` with the 6-digit code from the app → it
+   is on, and the answer has **10 recovery codes** (shown once).
+
+**Setting it up with email codes:**
+
+1. `POST /api/v1/auth/two-step/setup` with `{"method": "email"}` → a code is
+   emailed (`email_sent_to` says where).
+2. `POST /api/v1/auth/two-step/confirm` with that code → it is on, with
+   10 recovery codes.
+
+**Changing the way** (app → email or email → app): the same setup request with
+the new `method` **and** a current `code` (from the app, by email, or a
+recovery code), then confirm with a code of the new way. Until then the old
+way keeps working.
+
+**Codes by email, the rules:** 6 digits; work once, for 10 minutes; stop after
+5 wrong tries; one email a minute (`rate_limited` with `Retry-After`).
+`POST /api/v1/auth/two-step/email-code` (logged in) sends one for the requests
+below.
+
+New recovery codes: `POST /api/v1/auth/two-step/recovery-codes` with a code
+(the old ones stop). Turn it off (not allowed for owners and administrators):
 `POST /api/v1/auth/two-step/disable` with the password and a code.
 
 ---

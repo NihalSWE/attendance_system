@@ -36,11 +36,28 @@ class WebLoginSerializer(StrictSerializer):
 
 class TwoStepLoginSerializer(StrictSerializer):
     challenge = serializers.CharField(
-        max_length=200, help_text="The challenge from the login answer. Valid 5 minutes.")
+        max_length=200, help_text="The challenge from the login answer. Valid 10 minutes.")
     code = serializers.CharField(
         max_length=20,
-        help_text="The 6-digit code from the authenticator app, or one recovery code "
-                  "(e.g. 3f9a1c2e-7b4d5e6f). Each works once.")
+        help_text="The 6-digit code from the authenticator app, the 6-digit code sent by "
+                  "email, or one recovery code (e.g. 3f9a1c2e-7b4d5e6f). Each works once.")
+
+
+class ChallengeSerializer(StrictSerializer):
+    challenge = serializers.CharField(
+        max_length=200, help_text="The challenge from the login answer. Valid 10 minutes.")
+
+
+class TwoStepSetupInputSerializer(StrictSerializer):
+    method = serializers.ChoiceField(
+        choices=(("app", "Authenticator app"), ("email", "Code by email")),
+        required=False, default="app",
+        help_text="app (recommended): an authenticator app on the phone. email: a code is "
+                  "emailed at each login instead - for someone who does not want an app.")
+    code = serializers.CharField(
+        max_length=20, required=False, allow_blank=True, default="",
+        help_text="Only when two-step login is already on (changing the way): a current "
+                  "code - from the app, by email, or a recovery code.")
 
 
 class RefreshSerializer(StrictSerializer):
@@ -92,15 +109,28 @@ class EmptySerializer(StrictSerializer):
 
 # --- out ---
 
-class TokensSerializer(serializers.Serializer):
-    two_step_required = serializers.BooleanField(
-        help_text="True when the login needs the authenticator code next: then only "
-                  "challenge and challenge_expires_in are present - send them to "
-                  "POST /api/v1/auth/login/two-step.")
+class TwoStepChallengeFields(serializers.Serializer):
     challenge = serializers.CharField(
         required=False, help_text="Only when two_step_required: send it with the code.")
     challenge_expires_in = serializers.IntegerField(
         required=False, help_text="Only when two_step_required: seconds left to send the code.")
+    methods = serializers.ListField(
+        child=serializers.CharField(help_text='"app", "email" or "recovery_code".'),
+        required=False,
+        help_text='Only when two_step_required: the ways this login can pass. "email" means '
+                  "a code can be sent by email (POST /api/v1/auth/login/two-step/email-code).")
+    email_sent_to = serializers.CharField(
+        required=False,
+        help_text="Only when a code was emailed already (two-step by email): where it went, "
+                  "e.g. r***@example.com.")
+    email_expires_in = serializers.IntegerField(
+        required=False, help_text="Only with email_sent_to: seconds the emailed code works.")
+
+
+class TokensSerializer(TwoStepChallengeFields):
+    two_step_required = serializers.BooleanField(
+        help_text="True when the login needs a two-step code next: then only the challenge "
+                  "fields are present - send the code to POST /api/v1/auth/login/two-step.")
     session_id = serializers.CharField(
         required=False,
         help_text="This login's id (ses_…). Apps send it as X-Key-Id on every signed request.")
@@ -125,14 +155,10 @@ class TokensSerializer(serializers.Serializer):
                   "until it is set up, only two-step setup and logout work.")
 
 
-class WebSessionSerializer(serializers.Serializer):
+class WebSessionSerializer(TwoStepChallengeFields):
     two_step_required = serializers.BooleanField(
-        help_text="True when the login needs the authenticator code next "
+        help_text="True when the login needs a two-step code next "
                   "(POST /api/v1/auth/web/login/two-step).")
-    challenge = serializers.CharField(
-        required=False, help_text="Only when two_step_required: send it with the code.")
-    challenge_expires_in = serializers.IntegerField(
-        required=False, help_text="Only when two_step_required: seconds left to send the code.")
     session_id = serializers.CharField(required=False, help_text="This login's id (ses_…).")
     access_expires_in = serializers.IntegerField(
         required=False,
@@ -163,6 +189,8 @@ class CompanySerializer(serializers.Serializer):
 
 class TwoStepStatusSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(help_text="Two-step login is on for this login.")
+    method = serializers.CharField(
+        allow_null=True, help_text='"app" or "email" when it is on; null when it is off.')
     required = serializers.BooleanField(
         help_text="It must be on: the login is an owner or company administrator.")
 
@@ -198,10 +226,32 @@ class StaffSessionSerializer(SessionSerializer):
 
 
 class TwoStepSetupSerializer(serializers.Serializer):
+    method = serializers.CharField(help_text='The way being set up: "app" or "email".')
     secret = serializers.CharField(
-        help_text="The secret to type into the authenticator app, if it cannot scan.")
+        required=False,
+        help_text="app only: the secret to type into the authenticator app, if it cannot scan.")
     otpauth_url = serializers.CharField(
-        help_text="The same as an otpauth:// link: show it as a QR code for the app to scan.")
+        required=False,
+        help_text="app only: the same as an otpauth:// link - show it as a QR code to scan.")
+    email_sent_to = serializers.CharField(
+        required=False, help_text="email only: where the code went, e.g. r***@example.com.")
+    email_expires_in = serializers.IntegerField(
+        required=False, help_text="email only: seconds the emailed code works.")
+
+
+class EmailCodeSentSerializer(serializers.Serializer):
+    email_sent_to = serializers.CharField(help_text="Where the code went, e.g. r***@example.com.")
+    email_expires_in = serializers.IntegerField(
+        help_text="Seconds the code works (600). It works once; a new one can be asked for "
+                  "after a minute.")
+
+
+class TwoStepOnSerializer(serializers.Serializer):
+    method = serializers.CharField(help_text='The way now on: "app" or "email".')
+    recovery_codes = serializers.ListField(
+        child=serializers.CharField(help_text="One code, e.g. 3f9a1c2e-7b4d5e6f."),
+        help_text="10 single-use codes for when the phone or the email is out of reach. "
+                  "Shown once - keep them somewhere safe. Any older codes stop working.")
 
 
 class RecoveryCodesSerializer(serializers.Serializer):

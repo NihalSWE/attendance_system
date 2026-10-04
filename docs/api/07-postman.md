@@ -46,12 +46,20 @@ signed automatically** — open any request and press Send.
 **If the answer says `"two_step_required": true`** (owners and company
 administrators): open **Log in: the two-step code (apps)**, put the 6-digit
 code from the authenticator app in the body's `"code"`, and Send. (The
-`challenge` was saved for you.)
+`challenge` was saved for you.) No phone at hand? Run **Log in: send the code
+by email** first and use the emailed code.
 
 **If the answer says `"two_step_setup_required": true`**: first run
-**Set up two-step login**, add the `otpauth_url`/`secret` to an authenticator
-app, then **Confirm two-step login** with a code. Until then only two-step
-setup and logout work.
+**Set up two-step login**:
+
+- with the body `{"method": "app"}`: add the `secret` to an authenticator app;
+- or with `{"method": "email"}`: a code is emailed.
+
+Then **Confirm two-step login** with the code. Until then only *Who am I*,
+the two-step requests and logout work.
+
+> On a computer without mail set up (`DEBUG` on), the email is printed in the
+> console where `runserver` runs — copy the code from there.
 
 ## 4. After 10 minutes
 

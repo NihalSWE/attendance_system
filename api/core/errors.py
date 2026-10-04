@@ -141,16 +141,31 @@ _SPECS = (
         "Authentication", "Too many failed tries. Try again in 900 seconds."),
     ErrorSpec(
         "invalid_two_step_code", 401, "The two-step code is not right",
-        "The code from the authenticator app (or the recovery code) is wrong, "
-        "too old, or already used.",
-        "Type the current 6-digit code from the app - check the phone's clock "
-        "is right - or use one of your recovery codes.",
+        "The code from the authenticator app, the code sent by email, or the "
+        "recovery code is wrong, too old, or already used.",
+        "Type the current 6-digit code from the app (check the phone's clock is "
+        "right), ask for a code by email, or use one of your recovery codes. An "
+        "emailed code works once, for 10 minutes, and stops after 5 wrong tries.",
         "Authentication"),
     ErrorSpec(
         "challenge_expired", 401, "The login step expired",
-        "The two-step code must be sent within 5 minutes of the password.",
+        "The two-step code must be sent within 10 minutes of the password.",
         "Log in again with email and password, then send the code.",
         "Authentication"),
+    ErrorSpec(
+        "email_not_available", 409, "Codes by email cannot be sent",
+        "No mail account is set up, so this server cannot email login codes.",
+        "Use the authenticator app or a recovery code. To offer email codes, the "
+        "company's owner or administrator sets the mail account under "
+        "Organisation -> Email settings.",
+        "Authentication"),
+    ErrorSpec(
+        "email_not_sent", 502, "The email could not be sent",
+        "The mail server refused or could not be reached; the message says why.",
+        "Try again in a minute, or use the authenticator app or a recovery code. "
+        "If it keeps failing, the owner or administrator checks Organisation -> "
+        "Email settings.",
+        "Authentication", "The mail server refused the username or password."),
     ErrorSpec(
         "invalid_token", 401, "The token is not valid",
         "The access or refresh token is unknown, belongs to a session that "
