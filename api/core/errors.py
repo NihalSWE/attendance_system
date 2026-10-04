@@ -125,7 +125,145 @@ _SPECS = (
         "Log in first and send the credentials on every request, as described "
         "under Logging in & request signing.",
         "Authentication", "Authentication credentials were not provided."),
+    ErrorSpec(
+        "invalid_credentials", 401, "Email or password is not right",
+        "No active login has this email and password. For safety it does not "
+        "say which of the two is wrong.",
+        "Check both and try again. After several wrong tries the login is "
+        "locked for a while; use Forgot password if you need a new one.",
+        "Authentication", "Email or password is not right."),
+    ErrorSpec(
+        "login_locked", 429, "Login locked for a while",
+        "Too many wrong passwords or codes for this login (or from this "
+        "address) in a short time.",
+        "Wait the number of seconds in Retry-After, then try again with the "
+        "right password. Forgot password works meanwhile.",
+        "Authentication", "Too many failed tries. Try again in 900 seconds."),
+    ErrorSpec(
+        "invalid_two_step_code", 401, "The two-step code is not right",
+        "The code from the authenticator app (or the recovery code) is wrong, "
+        "too old, or already used.",
+        "Type the current 6-digit code from the app - check the phone's clock "
+        "is right - or use one of your recovery codes.",
+        "Authentication"),
+    ErrorSpec(
+        "challenge_expired", 401, "The login step expired",
+        "The two-step code must be sent within 5 minutes of the password.",
+        "Log in again with email and password, then send the code.",
+        "Authentication"),
+    ErrorSpec(
+        "invalid_token", 401, "The token is not valid",
+        "The access or refresh token is unknown, belongs to a session that "
+        "ended, or was for another kind of client.",
+        "Log in again. Keep tokens exactly as received.",
+        "Authentication"),
+    ErrorSpec(
+        "token_expired", 401, "The access token expired",
+        "Access tokens last 10 minutes.",
+        "Swap your refresh token for a new pair (POST /api/v1/auth/refresh), "
+        "then repeat the request.",
+        "Authentication"),
+    ErrorSpec(
+        "session_ended", 401, "This session ended",
+        "The session was signed out, its password was changed, the login was "
+        "disabled, or a refresh token was used twice.",
+        "Log in again.",
+        "Authentication"),
+    ErrorSpec(
+        "refresh_token_reused", 401, "A refresh token was used twice",
+        "Each refresh token works once. An old one presented again means it "
+        "may have been copied, so the whole session was ended for safety.",
+        "Log in again, and always keep only the newest refresh token.",
+        "Authentication"),
+    ErrorSpec(
+        "signature_required", 401, "This request must be signed",
+        "Mobile and desktop sessions, and API keys, sign every request.",
+        "Send X-Key-Id, X-Timestamp, X-Nonce and X-Signature as described "
+        "under Logging in & request signing.",
+        "Authentication"),
+    ErrorSpec(
+        "missing_signature_headers", 401, "Signing headers missing",
+        "One or more of X-Key-Id, X-Timestamp, X-Nonce, X-Signature was not "
+        "sent, or X-Nonce is not 16-64 letters, digits, - or _.",
+        "Send all four on every signed request.",
+        "Authentication"),
+    ErrorSpec(
+        "invalid_signature", 401, "The signature does not match",
+        "The signature the server worked out differs from X-Signature: the "
+        "request was changed on the way, or it was signed differently.",
+        "Sign the exact bytes you send, with the canonical request "
+        "METHOD, PATH, sorted QUERY, TIMESTAMP, NONCE, SHA256(body), one per "
+        "line (joined by \\n). POST /api/v1/auth/signature-test shows what the "
+        "server built.",
+        "Authentication"),
+    ErrorSpec(
+        "timestamp_out_of_range", 401, "The timestamp is too far from the server's time",
+        "X-Timestamp is more than 5 minutes from the server's clock.",
+        "Send the current Unix time in seconds. If the device's clock is "
+        "wrong, read server_time from GET /api/v1/ping and correct for it.",
+        "Authentication"),
+    ErrorSpec(
+        "replay_detected", 401, "This request was already received",
+        "This nonce was already used by the same key or session, so the "
+        "request looks like a replay.",
+        "Make a new nonce (and timestamp and signature) for every request, "
+        "retries included.",
+        "Authentication"),
+    ErrorSpec(
+        "invalid_api_key", 401, "Unknown API key",
+        "No API key has the X-Key-Id that was sent.",
+        "Copy the key ID (it starts with ak_) exactly. The secret is never "
+        "sent - it only signs.",
+        "Authentication"),
+    ErrorSpec(
+        "api_key_revoked", 401, "The API key no longer works",
+        "It was revoked, or the person who created it no longer manages the "
+        "company.",
+        "Ask the company owner or administrator for a new key.",
+        "Authentication"),
+    ErrorSpec(
+        "api_key_expired", 401, "The API key expired",
+        "The key had an expiry date, and it has passed.",
+        "Ask the company owner or administrator for a new key, or to extend it.",
+        "Authentication"),
+    ErrorSpec(
+        "invalid_reset", 422, "The reset link is not valid",
+        "The password reset is unknown, already used, or older than 30 minutes.",
+        "Ask for a new one with Forgot password.",
+        "Authentication"),
     # --- Permission ------------------------------------------------------------
+    ErrorSpec(
+        "two_step_setup_required", 403, "Set up two-step login first",
+        "Owners and company administrators must use two-step login. Until it "
+        "is set up, only setting it up (and logging out) is allowed.",
+        "Call POST /api/v1/auth/two-step/setup, add the code to an "
+        "authenticator app, then POST /api/v1/auth/two-step/confirm.",
+        "Permission"),
+    ErrorSpec(
+        "scope_missing", 403, "The API key lacks a scope",
+        "This endpoint needs a scope the key was not given.",
+        "Ask the company owner or administrator to add the scope this "
+        "endpoint lists to the key.",
+        "Permission", "This API key needs the scope employees:read."),
+    ErrorSpec(
+        "ip_not_allowed", 403, "Not allowed from this address",
+        "The API key has an allow-list of addresses, and this request came "
+        "from another.",
+        "Call from an allowed address, or ask the owner or administrator to "
+        "add this one.",
+        "Permission"),
+    ErrorSpec(
+        "csrf_failed", 403, "The CSRF check failed",
+        "A browser request that changes something must carry the CSRF token "
+        "(cookie login only).",
+        "Read the token from GET /api/v1/auth/web/csrf and send it as the "
+        "X-CSRFToken header.",
+        "Permission"),
+    ErrorSpec(
+        "platform_login_not_allowed", 403, "The platform login has no API",
+        "The platform owner keeps its own panel; it does not use the API.",
+        "Use the platform panel.",
+        "Permission"),
     ErrorSpec(
         "permission_denied", 403, "Not allowed",
         "You are logged in, but your role (or your API key's scopes) does not "
@@ -214,7 +352,9 @@ def _has_code(detail, code):
 def exception_handler(exc, context):
     """Every exception an API view raises becomes one catalogue error."""
     if isinstance(exc, ApiError):
-        return error_response(exc.spec.code, exc.message, exc.fields)
+        retry = getattr(exc, "retry_after", None)
+        return error_response(exc.spec.code, exc.message, exc.fields,
+                              headers={"Retry-After": str(retry)} if retry else None)
     if isinstance(exc, drf.ValidationError):
         unknown = _has_code(exc.detail, "unknown_field")
         fields = _as_lists(exc.detail)

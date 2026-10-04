@@ -17,7 +17,7 @@ from pathlib import Path
 
 import markdown
 from django.conf import settings
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.utils.safestring import mark_safe
@@ -29,13 +29,17 @@ from api.core.pagination import StandardPagination
 from api.core.registry import by_id, endpoints
 from api.core.samples import samples
 from api.core.throttling import SCOPES, rate_of
+from api.docs_site import postman as postman_collection
 
 DOCS_DIR = Path(settings.BASE_DIR) / "docs" / "api"
 
 #: Guide pages: address key -> (menu title, Markdown file).
 GUIDES = {
     "getting-started": ("Getting started", "01-getting-started.md"),
+    "authentication": ("Logging in & signing", "02-authentication.md"),
     "conventions": ("Conventions", "03-conventions.md"),
+    "security": ("Security", "06-security.md"),
+    "postman": ("Testing with Postman", "07-postman.md"),
     "changelog": ("Changelog", "CHANGELOG.md"),
 }
 
@@ -55,8 +59,12 @@ def _menu(current):
     sections = [{"title": "Start here", "items": [
         {"label": "Getting started", "url": reverse("api:docs"),
          "active": current == "getting-started"},
+        {"label": "Logging in & signing", "url": reverse("api:docs_authentication"),
+         "active": current == "authentication"},
         {"label": "Conventions", "url": reverse("api:docs_conventions"),
          "active": current == "conventions"},
+        {"label": "Testing with Postman", "url": reverse("api:docs_postman"),
+         "active": current == "postman"},
     ]}]
     for area, title in AREAS:
         items = [{"label": doc.title, "method": doc.method,
@@ -73,8 +81,12 @@ def _menu(current):
          "active": current == "errors"},
         {"label": "Rate limits", "url": reverse("api:docs_rate_limits"),
          "active": current == "rate-limits"},
+        {"label": "Security", "url": reverse("api:docs_security"),
+         "active": current == "security"},
         {"label": "Changelog", "url": reverse("api:docs_changelog"),
          "active": current == "changelog"},
+        {"label": "Postman collection (download)", "url": reverse("api:docs_postman_collection"),
+         "external": True},
         {"label": "Swagger (OpenAPI)", "url": reverse("api:swagger"), "external": True},
     ]})
     return sections
@@ -87,6 +99,16 @@ def guide(request, page):
     return render(request, "api/docs/guide.html", {
         "menu": _menu(page), "title": title, "content": _markdown(filename),
     })
+
+
+def postman(request):
+    """The Postman collection to import (the guide: Testing with Postman)."""
+    base = request.build_absolute_uri("/").rstrip("/")
+    data = postman_collection.collection(
+        base, lambda doc: request.build_absolute_uri(reverse("api:docs_endpoint", args=[doc.id])))
+    response = JsonResponse(data, json_dumps_params={"indent": 2, "ensure_ascii": False})
+    response["Content-Disposition"] = 'attachment; filename="attendance-api.postman_collection.json"'
+    return response
 
 
 def errors(request):

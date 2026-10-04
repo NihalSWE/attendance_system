@@ -2,11 +2,11 @@
 
 A person in several companies sends ``X-Company: <company id>``; it must be a
 company they are an active member of. With one company the header may be left
-out. (An API key belongs to one company - phase 1.) Logins wire this in in
-phase 1; the rule lives here so every endpoint uses the same one.
+out. An API key belongs to one company. ``ApiView`` applies it to every
+endpoint that acts for a company.
 """
 
-from accounts.models import CompanyMembership
+from accounts.services import get_active_memberships
 from api.core.errors import ApiError
 
 HEADER = "HTTP_X_COMPANY"
@@ -14,10 +14,8 @@ HEADER = "HTTP_X_COMPANY"
 
 def resolve_company(request, user):
     """The company id the request acts for, or raise ``ApiError``."""
-    memberships = list(
-        CompanyMembership.all_objects.filter(user=user, status=CompanyMembership.Status.ACTIVE)
-        .values_list("company_id", flat=True)
-    )
+    # The panels' own rule: active memberships of trial or active companies.
+    memberships = list(get_active_memberships(user).values_list("company_id", flat=True))
     asked = (request.META.get(HEADER) or "").strip()
     if asked:
         if not asked.isdigit() or int(asked) not in memberships:

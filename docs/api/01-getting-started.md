@@ -4,8 +4,8 @@ The Attendance Management API gives apps, frontends and other systems the
 same functions as the **company, branch and employee panels** — the same data
 and the same rules. Use the panels, the API, or both.
 
-> **Status:** phase 0 (foundation). The API answers, and this documentation is
-> live. Logging in arrives in phase 1; the panels' functions follow phase by
+> **Status:** phase 1 (security & login). Logging in, sessions, two-step
+> login, passwords and API keys work; the panels' functions follow phase by
 > phase, as set out in the plan (`docs/api/00-PLAN.md` in the project).
 
 ## The address
@@ -41,9 +41,11 @@ If you get this answer, the address is right.
 
 | You are building | You log in with |
 |---|---|
-| A mobile or desktop app used by people | email + password → tokens, and every request signed (phase 1) |
-| A web frontend (React, Vue, …) | email + password → secure cookies (phase 1) |
-| A server-to-server integration (an ERP, a sync program) | an API key the company creates, every request signed (phase 1) |
+| A mobile or desktop app used by people | email + password → tokens, and every request signed |
+| A web frontend (React, Vue, …) | email + password → secure cookies |
+| A server-to-server integration (an ERP, a sync program) | an API key the company creates, every request signed |
+
+Step by step, with code: [Logging in & signing](authentication/).
 
 A person can do through the API exactly what they can do in their panel —
 no more. A company owner or administrator works with the whole company; a

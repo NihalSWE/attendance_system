@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from api.core.errors import ApiError
-from api.core.permissions import Public
+from api.core.permissions import HasScope, Public
 from api.core.serializers import StrictSerializer
 from api.core.views import ApiView
 
@@ -70,6 +70,21 @@ class MakeView(ApiView):
         return Response({"made": COUNTER["made"]}, status=201)
 
 
+class KeyProbeView(ApiView):
+    """For the API-key tests: needs a scope and acts for a company."""
+
+    permission_classes = [HasScope]
+    required_scopes = ["employees:read"]
+    company_required = True
+    throttle_scope = "read"
+
+    def get(self, request):
+        return Response({"company_id": request.company_id, "user": request.user.email})
+
+    def post(self, request):
+        return Response({"got": request.data})
+
+
 urlpatterns = [
     path("", include("config.urls")),
     path("api-test/echo", EchoView.as_view()),
@@ -78,4 +93,5 @@ urlpatterns = [
     path("api-test/broken", BrokenView.as_view()),
     path("api-test/denied", DeniedView.as_view()),
     path("api-test/make", MakeView.as_view()),
+    path("api-test/key-probe", KeyProbeView.as_view()),
 ]

@@ -16,6 +16,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from api.core.company import resolve_company
 from api.core.errors import ApiError
 from api.models import IdempotencyRecord
 
@@ -41,6 +42,42 @@ def caller_of(request):
 
 
 class ApiView(APIView):
+    """The base of every endpoint.
+
+    ``company_required = True``: the request acts for one company (an API
+    key's, or the person's - ``X-Company`` when they have several); it is in
+    ``request.company_id`` and set as the tenant context for the request, as
+    the panels' code expects. ``allowed_during_two_step_setup = True``: the
+    endpoint stays open to an owner or administrator who still has to set up
+    two-step login (everything else answers two_step_setup_required).
+    """
+
+    company_required = False
+    allowed_during_two_step_setup = False
+
+    def perform_authentication(self, request):
+        super().perform_authentication(request)
+        request.company_id = None
+        session = getattr(request, "api_session", None)
+        if (session is not None and session.needs_two_step_setup
+                and not self.allowed_during_two_step_setup):
+            raise ApiError("two_step_setup_required")
+        if self.company_required and request.user is not None:
+            key = getattr(request, "api_key", None)
+            request.company_id = key.company_id if key is not None else resolve_company(
+                request, request.user)
+            from common.tenant import set_current_company_id
+
+            self._tenant_token = set_current_company_id(request.company_id)
+
+    def paginated(self, request, rows, serializer):
+        """A paged answer: {"count", "next", "previous", "results"}."""
+        from api.core.pagination import StandardPagination
+
+        paginator = StandardPagination()
+        page = paginator.paginate_queryset(rows, request, view=self)
+        return paginator.get_paginated_response(serializer(page, many=True).data)
+
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
         self._idempotency = None
@@ -67,6 +104,12 @@ class ApiView(APIView):
         return super().handle_exception(exc)
 
     def finalize_response(self, request, response, *args, **kwargs):
+        token = getattr(self, "_tenant_token", None)
+        if token is not None:
+            from common.tenant import clear_current_company_id
+
+            clear_current_company_id(token)
+            self._tenant_token = None
         response = super().finalize_response(request, response, *args, **kwargs)
         if not response.has_header("X-Request-Id"):
             response["X-Request-Id"] = uuid.uuid4().hex[:12]

@@ -2,6 +2,28 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-04 — Phase 1: security & login
+
+- **New — apps:** `POST /api/v1/auth/login`, `/login/two-step`, `/refresh`,
+  `/logout`. Opaque tokens (access 10 minutes, refresh 30 days, rotated once
+  per use) and every request signed with HMAC-SHA256.
+- **New — browser frontends:** `GET /api/v1/auth/web/csrf`,
+  `POST /api/v1/auth/web/login`, `/web/login/two-step`, `/web/refresh` —
+  HttpOnly cookies plus CSRF.
+- **New — the login:** `GET /api/v1/auth/me`; my sessions (list, end one, sign
+  out everywhere else); password change, forgot, reset; two-step login (setup,
+  confirm, disable, recovery codes) — required for owners and administrators.
+- **New — company:** staff sessions (`/api/v1/company/sessions`) and API keys
+  (`/api/v1/api-keys`: create, change, rotate with grace, revoke, scopes).
+- **New:** `POST /api/v1/auth/signature-test` — checks a signature step by step.
+- **Guides:** [Logging in & signing](../authentication/),
+  [Security](../security/) and [Testing with Postman](../postman/). Request
+  examples now sign in all eight languages.
+- **New:** the [Postman collection](../postman.json) — every endpoint, signed
+  for you; log-in requests save the tokens by themselves.
+- **Server:** passwords stored with Argon2; changing a password (here or in the
+  panels) ends that login's API sessions.
+
 ## 2026-10-04 — Phase 0: foundation & documentation site
 
 - **New:** `GET /api/v1/ping` — is the API up, and the server's time.

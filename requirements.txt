@@ -42,3 +42,8 @@ PyYAML==6.0.3
 referencing==0.37.0
 rpds-py==2026.6.3
 uritemplate==4.2.0
+# API phase 1: Argon2 password hashing (the first PASSWORD_HASHERS entry - must
+# be installed before the server restarts) and two-step login codes (TOTP).
+argon2-cffi==25.1.0
+argon2-cffi-bindings==26.1.0
+PyOTP==2.10.0
