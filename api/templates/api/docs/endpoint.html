@@ -1,0 +1,115 @@
+{% extends "api/docs/base.html" %}
+{% block content %}
+    <article class="endpoint">
+        <h1>{{ doc.title }}</h1>
+        <p class="endpoint__summary">{{ doc.summary }}</p>
+
+        <div class="endpoint__line">
+            <span class="method method--{{ doc.method|lower }}">{{ doc.method }}</span>
+            <code class="endpoint__path" data-copy-source>{{ doc.path }}</code>
+            <button class="copy" type="button" data-copy-prev>Copy</button>
+        </div>
+
+        <section class="endpoint__section">
+            <h2>What it does</h2>
+            <ul>{% for line in doc.what_it_does %}<li>{{ line }}</li>{% endfor %}</ul>
+            <div class="endpoint__facts">
+                <p><span class="tag tag--who">Who may use it</span> {{ doc.roles|join:" · " }}{% if doc.scopes %} · API key scope{{ doc.scopes|length|pluralize }}: {% for scope in doc.scopes %}<code>{{ scope }}</code>{% if not forloop.last %}, {% endif %}{% endfor %}{% endif %}</p>
+                {% if rate %}<p><span class="tag tag--rate">Rate limit</span> {{ rate.rate }} <span class="t-muted">({{ rate.scope }})</span> · <a href="{% url 'api:docs_rate_limits' %}">All rate limits</a></p>{% endif %}
+                <p><span class="tag">Login</span> {% if doc.auth == "public" %}Not needed{% else %}Required - see <a href="{% url 'api:docs' %}">Getting started</a>{% endif %}</p>
+            </div>
+            <div class="prose">{{ doc.description|linebreaks }}</div>
+        </section>
+
+        <section class="endpoint__section" id="request">
+            <h2>Request parameters <span class="eyebrow">You send</span></h2>
+            {% if params %}
+                <p class="t-muted">Values you supply. <em>In</em> says where each one travels: in the URL path, the query string or a header.</p>
+                <div class="table-scroll">
+                    <table class="params">
+                        <thead><tr><th>Name</th><th>Required</th><th>In</th><th>Type</th><th>Description</th></tr></thead>
+                        <tbody>
+                            {% for param in params %}
+                                <tr>
+                                    <td><code>{{ param.name }}</code></td>
+                                    <td>{% if param.required or param.location == "path" %}<span class="tag tag--required">required</span>{% else %}<span class="tag">optional</span>{% endif %}</td>
+                                    <td>{{ param.location }}</td>
+                                    <td>{{ param.type }}</td>
+                                    <td>{{ param.description }}{% if param.example is not None %} <span class="t-muted">e.g. <code>{{ param.example }}</code></span>{% endif %}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% endif %}
+            {% if request_tree %}
+                <h3>Body <span class="t-muted">JSON · {{ request_count }} field{{ request_count|pluralize }}</span></h3>
+                <div class="tree" data-tree>
+                    <div class="tree__tools">
+                        <button type="button" class="link-button" data-expand-all>Expand all</button>
+                        <button type="button" class="link-button" data-collapse-all>Collapse all</button>
+                    </div>
+                    {% include "api/docs/_fields.html" with nodes=request_tree %}
+                </div>
+            {% endif %}
+            {% if not params and not request_tree %}<p class="t-muted">Nothing to send.</p>{% endif %}
+        </section>
+
+        <section class="endpoint__section" id="request-example">
+            <h2>Request example</h2>
+            <div class="tabs" data-tabs>
+                <div class="tabs__list" role="tablist">
+                    {% for key, label, code in samples %}
+                        <button type="button" role="tab" class="tabs__tab" data-tab="{{ key }}" aria-selected="{% if forloop.first %}true{% else %}false{% endif %}">{{ label }}</button>
+                    {% endfor %}
+                </div>
+                {% for key, label, code in samples %}
+                    <div class="code-block" role="tabpanel" data-panel="{{ key }}"{% if not forloop.first %} hidden{% endif %}>
+                        <button class="copy" type="button" data-copy-next>Copy</button>
+                        <pre><code>{{ code }}</code></pre>
+                    </div>
+                {% endfor %}
+            </div>
+            {% if request_example %}
+                <h3>Example body</h3>
+                <div class="code-block"><button class="copy" type="button" data-copy-next>Copy</button><pre><code>{{ request_example }}</code></pre></div>
+            {% endif %}
+        </section>
+
+        <section class="endpoint__section" id="response">
+            <h2>Response fields <span class="eyebrow">You receive</span> <span class="t-muted">HTTP {{ doc.response_status }}</span></h2>
+            {% if response_tree %}
+                <p class="t-muted">What comes back on success. Open a field with <strong>+</strong> to see the fields inside it.</p>
+                <div class="tree" data-tree>
+                    <div class="tree__tools">
+                        <button type="button" class="link-button" data-expand-all>Expand all</button>
+                        <button type="button" class="link-button" data-collapse-all>Collapse all</button>
+                    </div>
+                    {% include "api/docs/_fields.html" with nodes=response_tree %}
+                </div>
+            {% else %}
+                <p class="t-muted">No body.</p>
+            {% endif %}
+        </section>
+
+        {% if response_example %}
+            <section class="endpoint__section" id="response-example">
+                <h2>Response example</h2>
+                <div class="code-block"><button class="copy" type="button" data-copy-next>Copy</button><pre><code>{{ response_example }}</code></pre></div>
+            </section>
+        {% endif %}
+
+        <section class="endpoint__section" id="errors">
+            <h2>Errors this endpoint can return</h2>
+            <div class="error-list">
+                {% for error in errors %}{% include "api/docs/_error.html" %}{% endfor %}
+            </div>
+            <p><a href="{% url 'api:docs_errors' %}">See the full error reference &rarr;</a></p>
+        </section>
+
+        <nav class="pager" aria-label="Previous and next">
+            {% if previous %}<a class="pager__prev" href="{% url 'api:docs_endpoint' previous.id %}"><span>&larr; Previous</span><strong>{{ previous.title }}</strong></a>{% else %}<span></span>{% endif %}
+            {% if next %}<a class="pager__next" href="{% url 'api:docs_endpoint' next.id %}"><span>Next &rarr;</span><strong>{{ next.title }}</strong></a>{% endif %}
+        </nav>
+    </article>
+{% endblock %}

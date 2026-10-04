@@ -1,0 +1,45 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} · Attendance API</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'base_template/css/tokens.css' %}">
+    <link rel="stylesheet" href="{% static 'api/docs/docs.css' %}">
+    <script defer src="{% static 'api/docs/docs.js' %}"></script>
+</head>
+<body class="apidocs">
+    <header class="apidocs__top">
+        <button class="apidocs__menu-toggle" type="button" aria-controls="apidocs-menu" aria-expanded="false" data-menu-toggle>
+            <span aria-hidden="true">&#9776;</span> Menu
+        </button>
+        <a class="apidocs__brand" href="{% url 'api:docs' %}">Attendance API <span class="apidocs__version">v1</span></a>
+        <a class="apidocs__swagger" href="{% url 'api:swagger' %}">Swagger</a>
+    </header>
+    <div class="apidocs__layout">
+        <nav class="apidocs__menu" id="apidocs-menu" aria-label="Documentation">
+            {% for section in menu %}
+                <div class="apidocs__section">
+                    <p class="apidocs__section-title">{{ section.title }}</p>
+                    <ul>
+                        {% for item in section.items %}
+                            <li>
+                                <a href="{{ item.url }}" class="{% if item.active %}is-active{% endif %}"{% if item.active %} aria-current="page"{% endif %}>
+                                    {% if item.method %}<span class="method method--{{ item.method|lower }}">{{ item.method }}</span>{% endif %}
+                                    <span>{{ item.label }}</span>
+                                    {% if item.external %}<span aria-hidden="true">&#8599;</span>{% endif %}
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endfor %}
+        </nav>
+        <main class="apidocs__main" id="main">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+</body>
+</html>

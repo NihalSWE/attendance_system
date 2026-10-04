@@ -1,0 +1,16 @@
+<article class="error-card" id="error-{{ error.code }}">
+    <header class="error-card__head">
+        <code class="error-card__code">{{ error.code }}</code>
+        <span class="tag tag--status">HTTP {{ error.status }}</span>
+    </header>
+    <h3 class="error-card__title">{{ error.title }}</h3>
+    <p>{{ error.meaning }}</p>
+    <p class="error-card__fix"><strong>Fix:</strong> {{ error.fix }}</p>
+    <details class="error-card__example">
+        <summary>Example response</summary>
+        <div class="code-block">
+            <button class="copy" type="button" data-copy-next>Copy</button>
+            <pre><code>{{ error.example }}</code></pre>
+        </div>
+    </details>
+</article>

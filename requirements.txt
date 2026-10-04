@@ -27,3 +27,18 @@ tzdata==2026.3
 # back from a worker. Without it a failing test crashes the run with
 # "cannot pickle 'traceback' object" and you never see which test.
 tblib==3.2.2
+# The REST API (docs/api/00-PLAN.md): the framework, the OpenAPI schema behind
+# the Swagger link, browser frontends (CORS), and the documentation site's
+# guide pages (Markdown). Their own requirements follow.
+djangorestframework==3.18.1
+drf-spectacular==0.30.0
+django-cors-headers==4.9.0
+Markdown==3.11
+attrs==26.1.0
+inflection==0.5.1
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+PyYAML==6.0.3
+referencing==0.37.0
+rpds-py==2026.6.3
+uritemplate==4.2.0

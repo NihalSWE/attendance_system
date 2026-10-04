@@ -89,6 +89,12 @@ INSTALLED_APPS = [
     'auditlog',
     # The ERP webhook: attendance pushed to a company's own system.
     'webhooks',
+    # The REST API (docs/api/00-PLAN.md): the panels' functions for apps,
+    # frontends and the ERP. Calls the same services the panels use.
+    'rest_framework',
+    'drf_spectacular',
+    'corsheaders',
+    'api',
     # Shared presentation app (no domain models/tables).
     'base_template',
 ]
@@ -96,6 +102,8 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    # Which web frontends may call the API from a browser (only /api/).
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -269,3 +277,56 @@ MAILERS = {
 # old one. The request is still refused; this only replaces the bare
 # "Forbidden (403)" wall with a page that says how to recover.
 CSRF_FAILURE_VIEW = 'base_template.views.csrf_failure'
+
+
+# --- The REST API (docs/api/00-PLAN.md) -------------------------------------
+# Deny by default: an endpoint is open only to whoever it names. JSON only;
+# errors in one shape (api/core/errors.py); lists paged, 100 at most.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [],      # phase 1 adds tokens and signatures
+    'DEFAULT_PERMISSION_CLASSES': ['api.core.permissions.DenyAll'],
+    'DEFAULT_RENDERER_CLASSES': ['rest_framework.renderers.JSONRenderer'],
+    'DEFAULT_PARSER_CLASSES': ['rest_framework.parsers.JSONParser'],
+    'DEFAULT_PAGINATION_CLASS': 'api.core.pagination.StandardPagination',
+    'DEFAULT_THROTTLE_CLASSES': ['api.core.throttling.ApiRateThrottle'],
+    'DEFAULT_THROTTLE_RATES': {
+        # A scope per kind of endpoint; each endpoint's page shows its rate.
+        'public': '60/minute',
+        'read': '300/minute',
+        'write': '120/minute',
+    },
+    'EXCEPTION_HANDLER': 'api.core.errors.exception_handler',
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+    'UNAUTHENTICATED_USER': None,
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Attendance Management API',
+    'DESCRIPTION': 'The company, branch and employee panels as an API. '
+                   'Full documentation: /api/docs/',
+    'VERSION': 'v1',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'SCHEMA_PATH_PREFIX': r'/api/v1',
+}
+
+# Rate limits are counted in the database, so they hold across every
+# server worker (a per-process cache would give each worker its own count).
+# Run `python manage.py createcachetable` once when deploying.
+CACHES = {
+    'default': {'BACKEND': 'django.core.cache.backends.locmem.LocMemCache'},
+    'api': {
+        'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+        'LOCATION': 'api_cache',
+    },
+}
+
+# Browser frontends allowed to call the API: comma-separated origins in .env,
+# e.g. API_CORS_ORIGINS=https://app.example.com. Empty: none.
+CORS_ALLOWED_ORIGINS = env.list('API_CORS_ORIGINS', default=[])
+CORS_URLS_REGEX = r'^/api/.*$'
+CORS_ALLOW_CREDENTIALS = True
+CORS_EXPOSE_HEADERS = ['Retry-After', 'X-Request-Id']
+CORS_ALLOW_HEADERS = (
+    'accept', 'authorization', 'content-type', 'x-csrftoken', 'x-company',
+    'idempotency-key', 'x-key-id', 'x-timestamp', 'x-nonce', 'x-signature',
+)

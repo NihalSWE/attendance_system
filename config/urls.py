@@ -10,6 +10,8 @@ from base_template import views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # The REST API, its documentation site and Swagger (docs/api/00-PLAN.md).
+    path("api/", include("api.urls")),
     path("platform/", include("tenants.urls")),
     # which is our word, not the operator's -- but the views live in
     # organization/ with their models.
