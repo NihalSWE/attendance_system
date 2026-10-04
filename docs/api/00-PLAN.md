@@ -1,193 +1,393 @@
 # API plan — the whole project, phase by phase
 
-Written 2026-10-04 for Nihal and his senior. This is the plan the API is built
-to; each phase is built **with its documentation and tests at the same time**,
-pushed, and checked before the next one starts.
+Version 2, 2026-10-04, for Nihal and his senior.
+Built **phase by phase**: each phase = its API **+ its documentation + its
+tests, together**, pushed and checked before the next phase starts.
+
+**Guiding rule from the senior:** keep it simple enough that anyone on the
+team can read it later and understand what happens. Every choice below is
+the plain, well-known way of doing it — no clever tricks.
 
 ---
 
-## 1. What is asked
+## Part 1 — The design in one page
 
-- An API for **everything** the website does, A to Z: every create, read,
-  update, delete and action on every page, from creating a company to
-  logging in.
-- Used by **a mobile app, a separate web frontend (React/Vue), a desktop app
-  and the ERP**.
-- **Strong security** (the senior suggested HMAC).
-- **Documentation written together with each endpoint**, never at the end, so
-  nothing is missed. Clear, well organised, easy to follow.
-- **Phase by phase**, not all at once.
+### 1.1 Where the API lives
 
-## 2. The decisions
+- One new Django app, **`api`**, inside this project. No second server, no
+  new language, no new database.
+- One folder per area (`api/v1/employees/`, `api/v1/devices/`, …). Every
+  folder looks the same: `serializers.py`, `views.py`, `urls.py`, `tests.py`.
+- **The one rule:** an API endpoint never changes data on its own. It checks
+  the request, **calls the same service function the website already uses**,
+  and returns the answer. So the API and the website always behave the same,
+  every business rule already written is respected, and the website itself
+  is not touched.
 
-### 2.1 Django REST Framework, inside this project
+Packages added (all widely used, well documented):
+`djangorestframework` (the API), `djangorestframework-simplejwt` (login
+tokens), `drf-spectacular` (Swagger / ReDoc documentation).
 
-The API is a new Django app, `api`, in this same project — not a separate
-service. It uses the same models, the same company isolation
-(`TenantOwned`, `use_company`), the same permission rules (`can()`, roles,
-branch access) and **the same service functions** the website uses
-(`create_employee`, `change_placement`, `recalculate`, `start_load`, …).
+### 1.2 Login — two ways, both standard
 
-The rule that keeps the API and the website identical:
+| Who calls the API | How it logs in | In short |
+|---|---|---|
+| **People** — mobile app, desktop app, React/Vue frontend | **Email + password → token** | Login gives an *access token* (15 min) and a *refresh token* (30 days). Every request sends `Authorization: Bearer <access token>`. Before it runs out, the app swaps the refresh token for a new pair. Logout ends it. |
+| **Machines** — ERP, other servers, a desktop sync program, another make of device | **API key, every request signed with HMAC** | The company admin creates a key (ID + secret, secret shown once). Each request carries the key ID, the time and an HMAC-SHA256 signature of the request. The server checks the signature, refuses old or repeated requests, and only allows what the key's scopes allow. |
 
-> **An API view never writes to a model itself. It validates the request,
-> calls the same service the web page calls, and returns the result.**
+Why not HMAC for the people apps: a person's app would have to keep a
+signing secret, and an app or web page can be unpacked to take it out. A
+short-lived token for people and HMAC for machines is the standard,
+easy-to-explain split. (If later the senior wants every mobile request signed
+too, it can be added on top without changing anything else.)
 
-So a fix in a service fixes both, every business rule (overlapping
-placements, finalised payroll, one device per company, …) holds in the API
-from day one, and the website is not touched.
+Protection for everyone:
+- HTTPS only; plain HTTP is refused.
+- A few wrong passwords lock the login for a while; every login is in the
+  audit log.
+- **Sessions list:** a person sees each device they are signed in on and can
+  sign one out; a company admin can do it for their staff.
+- Refresh tokens change on every use; an old one used again ends the session.
+- API keys: scopes, optional IP allow-list, expiry, "last used", revoke at once.
+- Secrets stored encrypted, shown once, never logged. Rate limits per person
+  and per key.
 
-Packages: `djangorestframework`, `drf-spectacular` (OpenAPI 3 / Swagger /
-ReDoc), `djangorestframework-simplejwt` (tokens). Nothing else to run on the
-server — same Gunicorn, same `git pull` and restart.
+### 1.3 The same conventions on every endpoint
 
-### 2.2 Security: two kinds of client, two kinds of login
-
-HMAC is an excellent choice — **for the right kind of client.** HMAC signing
-proves the caller holds a secret without ever sending it, and the signature
-covers the exact request (method, path, body, time), so a request cannot be
-altered or replayed. But the secret has to sit **inside the client**:
-
-| Client | Who uses it | Can it keep a secret? | Login |
-|---|---|---|---|
-| ERP, server-to-server integrations, an unattended desktop sync agent | a machine, on a company's own server | **Yes** — on a server only its owner can read | **HMAC-signed API key** |
-| Mobile app, React/Vue frontend, desktop app used by people | a person, on a phone / browser / PC | **No** — anyone can unpack an app or read a web page's code and take the secret out, for everyone | **Email + password → short-lived token** |
-
-A secret built into a mobile app or a web page is not a secret: one person
-extracts it and can sign requests as anyone, and it cannot be revoked for one
-user without breaking every install. So:
-
-**People (mobile, frontend, desktop app) — JWT tokens**
-- `POST /api/v1/auth/login` with email + password → an **access token**
-  (valid 15 minutes) and a **refresh token** (30 days).
-- Every request: `Authorization: Bearer <access token>`.
-- The refresh token **rotates** on every use and the old one is
-  **blacklisted**; logout revokes it. A stolen refresh token used twice
-  revokes the whole session.
-- Each login is a **session** the person (and the company admin) can see and
-  end: "Samsung A54, Dhaka, last used 2 min ago — Sign out".
-- Login is throttled (wrong passwords lock out for a while), and every login
-  is in the audit log.
-
-**Machines (ERP, integrations) — HMAC-signed API keys**
-- The company owner/admin creates an **API key** in the software: a key ID
-  and a secret (shown once). The key has **scopes** (e.g. read attendance,
-  write employees), optional **IP allow-list** and **expiry**, a "last used"
-  time, and can be revoked at once.
-- Every request carries:
-  ```
-  X-Api-Key: <key id>
-  X-Timestamp: 2026-10-04T10:15:00Z
-  X-Nonce: <random, once>
-  X-Signature: hex(HMAC-SHA256(secret, canonical request))
-  ```
-  where the canonical request is `METHOD \n PATH \n QUERY \n TIMESTAMP \n
-  NONCE \n SHA256(BODY)`.
-- The server refuses a request older than 5 minutes, a nonce seen before
-  (replay), a wrong signature, a revoked or expired key, an address outside
-  the allow-list, or anything outside the key's scopes.
-- The secret is stored **encrypted** (the server must read it to check a
-  signature), never shown again, never logged.
-- The documentation gives working signing code in **Python, PHP and
-  JavaScript**, plus a test endpoint that says exactly what is wrong with a
-  signature.
-
-**For everyone:** HTTPS only, per-user / per-key rate limits, and every write
-recorded in the audit log with who did it and through which session or key.
-
-### 2.3 Conventions (the same everywhere)
-
-- **Base URL:** `/api/v1/…`. A change that would break a client goes to `v2`;
-  `v1` keeps working.
-- **Company:** a person with several companies sends `X-Company: <company id>`;
-  it is checked against their memberships on every request. An API key
-  belongs to one company.
-- **JSON**, `snake_case`; times are ISO 8601 with the company's offset
-  (`2026-10-04T09:02:13+06:00`); dates `YYYY-MM-DD`.
-- **IDs:** the public UUID where a record has one, otherwise its number —
-  stated on every endpoint.
-- **Lists:** `?page=` and `?page_size=` (at most 100), `?search=`,
-  `?ordering=`, and the filters each list documents. Every list answers
-  `{"count", "next", "previous", "results"}`.
-- **Errors**, always one shape:
+- **Address:** `/api/v1/...` (a breaking change would become `v2`; `v1` keeps
+  working).
+- **Which company:** someone in several companies sends `X-Company: <id>`; it
+  is checked against their memberships every time. An API key belongs to one
+  company.
+- **JSON**, `snake_case`. Times ISO 8601 with the company's offset
+  (`2026-10-04T09:02:13+06:00`), dates `YYYY-MM-DD`.
+- **Lists:** `?page=`, `?page_size=` (max 100), `?search=`, `?ordering=` and
+  each list's own filters; answer `{"count", "next", "previous", "results"}`.
+- **Errors**, always one shape, with the same words the website shows:
   ```json
-  {"error": {"code": "validation_error",
-             "message": "Some fields are not valid.",
+  {"error": {"code": "validation_error", "message": "Some fields are not valid.",
              "fields": {"email": ["Another company already uses this email."]}}}
   ```
-  with `401` (not signed in), `403` (not allowed), `404`, `409` (conflict,
-  e.g. finalised payroll), `422` (validation), `429` (too many requests).
-  The messages are the same ones the website shows.
-- **Actions** that are not plain CRUD are verbs on the resource:
-  `POST /employees/{id}/end-employment`, `POST /payroll/runs/{id}/finalise`.
-- **Files** (photos, documents, imports, exports): multipart upload; downloads
-  as a file response or a short-lived link.
+  `401` not logged in · `403` not allowed · `404` not found · `409` conflict
+  (e.g. finalised payroll) · `422` invalid · `429` too many requests.
+- **Actions** that are not plain create/read/update/delete are named verbs:
+  `POST /employees/{id}/end-employment`, `POST /devices/{id}/test-connection`.
+- **Files:** upload as multipart; download as a file.
 
-### 2.4 Documentation, built with the code
+### 1.4 Documentation — written with the code, never after
 
-Two layers, both updated in the same commit as the endpoint:
+1. **Reference (generated from the code):** every endpoint has its summary,
+   who may use it, parameters, a request example, a response example and its
+   errors. Shown as **Swagger** (`/api/docs/`, try requests live) and **ReDoc**
+   (`/api/redoc/`, easy reading); the same schema makes a **Postman
+   collection**.
+2. **Guide (written by hand, `docs/api/`):** one page per phase in plain
+   words — what the area is, the flows step by step, a table of every
+   endpoint, copy-paste examples.
 
-1. **Reference — generated from the code (OpenAPI 3).** Every endpoint is
-   annotated with its summary, permissions, parameters, request and response
-   examples and errors. Served as **Swagger UI** (`/api/docs/`, try it live),
-   **ReDoc** (`/api/redoc/`, easy reading) and the raw schema
-   (`/api/v1/schema/`) — which also makes a **Postman collection**.
-2. **Guide — written by hand, in `docs/api/`.** One page per phase, in plain
-   words: what the area is, the flows step by step (e.g. "register a device
-   and load employees onto it"), a table of every endpoint, and copy-paste
-   examples (curl, and Python/JS where it helps).
+**"Done" for every endpoint, in the same commit:** view + serializer ·
+permission check · tests · reference annotation with examples · line in the
+guide · changelog entry. **A test fails if any endpoint has no
+documentation**, so nothing can be skipped or forgotten.
 
-**A phase is not done until every endpoint in it has, in the same commit:**
-the view and serializer · the permission check · tests (works; refused without
-permission; another company's data is invisible; validation errors) · its
-OpenAPI annotation with examples · its line in the guide · a changelog entry.
-A test fails the build if any endpoint is missing from the schema or has no
-description — so nothing can be left out of the documentation.
+**Tests for every endpoint:** it works · it is refused without the right
+permission · another company's data cannot be seen or changed · bad input
+gets the right error.
 
-## 3. The phases
+---
 
-Order: foundation first, then **root → company → branch → employee**, then
-the areas that build on employees, then the employee's own app, then reports
-and integrations. Each phase is its own branch, built, documented, tested
-(full suite), pushed, and reported to you before the next starts.
+## Part 2 — The phases at a glance
 
-| Phase | Area | What it covers (every page and action in it) | ≈ endpoints |
+| # | Phase | What you can do through the API when it is done | ≈ endpoints |
 |---|---|---|---|
-| **0** | **Foundation & login** | API app, versioning, error format, paging, rate limits, company header. **Auth:** login, refresh, logout, me, my companies, my sessions (list / end), change password, forgot / reset password. **API keys:** create, list, revoke, rotate, scopes, allow-list; HMAC check; signature test endpoint. Docs: Getting started, Authentication (with signing code), Conventions, Errors, Paging. Swagger + ReDoc. | 20 |
-| **1** | **Root (platform)** | Companies: list, create with administrator, detail, edit, status (trial / active / suspended), features on/off, members (add administrator, change role/status). Platform dashboard. | 15 |
-| **2** | **Company & branches** | Company profile and logo, mail settings. Branches: list, create, edit, status. Departments (adoption: list, create, copy, edit, status). Designations: list, create, edit, status. Access: who may do what (designation / department permissions, per-person overrides). | 30 |
-| **3** | **Employees** | List / search / filter, create, CSV import (upload, preview, confirm, demo file), profile, edit details / personal / placement / salary (with the "latest save wins" rule), line manager, photo, education, documents, end employment, inactive / active periods, leave policy and adjustments, late and overtime settings, report visibility, device permissions, logins (give, password, disable, enable, role). | 45 |
-| **4** | **Shifts & calendar** | Overview, attendance settings (incl. "first and last scan"), shifts (create, edit, status), department shifts, employee shifts, weekly offs (create, start, end), holidays (list, create, year, edit, cancel). | 20 |
-| **5** | **Devices** | Devices: list, register, serial check, edit, retire, departments. Connection status and test. Device users: roster, refresh, add / delete one, read back, map automatically, replace old links, copy to another device, add as employees, remove, **load employees (background job + progress)**. Employees ↔ devices: map, bulk map, send. Fingerprints / faces: save, trial. Commands and options, server address change. Enrollments, messages, punches, unresolved queue, attendance rules and recheck. (The device's own `/iclock/` push protocol stays as it is.) | 45 |
-| **6** | **Attendance** | Daily list, late entries, "who is in now", calendar month, one day in detail, days to review, fix a day (corrections), missed scans (staff: list, enter, decide; withdraw), manual attendance, Excel / PDF exports. | 20 |
-| **7** | **Leave** | Leave types (create, defaults, edit, status), policies and versions, balances, leave records (record, cancel, amend), requests and approvals, documents. | 20 |
-| **8** | **Salary (payroll)** | Periods and runs (generate, submit, finalise, send back, reopen), salary settings, components (company and per employee), penalty rules (create, change, stop, waive), payslips (view, email, adjust, correct), overtime decisions, LFA (settings, claims, paid). | 30 |
-| **9** | **The employee's own app ("me")** | My profile, details, photo, education; my attendance and a day; report / withdraw a missed scan; my leave (request, withdraw, document); leave inbox for approvers; branch attendance for branch managers; my payslips; my LFA; change password. Built last of the main areas because it uses all of them — and it is what the mobile app needs most. | 25 |
-| **10** | **Reports & dashboard** | Every report (daily, weekly, monthly, late, overtime, …) as JSON plus Excel / PDF export, dashboard figures. | 15 |
-| **11** | **Integrations & finish** | ERP webhook (settings, test, send a test, events, send again, debug messages, guide), audit log (read), final pass over the whole guide, the Postman collection, a "build a client in 10 minutes" walkthrough. | 15 |
+| 0 | **Foundation & login** | Log in / out, tokens, sessions, password, API keys with HMAC; the docs site | 20 |
+| 1 | **Root (platform)** | Manage companies, their status, features and administrators | 15 |
+| 2 | **Company & branches** | Company profile, branches, departments, designations, who may do what | 30 |
+| 3 | **Employees** | Everything on the employee pages, from creating to ending employment | 45 |
+| 4 | **Shifts & calendar** | Shifts, attendance settings, weekly offs, holidays | 20 |
+| 5 | **Devices — setup** | Register, edit, retire devices; connection and test; device rules | 15 |
+| 6 | **Devices — data flow (device ⇄ software)** | Everything that comes from the device and everything sent to it, and every process in between | 40 |
+| 7 | **Attendance** | Daily list, calendar, day detail, corrections, missed scans, review | 20 |
+| 8 | **Leave** | Leave types, policies, balances, records, requests and approvals | 20 |
+| 9 | **Salary (payroll)** | Salary runs, settings, components, penalties, payslips, overtime, LFA | 30 |
+| 10 | **The employee's own app ("me")** | Everything an employee does for themself — the mobile app's main part | 25 |
+| 11 | **Reports & dashboard** | Every report as data and as Excel / PDF; dashboard figures | 15 |
+| 12 | **Integrations & finish** | ERP webhook, audit log, final review of all docs, Postman collection | 15 |
 
-About **300 endpoints** in all. The counts are estimates; each phase starts
-by listing its exact endpoints from the web routes, so nothing is missed.
+About **310 endpoints**. Order: foundation → root → company → branch →
+employee → what builds on employees → the employee's own app → reports.
+Each phase starts by checking its list against the website's pages, so
+nothing is left out.
 
-## 4. How each phase is run
+---
 
-1. **List** every page and action in the area (from the web routes and
-   services) — that list becomes the guide page's table of contents.
-2. **Build** endpoint by endpoint: serializer → view calling the service →
-   permission → tests → OpenAPI annotation → guide entry. One endpoint is
-   finished before the next starts.
-3. **Check:** the area's tests, the "every endpoint documented" test, a look
-   through Swagger, then the full suite.
-4. **Push** to Ajay's main, with the guide page, and a short report: what was
-   added, how to try it, anything to decide.
+## Part 3 — Each phase in detail
 
-The website is never changed by an API phase (except where a service needs a
-small, shared fix — then both use it, and both are tested).
+Paths are under `/api/v1`. `{id}` is the record's ID. The lists are complete
+to the best of today's knowledge; anything found missing while building is
+added to that phase before it is called done.
 
-## 5. What the server needs
+### Phase 0 — Foundation & login
 
-- Phase 0 adds three Python packages (`pip install -r requirements.txt` on the
-  server once), and a few small tables (API keys, sessions, used nonces).
-  After that each phase is the usual `git pull`, `migrate`, restart.
-- HTTPS is already in place on the live server; the API refuses plain HTTP
-  there.
+**Goal:** the base every later phase stands on, and all the ways to log in.
+
+| Group | Endpoints |
+|---|---|
+| Health | `GET /ping` (is the API up, server time — apps use it to correct their clock) |
+| Login | `POST /auth/login` · `POST /auth/refresh` · `POST /auth/logout` |
+| Me | `GET /auth/me` (who I am, my companies, my role in each) |
+| Sessions | `GET /auth/sessions` · `DELETE /auth/sessions/{id}` (sign one device out) · `POST /auth/sessions/sign-out-others` |
+| Password | `POST /auth/password/change` · `POST /auth/password/forgot` · `POST /auth/password/reset` |
+| API keys (company admin) | `GET /api-keys` · `POST /api-keys` (secret shown once) · `GET /api-keys/{id}` · `PATCH /api-keys/{id}` (name, scopes, IP list, expiry) · `POST /api-keys/{id}/rotate` · `DELETE /api-keys/{id}` (revoke) |
+| HMAC check | `POST /auth/hmac-test` (says exactly what is wrong with a signature) |
+
+**Also built:** the `api` app and its folder pattern, the error format,
+paging, rate limits, the company header, the "every endpoint documented"
+test, Swagger and ReDoc.
+
+**Guide pages:** `01-getting-started.md` (first request in 5 minutes) ·
+`02-authentication.md` (tokens step by step; HMAC signing with ready code in
+Python, PHP and JavaScript) · `03-conventions.md` (IDs, times, lists,
+company header) · `04-errors.md` · `05-how-the-api-is-built.md` (for the
+team: the folder pattern, how to add an endpoint).
+
+---
+
+### Phase 1 — Root (platform)
+
+**Goal:** the platform owner manages companies.
+
+| Group | Endpoints |
+|---|---|
+| Companies | `GET /platform/companies` · `POST /platform/companies` (with its administrator) · `GET /platform/companies/{id}` · `PATCH /platform/companies/{id}` |
+| Status | `POST /platform/companies/{id}/status` (trial / active / suspended, with reason) |
+| Features | `GET /platform/features` · `POST /platform/companies/{id}/features` (switch a feature on / off) |
+| Members | `GET /platform/companies/{id}/members` · `POST /platform/companies/{id}/administrators` · `PATCH /platform/companies/{id}/members/{id}` (role, status) |
+| Overview | `GET /platform/dashboard` |
+
+**Guide:** `10-platform.md`.
+
+---
+
+### Phase 2 — Company & branches
+
+**Goal:** a company sets itself up.
+
+| Group | Endpoints |
+|---|---|
+| Company profile | `GET /company` · `PATCH /company` · `PUT /company/logo` · `GET/PATCH /company/mail-settings` |
+| Branches | `GET /branches` · `POST /branches` · `GET /branches/{id}` · `PATCH /branches/{id}` · `POST /branches/{id}/status` |
+| Departments | `GET /departments` · `POST /departments` (adopt from the catalogue) · `POST /departments/{id}/copy` (to another branch) · `PATCH /departments/{id}` · `POST /departments/{id}/status` |
+| Designations | `GET /designations` · `POST /designations` · `PATCH /designations/{id}` · `POST /designations/{id}/status` |
+| Access | `GET /access` (who may do what) · `GET/PUT /access/designations/{id}` · `GET/PUT /access/departments/{id}` · `GET/PUT /access/people/{id}` (personal overrides) |
+| Lookups | `GET /branches/{id}/departments` · `GET /departments/{id}/designations` (for dropdowns) |
+
+**Guide:** `20-company-and-branches.md`.
+
+---
+
+### Phase 3 — Employees
+
+**Goal:** everything on the Employees pages and the employee profile.
+
+| Group | Endpoints |
+|---|---|
+| List & create | `GET /employees` (search, filters: branch, department, status, device) · `POST /employees` |
+| Import | `POST /employees/import` (upload, get a preview) · `POST /employees/import/{id}/confirm` · `GET /employees/import/demo-file` |
+| Profile | `GET /employees/{id}` (everything the profile shows) · `GET /employees/{id}/history` |
+| Edit | `PATCH /employees/{id}` (details) · `PATCH /employees/{id}/personal` · `POST /employees/{id}/placement` · `POST /employees/{id}/salary` (both with "the latest save wins") · `PUT /employees/{id}/line-manager` |
+| Photo | `GET /employees/{id}/photo` · `PUT /employees/{id}/photo` |
+| Education | `GET /employees/{id}/education` · `POST …` · `PATCH …/{row}` · `DELETE …/{row}` |
+| Documents | `GET /employees/{id}/documents` · `POST …` · `GET …/{doc}` (download) · `DELETE …/{doc}` |
+| Status | `POST /employees/{id}/end-employment` · `POST /employees/{id}/inactive` (period) · `POST /employees/{id}/active` |
+| Leave on profile | `PUT /employees/{id}/leave-policy` · `POST /employees/{id}/leave-adjustments` |
+| Settings | `PATCH /employees/{id}/late-rules` · `PATCH /employees/{id}/overtime` · `PATCH /employees/{id}/report-visibility` · `PATCH /employees/{id}/devices/{enrollment}` (device permissions) |
+| Login for an employee | `POST /employees/{id}/login` (give) · `POST …/login/password` · `POST …/login/disable` · `POST …/login/enable` · `PATCH …/login/role` |
+
+**Guide:** `30-employees.md`.
+
+---
+
+### Phase 4 — Shifts & calendar
+
+| Group | Endpoints |
+|---|---|
+| Overview & settings | `GET /schedule` · `GET/PATCH /attendance-settings` (incl. "Check-in and check-out": alternate or first-and-last) |
+| Shifts | `GET /shifts` · `POST /shifts` · `GET /shifts/{id}` · `PATCH /shifts/{id}` · `POST /shifts/{id}/status` |
+| Department shifts | `GET /department-shifts` · `POST /department-shifts` (a department's shift from a date) |
+| Employee shifts | `GET /employees/{id}/shifts` · `POST /employees/{id}/shifts` · `POST /employees/{id}/shifts/{id}/end` |
+| Weekly offs | `GET /weekly-offs` · `POST /weekly-offs` · `POST /weekly-offs/{id}/start` · `POST /weekly-offs/{id}/end` |
+| Holidays | `GET /holidays` (by year) · `POST /holidays` · `POST /holidays/year` (a whole year at once) · `PATCH /holidays/{id}` · `POST /holidays/{id}/cancel` |
+
+**Guide:** `40-shifts-and-calendar.md`.
+
+---
+
+### Phase 5 — Devices: setup
+
+**Goal:** register and look after devices.
+
+| Group | Endpoints |
+|---|---|
+| Devices | `GET /devices` · `POST /devices` (register) · `GET /devices/serial-check?serial=` · `GET /devices/{id}` · `PATCH /devices/{id}` · `POST /devices/{id}/retire` |
+| Setup | `GET /devices/{id}/setup` (what to type on the terminal: server address, port, serial) · `GET /device-models` |
+| Connection | `GET /devices/connections` (all devices: connected, late, not connected) · `GET /devices/{id}/connection` · `POST /devices/{id}/test-connection` · `GET /devices/{id}/test-connection/{test}` (result) |
+| Departments | `GET /devices/{id}/departments` · `POST /devices/{id}/departments` · `POST /devices/{id}/departments/{id}/end` |
+| Rules | `GET/PATCH /devices/attendance-rules` (which devices count for attendance) |
+
+**Guide:** `50-devices-setup.md`.
+
+---
+
+### Phase 6 — Devices: data flow (device ⇄ software)
+
+**Goal:** *A to Z between the software and the devices* — see everything a
+device sends, send it anything it can do, and follow every process in
+between.
+
+**How it works today (explained in the guide with a diagram):** a ZKTeco
+terminal calls the server every few seconds on its own (`/iclock/…`, the
+protocol built into the device). With each call it **uploads** what is new
+(scans, users, fingerprints, faces, settings) and **collects** commands
+waiting for it. The server stores every upload as a *message*, turns scans
+into *punches*, decides whose they are and whether they count, and rebuilds
+attendance. The device's own `/iclock/` protocol cannot change — the device
+decides it — so the API is the window onto all of it and the way to drive it.
+
+| Direction | Group | Endpoints |
+|---|---|---|
+| **Device → software** | Messages (every upload, raw) | `GET /devices/{id}/messages` · `GET /device-messages/{id}` (raw text, parsed result, processing status) |
+| | Punches (scans) | `GET /punches` (filters: device, employee, date, status) · `GET /punches/{id}` (who, counted or not, and why) |
+| | Unresolved scans | `GET /punches/unresolved` (scans nobody is mapped to) · `POST /punches/recheck` (judge excluded scans again from a date) |
+| | Users on the device | `GET /devices/{id}/users` (roster: ID, name, card, role, finger/face counts, linked employee, removed on the terminal, why not linked) |
+| | Fingerprints & faces | `GET /devices/{id}/templates` (what is saved, by format) · `POST /devices/{id}/templates/save` |
+| | Device settings | `GET /devices/{id}/options` (what the device reported about itself) |
+| **Software → device** | Ask the device | `POST /devices/{id}/users/refresh` (send the user list) · `POST /devices/{id}/users/{pin}/read-back` · `POST /devices/{id}/commands` (the safe commands: refresh users / templates / settings, fetch attendance history) |
+| | Write users | `POST /devices/{id}/users` (add / update one) · `DELETE /devices/{id}/users/{pin}` · `POST /devices/{id}/users/remove` (several) · `POST /devices/{id}/users/copy` (to another device) |
+| | Load a device | `POST /devices/{id}/load` (all employees of the branch, in the background) · `GET /devices/{id}/load` (preparing X of Y, who could not go) |
+| | Settings & address | `POST /devices/{id}/options` (allowed settings) · `POST /devices/{id}/server-address` · `GET /devices/{id}/server-address` (progress) · `POST /devices/{id}/server-address/cancel` |
+| | The queue | `GET /devices/{id}/commands` (waiting, sent, answered, refused — with the device's answer) · `DELETE /devices/{id}/commands/{id}` (withdraw one not yet sent) · `GET /devices/{id}/jobs` (progress: done / waiting / refused) |
+| **People ⇄ device users** | Linking | `GET /enrollments` · `POST /enrollments` (map) · `PATCH /enrollments/{id}` · `POST /devices/{id}/users/map-automatically` · `POST /devices/{id}/users/replace-old-links` · `POST /devices/{id}/users/import` (add device users as employees) · `POST /employees/{id}/map` · `POST /employees/bulk-map` · `POST /employees/send-to-devices` |
+| **Other makes of device** | Push scans in | `POST /ingest/punches` (HMAC key with the `punches:write` scope) — a device or program that is not a ZKTeco terminal sends its scans here, and they go through exactly the same processing as a terminal's |
+
+**Guide:** `60-devices-data-flow.md` — the flow drawn end to end (device →
+message → punch → whose → counts? → attendance → ERP webhook, and software →
+queue → device → answer), what each status means, and how to follow one scan
+from the terminal to the attendance report.
+
+---
+
+### Phase 7 — Attendance
+
+| Group | Endpoints |
+|---|---|
+| Lists | `GET /attendance` (daily list: filters date range, branch, employee, status) · `GET /attendance/late` · `GET /attendance/now` (who is in, on a break, left) |
+| Calendar & day | `GET /attendance/calendar?employee=&month=` · `GET /attendance/days/{employee}/{date}` (every scan with its label, totals, worked (paid)) |
+| Review | `GET /attendance/review` (days to review) |
+| Fix a day | `POST /attendance/days/{employee}/{date}/fix` · `POST /attendance/corrections/{id}/withdraw` |
+| Missed scans (staff) | `GET /missed-scans` · `POST /missed-scans` (enter one for someone) · `POST /missed-scans/{id}/decide` (approve / reject) |
+| Exports | `GET /attendance/export?format=xlsx|pdf` |
+
+**Guide:** `70-attendance.md` (includes how a day is worked out: check-in,
+check-out, breaks, the two "check-in and check-out" settings, when a day
+closes).
+
+---
+
+### Phase 8 — Leave
+
+| Group | Endpoints |
+|---|---|
+| Types | `GET /leave/types` · `POST /leave/types` · `POST /leave/types/defaults` · `PATCH /leave/types/{id}` · `POST /leave/types/{id}/status` |
+| Policies | `GET /leave/policies` · `POST /leave/policies` · `GET /leave/policies/{id}` · `PATCH /leave/policies/{id}` · `POST /leave/policies/{id}/status` · `POST /leave/policies/{id}/versions` · `PATCH /leave/policies/{id}/versions/{v}` · `DELETE /leave/policies/{id}/versions/{v}` |
+| Balances | `GET /leave/balances` |
+| Records | `GET /leave/records` · `POST /leave/records` (record leave for someone) · `POST /leave/records/{id}/cancel` · `POST /leave/records/{id}/amend` · `GET /leave/records/{id}/document` |
+| Approvals | `GET /leave/requests` (to approve) · `POST /leave/requests/{id}/decide` |
+
+**Guide:** `80-leave.md`.
+
+---
+
+### Phase 9 — Salary (payroll)
+
+| Group | Endpoints |
+|---|---|
+| Runs | `GET /payroll/runs` · `POST /payroll/runs` (generate a month) · `GET /payroll/runs/{id}` · `POST …/submit` · `POST …/finalise` · `POST …/send-back` · `POST …/reopen` |
+| Settings | `GET/PATCH /payroll/settings` |
+| Components | `GET /payroll/components` · `POST …` · `PATCH …/{id}` · `POST …/{id}/status` · `GET/POST /employees/{id}/components` · `POST /employees/{id}/components/{id}/end` |
+| Penalties | `GET /payroll/penalty-rules` · `POST …` · `POST …/{id}/change` · `POST …/{id}/stop` · `POST /payroll/penalties/{id}/waive` · `POST …/unwaive` |
+| Payslips | `GET /payroll/payslips/{id}` · `GET …/{id}/pdf` · `POST …/{id}/email` · `POST …/{id}/adjustments` · `POST …/{id}/corrections` · `DELETE …/adjustments/{id}` |
+| Overtime | `GET /payroll/overtime` · `POST /payroll/overtime/{id}/decide` · `POST /payroll/overtime/{id}/undo` |
+| LFA | `GET/PATCH /payroll/lfa/settings` · `GET /payroll/lfa/claims` · `POST …` · `GET …/{id}` · `POST …/{id}/cancel` · `POST …/{id}/paid` · `GET …/{id}/document` |
+
+**Guide:** `90-salary.md`.
+
+---
+
+### Phase 10 — The employee's own app ("me")
+
+**Goal:** what an employee, line manager or branch manager does for
+themself. Built after the areas it uses — and the main part of the mobile app.
+
+| Group | Endpoints |
+|---|---|
+| Profile | `GET /me/profile` · `PATCH /me/details` · `PUT /me/photo` · `GET/POST/PATCH/DELETE /me/education` |
+| Attendance | `GET /me/attendance?month=` · `GET /me/attendance/{date}` |
+| Missed scans | `GET /me/missed-scans` · `POST /me/missed-scans` · `POST /me/missed-scans/{id}/withdraw` |
+| Leave | `GET /me/leave` (balances and requests) · `POST /me/leave` · `POST /me/leave/{id}/withdraw` · `GET /me/leave/{id}/document` |
+| Approver | `GET /me/leave-inbox` · `POST /me/leave-inbox/{id}/decide` · `GET /me/branch-attendance` |
+| Salary | `GET /me/payslips` · `GET /me/payslips/{id}` · `GET /me/payslips/{id}/pdf` · `GET/POST /me/lfa` · `POST /me/lfa/{id}/withdraw` |
+| Account | `POST /me/password` |
+
+**Guide:** `100-employee-app.md` (a "build the mobile app screens" walk-through).
+
+---
+
+### Phase 11 — Reports & dashboard
+
+| Group | Endpoints |
+|---|---|
+| Reports | `GET /reports` (the list) · `GET /reports/{name}` (data, same filters as the page) · `GET /reports/{name}/export?format=xlsx|pdf` — for every report: daily, weekly, monthly, late, overtime, times out, leave, salary, … |
+| Dashboard | `GET /dashboard` (the figures on the home page) |
+
+**Guide:** `110-reports.md`.
+
+---
+
+### Phase 12 — Integrations & finish
+
+| Group | Endpoints |
+|---|---|
+| ERP webhook | `GET/PATCH /webhook` · `POST /webhook/secret` (create a key) · `POST /webhook/test` · `POST /webhook/test-event` · `GET /webhook/events` · `POST /webhook/send-now` · `POST /webhook/send-again` · `POST /webhook/debug` (on / off) · `GET /webhook/debug` · `GET /webhook/guide?format=pdf|md` |
+| Audit log | `GET /audit-log` (who did what, when, through which session or key) |
+
+**Finish:** read every guide page again, top to bottom; check Swagger
+against every page of the website; publish the Postman collection; write
+`120-build-a-client.md` (a working client in 10 minutes).
+
+**Guide:** `120-integrations.md`.
+
+---
+
+## Part 4 — How every phase is run
+
+1. **List** — take the website's pages and actions for the area and write the
+   exact endpoint list (it becomes the guide page's table).
+2. **Build, one endpoint at a time** — serializer → view calling the service →
+   permission → tests → documentation → guide line. An endpoint is finished
+   before the next one starts.
+3. **Check** — the area's tests, the "every endpoint documented" test, a walk
+   through Swagger, then the full test suite.
+4. **Push** — to Ajay's main, with the guide page and a short report: what
+   was added, how to try it, anything to decide.
+5. **Next phase only after that.**
+
+## Part 5 — What the server needs
+
+- **Phase 0 only:** three new Python packages (`pip install -r
+  requirements.txt` once) and a few small tables (API keys, sessions, used
+  request IDs).
+- **Every phase after:** the usual `git pull`, `python manage.py migrate`,
+  restart.
+- The website and the device connection keep working exactly as now
+  throughout.
