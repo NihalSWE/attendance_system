@@ -402,14 +402,19 @@ code at login for app users without their phone.
 
 | Group | Endpoints |
 |---|---|
-| Company | `GET /company` · `PATCH /company` · `PUT /company/logo` · `GET/PATCH /company/mail-settings` |
+| Company | `GET /company` · `PATCH /company` · `PUT/DELETE /company/logo` · `GET/PATCH /company/mail-settings` · `POST /company/mail-settings/test` |
 | Branches | `GET /branches` · `POST /branches` · `GET /branches/{id}` · `PATCH /branches/{id}` · `POST /branches/{id}/status` |
-| Departments | `GET /departments` · `POST /departments` · `POST /departments/{id}/copy` · `PATCH /departments/{id}` · `POST /departments/{id}/status` |
-| Designations | `GET /designations` · `POST /designations` · `PATCH /designations/{id}` · `POST /designations/{id}/status` |
-| Access | `GET /access` · `GET/PUT /access/designations/{id}` · `GET/PUT /access/departments/{id}` · `GET/PUT /access/people/{id}` |
-| Lookups | `GET /branches/{id}/departments` · `GET /departments/{id}/designations` |
+| Departments | `GET /departments` · `POST /departments` · `GET /departments/{id}` · `PATCH /departments/{id}` · `POST /departments/{id}/status` · `POST /departments/copy` (branch → branch, as the panel) |
+| Designations | `GET /designations` · `POST /designations` · `GET /designations/{id}` · `PATCH /designations/{id}` · `POST /designations/{id}/status` |
+| Access | `GET /access/permissions` · `GET /access/people` · `GET/PUT /access/people/{employee_id}` (the panel's per-person, per-branch grid - access by designation or department no longer exists in the panel) |
+| Lookups | filters on the lists: `GET /departments?branch_id=` · `GET /designations?department_id=` |
 
 Guide: `20-company-and-branches.md`.
+
+**Status: DONE 2026-10-05.** Each endpoint uses its panel page's gate
+(`PanelRule`, the panel's `SelfServiceGate` rule), form (`api/core/forms.py`)
+and service. Found and fixed on the way: the panel's "Remove the logo" crashed
+on save.
 
 ### Phase 3 — Employees
 

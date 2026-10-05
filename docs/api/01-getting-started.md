@@ -4,8 +4,9 @@ The Attendance Management API gives apps, frontends and other systems the
 same functions as the **company, branch and employee panels** — the same data
 and the same rules. Use the panels, the API, or both.
 
-> **Status:** phase 1 (security & login). Logging in, sessions, two-step
-> login, passwords and API keys work; the panels' functions follow phase by
+> **Status:** phase 2 (company & branches). Logging in, sessions, two-step
+> login, passwords, API keys, the company profile, branches, departments,
+> designations and access work; the panels' other functions follow phase by
 > phase, as set out in the plan (`docs/api/00-PLAN.md` in the project).
 
 ## The address

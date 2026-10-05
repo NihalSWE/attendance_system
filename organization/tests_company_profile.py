@@ -81,3 +81,33 @@ class PlatformBrandTests(TestCase):
         page = self.client.get(reverse("platform:company_list"))
         self.assertContains(page, "base_template/img/logo.png")
         self.assertNotContains(page, "company_logos/")
+
+
+class RemoveLogoTests(TestCase):
+    """"Remove the logo" on the profile page (it used to fail on save)."""
+
+    def setUp(self):
+        import tempfile
+
+        self.media = tempfile.mkdtemp()
+        self.company = onboard_company(code="RML", slug="rml", name="Remove Ltd")
+        self.admin = User.objects.create_user(email="admin@rml.test")
+        CompanyMembership.all_objects.create(
+            company=self.company, user=self.admin, role="company_admin", status="active")
+        self.url = reverse("organization:company_profile")
+
+    def tearDown(self):
+        import shutil
+
+        shutil.rmtree(self.media, ignore_errors=True)
+
+    def test_the_logo_can_be_removed(self):
+        self.client.force_login(self.admin)
+        with override_settings(MEDIA_ROOT=self.media):
+            logo = SimpleUploadedFile("logo.png", b"\x89PNG\r\n\x1a\n" + b"0" * 40,
+                                      content_type="image/png")
+            self.client.post(self.url, {"name": "Remove Ltd", "logo": logo})
+            self.assertTrue(Company.objects.get(pk=self.company.pk).logo)
+            response = self.client.post(self.url, {"name": "Remove Ltd", "logo-clear": "on"})
+            self.assertRedirects(response, self.url)
+            self.assertFalse(Company.objects.get(pk=self.company.pk).logo)

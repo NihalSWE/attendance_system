@@ -41,7 +41,11 @@ GUIDES = {
     "security": ("Security", "06-security.md"),
     "postman": ("Testing with Postman", "07-postman.md"),
     "changelog": ("Changelog", "CHANGELOG.md"),
+    "company-and-branches": ("Company & branches", "20-company-and-branches.md"),
 }
+
+#: Each area's guide page, shown first in the area's menu section.
+AREA_GUIDES = {"company": "company-and-branches"}
 
 
 def _markdown(filename):
@@ -71,6 +75,10 @@ def _menu(current):
                   "url": reverse("api:docs_endpoint", args=[doc.id]),
                   "active": current == f"endpoint:{doc.id}"}
                  for doc in docs if doc.area == area]
+        if items and area in AREA_GUIDES:
+            page = AREA_GUIDES[area]
+            items.insert(0, {"label": "Overview", "url": reverse("api:docs_guide", args=[page]),
+                             "active": current == page})
         if items:
             if area == "start":
                 sections[0]["items"].extend(items)
