@@ -50,12 +50,8 @@ code from the authenticator app in the body's `"code"`, and Send. (The
 by email** first and use the emailed code.
 
 **If the answer says `"two_step_setup_required": true`**: first run
-**Set up two-step login**:
-
-- with the body `{"method": "app"}`: add the `secret` to an authenticator app;
-- or with `{"method": "email"}`: a code is emailed.
-
-Then **Confirm two-step login** with the code. Until then only *Who am I*,
+**Set up two-step login**, add the `secret` to an authenticator app, then
+**Confirm two-step login** with the app's code. Until then only *Who am I*,
 the two-step requests and logout work.
 
 > On a computer without mail set up (`DEBUG` on), the email is printed in the

@@ -571,12 +571,14 @@ MAIL_ON = {"MAIL_CONFIGURED": True, "DEFAULT_FROM_EMAIL": "noreply@example.test"
 
 
 @override_settings(**MAIL_ON)
-class EmailCodeTests(ApiTestCase):
-    """Two-step codes by email - the second way after the authenticator app."""
+class EmailBackupTests(ApiTestCase):
+    """The authenticator app is the main way; a code by email is the backup
+    that gets the person in when the app cannot be used."""
 
     def setUp(self):
         super().setUp()
         self.owner = self.person("owner@example.test", role="owner")
+        self.secret = self.turn_on_two_step(self.owner)
 
     def emailed_code(self):
         import re
@@ -587,103 +589,108 @@ class EmailCodeTests(ApiTestCase):
         return self.call("POST", "/api/v1/auth/login/two-step",
                          {"challenge": challenge, "code": code})
 
-    def owner_with_app(self):
-        secret = self.turn_on_two_step(self.owner)
-        challenge = self.login("owner@example.test").json()["challenge"]
-        return secret, self.two_step(challenge, pyotp.TOTP(secret).now()).json()
+    def email_me(self, challenge):
+        return self.call("POST", "/api/v1/auth/login/two-step/email-code",
+                         {"challenge": challenge})
 
-    def test_an_owner_sets_up_two_step_with_email_codes_only(self):
-        session = self.logged_in("owner@example.test")
-        setup = self.call("POST", "/api/v1/auth/two-step/setup", {"method": "email"},
-                          session=session)
-        self.assertEqual(setup.status_code, 200, setup.content)
-        self.assertEqual(setup.json(), {"method": "email", "email_sent_to": "o***@example.test",
-                                        "email_expires_in": 600})
-        self.assertEqual(mail.outbox[-1].to, ["owner@example.test"])
-        confirmed = self.call("POST", "/api/v1/auth/two-step/confirm",
-                              {"code": self.emailed_code()}, session=session)
-        self.assertEqual(confirmed.status_code, 200, confirmed.content)
-        self.assertEqual(confirmed.json()["method"], "email")
-        me = self.call("GET", "/api/v1/auth/me", session=session).json()
-        self.assertEqual(me["two_step"], {"enabled": True, "method": "email", "required": True})
-
-        # Every login now emails a code by itself.
-        first = self.login("owner@example.test").json()
-        self.assertEqual(first["methods"], ["email", "recovery_code"])
-        self.assertEqual(first["email_sent_to"], "o***@example.test")
-        code = self.emailed_code()
-        done = self.two_step(first["challenge"], code)
-        self.assertEqual(done.status_code, 200, done.content)
-        again = self.login("owner@example.test").json()
-        self.assertEqual(self.code_of(self.two_step(again["challenge"], code)),
-                         "invalid_two_step_code")         # a code belongs to one login, once
-
-    def test_an_app_user_may_get_the_code_by_email_instead(self):
-        self.turn_on_two_step(self.owner)
+    def test_the_app_is_offered_first_and_email_as_the_backup(self):
         first = self.login("owner@example.test").json()
         self.assertEqual(first["methods"], ["app", "email", "recovery_code"])
-        self.assertNotIn("email_sent_to", first)
-        sent = self.call("POST", "/api/v1/auth/login/two-step/email-code",
-                         {"challenge": first["challenge"]})
-        self.assertEqual(sent.status_code, 200, sent.content)
-        done = self.two_step(first["challenge"], self.emailed_code())
-        self.assertEqual(done.status_code, 200, done.content)
+        self.assertEqual(mail.outbox, [])                  # nothing sent unless asked
+
+    @override_settings(MAIL_CONFIGURED=False)
+    def test_without_mail_the_backup_is_not_offered(self):
+        first = self.login("owner@example.test").json()
+        self.assertEqual(first["methods"], ["app", "recovery_code"])
+        response = self.email_me(first["challenge"])
+        self.assertEqual((response.status_code, self.code_of(response)),
+                         (409, "email_not_available"))
+
+    def test_phone_lost_log_in_by_email_and_move_the_app_to_a_new_phone(self):
+        old_phone = pyotp.TOTP(self.secret)
+        first = self.login("owner@example.test").json()
+        sent = self.email_me(first["challenge"])
+        self.assertEqual(sent.json(), {"email_sent_to": "o***@example.test",
+                                       "email_expires_in": 600})
+        self.assertEqual(mail.outbox[-1].to, ["owner@example.test"])
+        session = self.two_step(first["challenge"], self.emailed_code()).json()
+        self.assertIn("access_token", session)
+
+        # Move the app: a current code (by email) proves it is them.
+        self.call("POST", "/api/v1/auth/two-step/email-code", session=session)
+        moved = self.call("POST", "/api/v1/auth/two-step/setup", {"code": self.emailed_code()},
+                          session=session)
+        self.assertEqual(moved.status_code, 200, moved.content)
+        self.assertTrue(moved.json()["replacing"])
+        new_phone = pyotp.TOTP(moved.json()["secret"])
+        confirmed = self.call("POST", "/api/v1/auth/two-step/confirm",
+                              {"code": new_phone.now()}, session=session)
+        self.assertEqual(confirmed.status_code, 200, confirmed.content)
+        self.assertTrue(confirmed.json()["email_backup"])
+        self.assertEqual(len(confirmed.json()["recovery_codes"]), 10)
+
+        # The old phone no longer counts; the new one does.
+        again = self.login("owner@example.test").json()
+        self.assertEqual(self.code_of(self.two_step(again["challenge"], old_phone.now())),
+                         "invalid_two_step_code")
+        later = new_phone.at(int(time.time()) + 30)
+        self.assertEqual(self.two_step(again["challenge"], later).status_code, 200)
+
+    def test_until_the_new_phone_is_confirmed_the_old_one_works(self):
+        old_phone = pyotp.TOTP(self.secret)
+        session = self.two_step(self.login("owner@example.test").json()["challenge"],
+                                old_phone.now()).json()
+        no_code = self.call("POST", "/api/v1/auth/two-step/setup", {}, session=session)
+        self.assertEqual(no_code.status_code, 422)
+        self.call("POST", "/api/v1/auth/two-step/email-code", session=session)
+        started = self.call("POST", "/api/v1/auth/two-step/setup", {"code": self.emailed_code()},
+                            session=session)
+        self.assertTrue(started.json()["replacing"])
+        again = self.login("owner@example.test").json()
+        later = old_phone.at(int(time.time()) + 30)
+        self.assertEqual(self.two_step(again["challenge"], later).status_code, 200)
 
     def test_one_email_a_minute(self):
-        self.turn_on_two_step(self.owner)
         challenge = self.login("owner@example.test").json()["challenge"]
-        path = "/api/v1/auth/login/two-step/email-code"
-        self.assertEqual(self.call("POST", path, {"challenge": challenge}).status_code, 200)
-        again = self.call("POST", path, {"challenge": challenge})
+        self.assertEqual(self.email_me(challenge).status_code, 200)
+        again = self.email_me(challenge)
         self.assertEqual((again.status_code, self.code_of(again)), (429, "rate_limited"))
         self.assertGreater(int(again["Retry-After"]), 0)
         self.assertEqual(len(mail.outbox), 1)
 
+    def test_an_emailed_code_works_once_for_its_own_login(self):
+        first = self.login("owner@example.test").json()
+        self.email_me(first["challenge"])
+        code = self.emailed_code()
+        self.assertEqual(self.two_step(first["challenge"], code).status_code, 200)
+        again = self.login("owner@example.test").json()
+        self.assertEqual(self.code_of(self.two_step(again["challenge"], code)),
+                         "invalid_two_step_code")
+
     def test_an_emailed_code_dies_after_five_wrong_tries_and_after_ten_minutes(self):
-        session = self.logged_in("owner@example.test")
-        self.call("POST", "/api/v1/auth/two-step/setup", {"method": "email"}, session=session)
+        session = self.two_step(self.login("owner@example.test").json()["challenge"],
+                                pyotp.TOTP(self.secret).now()).json()
+        self.call("POST", "/api/v1/auth/two-step/email-code", session=session)
         code = self.emailed_code()
         wrong = "000000" if code != "000000" else "111111"
+        path = "/api/v1/auth/two-step/recovery-codes"
         for _ in range(5):
-            self.call("POST", "/api/v1/auth/two-step/confirm", {"code": wrong}, session=session)
-        late = self.call("POST", "/api/v1/auth/two-step/confirm", {"code": code}, session=session)
-        self.assertEqual(self.code_of(late), "invalid_two_step_code")
+            self.call("POST", path, {"code": wrong}, session=session)
+        self.assertEqual(self.code_of(self.call("POST", path, {"code": code}, session=session)),
+                         "invalid_two_step_code")
 
         ApiSession.objects.filter(public_id=session["session_id"]).update(email_code_sent_at=None)
         self.call("POST", "/api/v1/auth/two-step/email-code", session=session)
         ApiSession.objects.filter(public_id=session["session_id"]).update(
             email_code_expires_at=timezone.now() - datetime.timedelta(seconds=1))
-        expired = self.call("POST", "/api/v1/auth/two-step/confirm",
-                            {"code": self.emailed_code()}, session=session)
+        expired = self.call("POST", path, {"code": self.emailed_code()}, session=session)
         self.assertEqual(self.code_of(expired), "invalid_two_step_code")
 
-    @override_settings(MAIL_CONFIGURED=False)
-    def test_without_a_mail_account_email_codes_are_not_offered(self):
-        session = self.logged_in("owner@example.test")
-        response = self.call("POST", "/api/v1/auth/two-step/setup", {"method": "email"},
-                             session=session)
-        self.assertEqual((response.status_code, self.code_of(response)),
-                         (409, "email_not_available"))
-
-    def test_changing_from_the_app_to_email_needs_a_current_code(self):
-        secret, session = self.owner_with_app()
-        totp = pyotp.TOTP(secret)
-        no_code = self.call("POST", "/api/v1/auth/two-step/setup", {"method": "email"},
-                            session=session)
-        self.assertEqual(no_code.status_code, 422)
-        started = self.call("POST", "/api/v1/auth/two-step/setup",
-                            {"method": "email", "code": totp.at(int(time.time()) + 30)},
-                            session=session)
-        self.assertEqual(started.status_code, 200, started.content)
-        # Not switched until confirmed: the app still works meanwhile.
-        self.assertEqual(TwoStep.objects.get(user=self.owner).method, "app")
-        confirmed = self.call("POST", "/api/v1/auth/two-step/confirm",
-                              {"code": self.emailed_code()}, session=session)
-        self.assertEqual(confirmed.json()["method"], "email")
-        first = self.login("owner@example.test").json()
-        self.assertEqual(first["methods"], ["email", "recovery_code"])
-        self.assertEqual(self.code_of(self.two_step(first["challenge"], totp.now())),
-                         "invalid_two_step_code")         # the app no longer counts
+    def test_who_am_i_says_whether_the_email_backup_works(self):
+        session = self.two_step(self.login("owner@example.test").json()["challenge"],
+                                pyotp.TOTP(self.secret).now()).json()
+        me = self.call("GET", "/api/v1/auth/me", session=session).json()
+        self.assertEqual(me["two_step"], {"enabled": True, "email_backup": True, "required": True})
 
     def test_staff_turn_two_step_off_with_an_emailed_code(self):
         staff = self.person("staff@example.test")
@@ -694,3 +701,10 @@ class EmailCodeTests(ApiTestCase):
         off = self.call("POST", "/api/v1/auth/two-step/disable",
                         {"password": PASSWORD, "code": self.emailed_code()}, session=session)
         self.assertEqual(off.status_code, 200, off.content)
+
+    def test_the_platform_owner_can_reset_a_locked_out_person(self):
+        from django.contrib.admin.sites import site
+
+        from api.admin import TwoStepAdmin
+
+        self.assertIsInstance(site._registry[TwoStep], TwoStepAdmin)

@@ -2,6 +2,22 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Two-step login: the app first, email as the backup
+
+At the senior's decision: the authenticator app is the main way; a code by
+email is the backup for everyone, so a lost phone never locks anyone out.
+
+- **Removed:** setting two-step login up with email codes only
+  (`method` on `POST /api/v1/auth/two-step/setup`). Anyone set up that way
+  sets up the app at their next login.
+- **Changed:** `POST /api/v1/auth/two-step/setup` with a current `code` moves
+  the app to a new phone (`replacing: true`); the old phone works until the
+  new one is confirmed. Confirm answers `email_backup`; *Who am I* shows
+  `two_step.email_backup` instead of `two_step.method`. The login answer no
+  longer emails a code by itself (no `email_sent_to`): the person asks for it.
+- **New:** the platform owner can reset a locked-out person's two-step login
+  (Django admin).
+
 ## 2026-10-05 — Phase 2: company & branches
 
 - **New:** the company — `GET`/`PATCH /api/v1/company`, the logo

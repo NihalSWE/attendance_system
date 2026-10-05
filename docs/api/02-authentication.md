@@ -69,11 +69,10 @@ POST /api/v1/auth/login/two-step
 ```
 
 - `app` — the 6-digit code from their authenticator app (the main way).
-- `email` — show a button *"Email me a code instead"*:
+- `email` — the backup: show *"Email me a code instead"*.
   `POST /api/v1/auth/login/two-step/email-code` with `{"challenge": "ch_…"}`
-  emails a 6-digit code; send it the same way. For a login **set up with email
-  codes**, the first code is already sent: the answer has `email_sent_to`
-  (e.g. `r***@example.com`).
+  emails a 6-digit code; send it the same way. Listed only when this server
+  can send email.
 - `recovery_code` — one of the 10 recovery codes.
 
 The answer is the same as above.
@@ -268,42 +267,48 @@ are not affected. Until an owner or administrator has set it up, their session
 answers `two_step_setup_required` for everything except *Who am I*, the
 two-step requests and logging out.
 
-There are two ways:
-
-| Way | How it works | For |
+| | How it works | Set up |
 |---|---|---|
-| **Authenticator app** (`app`, the main way) | an app on the phone (Google Authenticator, Microsoft Authenticator, Authy, …) shows a new 6-digit code every 30 seconds; works offline | everyone — recommended |
-| **Code by email** (`email`) | each login emails a 6-digit code, valid 10 minutes, once | someone who does not want an app |
+| **1. Authenticator app** — the main way | an app on the phone (Google Authenticator, Microsoft Authenticator, Authy, …) shows a new 6-digit code every 30 seconds; works offline | once, below |
+| **2. Code by email** — the backup | when the app cannot be used (phone lost or not at hand, app deleted, its account gone), *"Email me a code"* sends a 6-digit code to the login's email | nothing — always there |
+| **3. Recovery codes** — the last resort | 10 single-use codes, shown once when two-step login is turned on | keep them safe |
 
-People who use the app can **also** get a code by email at login, when the
-phone is not at hand. Email codes need a mail account — the company's
-(*Organisation → Email settings*) or the server's; without one they are not
-offered (`email_not_available`).
+The backup means nobody is locked out of their company because of a phone.
+It needs a mail account — the company's (*Organisation → Email settings*) or
+the server's. `email_backup` (in *Who am I* and in the confirm answer) says
+whether it works; when it is `false`, the recovery codes are the only backup,
+so set up mail.
 
-**Setting it up with the app:**
+**Setting it up:**
 
-1. `POST /api/v1/auth/two-step/setup` with `{"method": "app"}` (or no body) →
-   a `secret` and an `otpauth_url`. Show the URL as a QR code; the person scans
-   it (or types the secret) in the authenticator app.
-2. `POST /api/v1/auth/two-step/confirm` with the 6-digit code from the app → it
-   is on, and the answer has **10 recovery codes** (shown once).
+1. `POST /api/v1/auth/two-step/setup` → a `secret` and an `otpauth_url`. Show
+   the URL as a QR code; the person scans it (or types the secret) in the
+   authenticator app.
+2. `POST /api/v1/auth/two-step/confirm` with the 6-digit code from the app →
+   it is on, and the answer has **10 recovery codes** (shown once) and
+   `email_backup`.
 
-**Setting it up with email codes:**
+**Logging in:** the login answers `methods`, e.g. `["app", "email",
+"recovery_code"]`. Ask for the app's code, and offer *"Email me a code
+instead"* (`POST /api/v1/auth/login/two-step/email-code` with the challenge).
+Either code goes to `POST /api/v1/auth/login/two-step`.
 
-1. `POST /api/v1/auth/two-step/setup` with `{"method": "email"}` → a code is
-   emailed (`email_sent_to` says where).
-2. `POST /api/v1/auth/two-step/confirm` with that code → it is on, with
-   10 recovery codes.
+**Phone lost or replaced:**
 
-**Changing the way** (app → email or email → app): the same setup request with
-the new `method` **and** a current `code` (from the app, by email, or a
-recovery code), then confirm with a code of the new way. Until then the old
-way keeps working.
+1. Log in with a code by email (or a recovery code).
+2. `POST /api/v1/auth/two-step/email-code` → a code by email, then
+   `POST /api/v1/auth/two-step/setup` with `{"code": "<that code>"}` → a new
+   secret for the new phone (`replacing: true`).
+3. `POST /api/v1/auth/two-step/confirm` with a code from the new phone. The old
+   phone stops counting; until this step it keeps working.
+
+**Nothing works at all** (no phone, no email getting through, no recovery
+codes): the platform owner resets the person's two-step login (Django admin →
+*Two steps* → delete). An owner or administrator then sets the app up again
+at their next login.
 
 **Codes by email, the rules:** 6 digits; work once, for 10 minutes; stop after
 5 wrong tries; one email a minute (`rate_limited` with `Retry-After`).
-`POST /api/v1/auth/two-step/email-code` (logged in) sends one for the requests
-below.
 
 New recovery codes: `POST /api/v1/auth/two-step/recovery-codes` with a code
 (the old ones stop). Turn it off (not allowed for owners and administrators):
