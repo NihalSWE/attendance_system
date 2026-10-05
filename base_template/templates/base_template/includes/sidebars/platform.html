@@ -12,6 +12,15 @@
             Companies
         </span>
     </a>
+    {# The API's documentation site, so nobody has to remember its address. #}
+    <a class="sidebar__link" href="{% url 'api:docs' %}" aria-label="Developer's API">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <path d="M8 6l-6 6 6 6M16 6l6 6-6 6M14 4l-4 16"/>
+        </svg>
+        <span>
+            Developer's API
+        </span>
+    </a>
     <div class="sidebar__foot">
         <form method="post" action="{% url 'logout' %}">
             {% csrf_token %}
