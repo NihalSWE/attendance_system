@@ -5999,3 +5999,17 @@ panel's `AddScanForm` / `LateForm` and late-day list), withdraw, and missed
 scans (`scan_requests.reviewable` / `decide` / `enter_for` /
 `enter_and_approve`). Each endpoint uses its panel page's gate; the services
 do the branch checks. No panel code changed.
+
+### API phase 8 — leave — 2026-10-05
+
+18 endpoints over the panel's leave code: types (`leaves.services`, the
+panel's `LeaveTypeForm`), policies and versions (`leaves.policy_admin`,
+`LeavePolicyForm` / `PolicyVersionForm` / one `PolicyRuleForm` per rule),
+balances (`policies.overview`, or each type's days per year), recorded leave
+(`RecordLeaveForm` / `AmendLeaveForm` / `CancelLeaveForm`, documents as base64
+through the panel's `DocumentField`), and the approval inbox
+(`workflow.reviewable` / `decide_request`, `DecideLeaveForm`). Panel
+refactor, no behaviour change: `leaves.views.leave_rows` (the Leave list's
+query) and `recordable_employees` (Record leave's people), shared with the
+API. `PanelRule` opens My account pages (the inbox) to every login, as the
+panel's gate does; the service decides.

@@ -2,6 +2,16 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 8: leave
+
+- **New:** leave types - list, add, change, turn on or off, add the defaults.
+- **New:** leave policies - list, add, change, turn on or off; versions of
+  the rules (add; change or remove one not started yet).
+- **New:** balances - each person's given, taken and left per type and year.
+- **New:** leave - list (a month or a range), one, record (also from the
+  profile; with a document), change, cancel all or some days, the document.
+- **New:** approval - the requests to decide, one, approve or reject.
+
 ## 2026-10-05 — Phase 7: attendance
 
 - **New:** the daily list and late entries (`GET /attendance`,

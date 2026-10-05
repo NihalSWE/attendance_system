@@ -86,7 +86,7 @@ class PanelRule(BasePermission):
 
         from accounts.services import get_active_memberships
         from access_control.page_access import may_open
-        from common.middleware import SELF_SERVICE_ROLES
+        from common.middleware import SELF_SERVICE_NAMESPACES, SELF_SERVICE_ROLES
 
         key = getattr(request, "api_key", None)
         if key is not None:
@@ -109,4 +109,8 @@ class PanelRule(BasePermission):
         page = getattr(view, "panel_page", None)
         if isinstance(page, dict):
             page = page.get(request.method)
+        if page and page.split(":")[0] in SELF_SERVICE_NAMESPACES:
+            # A My account page (the leave approval inbox): open to every
+            # login, as on the panel; its service decides who may act.
+            return True
         return bool(page) and may_open(request.user, request.company_id, page)
