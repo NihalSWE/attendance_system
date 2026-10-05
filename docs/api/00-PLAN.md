@@ -618,6 +618,17 @@ publish the Postman collection; `120-build-a-client.md` (a working client in
 
 Guide: `120-integrations.md`.
 
+**Status: DONE 2026-10-05.** As built: the webhook's secret keys are never
+shown back (a new one is shown once, `POST /webhook/secret`), and changing
+where the attendance goes is for a person, not an API key; send-now /
+send-again / test stay open to `webhook:manage` keys. The audit log is read
+only by the owner or company administrator, logged in (the panel has no page
+for it). Finish: `120-build-a-client.md` (run by the tests against a live
+server); the security review is in `06-security.md`, with a whole-API sweep
+test and the `api.security` log for refused signatures and replays.
+
+**All 13 phases (0-12) are done: 301 endpoints.**
+
 ---
 
 ## Part 7 — How every phase is run

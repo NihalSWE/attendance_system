@@ -348,6 +348,14 @@ API_PROXY_COUNT = env.int('API_PROXY_COUNT', default=0)
 # frontend is on another site (then HTTPS is required).
 API_COOKIE_SECURE = env.bool('API_COOKIE_SECURE', default=not DEBUG)
 API_COOKIE_SAMESITE = env('API_COOKIE_SAMESITE', default='Strict')
+# HTTPS on the live server (docs/api/00-PLAN.md 2.6): HSTS tells browsers to
+# use https only, for this many seconds (31536000 = a year); the redirect
+# sends http to https. Off unless set, so development is unchanged. Behind
+# nginx set SECURE_PROXY_SSL=True so Django sees the request was https.
+SECURE_HSTS_SECONDS = env.int('SECURE_HSTS_SECONDS', default=0)
+SECURE_SSL_REDIRECT = env.bool('SECURE_SSL_REDIRECT', default=False)
+if env.bool('SECURE_PROXY_SSL', default=False):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # Password reset email: the frontend's page, with {token} where the code goes,
 # e.g. https://app.example.com/reset?token={token}. Empty: the code is emailed.
 API_PASSWORD_RESET_URL = env('API_PASSWORD_RESET_URL', default='')
