@@ -2,6 +2,17 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 6, part a: devices - what they sent
+
+- **New:** device messages (list, one - raw text for people only), punches
+  (list with filters, one with its raw record and frozen judgement), punches
+  to sort out (list, counts).
+- **New:** for one device - its users (joined to employees, with why someone
+  is not linked), saved fingerprints and faces (counts and formats, never the
+  templates), its settings, its command queue and its work in progress.
+- **Guide:** [Devices: data flow](../guides/devices-data-flow/) - how a scan
+  travels, every status explained.
+
 ## 2026-10-05 — Phase 5: devices - setup
 
 - **New:** devices - list, register, one, change, retire; `serial-check`,

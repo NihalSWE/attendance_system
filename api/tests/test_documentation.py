@@ -120,7 +120,8 @@ class PostmanCollectionTests(SimpleTestCase):
         for path in ("/api/docs/authentication/", "/api/docs/security/", "/api/docs/postman/",
                      "/api/docs/guides/company-and-branches/", "/api/docs/guides/employees/",
                      "/api/docs/guides/shifts-and-calendar/",
-                     "/api/docs/guides/devices-setup/"):
+                     "/api/docs/guides/devices-setup/",
+                     "/api/docs/guides/devices-data-flow/"):
             self.assertEqual(self.client.get(path).status_code, 200, path)
 
 
