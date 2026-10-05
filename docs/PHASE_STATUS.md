@@ -6037,3 +6037,15 @@ change sends only what changes, `change_salary_rules`), components
 `_penalty_rows`), and LFA (`LfaSettingsForm`, `lfa.eligibility`,
 `LfaClaimForm` with the proof as base64, `LfaDecisionForm`, `lfa.decide /
 cancel / mark_paid`). Months travel as YYYY-MM. No panel code changed.
+
+### API phase 10 — My account (the employee app) — 2026-10-05
+
+24 endpoints under `/api/v1/me` over the panel's own My account code:
+`employee_self` (details through `MyDetailsForm`, photo, education),
+`month_view` for the month and the day, `scan_requests.submit / withdraw`
+through `MissedScanForm`, `workflow.submit_request / withdraw_request` through
+`RequestLeaveForm`, finalised payslips (`me_views._my_payslips`,
+`payslip_context(for_employee=True)`), `lfa.eligibility / submit / withdraw`
+through `LfaClaimForm`, and the branch manager's day (as
+`request_views.branch_attendance`). Always the login's own record; API keys
+are refused. No panel code changed.
