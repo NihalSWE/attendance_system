@@ -51,6 +51,15 @@
                 </ul>
             </details>
         {% endfor %}
+        {% if sidebar_developer_api %}
+        {# Enabled per company by the platform owner (Feature access); opens the API docs. #}
+        <a class="sidebar__link" href="{% url 'api:docs' %}" target="_blank" rel="noopener" aria-label="Developer's API (opens in a new tab)">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 6l-6 6 6 6M16 6l6 6-6 6M14 4l-4 16"/>
+            </svg>
+            <span>Developer's API</span>
+        </a>
+        {% endif %}
     </nav>
     <div class="sidebar__foot">
         <form method="post" action="{% url 'logout' %}">

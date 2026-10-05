@@ -75,7 +75,27 @@ def shell(request):
         "sidebar_leave_approver": leave_approver,
         # "My LFA", once the company has switched LFA on (2026-09-28).
         "sidebar_lfa": bool(self_service and company_id and _lfa_on(company_id)),
+        # Developer's API: the owner and administrator of a company the platform
+        # owner enabled it for (2026-10-06).
+        "sidebar_developer_api": bool(
+            membership and not self_service and membership.role in DEVELOPER_API_ROLES
+            and developer_api_on(company_id)),
     }
+
+
+#: Who sees the Developer's API link once the company has the module: those who
+#: make the company's API keys and set up its integrations.
+DEVELOPER_API_ROLES = ("owner", "company_admin")
+
+
+def developer_api_on(company_id):
+    """Whether the platform owner has enabled the Developer's API module for
+    this company (tenants Feature "developer_api", Companies → Feature access)."""
+    from access_control.services import is_feature_enabled
+    from tenants.models import Feature
+
+    feature = Feature.objects.filter(code="developer_api", is_active=True).first()
+    return feature is not None and is_feature_enabled(company_id, feature)
 
 
 def _lfa_on(company_id):

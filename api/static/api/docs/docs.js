@@ -72,6 +72,26 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     const menu = document.getElementById("apidocs-menu");
+    if (menu) {
+        // Each link loads a new page: keep the menu's scroll and its open
+        // sections for the next one (this tab only).
+        const remember = function () {
+            try {
+                sessionStorage.setItem("apidocs-menu-top", String(menu.scrollTop));
+                const open = Array.from(menu.querySelectorAll("details[data-section]"))
+                    .filter(function (section) { return section.open; })
+                    .map(function (section) { return section.dataset.section; });
+                sessionStorage.setItem("apidocs-open", JSON.stringify(open));
+            } catch (e) { /* storage blocked */ }
+        };
+        menu.addEventListener("click", function (event) {
+            if (event.target.closest("a")) remember();
+        });
+        menu.querySelectorAll("details[data-section]").forEach(function (section) {
+            section.addEventListener("toggle", remember);
+        });
+        window.addEventListener("pagehide", remember);
+    }
     const menuToggle = document.querySelector("[data-menu-toggle]");
     if (menu && menuToggle) {
         menuToggle.addEventListener("click", function () {

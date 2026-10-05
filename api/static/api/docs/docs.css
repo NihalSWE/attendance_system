@@ -36,11 +36,24 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
     height: calc(100vh - 56px); overflow-y: auto;
     padding: 20px 12px 40px; border-right: 1px solid var(--border); background: var(--surface);
 }
-.apidocs__section { margin-bottom: 18px; }
+.apidocs__section { margin-bottom: 6px; }
+.apidocs__section[open] { margin-bottom: 14px; }
 .apidocs__section-title {
-    margin: 0 8px 6px; color: var(--muted); font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 0; padding: 7px 8px; border-radius: var(--r-sm);
+    color: var(--muted); font-size: 12px; font-weight: 600;
     letter-spacing: .04em; text-transform: uppercase;
+    cursor: pointer; list-style: none; user-select: none;
 }
+.apidocs__section-title::-webkit-details-marker { display: none; }
+.apidocs__section-title:hover { background: var(--row-hover, var(--surface-sunken)); color: var(--text); }
+.apidocs__section-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.apidocs__section[open] > .apidocs__section-title { color: var(--text); }
+.apidocs__chevron {
+    width: 14px; height: 14px; flex: none; stroke-width: 2.2;
+    transition: transform .15s ease;
+}
+.apidocs__section[open] > .apidocs__section-title .apidocs__chevron { transform: rotate(90deg); }
 .apidocs__menu ul { list-style: none; margin: 0; padding: 0; }
 .apidocs__menu a {
     display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-sm);
@@ -184,4 +197,4 @@ code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospac
     .fields .fields { margin-left: 6px; padding-left: 10px; }
     .field-node__body { margin-left: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .apidocs__menu { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .apidocs__menu, .apidocs__chevron { transition: none; } }
