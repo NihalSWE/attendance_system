@@ -601,6 +601,10 @@ panel) and the password is phase 1's `/auth/password/change`.
 
 Guide: `110-reports.md`.
 
+**Status: DONE 2026-10-05.** As built: reports are addressed by their slug
+(`daily-attendance`, …); each row is a list, one value per column, with the
+columns, totals and filters described in the answer.
+
 ### Phase 12 — Integrations & finish
 
 | Group | Endpoints |
