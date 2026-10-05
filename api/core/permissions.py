@@ -70,7 +70,8 @@ class PanelRule(BasePermission):
     company pages; an Employee, Branch manager or Auditor login reaches only
     the pages for a permission they hold in some branch
     (``common.middleware.SelfServiceGate`` and ``access_control.page_access``).
-    The view names the panel page it mirrors in ``panel_page`` and the same
+    The view names the panel page it mirrors in ``panel_page`` - one name, or
+    ``{method: name}`` when its methods mirror different pages - and the same
     check is made here; the panel's service then checks again (role, branch).
 
     API keys: ``read_scope`` (GET) or ``write_scope`` (anything else) must be
@@ -106,4 +107,6 @@ class PanelRule(BasePermission):
         if role not in SELF_SERVICE_ROLES:
             return True
         page = getattr(view, "panel_page", None)
+        if isinstance(page, dict):
+            page = page.get(request.method)
         return bool(page) and may_open(request.user, request.company_id, page)

@@ -49,10 +49,15 @@ class ChallengeSerializer(StrictSerializer):
 
 
 class TwoStepSetupInputSerializer(StrictSerializer):
+    method = serializers.ChoiceField(
+        choices=(("app", "Authenticator app"), ("email", "Code by email")),
+        required=False, default="app",
+        help_text="app (recommended): an authenticator app on the phone. email: a code is "
+                  "emailed at each login instead - for someone who does not want an app.")
     code = serializers.CharField(
         max_length=20, required=False, allow_blank=True, default="",
-        help_text="Only when two-step login is already on (moving the app to a new phone): "
-                  "a current code - from the app, by email, or a recovery code.")
+        help_text="Only when two-step login is already on (changing the way, or the app to a "
+                  "new phone): a current code - from the app, by email, or a recovery code.")
 
 
 class RefreshSerializer(StrictSerializer):
@@ -112,10 +117,15 @@ class TwoStepChallengeFields(serializers.Serializer):
     methods = serializers.ListField(
         child=serializers.CharField(help_text='"app", "email" or "recovery_code".'),
         required=False,
-        help_text='Only when two_step_required: the ways this login can pass - "app" (the '
-                  'main way), "email" (the backup: POST /api/v1/auth/login/two-step/email-code '
-                  'sends a code; listed only when this server can send email) and '
-                  '"recovery_code".')
+        help_text='Only when two_step_required: the ways this login can pass - "app", '
+                  '"email" (POST /api/v1/auth/login/two-step/email-code sends a code: the backup '
+                  'for app users, listed when this server can send email) and "recovery_code".')
+    email_sent_to = serializers.CharField(
+        required=False,
+        help_text="Only for a login set up with email codes: their code was emailed already, "
+                  "here (e.g. r***@example.com).")
+    email_expires_in = serializers.IntegerField(
+        required=False, help_text="Only with email_sent_to: seconds the emailed code works.")
 
 
 class TokensSerializer(TwoStepChallengeFields):
@@ -180,6 +190,8 @@ class CompanySerializer(serializers.Serializer):
 
 class TwoStepStatusSerializer(serializers.Serializer):
     enabled = serializers.BooleanField(help_text="Two-step login is on for this login.")
+    method = serializers.CharField(
+        allow_null=True, help_text='"app" or "email" when it is on; null when it is off.')
     email_backup = serializers.BooleanField(
         help_text="A code by email can be used when the app cannot (this server can send "
                   "email). When false, the recovery codes are the only backup.")
@@ -218,13 +230,20 @@ class StaffSessionSerializer(SessionSerializer):
 
 
 class TwoStepSetupSerializer(serializers.Serializer):
-    secret = serializers.CharField(
-        help_text="The secret to type into the authenticator app, if it cannot scan.")
-    otpauth_url = serializers.CharField(
-        help_text="The same as an otpauth:// link - show it as a QR code to scan.")
+    method = serializers.CharField(help_text='The way being set up: "app" or "email".')
     replacing = serializers.BooleanField(
-        help_text="True when two-step login was on already: this moves it to a new phone. "
-                  "The old phone keeps working until the new one is confirmed.")
+        help_text="True when two-step login was on already: this changes the way (or moves "
+                  "the app to a new phone). The old way keeps working until confirmed.")
+    secret = serializers.CharField(
+        required=False,
+        help_text="app only: the secret to type into the authenticator app, if it cannot scan.")
+    otpauth_url = serializers.CharField(
+        required=False,
+        help_text="app only: the same as an otpauth:// link - show it as a QR code to scan.")
+    email_sent_to = serializers.CharField(
+        required=False, help_text="email only: where the code went, e.g. r***@example.com.")
+    email_expires_in = serializers.IntegerField(
+        required=False, help_text="email only: seconds the emailed code works.")
 
 
 class EmailCodeSentSerializer(serializers.Serializer):
@@ -235,6 +254,7 @@ class EmailCodeSentSerializer(serializers.Serializer):
 
 
 class TwoStepOnSerializer(serializers.Serializer):
+    method = serializers.CharField(help_text='The way now on: "app" or "email".')
     recovery_codes = serializers.ListField(
         child=serializers.CharField(help_text="One code, e.g. 3f9a1c2e-7b4d5e6f."),
         help_text="10 single-use codes for when neither the phone nor the email can be used. "

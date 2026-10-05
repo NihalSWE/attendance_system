@@ -690,7 +690,8 @@ class EmailBackupTests(ApiTestCase):
         session = self.two_step(self.login("owner@example.test").json()["challenge"],
                                 pyotp.TOTP(self.secret).now()).json()
         me = self.call("GET", "/api/v1/auth/me", session=session).json()
-        self.assertEqual(me["two_step"], {"enabled": True, "email_backup": True, "required": True})
+        self.assertEqual(me["two_step"], {"enabled": True, "method": "app", "email_backup": True,
+                                          "required": True})
 
     def test_staff_turn_two_step_off_with_an_emailed_code(self):
         staff = self.person("staff@example.test")
@@ -708,3 +709,72 @@ class EmailBackupTests(ApiTestCase):
         from api.admin import TwoStepAdmin
 
         self.assertIsInstance(site._registry[TwoStep], TwoStepAdmin)
+
+
+@override_settings(**MAIL_ON)
+class EmailOnlyTests(ApiTestCase):
+    """The optional way: email codes only, for someone who does not want an app."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = self.person("owner@example.test", role="owner")
+
+    def emailed_code(self):
+        import re
+
+        return re.search(r"Your login code is (\d{6})", mail.outbox[-1].body).group(1)
+
+    def two_step(self, challenge, code):
+        return self.call("POST", "/api/v1/auth/login/two-step",
+                         {"challenge": challenge, "code": code})
+
+    def test_an_owner_sets_up_email_codes_only(self):
+        session = self.logged_in("owner@example.test")
+        setup = self.call("POST", "/api/v1/auth/two-step/setup", {"method": "email"},
+                          session=session)
+        self.assertEqual(setup.status_code, 200, setup.content)
+        self.assertEqual(setup.json(), {"method": "email", "replacing": False,
+                                        "email_sent_to": "o***@example.test",
+                                        "email_expires_in": 600})
+        confirmed = self.call("POST", "/api/v1/auth/two-step/confirm",
+                              {"code": self.emailed_code()}, session=session)
+        self.assertEqual(confirmed.status_code, 200, confirmed.content)
+        self.assertEqual(confirmed.json()["method"], "email")
+        me = self.call("GET", "/api/v1/auth/me", session=session).json()
+        self.assertEqual(me["two_step"], {"enabled": True, "method": "email",
+                                          "email_backup": True, "required": True})
+        # Every login emails their code by itself.
+        first = self.login("owner@example.test").json()
+        self.assertEqual(first["methods"], ["email", "recovery_code"])
+        self.assertEqual(first["email_sent_to"], "o***@example.test")
+        done = self.two_step(first["challenge"], self.emailed_code())
+        self.assertEqual(done.status_code, 200, done.content)
+
+    @override_settings(MAIL_CONFIGURED=False)
+    def test_without_mail_email_codes_cannot_be_chosen(self):
+        session = self.logged_in("owner@example.test")
+        response = self.call("POST", "/api/v1/auth/two-step/setup", {"method": "email"},
+                             session=session)
+        self.assertEqual((response.status_code, self.code_of(response)),
+                         (409, "email_not_available"))
+
+    def test_changing_from_the_app_to_email_needs_a_current_code(self):
+        secret = self.turn_on_two_step(self.owner)
+        app = pyotp.TOTP(secret)
+        session = self.two_step(self.login("owner@example.test").json()["challenge"],
+                                app.now()).json()
+        no_code = self.call("POST", "/api/v1/auth/two-step/setup", {"method": "email"},
+                            session=session)
+        self.assertEqual(no_code.status_code, 422)
+        started = self.call("POST", "/api/v1/auth/two-step/setup",
+                            {"method": "email", "code": app.at(int(time.time()) + 30)},
+                            session=session)
+        self.assertTrue(started.json()["replacing"])
+        self.assertEqual(TwoStep.objects.get(user=self.owner).method, "app")   # not yet
+        confirmed = self.call("POST", "/api/v1/auth/two-step/confirm",
+                              {"code": self.emailed_code()}, session=session)
+        self.assertEqual(confirmed.json()["method"], "email")
+        first = self.login("owner@example.test").json()
+        self.assertEqual(first["methods"], ["email", "recovery_code"])
+        self.assertEqual(self.code_of(self.two_step(first["challenge"], app.now())),
+                         "invalid_two_step_code")                 # the app no longer counts

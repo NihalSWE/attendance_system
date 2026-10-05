@@ -22,12 +22,14 @@ server and for anyone reviewing it. How to log in is in
   next login). Wrong passwords lock the login and the address for a while
   (`login_locked` with `Retry-After`).
 - **Two-step login** is required for owners and company administrators on
-  the API. The main way is an authenticator app (TOTP). The backup, so nobody
-  is locked out by a lost phone, is a 6-digit code by email (10 minutes, once,
-  5 wrong tries, one email a minute, only its hash stored); the last resort is
-  10 recovery codes (stored hashed). Each code works once. Moving the app to a
-  new phone needs a current code and a confirm from the new phone. The
-  platform owner can reset a locked-out person in the Django admin.
+  the API. Each person chooses an authenticator app (TOTP, recommended) or
+  codes by email only; app users always have a code by email as the backup,
+  so a lost phone locks nobody out. Email codes: 10 minutes, once, 5 wrong
+  tries, one email a minute, only their hash stored. The last resort is 10
+  recovery codes (stored hashed). Each code works once. Changing the way or
+  the phone needs a current code and a confirm of the new way. An email code
+  is only as safe as the mailbox - the app is recommended. The platform owner
+  can reset a locked-out person in the Django admin.
 - **Tokens are random values, not JWTs.** The server keeps only their
   SHA-256, so a stolen database does not give working tokens, and a session
   can be ended **at once** (nothing stays valid until it expires).

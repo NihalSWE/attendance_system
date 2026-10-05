@@ -2,6 +2,40 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 3, part 2: the rest of the profile, and import
+
+- **New:** the photo (`GET`/`PUT`/`DELETE …/{id}/photo`), education
+  (`…/education`, `…/education/{row_id}`), documents (`…/documents`,
+  `…/documents/{document_id}`) - files as base64 in JSON, served privately.
+- **New:** their login - `GET`, `POST` (give), `PATCH` (access) `…/{id}/login`,
+  `…/login/password`, `…/login/disable`, `…/login/enable`.
+- **New:** `…/leave-policy` and `…/leave-adjustments` (keys: `leave:write`),
+  `…/overtime`, `…/report-visibility`, `…/reports` (set as line manager),
+  `…/devices` and `…/devices/{enrollment_id}` (keys: `devices:write`).
+- **New:** `POST /api/v1/employees/import` (check, then `confirm`) and
+  `GET /api/v1/employees/import/demo-file`.
+
+## 2026-10-05 — Two-step login: email codes stay as an option
+
+At the senior's word: a person chooses the authenticator app (recommended)
+or **email codes only** (`{"method": "email"}` on setup); app users keep the
+email backup at login. *Who am I* and confirm show `method` again; the login
+answer has `email_sent_to` for an email user (their code is sent already).
+
+## 2026-10-05 — Phase 3, part 1: employees
+
+- **New:** `GET /api/v1/employees` (the Employees list: filters, paging, pay
+  only where you may see it), `GET /api/v1/employees/choices` and
+  `POST /api/v1/employees` (Create employee).
+- **New:** `GET /api/v1/employees/{id}` (the profile) and `…/history`.
+- **New:** changes — details (`PATCH /api/v1/employees/{id}`), `…/personal`,
+  `…/placement` and `…/salary` (dated: later date keeps history, same or
+  earlier replaces), `…/line-manager`.
+- **New:** `…/end-employment`, `…/inactive`, `…/active`.
+- **Keys:** `employees:read` / `employees:write`; pay needs `payroll:read`,
+  changing it `payroll:write`.
+- **Guide:** [Employees](../guides/employees/).
+
 ## 2026-10-05 — Two-step login: the app first, email as the backup
 
 At the senior's decision: the authenticator app is the main way; a code by

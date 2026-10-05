@@ -198,9 +198,15 @@ def login(request, *, email, password, client_type, device_name=""):
         session.challenge_hash = digest(challenge)
         session.challenge_expires_at = timezone.now() + datetime.timedelta(minutes=CHALLENGE_MINUTES)
         session.save()
-        return {"two_step_required": True, "challenge": challenge,
-                "challenge_expires_in": CHALLENGE_MINUTES * 60,
-                "methods": methods_for(two_step)}
+        answer = {"two_step_required": True, "challenge": challenge,
+                  "challenge_expires_in": CHALLENGE_MINUTES * 60,
+                  "methods": methods_for(two_step)}
+        if two_step.method == TwoStep.Method.EMAIL:
+            try:                       # their code is on its way; a failure shows on a resend
+                answer.update(email_codes.send(session))
+            except ApiError:
+                pass
+        return answer
     with transaction.atomic():
         _attempt(request, email, True)
         session = _new_session(request, user, client_type, device_name, ApiSession.State.ACTIVE)
@@ -284,14 +290,15 @@ def refresh(request, *, token, signed_by=None):
         return _issue(locked)
 
 
-# --- two-step: the authenticator app, with a code by email as the backup -------
+# --- two-step: the authenticator app or codes by email --------------------------
 
 
 def methods_for(two_step):
-    """The ways this login can pass two-step: "app" (the main way), "email"
-    (the backup, when this server can send email) and "recovery_code"."""
-    ways = ["app"]
-    if email_codes.available(two_step.user):
+    """The ways this login can pass two-step: "app", "email" and
+    "recovery_code". App users get "email" too - the backup when the app
+    cannot be used - when this server can send email."""
+    ways = ["app"] if two_step.method == TwoStep.Method.APP else []
+    if two_step.method == TwoStep.Method.EMAIL or email_codes.available(two_step.user):
         ways.append("email")
     return ways + ["recovery_code"]
 
@@ -328,7 +335,8 @@ def check_code(two_step, code, session=None):
     it outside a transaction that a refusal would roll back."""
     code = (code or "").strip().replace(" ", "")
     if code.isdigit() and len(code) == 6:
-        secret = decrypt(two_step.secret_encrypted)
+        secret = (decrypt(two_step.secret_encrypted)
+                  if two_step.method == TwoStep.Method.APP else "")
         if secret and _totp_ok(two_step, secret, code):
             return True
         return session is not None and email_codes.check(session, code)
@@ -357,67 +365,84 @@ def email_code_for_challenge(request, challenge):
 
 
 def email_code_for_session(request, session):
-    """Logged in: a code by email, where a code is asked for - moving the app
-    to a new phone, new recovery codes, turning two-step off."""
+    """Logged in: a code by email, where a code is asked for - confirming
+    email setup, changing the way or the phone, new recovery codes, turning
+    two-step off."""
     if not TwoStep.objects.filter(user=session.user).exists():
         raise ApiError("conflict", "Two-step login is not set up: nothing needs a code.")
     return email_codes.send(session)
 
 
-def two_step_setup(request, session, code=""):
-    """Start two-step login with the authenticator app: a new secret to scan.
+def two_step_setup(request, session, method=TwoStep.Method.APP, code=""):
+    """Start two-step login: with the authenticator app (a new secret to scan,
+    recommended) or with codes by email only (a code is sent now).
 
-    Already on (e.g. a new phone): a current code must prove it is the person
-    - from the app, by email or a recovery code - and the new phone's secret
-    takes over only when a code from it confirms it."""
+    Already on - changing the way, or the app to a new phone: a current code
+    must prove it is the person (from the app, by email or a recovery code),
+    and the new way takes over only when a code of it confirms it."""
     user = session.user
     current = two_step_on(user)
     if current is not None:
         if not code:
             raise ApiError("validation_error", fields={"code": [
                 "Two-step login is on: send a current code (from the app, by email, or a "
-                "recovery code) to move it to a new phone."]})
+                "recovery code) to change it."]})
         if not check_code(current, code, session):
             raise ApiError("invalid_two_step_code")
-    secret = pyotp.random_base32()
+    if method == TwoStep.Method.EMAIL and not email_codes.available(user):
+        raise ApiError("email_not_available")
+    secret = pyotp.random_base32() if method == TwoStep.Method.APP else ""
+    stored = encrypt(secret) if secret else ""
     with transaction.atomic():
         if current is not None:
-            current.pending_secret_encrypted = encrypt(secret)
-            current.save(update_fields=["pending_secret_encrypted"])
+            current.pending_method, current.pending_secret_encrypted = method, stored
+            current.save(update_fields=["pending_method", "pending_secret_encrypted"])
         else:
             TwoStep.objects.update_or_create(user=user, defaults={
-                "secret_encrypted": encrypt(secret), "confirmed_at": None,
-                "recovery_hashes": [], "last_used_step": 0, "pending_secret_encrypted": ""})
-    return {"secret": secret, "replacing": current is not None,
-            "otpauth_url": pyotp.TOTP(secret).provisioning_uri(name=user.email,
-                                                              issuer_name=TOTP_ISSUER)}
+                "method": method, "secret_encrypted": stored, "confirmed_at": None,
+                "recovery_hashes": [], "last_used_step": 0, "pending_method": "",
+                "pending_secret_encrypted": ""})
+    answer = {"method": method, "replacing": current is not None}
+    if secret:
+        answer.update(secret=secret, otpauth_url=pyotp.TOTP(secret).provisioning_uri(
+            name=user.email, issuer_name=TOTP_ISSUER))
+    else:
+        answer.update(email_codes.send(session))
+    return answer
 
 
 def two_step_confirm(request, session, code):
-    """The first code from the app turns two-step login on (or completes the
-    move to a new phone). Answers 10 new recovery codes, and whether the email
-    backup works on this server."""
+    """The first code of the new way - from the app, or the one emailed -
+    turns two-step login on (or completes the change). Answers 10 new
+    recovery codes, and whether email codes work on this server."""
     user = session.user
     two_step = TwoStep.objects.filter(user=user).first()
     if two_step is None:
         raise ApiError("conflict", "Start with two-step setup.")
-    replacing = two_step.confirmed_at is not None
-    if replacing and not two_step.pending_secret_encrypted:
+    changing = two_step.confirmed_at is not None
+    if changing and not two_step.pending_method:
         raise ApiError("conflict", "Two-step login is already on.")
-    stored = two_step.pending_secret_encrypted if replacing else two_step.secret_encrypted
+    method = two_step.pending_method if changing else two_step.method
+    stored = two_step.pending_secret_encrypted if changing else two_step.secret_encrypted
     code = (code or "").strip().replace(" ", "")
-    if not (stored and _totp_ok(two_step, decrypt(stored), code)):
+    if method == TwoStep.Method.APP:
+        ok = bool(stored) and _totp_ok(two_step, decrypt(stored), code)
+    else:
+        ok = email_codes.check(session, code)
+    if not ok:
         raise ApiError("invalid_two_step_code")
     with transaction.atomic():
-        two_step.secret_encrypted, two_step.pending_secret_encrypted = stored, ""
+        two_step.method, two_step.secret_encrypted = method, stored
+        two_step.pending_method = two_step.pending_secret_encrypted = ""
         two_step.confirmed_at = timezone.now()
         two_step.save()
         codes = new_recovery_codes(two_step)
         ApiSession.objects.filter(user=user, needs_two_step_setup=True).update(
             needs_two_step_setup=False)
-        audit.record(request, "api.two_step_new_phone" if replacing else "api.two_step_on",
-                     user=user)
-    return {"recovery_codes": codes, "email_backup": email_codes.available(user)}
+        audit.record(request, "api.two_step_changed" if changing else "api.two_step_on",
+                     user=user, data={"method": method})
+    return {"method": method, "recovery_codes": codes,
+            "email_backup": email_codes.available(user)}
 
 
 def two_step_disable(request, session, password, code):
