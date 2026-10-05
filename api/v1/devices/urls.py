@@ -1,5 +1,6 @@
 from django.urls import path
 
+from api.v1.devices import action_views as act
 from api.v1.devices import flow_views as flow
 from api.v1.devices import views
 
@@ -35,7 +36,34 @@ urlpatterns = [
     path("devices/<uuid:device_id>/templates", flow.TemplatesView.as_view(),
          name="device_templates"),
     path("devices/<uuid:device_id>/options", flow.OptionsView.as_view(), name="device_options"),
-    path("devices/<uuid:device_id>/commands", flow.CommandsView.as_view(),
+    path("devices/<uuid:device_id>/commands", act.CommandView.as_view(),
          name="device_commands"),
     path("devices/<uuid:device_id>/jobs", flow.JobsView.as_view(), name="device_jobs"),
+    path("devices/<uuid:device_id>/users/remove", act.RemoveUsersView.as_view(),
+         name="device_users_remove"),
+    path("devices/<uuid:device_id>/users/copy", act.CopyUsersView.as_view(),
+         name="device_users_copy"),
+    path("devices/<uuid:device_id>/users/link-by-employee-id", act.LinkByIdView.as_view(),
+         name="device_users_link"),
+    path("devices/<uuid:device_id>/users/replace-old-links", act.ReplaceLinksView.as_view(),
+         name="device_users_replace"),
+    path("devices/<uuid:device_id>/users/import", act.ImportUsersView.as_view(),
+         name="device_users_import"),
+    path("devices/<uuid:device_id>/users/<str:pin>", act.DeviceUserView.as_view(),
+         name="device_user"),
+    path("devices/<uuid:device_id>/users/<str:pin>/ask", act.AskUserView.as_view(),
+         name="device_user_ask"),
+    path("devices/<uuid:device_id>/load", act.LoadView.as_view(), name="device_load"),
+    path("devices/<uuid:device_id>/templates/save", act.SaveTemplatesView.as_view(),
+         name="device_templates_save"),
+    path("devices/<uuid:device_id>/options/set", act.SetOptionView.as_view(),
+         name="device_options_set"),
+    path("devices/<uuid:device_id>/server-address", act.ServerAddressView.as_view(),
+         name="device_address"),
+    path("devices/<uuid:device_id>/server-address/cancel", act.CancelAddressView.as_view(),
+         name="device_address_cancel"),
+    path("employees/<int:employee_id>/map", act.MapEmployeeView.as_view(), name="employee_map"),
+    path("employees/bulk-map", act.BulkMapView.as_view(), name="employees_bulk_map"),
+    path("employees/send-to-devices", act.SendEmployeesView.as_view(), name="employees_send"),
+    path("ingest/punches", act.IngestPunchesView.as_view(), name="ingest_punches"),
 ]

@@ -399,3 +399,215 @@ class JobsSerializer(serializers.Serializer):
     load = LoadSerializer(allow_null=True,
                           help_text="Loading employees onto it: the running load, or the last "
                                     "one within the hour; null otherwise.")
+
+
+# --- data flow: telling the devices -------------------------------------------------------
+
+class CommandInputSerializer(StrictSerializer):
+    command = serializers.ChoiceField(
+        choices=("query_users", "query_biodata", "query_options", "query_attlog"),
+        help_text="query_users (send your user list), query_biodata (your fingerprints and "
+                  "faces), query_options (your settings) or query_attlog (your scans of the "
+                  "last 31 days).")
+
+
+class QueuedSerializer(serializers.Serializer):
+    queued = serializers.BooleanField(
+        help_text="Queued now (false: the same command was already waiting).")
+    command_id = serializers.IntegerField(allow_null=True, help_text="Its id, to follow it.")
+    detail = serializers.CharField(help_text="What happens next, in words.")
+
+
+class PinsInputSerializer(StrictSerializer):
+    pins = serializers.ListField(
+        child=serializers.CharField(max_length=100, help_text="A user number."),
+        required=False, help_text="The user numbers; left out (or all true): every user.")
+    all = serializers.BooleanField(required=False, default=False,
+                                   help_text="true: every user on the device.")
+
+
+class CopyInputSerializer(PinsInputSerializer):
+    target_device_id = serializers.UUIDField(
+        help_text="Another device of the company, of the same model.")
+
+
+class SkippedSerializer(serializers.Serializer):
+    pin = serializers.CharField(help_text="The user number.")
+    reason = serializers.CharField(help_text="Why, in words.")
+
+
+class RemovedSerializer(serializers.Serializer):
+    removed = serializers.ListField(child=serializers.CharField(help_text="A user number."),
+                                    help_text="Being removed (a few per check-in).")
+    kept = SkippedSerializer(many=True, help_text="Kept, and why (e.g. the last super admin).")
+
+
+class CopiedSerializer(serializers.Serializer):
+    sent = serializers.ListField(child=serializers.CharField(help_text="A user number."),
+                                 help_text="Being copied (a few per check-in).")
+    fingerprints = serializers.IntegerField(help_text="Fingerprints going with them.")
+    faces = serializers.IntegerField(help_text="Faces going with them.")
+    employees_linked = serializers.IntegerField(help_text="Employees linked on the target too.")
+    failed = SkippedSerializer(many=True, help_text="Not copied, and why.")
+
+
+class LinkedSerializer(serializers.Serializer):
+    pin = serializers.CharField(help_text="The user number.")
+    employee = RefSerializer(help_text="The employee it is linked to.")
+
+
+class LinkResultSerializer(serializers.Serializer):
+    linked = LinkedSerializer(many=True, help_text="Linked now.")
+    left = SkippedSerializer(many=True, help_text="Left unlinked, and why.")
+    rechecked = serializers.IntegerField(allow_null=True,
+                                         help_text="Earlier scans that now count (null: not "
+                                                   "re-checked - do it with recheck).")
+
+
+class DeviceImportResultSerializer(serializers.Serializer):
+    created = RefSerializer(many=True, help_text="Employees made from device users (filed under "
+                                                 "Unassigned: give them a department and pay).")
+    linked = RefSerializer(many=True, help_text="Existing employees linked by Employee ID.")
+    left = SkippedSerializer(many=True, help_text="Left as they are, and why.")
+
+
+class LoadStartedSerializer(serializers.Serializer):
+    started = serializers.BooleanField(help_text="Started now (false: one was already running).")
+    total = serializers.IntegerField(help_text="Employees of the device's branch to load.")
+    detail = serializers.CharField(help_text="What happens next, in words.")
+
+
+class TemplatesSavedSerializer(serializers.Serializer):
+    added = serializers.IntegerField(help_text="Templates saved for the first time.")
+    updated = serializers.IntegerField(help_text="Templates that had changed.")
+    unchanged = serializers.IntegerField(help_text="Already saved.")
+    asked_device = serializers.BooleanField(help_text="The device was asked to send them again.")
+
+
+class OptionInputSerializer(StrictSerializer):
+    key = serializers.CharField(max_length=64, help_text="A changeable setting (GET …/options).")
+    value = serializers.CharField(max_length=64, help_text="Its new value.")
+
+
+class AddressInputSerializer(StrictSerializer):
+    address = serializers.CharField(
+        max_length=255, help_text="Where the device should send, e.g. "
+                                  "https://attendance.example.com or 192.168.1.20:8000.")
+
+
+class AddressSerializer(serializers.Serializer):
+    active = serializers.BooleanField(help_text="A change is under way.")
+    status = serializers.CharField(help_text="Where the change is (empty: none).")
+    message = serializers.CharField(help_text="The same in words.")
+    saved_address = serializers.CharField(allow_null=True,
+                                          help_text="The address the device is known to use.")
+    new_address = serializers.CharField(required=False, help_text="The address asked for.")
+    previous_address = serializers.CharField(required=False, help_text="The one before.")
+    reason = serializers.CharField(required=False, help_text="Why it failed (may be empty).")
+    sent_to_device = serializers.BooleanField(required=False,
+                                              help_text="The device has collected the change.")
+    requested_at = serializers.CharField(required=False, help_text="When it was asked.")
+    requested_by = serializers.CharField(required=False, help_text="Who asked (email).")
+    deadline_at = serializers.CharField(required=False, allow_null=True,
+                                        help_text="When it gives up waiting for the device.")
+    finished = serializers.BooleanField(required=False, help_text="It is over, one way or the "
+                                                                  "other.")
+    recovery = serializers.JSONField(required=False, allow_null=True,
+                                     help_text="When the device went quiet: what to type on the "
+                                               "terminal to bring it back.")
+
+
+class MapInputSerializer(StrictSerializer):
+    device_id = serializers.UUIDField(help_text="A device of their branch.")
+    start_day = serializers.DateField(required=False, allow_null=True,
+                                      help_text="From this day (today when left out); earlier "
+                                                "scans are re-checked.")
+    attendance_enabled = serializers.BooleanField(required=False, default=True,
+                                                  help_text="Their punches can count (true).")
+    assigned = serializers.BooleanField(required=False, default=True,
+                                        help_text="One of their assigned devices (true).")
+
+
+class MappedSerializer(serializers.Serializer):
+    employee = RefSerializer(help_text="The employee.")
+    device = DeviceRefSerializer(help_text="The device.")
+    user_number = serializers.CharField(help_text="Their user number on it (their Employee ID).")
+    sent_to_device = serializers.BooleanField(help_text="Their record is on its way to the device.")
+    with_fingerprint = serializers.BooleanField(help_text="A saved fingerprint goes with it.")
+    with_face = serializers.BooleanField(help_text="A saved face goes with it.")
+    note = serializers.CharField(help_text="Why it was not sent, if it was not (may be empty).")
+    rechecked = serializers.IntegerField(allow_null=True,
+                                         help_text="Earlier scans that now count.")
+
+
+class BulkMapInputSerializer(StrictSerializer):
+    branch_id = serializers.IntegerField(help_text="The branch whose active employees are mapped.")
+    device_id = serializers.UUIDField(required=False, allow_null=True,
+                                      help_text="One device of the branch; left out: all of them.")
+    start_day = serializers.DateField(required=False, allow_null=True,
+                                      help_text="From this day (today when left out).")
+    attendance_enabled = serializers.BooleanField(required=False, default=True,
+                                                  help_text="Their punches can count (true).")
+    assigned = serializers.BooleanField(required=False, default=True,
+                                        help_text="Their assigned devices (true).")
+
+
+class FailedSerializer(serializers.Serializer):
+    employee = RefSerializer(help_text="The employee.")
+    device = DeviceRefSerializer(allow_null=True, help_text="The device, if any.")
+    reason = serializers.CharField(help_text="Why, in words.")
+
+
+class BulkMappedSerializer(serializers.Serializer):
+    mapped = MappedSerializer(many=True, help_text="Mapped now.")
+    already = serializers.IntegerField(help_text="Already mapped, left as they are.")
+    failed = FailedSerializer(many=True, help_text="Not mapped, and why.")
+    rechecked = serializers.IntegerField(help_text="Earlier scans that now count.")
+
+
+class SendInputSerializer(StrictSerializer):
+    employee_ids = serializers.ListField(child=serializers.IntegerField(help_text="An employee."),
+                                         required=False, help_text="Who to send.")
+    all = serializers.BooleanField(required=False, default=False,
+                                   help_text="true: everyone you may put on a device.")
+
+
+class SentPairSerializer(serializers.Serializer):
+    employee = RefSerializer(help_text="The employee.")
+    device = DeviceRefSerializer(help_text="The device.")
+
+
+class SentSerializer(serializers.Serializer):
+    sent = SentPairSerializer(many=True, help_text="On their way (within a minute or two).")
+    failed = FailedSerializer(many=True, help_text="Not sent, and why.")
+
+
+
+# --- other makes of device: pushing scans ------------------------------------------------
+
+class ScanInputSerializer(StrictSerializer):
+    user_number = serializers.CharField(max_length=100,
+                                        help_text="The person's user number on the device.")
+    time = serializers.CharField(
+        max_length=19, help_text="When, in the device's own time: YYYY-MM-DD HH:MM:SS (or with "
+                                 "a T in the middle).")
+    method = serializers.ChoiceField(choices=("fingerprint", "face", "card", "pin", "unknown"),
+                                     required=False, default="unknown",
+                                     help_text="How they were recognised.")
+
+
+class IngestInputSerializer(StrictSerializer):
+    device_id = serializers.UUIDField(help_text="The device, registered in the company first.")
+    batch_id = serializers.CharField(
+        max_length=100, help_text="Your id for this batch. Sending the same batch again (a retry "
+                                  "after a lost answer) stores nothing twice.")
+    scans = ScanInputSerializer(many=True, allow_empty=False,
+                                help_text="The scans, at most 500 per call.")
+
+
+class IngestedSerializer(serializers.Serializer):
+    replay = serializers.BooleanField(help_text="This batch was already received: nothing stored "
+                                                "again.")
+    message_id = serializers.CharField(help_text="The message it was stored as.")
+    punches = serializers.IntegerField(help_text="Punches made from it.")
+    detail = serializers.CharField(help_text="What happened, in words.")
