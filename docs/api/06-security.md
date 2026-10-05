@@ -91,8 +91,31 @@ Settings (in `.env`):
 | `API_COOKIE_SAMESITE` | `Strict`, or `None` for a frontend on another site | `Strict` |
 | `API_PASSWORD_RESET_URL` | your frontend's reset page, with `{token}` where the code goes, e.g. `https://app.example.com/reset?token={token}` | empty: the bare code is emailed |
 | `API_ACCESS_MINUTES` / `API_REFRESH_DAYS` | token lifetimes | 10 / 30 |
+| `SECURE_HSTS_SECONDS` | browsers use https only, for this long (`31536000` = a year) | `0` (off) |
+| `SECURE_SSL_REDIRECT` | send http to https | off |
+| `SECURE_PROXY_SSL` | behind nginx: trust its `X-Forwarded-Proto` to know a request was https | off |
 
 - Serve the API over **HTTPS** only.
 - Behind nginx set `API_PROXY_COUNT=1` — otherwise every request seems to come
   from nginx's address and the address lockout would lock everyone together.
 - Keep `SECRET_KEY` secret and unchanged (see *Signed requests*).
+
+## The security review (2026-10-05)
+
+The whole API was checked against the plan's security part (00-PLAN.md,
+Part 2) when the last endpoints were added. What holds, and how it is kept so:
+
+| Rule | How it is kept | Proved by |
+|---|---|---|
+| Deny by default | Every endpoint names who may use it; anything else is refused | the documentation test (a view without a rule fails) and the **sweep**: all 269 non-public endpoints answer 401 without a login |
+| The panels' own rules | Each endpoint passes its panel page's gate, then the panel's own service | each area's tests, and the sweep: an Employee login without grants is refused by all 237 company endpoints |
+| Company isolation | Every request acts for one company; another company's records answer 404 | each area's tests, and the sweep's cross-company check |
+| No server errors on bad ids | Clean 404/403/422 answers | the sweep: all 115 reads with made-up ids |
+| Signatures, replays, old timestamps | HMAC-SHA256, one-use nonces, a 5-minute window | the authentication tests |
+| Refused signatures and replays logged | `api.security` server log: who, from where, on what - never a secret | `SecurityLogTests` |
+| Tokens and secrets at rest | Tokens stored as SHA-256 only; secrets encrypted | the authentication tests |
+| API keys | Scopes, company, IP allow-list, expiry, rotation with a grace period, revoke | the key tests; keys cannot use people-only endpoints (My account, the audit log, changing the webhook) |
+| Input | Unknown fields refused; the panels' own forms and file checks; 4 MB bodies; pages at most 100 | each area's tests |
+| Secrets never shown again | API key and webhook secrets shown once; `GET /webhook` only says one is saved | the key and integration tests |
+| HTTPS, HSTS | Settings above, for the live server | - (a deployment setting) |
+| A client that works | The guide's own code logs in, signs, refreshes, logs out | `ClientGuideTests`, against a live server |

@@ -6060,3 +6060,16 @@ outside reach is refused rather than dropped, rows paged), its download
 panel's figures, `connection.stopped_devices`, `still_in_for`; owner or
 unrestricted administrator only). Each report's gate is its own panel page
 (`OneReportView.panel_page` from the slug). No panel code changed.
+
+### API phase 12 — integrations and the finish — 2026-10-05
+
+12 endpoints: the ERP webhook (`webhooks.services` through the panel's
+`WebhookSettingsForm` and `TestEventForm`; secrets never shown back; address
+and keys changed by people only) and the audit log (read only, owner or
+administrator). Finish: guides `120-integrations.md` and
+`120-build-a-client.md` (`ClientGuideTests` runs its code against a live
+server), `api.security` log for refused signatures and replays
+(`api/core/signing.py`), HSTS / https redirect settings (off unless set in
+`.env`), and `api/tests/test_security_sweep.py` (every endpoint without a
+login, as an Employee without grants, with made-up ids; another company's
+records). The API is complete: 301 endpoints.

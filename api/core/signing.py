@@ -26,6 +26,7 @@ not match (the request was changed, or the wrong secret was used).
 import datetime
 import hashlib
 import hmac
+import logging
 import random
 import re
 import time
@@ -35,6 +36,11 @@ from django.utils import timezone
 
 from api.core.crypto import same
 from api.core.errors import ApiError
+
+#: Refused signatures and replays, for the server log (docs/api/00-PLAN.md 2.7):
+#: who (the session or key id), from where, on what - never the signature,
+#: token or secret. Not the audit table: an attacker could flood it.
+security_log = logging.getLogger("api.security")
 
 WINDOW_SECONDS = 300
 NONCE_PATTERN = re.compile(r"^[A-Za-z0-9_-]{16,64}$")
@@ -87,8 +93,20 @@ def verify(request, owner, secrets):
                        "X-Nonce must be 16-64 letters, digits, - or _.")
     text = request_canonical(request, found["timestamp"], found["nonce"])
     if not any(secret and same(sign(secret, text), found["signature"]) for secret in secrets):
+        _refused(request, owner, "invalid_signature")
         raise ApiError("invalid_signature")
-    _use_nonce(owner, found["nonce"])
+    try:
+        _use_nonce(owner, found["nonce"])
+    except ApiError:
+        _refused(request, owner, "replay_detected")
+        raise
+
+
+def _refused(request, owner, code):
+    from api.core.network import client_ip
+
+    security_log.warning("%s: %s from %s on %s %s", code, owner, client_ip(request),
+                         request.method, request.path)
 
 
 def _use_nonce(owner, nonce):

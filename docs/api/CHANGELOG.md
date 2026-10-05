@@ -2,6 +2,19 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 12: integrations and the finish
+
+- **New:** the ERP webhook - settings, a new secret key (shown once), test
+  the connection, send a test attendance, what was sent, send now, send
+  again, debug messages, the developer's guide.
+- **New:** `GET /api/v1/audit-log` - the company's audit records (owner or
+  administrator, logged in).
+- **New guides:** *Integrations*, and *Build a client in 10 minutes* (its code
+  is run by the tests against a live server).
+- **Security:** refused signatures and replays are written to the
+  `api.security` server log; HSTS and the https redirect can be switched on in
+  `.env`; the whole API is swept by the tests (see *Security*).
+
 ## 2026-10-05 — Phase 11: reports and the dashboard
 
 - **New:** `GET /api/v1/reports` - the reports you may open; run any of the
