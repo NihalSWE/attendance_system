@@ -42,6 +42,68 @@ So a command is never instant: queue it, then watch its answer.
 | A device's settings | `GET /api/v1/devices/{id}/options` |
 | Its queue & progress | `GET /api/v1/devices/{id}/commands` · `GET /api/v1/devices/{id}/jobs` |
 
+## The endpoints — telling the devices
+
+| What | Endpoint |
+|---|---|
+| Ask for its data | `POST /api/v1/devices/{id}/commands` (`query_users`, `query_biodata`, `query_options`, `query_attlog`) |
+| One user | `POST …/users/{pin}` (send them again) · `DELETE …/users/{pin}` (remove) · `POST …/users/{pin}/ask` |
+| Many users | `POST …/users/remove` · `POST …/users/copy` (to another device of the same model) |
+| Linking | `POST …/users/link-by-employee-id` · `POST …/users/replace-old-links` · `POST …/users/import` (as employees) |
+| A new or replaced device | `POST …/load` (every active employee of its branch; follow it with `GET …/jobs`) |
+| Fingerprints & faces | `POST …/templates/save` |
+| Settings | `POST …/options/set` |
+| Server address | `GET` · `POST …/server-address` · `POST …/server-address/cancel` |
+| From the Employees list | `POST /api/v1/employees/{id}/map` · `POST /api/v1/employees/bulk-map` · `POST /api/v1/employees/send-to-devices` |
+| Other makes of device | `POST /api/v1/ingest/punches` |
+
+Every write is **queued**: the answer says so, and `GET …/commands` /
+`GET …/jobs` follow it. Writing users is allowed only on device protocols
+whose writes have been proven on real hardware; otherwise the answer says so.
+
+- **Removing** a user destroys the fingerprint and face on that terminal; the
+  copy saved here stays, so they can be sent back. The device's last super
+  admin is always kept. Punch history is never touched.
+- **Map**, **Bulk map** and **Send to devices** (the Employees list) are open
+  to whoever may edit people of that branch — a branch manager in theirs. All
+  other device endpoints are the owner's or an unrestricted administrator's.
+
+### Changing the server address
+
+A device pointed at an address it cannot reach is out of reach until someone
+types the old address back in at the terminal. So:
+
+1. `POST …/server-address` with `address` — the server first checks that the
+   new address answers like this server; if not, nothing is sent.
+2. Then the change is queued. `GET …/server-address` (every few seconds while
+   `active`) follows it; the saved address changes only once the device has
+   called in at the new one. If it goes quiet, `recovery` says what to type on
+   the terminal.
+
+Refused for a device that has never connected (set it on the terminal), a
+retired one, or while another change runs.
+
+## Other makes of device
+
+A device that is not a ZKTeco push terminal can send its scans to
+`POST /api/v1/ingest/punches` — with an **API key holding `punches:write`**,
+signed like any request:
+
+```json
+{"device_id": "6f1c9a2b-…", "batch_id": "gate-2026-10-05-0915",
+ "scans": [{"user_number": "41", "time": "2026-10-05 09:02:08", "method": "card"}]}
+```
+
+1. Register the device first (`POST /api/v1/devices`) and enroll the people
+   on it (`POST /api/v1/device-enrollments`), so user numbers are linked.
+2. Times are the device's own local time; the time zone registered for it
+   decides the instant.
+3. Up to 500 scans a call. Sending the same `batch_id` again (a retry after a
+   lost answer) stores nothing twice.
+
+Each batch is kept as a message and each scan becomes a punch, judged exactly
+like a terminal's own.
+
 ## Following one scan
 
 1. `GET /api/v1/punches?device_id=…&q=41` — find it; `authorization_status`

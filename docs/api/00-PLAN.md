@@ -501,6 +501,14 @@ the ERP webhook sends check-ins and check-outs on.
 | People ⇄ device users | Linking | `GET/POST /enrollments` · `PATCH /enrollments/{id}` · `POST /devices/{id}/users/map-automatically` · `POST /devices/{id}/users/replace-old-links` · `POST /devices/{id}/users/import` · `POST /employees/{id}/map` · `POST /employees/bulk-map` · `POST /employees/send-to-devices` |
 | Other devices | Push scans | `POST /ingest/punches` (signed API key, `punches:write`) |
 
+**Status: DONE 2026-10-05**, in two parts (a: what the devices sent; b:
+telling them). As built: `POST /devices/{id}/commands` covers the refresh
+requests; one user is `POST`/`DELETE /devices/{id}/users/{pin}` and
+`POST …/users/{pin}/ask`; linking is `…/users/link-by-employee-id`,
+`…/users/replace-old-links`, `…/users/import`; enrollments are the phase 5
+`/device-enrollments`; settings are `POST …/options/set`. The trial tools
+for measuring a new firmware's write forms stay on the panel.
+
 Guide: `60-devices-data-flow.md` — the flow end to end, every status
 explained, and how to follow one scan from the terminal to the report and the
 ERP.

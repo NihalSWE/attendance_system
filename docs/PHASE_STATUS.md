@@ -5975,3 +5975,16 @@ only), settings, command queue and jobs. Tests send real scans through
 /iclock/cdata. Guide `docs/api/60-devices-data-flow.md`. Part b (commands to
 devices, users, load, settings, server address, linking people, pushing scans
 from other devices) next.
+
+### API phase 6, part b — devices: telling them — 2026-10-05
+
+19 endpoints over the panel's services (mapping, commands, load_jobs,
+templates, server_address): commands, one user (send / remove / ask), remove
+many, copy to another device, link by Employee ID, replace old links, import
+as employees, load, save templates, set an option, the server address
+(status / change - probed first / cancel); the Employees list's map, bulk map
+and send (open to branch managers for their branch, the mapping service
+checks); and `POST /ingest/punches` - other makes of device push scans with an
+API key (`punches:write`) through `devices.services.ingestion.ingest`, the
+same pipeline as the terminals (batch_id = idempotency key). The firmware
+trial tools stay panel-only.

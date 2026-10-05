@@ -2,6 +2,19 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 6, part b: devices - telling them
+
+- **New:** ask a device for its users, fingerprints and faces, settings or
+  scans (`POST …/commands`); one user - send again, remove, ask about; many
+  users - remove, copy to another device; link by Employee ID, replace old
+  links, add device users as employees; load a new device; save templates;
+  change a setting.
+- **New:** the server address - status, change (checked first), cancel.
+- **New:** from the Employees list - map one, bulk map a branch, send to
+  devices (branch managers too, for their branch).
+- **New:** `POST /api/v1/ingest/punches` - other makes of device push their
+  scans (API key with `punches:write`); same pipeline as the terminals.
+
 ## 2026-10-05 — Phase 6, part a: devices - what they sent
 
 - **New:** device messages (list, one - raw text for people only), punches
