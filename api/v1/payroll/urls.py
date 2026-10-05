@@ -1,5 +1,6 @@
 from django.urls import path
 
+from api.v1.payroll import settings_views as sv
 from api.v1.payroll import views
 
 MONTH = "payroll/months/<int:year>/<int:month>"
@@ -33,4 +34,33 @@ urlpatterns = [
          name="overtime_decide"),
     path("payroll/overtime/<int:day_id>/undo", views.OvertimeUndoView.as_view(),
          name="overtime_undo"),
+    path("payroll/settings", sv.SalarySettingsView.as_view(), name="salary_settings"),
+    path("payroll/settings/rules", sv.SalaryRulesView.as_view(), name="salary_rules"),
+    path("payroll/components", sv.ComponentListView.as_view(), name="salary_components"),
+    path("payroll/components/<int:component_id>", sv.ComponentView.as_view(),
+         name="salary_component"),
+    path("payroll/components/<int:component_id>/status", sv.ComponentStatusView.as_view(),
+         name="salary_component_status"),
+    path("employees/<int:employee_id>/components", sv.EmployeeComponentsView.as_view(),
+         name="employee_components"),
+    path("employees/<int:employee_id>/components/<int:row_id>/end",
+         sv.EmployeeComponentEndView.as_view(), name="employee_component_end"),
+    path("payroll/penalty-rules", sv.PenaltyRuleListView.as_view(), name="penalty_rules"),
+    path("payroll/penalty-rules/<int:rule_id>", sv.PenaltyRuleView.as_view(),
+         name="penalty_rule"),
+    path("payroll/penalty-rules/<int:rule_id>/change", sv.PenaltyRuleChangeView.as_view(),
+         name="penalty_rule_change"),
+    path("payroll/penalty-rules/<int:rule_id>/stop", sv.PenaltyRuleStopView.as_view(),
+         name="penalty_rule_stop"),
+    path("payroll/lfa/settings", sv.LfaSettingsView.as_view(), name="lfa_settings"),
+    path("payroll/lfa/eligibility", sv.LfaEligibilityView.as_view(), name="lfa_eligibility"),
+    path("payroll/lfa/claims", sv.LfaClaimListView.as_view(), name="lfa_claims"),
+    path("payroll/lfa/claims/<int:claim_id>", sv.LfaClaimView.as_view(), name="lfa_claim"),
+    path("payroll/lfa/claims/<int:claim_id>/decide", sv.LfaDecideView.as_view(),
+         name="lfa_decide"),
+    path("payroll/lfa/claims/<int:claim_id>/cancel", sv.LfaCancelView.as_view(),
+         name="lfa_cancel"),
+    path("payroll/lfa/claims/<int:claim_id>/paid", sv.LfaPaidView.as_view(), name="lfa_paid"),
+    path("payroll/lfa/claims/<int:claim_id>/document", sv.LfaDocumentView.as_view(),
+         name="lfa_document"),
 ]

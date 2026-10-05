@@ -563,6 +563,15 @@ profile is `POST /leave/records` with `employee_id`.
 
 Guide: `90-salary.md`.
 
+**Status: DONE 2026-10-05**, in two parts (a: months, payslips, penalties,
+overtime; b: settings, components, penalty rules, LFA). As built: runs are
+addressed by month - `/payroll/months/{year}/{month}` with `…/generate`,
+`…/submit`, `…/approve`, `…/send-back`, `…/reopen` - as the panel and the
+services are; `GET …/payslips` lists a month's payslips; the PDF is
+`GET /payroll/payslips/{id}/pdf`; a line is removed with
+`DELETE /payroll/adjustments/{id}`; salary rules are
+`POST /payroll/settings/rules`; LFA adds `GET /payroll/lfa/eligibility`.
+
 ### Phase 10 — Employee panel ("me")
 
 | Group | Endpoints |
