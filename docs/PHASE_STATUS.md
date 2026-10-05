@@ -6040,7 +6040,7 @@ cancel / mark_paid`). Months travel as YYYY-MM. No panel code changed.
 
 ### API phase 10 — My account (the employee app) — 2026-10-05
 
-24 endpoints under `/api/v1/me` over the panel's own My account code:
+29 endpoints under `/api/v1/me` over the panel's own My account code:
 `employee_self` (details through `MyDetailsForm`, photo, education),
 `month_view` for the month and the day, `scan_requests.submit / withdraw`
 through `MissedScanForm`, `workflow.submit_request / withdraw_request` through
