@@ -2,6 +2,22 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 2: company & branches
+
+- **New:** the company — `GET`/`PATCH /api/v1/company`, the logo
+  (`PUT`/`DELETE /api/v1/company/logo`, the file as base64 in JSON) and the
+  email settings (`GET`/`PATCH /api/v1/company/mail-settings`,
+  `POST …/mail-settings/test`).
+- **New:** branches, departments and designations — list (search, status and
+  parent filters, paged), create, one, change, status; copy a branch's
+  departments into another (`POST /api/v1/departments/copy`).
+- **New:** access — `GET /api/v1/access/permissions`, `GET /api/v1/access/people`,
+  `GET`/`PUT /api/v1/access/people/{employee_id}` (the panel's grid).
+- **Rules:** each endpoint applies its panel page's gate, form and service — the
+  same checks and messages. API keys: `company:read` / `company:write`; email
+  settings and access are for people only.
+- **Guide:** [Company & branches](../guides/company-and-branches/).
+
 ## 2026-10-04 — Two-step login by email
 
 - **New:** codes by email as the second way of two-step login, beside the

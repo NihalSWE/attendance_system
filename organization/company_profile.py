@@ -91,7 +91,12 @@ def save_profile(*, actor, company_id, form):
     before = _snapshot(company)
     for field in PROFILE_FIELDS:
         if field in form.cleaned_data:
-            setattr(company, field, form.cleaned_data[field])
+            value = form.cleaned_data[field]
+            # "Remove the logo" comes back from the form as False; the model
+            # wants None for no file (False crashed the save).
+            if field == "logo" and value is False:
+                value = None
+            setattr(company, field, value)
     check_logo(company.logo)
     company.full_clean(exclude=["slug", "code"])
     company.save()

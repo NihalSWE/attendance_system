@@ -61,3 +61,49 @@ class HasScope(BasePermission):
         if missing:
             raise ApiError("scope_missing", f"This API key needs the scope {', '.join(missing)}.")
         return True
+
+
+class PanelRule(BasePermission):
+    """The panels' own gate, for an endpoint that mirrors a panel page.
+
+    The panels let the owner, company administrator, HR and payroll open the
+    company pages; an Employee, Branch manager or Auditor login reaches only
+    the pages for a permission they hold in some branch
+    (``common.middleware.SelfServiceGate`` and ``access_control.page_access``).
+    The view names the panel page it mirrors in ``panel_page`` and the same
+    check is made here; the panel's service then checks again (role, branch).
+
+    API keys: ``read_scope`` (GET) or ``write_scope`` (anything else) must be
+    among the key's scopes; None means keys cannot call it at all. A key acts
+    as its creator, an owner or company administrator.
+    """
+
+    message = "Your login cannot open this part of the panel."
+
+    def has_permission(self, request, view):
+        from rest_framework.permissions import SAFE_METHODS
+
+        from accounts.services import get_active_memberships
+        from access_control.page_access import may_open
+        from common.middleware import SELF_SERVICE_ROLES
+
+        key = getattr(request, "api_key", None)
+        if key is not None:
+            scope = getattr(view, "read_scope" if request.method in SAFE_METHODS
+                            else "write_scope", None)
+            if not scope:
+                raise ApiError("permission_denied", "API keys cannot use this endpoint; "
+                                                    "a person must log in.")
+            if scope not in key.scopes:
+                raise ApiError("scope_missing", f"This API key needs the scope {scope}.")
+            return True
+        if getattr(request, "api_session", None) is None or not request.company_id:
+            return False
+        role = (get_active_memberships(request.user).filter(company_id=request.company_id)
+                .values_list("role", flat=True).first())
+        if role is None:
+            return False
+        if role not in SELF_SERVICE_ROLES:
+            return True
+        page = getattr(view, "panel_page", None)
+        return bool(page) and may_open(request.user, request.company_id, page)

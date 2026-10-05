@@ -8,4 +8,6 @@ urlpatterns = [
     path("", include("api.v1.system.urls")),
     path("", include("api.v1.auth.urls")),
     path("", include("api.v1.keys.urls")),
+    path("", include("api.v1.company.urls")),
+    path("", include("api.v1.access.urls")),
 ]

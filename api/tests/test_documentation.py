@@ -116,5 +116,34 @@ class PostmanCollectionTests(SimpleTestCase):
         self.assertIn("X-Signature", "\n".join(data["event"][0]["script"]["exec"]))
 
     def test_the_guide_pages_open(self):
-        for path in ("/api/docs/authentication/", "/api/docs/security/", "/api/docs/postman/"):
+        for path in ("/api/docs/authentication/", "/api/docs/security/", "/api/docs/postman/",
+                     "/api/docs/guides/company-and-branches/"):
             self.assertEqual(self.client.get(path).status_code, 200, path)
+
+
+class SchemaNameTests(SimpleTestCase):
+    def test_no_two_serializers_share_a_name(self):
+        """Swagger names each shape after its serializer: two different
+        serializers with one name would make the schema wrong."""
+        from rest_framework import serializers as rf
+
+        from api.core.registry import endpoints
+
+        seen, clashes = {}, []
+
+        def visit(serializer_class):
+            if serializer_class is None:
+                return
+            name = serializer_class.__name__.removesuffix("Serializer")
+            if seen.setdefault(name, serializer_class) is not serializer_class:
+                clashes.append(f"{name}: {seen[name].__module__} and {serializer_class.__module__}")
+                return
+            for field in serializer_class().fields.values():
+                child = getattr(field, "child", field)
+                if isinstance(child, rf.BaseSerializer):
+                    visit(type(child))
+
+        for doc in endpoints():
+            visit(doc.request)
+            visit(doc.response)
+        self.assertEqual(clashes, [])

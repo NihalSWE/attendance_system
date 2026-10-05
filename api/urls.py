@@ -20,6 +20,7 @@ urlpatterns = [
     path("docs/", docs.guide, {"page": "getting-started"}, name="docs"),
     path("docs/authentication/", docs.guide, {"page": "authentication"},
          name="docs_authentication"),
+    path("docs/guides/<slug:page>/", docs.guide, name="docs_guide"),
     path("docs/postman/", docs.guide, {"page": "postman"}, name="docs_postman"),
     path("docs/postman.json", docs.postman, name="docs_postman_collection"),
     path("docs/security/", docs.guide, {"page": "security"}, name="docs_security"),

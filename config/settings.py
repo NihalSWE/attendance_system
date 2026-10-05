@@ -346,6 +346,10 @@ API_COOKIE_SAMESITE = env('API_COOKIE_SAMESITE', default='Strict')
 # Password reset email: the frontend's page, with {token} where the code goes,
 # e.g. https://app.example.com/reset?token={token}. Empty: the code is emailed.
 API_PASSWORD_RESET_URL = env('API_PASSWORD_RESET_URL', default='')
+# The API sends files inside JSON (base64, about a third larger), so a 2 MB
+# logo arrives as about 2.7 MB - over Django's 2.5 MB default for a request
+# body. Behind nginx, client_max_body_size must allow it too.
+DATA_UPLOAD_MAX_MEMORY_SIZE = 4 * 1024 * 1024
 # A browser frontend allowed by CORS may also send the CSRF token.
 CSRF_TRUSTED_ORIGINS = list(CSRF_TRUSTED_ORIGINS) + list(CORS_ALLOWED_ORIGINS)
 

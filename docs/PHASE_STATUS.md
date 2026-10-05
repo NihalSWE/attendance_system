@@ -5863,3 +5863,31 @@ steps and recovery codes claimed atomically). Migration `api.0003_two_step_email
 Swagger describes the API's authentication (`api/core/schema.py`).
 
 Tests: `api/tests/` (101).
+
+### API phase 2 — company & branches — 2026-10-05
+
+Per `docs/api/00-PLAN.md` phase 2 (endpoint list updated to match the panel
+as it is today). 26 endpoints: company profile, logo (base64 JSON), email
+settings and test; branches, departments, designations (list with filters and
+paging, create, one, change, status; copy departments between branches);
+access (permissions, people, one person's grid, save the grid).
+
+- `api/core/permissions.PanelRule`: the panel's own gate - owner, company
+  admin, HR and payroll open company pages; Employee / Branch manager /
+  Auditor logins only pages listed in `access_control.page_access` for a
+  permission they hold. API keys need `read_scope` / `write_scope`; email
+  settings and access refuse keys.
+- `api/core/forms.py`: input is validated by the panel page's own form (PATCH
+  merges the stored values first), then the panel's service writes - same
+  rules, messages and audit lines. API field names `branch_id`, `head_employee_id`,
+  `department_id`, `parent_id`, `source_branch_id`, `target_branch_id` are mapped
+  to the form's names both ways.
+- Records of another company, or outside the caller's branches, answer 404.
+- `DATA_UPLOAD_MAX_MEMORY_SIZE` = 4 MB (a 2 MB logo in base64 is about 2.7 MB).
+- **Panel bug fixed:** Organisation → Company profile → "Remove the logo"
+  crashed (the form's False was stored on the FileField); `save_profile` now
+  stores None. Test: `organization.tests_company_profile.RemoveLogoTests`.
+- Docs: guide `docs/api/20-company-and-branches.md` (menu: the area's
+  *Overview*), changelog. Postman collection picks the endpoints up by itself.
+
+Tests: `api/tests/test_company.py`, `api/tests/test_access.py`.
