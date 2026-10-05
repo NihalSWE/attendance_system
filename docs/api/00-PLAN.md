@@ -525,6 +525,12 @@ ERP.
 
 Guide: `70-attendance.md` (incl. how a day is worked out).
 
+**Status: DONE 2026-10-05.** As built: the one `…/fix` became four named
+fixes (`add-scan`, `change-status`, `accept-review`, `excuse-late` - the
+profile's *Approve late*); entering missing attendance for someone is
+`POST /employees/{id}/missing-attendance`; an employee's own missed scans
+(`POST /missed-scans`) move to phase 10's `/me/missed-scans`.
+
 ### Phase 8 — Leave
 
 | Group | Endpoints |
