@@ -456,6 +456,9 @@ the company's (Shifts, phase 4).
 
 Guide: `40-shifts-and-calendar.md`.
 
+**Status: DONE 2026-10-05.** Also `GET /shifts/{id}`, `GET /holidays/{id}`,
+`GET /attendance-settings`; weekly offs take weekday names.
+
 ### Phase 5 — Devices: setup
 
 | Group | Endpoints |
