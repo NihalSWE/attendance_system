@@ -543,6 +543,12 @@ profile's *Approve late*); entering missing attendance for someone is
 
 Guide: `80-leave.md`.
 
+**Status: DONE 2026-10-05.** As built: versions are
+`PUT`/`DELETE /leave/policies/{id}/versions/{version_id}` (a version is
+replaced whole, as on the panel); a leave's document is
+`GET /leave/records/{id}/document` for requests too; recording from the
+profile is `POST /leave/records` with `employee_id`.
+
 ### Phase 9 — Salary (payroll)
 
 | Group | Endpoints |

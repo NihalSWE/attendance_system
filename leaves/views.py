@@ -90,6 +90,77 @@ def _list_scope(user, company_id):
     return False, view, record
 
 
+def leave_rows(view_branches, first, last):
+    """The Leave list's rows: leave touching ``first``..``last`` in
+    ``view_branches``, each with its current type, dates, pay and days. Shared
+    with the API (api/v1/leave). Call inside the company's tenant context."""
+    # EXISTS rather than a join: joining segments and then ordering by one
+    # of their columns duplicates rows, and PostgreSQL refuses DISTINCT
+    # combined with an ORDER BY outside the select list.
+    in_month = LeaveRequestSegment.objects.filter(
+        leave_request=OuterRef("pk"), start_date__lte=last, end_date__gte=first
+    )
+    queryset = (
+        LeaveRequest.objects.select_related("employee", "submitted_by")
+        .prefetch_related("segments__leave_type")
+        .filter(Exists(in_month))
+    )
+    if not view_branches.is_all:
+        reachable = Q(submission_assignment__branch_id__in=view_branches.branches)
+        if view_branches.departments:
+            reachable |= Q(
+                submission_assignment__department_id__in=view_branches.departments
+            )
+        queryset = queryset.filter(reachable)
+    # A changed leave keeps its old part, cancelled: show the current one -
+    # or, for a leave cancelled whole, what it was. Days are the days that
+    # still count once some were cancelled.
+    current = ~Q(segments__status=LeaveRequestSegment.Status.CANCELLED)
+    live_units = (
+        LeaveDay.objects.filter(request_segment__leave_request=OuterRef("pk"),
+                                status__in=services.LIVE_LEAVE_DAYS)
+        .values("request_segment__leave_request")
+        .annotate(total=Sum("balance_units")).values("total")
+    )
+    return (
+        queryset.select_related("submission_assignment")
+        .annotate(
+            first_day=Coalesce(Min("segments__start_date", filter=current),
+                               Min("segments__start_date")),
+            last_day=Coalesce(Max("segments__end_date", filter=current),
+                              Max("segments__end_date")),
+            table_type=Coalesce(Min("segments__leave_type__name", filter=current),
+                                Min("segments__leave_type__name")),
+            table_pay=Coalesce(Min("segments__requested_pay_type", filter=current),
+                               Min("segments__requested_pay_type")),
+            table_units=Coalesce(Subquery(live_units),
+                                 Sum("segments__requested_units", filter=current),
+                                 Sum("segments__requested_units")),
+        )
+    )
+
+
+def recordable_employees(branches):
+    """Who leave may be recorded for: people still employed, placed now in
+    ``branches`` (A12 part 5; the service re-checks each day). Shared with the
+    API. Call inside the company's tenant context."""
+    from access_control.branch_access import ALL_BRANCHES
+
+    current = EmployeeAssignment.objects.filter(employee=OuterRef("pk")).exclude(
+        status="cancelled").order_by("-effective_from", "-pk")
+    employees = Employee.objects.exclude(
+        employment_status__in=[
+            Employee.EmploymentStatus.RESIGNED,
+            Employee.EmploymentStatus.TERMINATED,
+            Employee.EmploymentStatus.RETIRED,
+        ]
+    ).annotate(table_code=Subquery(current.values("employee_code")[:1]),
+               table_branch_id=Subquery(current.values("branch_id")[:1]))
+    if branches is not ALL_BRANCHES:
+        employees = employees.filter(table_branch_id__in=branches)
+    return employees
+
+
 @login_required
 @require_http_methods(["GET"])
 def leave_list(request):
@@ -111,50 +182,7 @@ def leave_list(request):
     query = request.GET.get("q", "").strip()[:200]
 
     with use_company(company_id):
-        # EXISTS rather than a join: joining segments and then ordering by one
-        # of their columns duplicates rows, and PostgreSQL refuses DISTINCT
-        # combined with an ORDER BY outside the select list.
-        in_month = LeaveRequestSegment.objects.filter(
-            leave_request=OuterRef("pk"), start_date__lte=last, end_date__gte=first
-        )
-        queryset = (
-            LeaveRequest.objects.select_related("employee", "submitted_by")
-            .prefetch_related("segments__leave_type")
-            .filter(Exists(in_month))
-        )
-        if not view_branches.is_all:
-            reachable = Q(submission_assignment__branch_id__in=view_branches.branches)
-            if view_branches.departments:
-                reachable |= Q(
-                    submission_assignment__department_id__in=view_branches.departments
-                )
-            queryset = queryset.filter(reachable)
-        # A changed leave keeps its old part, cancelled: show the current one -
-        # or, for a leave cancelled whole, what it was. Days are the days that
-        # still count once some were cancelled.
-        current = ~Q(segments__status=LeaveRequestSegment.Status.CANCELLED)
-        live_units = (
-            LeaveDay.objects.filter(request_segment__leave_request=OuterRef("pk"),
-                                    status__in=services.LIVE_LEAVE_DAYS)
-            .values("request_segment__leave_request")
-            .annotate(total=Sum("balance_units")).values("total")
-        )
-        queryset = (
-            queryset.select_related("submission_assignment")
-            .annotate(
-                first_day=Coalesce(Min("segments__start_date", filter=current),
-                                   Min("segments__start_date")),
-                last_day=Coalesce(Max("segments__end_date", filter=current),
-                                  Max("segments__end_date")),
-                table_type=Coalesce(Min("segments__leave_type__name", filter=current),
-                                    Min("segments__leave_type__name")),
-                table_pay=Coalesce(Min("segments__requested_pay_type", filter=current),
-                                   Min("segments__requested_pay_type")),
-                table_units=Coalesce(Subquery(live_units),
-                                     Sum("segments__requested_units", filter=current),
-                                     Sum("segments__requested_units")),
-            )
-        )
+        queryset = leave_rows(view_branches, first, last)
         total = queryset.count()
         if status in dict(LeaveRequest.Status.choices):
             queryset = queryset.filter(status=status)
@@ -207,23 +235,9 @@ def leave_record(request):
     company_id, bail = _company_or_redirect(request)
     if bail:
         return bail
-    from access_control.branch_access import ALL_BRANCHES
-
     _, branches = services.recorder_branches(request.user, company_id)
     with use_company(company_id):
-        current = EmployeeAssignment.objects.filter(employee=OuterRef("pk")).exclude(
-            status="cancelled").order_by("-effective_from", "-pk")
-        employees = Employee.objects.exclude(
-            employment_status__in=[
-                Employee.EmploymentStatus.RESIGNED,
-                Employee.EmploymentStatus.TERMINATED,
-                Employee.EmploymentStatus.RETIRED,
-            ]
-        ).annotate(table_code=Subquery(current.values("employee_code")[:1]),
-                   table_branch_id=Subquery(current.values("branch_id")[:1]))
-        if branches is not ALL_BRANCHES:
-            # A12 part 5: people placed in their branches (the service re-checks each day).
-            employees = employees.filter(table_branch_id__in=branches)
+        employees = recordable_employees(branches)
         initial = {"pay_type": "paid", "duration": "full_day"}
         # "Record leave" from someone's profile opens with them chosen - only
         # someone this login may record leave for anyway.
