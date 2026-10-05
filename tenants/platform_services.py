@@ -128,6 +128,9 @@ def ensure_feature_catalogue(*, actor):
     require_platform_owner(actor)
     for order, (code, name) in enumerate((("attendance", "Attendance"), ("leave", "Leave"), ("payroll", "Payroll"))):
         Feature.objects.get_or_create(code=code, defaults={"name": name, "sort_order": order})
+    # Off for every company until the platform owner enables it (2026-10-06).
+    Feature.objects.get_or_create(code="developer_api",
+                                  defaults={"name": "Developer's API", "sort_order": 90})
 
 
 @transaction.atomic

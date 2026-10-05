@@ -20,6 +20,7 @@ from django.conf import settings
 from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
+from django.utils.text import slugify
 from django.utils.safestring import mark_safe
 
 from api.core import errors as catalogue
@@ -85,6 +86,9 @@ def _menu(current):
          "active": current == "conventions"},
         {"label": "Testing with Postman", "url": reverse("api:docs_postman"),
          "active": current == "postman"},
+        {"label": "Build a client in 10 minutes",
+         "url": reverse("api:docs_guide", args=["build-a-client"]),
+         "active": current == "build-a-client"},
     ]}]
     for area, title in AREAS:
         items = [{"label": doc.title, "method": doc.method,
@@ -113,6 +117,9 @@ def _menu(current):
          "external": True},
         {"label": "Swagger (OpenAPI)", "url": reverse("api:swagger"), "external": True},
     ]})
+    for section in sections:
+        section["key"] = slugify(section["title"])
+        section["open"] = any(item.get("active") for item in section["items"])
     return sections
 
 
