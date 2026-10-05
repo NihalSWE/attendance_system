@@ -2,6 +2,16 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — The last two panel downloads
+
+Found by checking every panel page and action against the API:
+
+- **New:** `GET /api/v1/employees/export` - the Employees list as Excel or
+  PDF, with the list's filters; pay only where you may see it, and none for
+  an API key without `payroll:read`.
+- **New:** `GET /api/v1/attendance/calendar/export` - one person's month as a
+  PDF calendar.
+
 ## 2026-10-05 — Phase 12: integrations and the finish
 
 - **New:** the ERP webhook - settings, a new secret key (shown once), test

@@ -245,6 +245,31 @@ class NowView(AttendanceView):
         return self.paginated(request, rows, s.NowSerializer)
 
 
+def _month_of(request):
+    """``(membership, employee, year, month, built)``: one person's month, as the
+    panel's Calendar builds it - only someone placed where you see attendance,
+    and only the days worked in those branches."""
+    from attendance.views import read_month
+
+    membership, visible = access.view_scope(request.user, request.company_id)
+    raw = request.query_params.get("employee_id", "")
+    if not raw.isdigit():
+        refuse({"employee_id": ["Give the person's id."]})
+    pickable = Employee.objects.all() if visible.is_all else people(visible)
+    employee = pickable.filter(pk=int(raw)).first()
+    if employee is None:
+        if Employee.objects.filter(pk=int(raw)).exists():
+            raise PermissionDenied("That person is not in a branch whose attendance you see.")
+        raise ApiError("not_found", "No such employee in this company.")
+    year, month = read_month(request.query_params)
+    first, last = month_bounds(year, month)
+    refresh(request.company_id, employee_ids=[employee.pk], start=first, end=last)
+    built = month_view.build_month(employee=employee, year=year, month=month,
+                                   company_timezone=_tz(request.company_id),
+                                   today=timezone.localdate(), branches=visible)
+    return membership, employee, year, month, built
+
+
 class CalendarView(AttendanceView):
     permission_classes = [PanelRule]
     panel_page = "attendance:attendance_calendar"
@@ -269,30 +294,35 @@ class CalendarView(AttendanceView):
         errors=ERRORS + ["not_found", "validation_error"],
     )
     def get(self, request):
-        from attendance.views import read_month
-
-        _m, visible = access.view_scope(request.user, request.company_id)
-        raw = request.query_params.get("employee_id", "")
-        if not raw.isdigit():
-            refuse({"employee_id": ["Give the person's id."]})
-        pickable = Employee.objects.all() if visible.is_all else people(visible)
-        employee = pickable.filter(pk=int(raw)).first()
-        if employee is None:
-            if Employee.objects.filter(pk=int(raw)).exists():
-                raise PermissionDenied("That person is not in a branch whose attendance you see.")
-            raise ApiError("not_found", "No such employee in this company.")
-        year, month = read_month(request.query_params)
-        first, last = month_bounds(year, month)
-        refresh(request.company_id, employee_ids=[employee.pk], start=first, end=last)
-        built = month_view.build_month(employee=employee, year=year, month=month,
-                                       company_timezone=_tz(request.company_id),
-                                       today=timezone.localdate(), branches=visible)
+        _m, employee, year, month, built = _month_of(request)
         return Response(s.CalendarSerializer({
             "employee": _ref(employee), "year": year, "month": month,
             "days": [{"date": d.date, "status": d.status, "label": d.status_label,
                       "late": d.is_late, "check_in": d.check_in, "check_out": d.check_out,
                       "worked": d.worked, "note": d.note} for d in built["days"]],
             "summary": built["summary"]}).data)
+
+
+class CalendarExportView(AttendanceView):
+    permission_classes = [PanelRule]
+    panel_page = "attendance:attendance_calendar"
+
+    @endpoint(
+        id="attendance-calendar-export", area=AREA, title="Download one person's month",
+        summary="One person's month as a PDF calendar, the grid the panel draws.",
+        what_it_does=["Brings the month up to date and answers the PDF; the download is kept "
+                      "in the audit log."],
+        description="The same person, month and branch limits as GET /attendance/calendar.",
+        roles=VIEWERS, scopes=["attendance:read"],
+        params=[Param("employee_id", QUERY, "integer", "The person.", required=True, example=41)]
+        + MONTH_PARAMS,
+        errors=ERRORS + ["not_found", "validation_error"],
+    )
+    def get(self, request):
+        from attendance.exports import export_calendar
+
+        membership, employee, year, month, built = _month_of(request)
+        return export_calendar(request, membership, employee, built, year, month)
 
 
 def _detail(request, employee_id, day):

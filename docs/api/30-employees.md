@@ -28,7 +28,7 @@ with `payroll:read` too, and changing pay needs `payroll:write`.
 
 | What | Endpoint |
 |---|---|
-| The list | `GET /api/v1/employees` — filters `q`, `status`, `branch_id`, `setup` |
+| The list | `GET /api/v1/employees` — filters `q`, `status`, `branch_id`, `setup` · download: `GET /api/v1/employees/export?file_type=xlsx` (or `pdf`; pay only where you may see it) |
 | Add | `GET /api/v1/employees/choices` · `POST /api/v1/employees` |
 | One person | `GET /api/v1/employees/{id}` · `GET /api/v1/employees/{id}/history` |
 | Change | `PATCH /api/v1/employees/{id}` (name, work email, phone, joining date) · `PATCH …/{id}/personal` · `POST …/{id}/placement` · `POST …/{id}/salary` · `PUT …/{id}/line-manager` |

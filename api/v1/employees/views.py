@@ -289,6 +289,52 @@ class EmployeeListView(EmployeeView):
         return _profile_response(request, result["employee"].pk, status=201)
 
 
+class EmployeeExportView(EmployeeView):
+    permission_classes = [PanelRule]
+    panel_page = "employee_list"
+
+    @endpoint(
+        id="employees-export", area=AREA, title="Download the Employees list",
+        summary="The people you may see as an Excel (xlsx) or PDF file.",
+        what_it_does=["Answers the file with the same people and filters as the list; the "
+                      "download is kept in the audit log."],
+        description=("Pay columns only for people whose pay you may see - and none at all for "
+                     "an API key without payroll:read. More than 10,000 rows (Excel) or 1,500 "
+                     "(PDF) is refused: narrow the filters."),
+        roles=VIEWERS, scopes=["employees:read"],
+        params=[Param("file_type", QUERY, "string", "xlsx (default) or pdf.", example="xlsx"),
+                Param("q", QUERY, "string", "Search by name, email or Employee ID.",
+                      example="rahim"),
+                Param("status", QUERY, "string", "As the list.", example="active"),
+                Param("branch_id", QUERY, "integer", "Only this branch.", example=3),
+                Param("setup", QUERY, "string", "department, salary, both or complete.",
+                      example="salary")],
+        errors=BASE_ERRORS + ["validation_error"],
+    )
+    def get(self, request):
+        from base_template.employee_export import export_employees
+        from base_template.views import employee_list_query
+        from common import exports
+
+        fmt = request.query_params.get("file_type") or "xlsx"
+        if fmt not in ("xlsx", "pdf"):
+            refuse({"file_type": ["xlsx or pdf."]})
+        params = {"q": request.query_params.get("q", ""),
+                  "status": request.query_params.get("status", ""),
+                  "branch": request.query_params.get("branch_id", ""),
+                  "setup": request.query_params.get("setup", "")}
+        listing = employee_list_query(_Listing(request, params))
+        if not _key_sees_pay(request):
+            listing.show_rate_column, listing.salary_branches = False, set()
+        try:
+            exports.check_size(listing.queryset.count(), fmt, noun="employees")
+        except exports.TooManyRows as refusal:
+            raise ApiError("validation_error", str(refusal)) from None
+        # The panel's export reads the company from the request it is given.
+        request._request.company_id = request.company_id
+        return export_employees(request._request, listing, fmt)
+
+
 class ChoicesView(EmployeeView):
     permission_classes = [PanelRule]
     panel_page = "organization:employee_branch_departments"
