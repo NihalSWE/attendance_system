@@ -1,5 +1,6 @@
 from django.urls import path
 
+from api.v1.devices import flow_views as flow
 from api.v1.devices import views
 
 urlpatterns = [
@@ -22,4 +23,19 @@ urlpatterns = [
          name="device_test"),
     path("devices/<uuid:device_id>/departments", views.DepartmentLinksView.as_view(),
          name="device_departments"),
+    path("device-messages", flow.MessageListView.as_view(), name="device_messages"),
+    path("device-messages/<uuid:message_id>", flow.MessageDetailView.as_view(),
+         name="device_message"),
+    path("punches", flow.PunchListView.as_view(), name="punches"),
+    path("punches/unresolved", flow.UnresolvedView.as_view(), name="punches_unresolved"),
+    path("punches/unresolved/counts", flow.UnresolvedCountsView.as_view(),
+         name="punches_unresolved_counts"),
+    path("punches/<int:punch_id>", flow.PunchDetailView.as_view(), name="punch"),
+    path("devices/<uuid:device_id>/users", flow.DeviceUsersView.as_view(), name="device_users"),
+    path("devices/<uuid:device_id>/templates", flow.TemplatesView.as_view(),
+         name="device_templates"),
+    path("devices/<uuid:device_id>/options", flow.OptionsView.as_view(), name="device_options"),
+    path("devices/<uuid:device_id>/commands", flow.CommandsView.as_view(),
+         name="device_commands"),
+    path("devices/<uuid:device_id>/jobs", flow.JobsView.as_view(), name="device_jobs"),
 ]

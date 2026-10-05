@@ -225,3 +225,177 @@ class RecheckSerializer(serializers.Serializer):
     now_count = serializers.IntegerField(help_text="Now counting: their days were rebuilt.")
     still_excluded = serializers.IntegerField(help_text="Still not counting.")
     skipped_locked = serializers.IntegerField(help_text="In a finalised salary month: left alone.")
+
+
+# --- data flow: what the devices sent ---------------------------------------------------
+
+class DeviceMessageSerializer(serializers.Serializer):
+    id = serializers.CharField(help_text="The message id (a UUID).")
+    device = DeviceRefSerializer(help_text="The device that sent it.")
+    message_type = serializers.CharField(
+        help_text="punch_batch, heartbeat, enrollment_result, command_result, device_info or "
+                  "unknown.")
+    received_at = serializers.DateTimeField(help_text="When it arrived (server time).")
+    record_count = serializers.IntegerField(allow_null=True,
+                                            help_text="How many records it carried.")
+    processing_status = serializers.CharField(
+        help_text="received, parsing, parsed, partially_failed or failed.")
+    processing_error = serializers.CharField(help_text="Why it failed (may be empty).")
+
+
+class DeviceMessageDetailSerializer(DeviceMessageSerializer):
+    content_type = serializers.CharField(help_text="As the device sent it.")
+    source_ip = serializers.CharField(allow_null=True, help_text="Where it came from.")
+    raw_payload_text = serializers.CharField(
+        allow_null=True,
+        help_text="Exactly what the device sent - to people only (it can hold fingerprint and "
+                  "face templates); null for an API key.")
+    punch_ids = serializers.ListField(child=serializers.IntegerField(help_text="A punch id."),
+                                      help_text="The punches it became.")
+
+
+class PunchSerializer(serializers.Serializer):
+    id = serializers.IntegerField(help_text="The punch id.")
+    device = DeviceRefSerializer(help_text="Where it was scanned.")
+    device_user_id = serializers.CharField(help_text="The user number the device reported.")
+    employee = RefSerializer(allow_null=True, help_text="Whose it is; null when unknown.")
+    punched_at = serializers.DateTimeField(help_text="When, in the device's own time.")
+    punched_at_utc = serializers.DateTimeField(help_text="The same instant in UTC.")
+    received_at = serializers.DateTimeField(help_text="When it reached the server.")
+    verification_method = serializers.CharField(
+        help_text="fingerprint, face, card, pin or unknown.")
+    authorization_status = serializers.CharField(
+        help_text="Whether it counts: authorized, or why not - unauthorized_device, "
+                  "unknown_employee, expired_enrollment, department_mismatch, branch_mismatch, "
+                  "enrollment_disabled, policy_unresolved, employee_inactive.")
+    dedupe_status = serializers.CharField(
+        help_text="unique, probable_duplicate or confirmed_duplicate.")
+    processing_status = serializers.CharField(
+        help_text="pending, allocated (in attendance), excluded, needs_review or failed.")
+
+
+class PunchDetailSerializer(PunchSerializer):
+    message_id = serializers.CharField(allow_null=True, help_text="The message it came in.")
+    duplicate_of = serializers.IntegerField(allow_null=True,
+                                            help_text="The punch it duplicates, if any.")
+    raw_record = serializers.DictField(help_text="The record exactly as the device sent it.")
+    authorization_snapshot = serializers.DictField(
+        help_text="The facts it was judged on, frozen when it was judged.")
+    processing_error = serializers.CharField(help_text="Why it failed (may be empty).")
+
+
+class UnresolvedCountsSerializer(serializers.Serializer):
+    unknown_employee = serializers.IntegerField(help_text="Nobody is this user number.")
+    expired_enrollment = serializers.IntegerField(help_text="Scanned outside their enrollment.")
+    policy_unresolved = serializers.IntegerField(help_text="The rules could not decide.")
+    probable_duplicate = serializers.IntegerField(help_text="Probably the same scan twice.")
+
+
+class UnlinkedSerializer(serializers.Serializer):
+    code = serializers.CharField(help_text="ready, other_number, other_branch, no_employee or "
+                                           "not_digits.")
+    text = serializers.CharField(help_text="Why, and what to do, in words.")
+
+
+class DeviceUserSerializer(serializers.Serializer):
+    pin = serializers.CharField(help_text="Their user number on the device.")
+    name = serializers.CharField(help_text="The name the device holds (may be empty).")
+    privilege = serializers.CharField(help_text="Their role on the terminal, in words.")
+    card_number = serializers.CharField(help_text="Their card (may be empty).")
+    has_password = serializers.BooleanField(help_text="A PIN is set on the device.")
+    fingerprint_count = serializers.IntegerField(help_text="Fingerprints on the device.")
+    face_count = serializers.IntegerField(help_text="Faces on the device.")
+    saved_fingerprints = serializers.IntegerField(help_text="Fingerprints saved on the server.")
+    saved_faces = serializers.IntegerField(help_text="Faces saved on the server.")
+    only_in_scans = serializers.BooleanField(
+        help_text="Seen in scans, but its user record has not arrived yet (refresh the list).")
+    removed_from_device = serializers.BooleanField(help_text="Removed from the terminal.")
+    employee = RefSerializer(allow_null=True, help_text="Who they are here; null: not linked.")
+    attendance_enabled = serializers.BooleanField(help_text="Their punches can count.")
+    assigned_device_authorized = serializers.BooleanField(
+        help_text="Counts in assigned-devices mode.")
+    unlinked = UnlinkedSerializer(allow_null=True, help_text="For someone not linked: why.")
+
+
+class TemplateFormatSerializer(serializers.Serializer):
+    kind = serializers.CharField(help_text="fingerprint, face or other.")
+    type = serializers.CharField(help_text="The vendor's type number.")
+    version = serializers.CharField(help_text="The algorithm version (may be empty).")
+    format = serializers.CharField(help_text="The template format.")
+    count = serializers.IntegerField(help_text="How many.")
+
+
+class TemplatesSerializer(serializers.Serializer):
+    can_save = serializers.BooleanField(help_text="The server can keep templates (its key is set).")
+    problem = serializers.CharField(help_text="Why it cannot (may be empty).")
+    people = serializers.IntegerField(help_text="People with saved templates.")
+    fingerprints = serializers.IntegerField(help_text="Fingerprints saved.")
+    faces = serializers.IntegerField(help_text="Faces saved.")
+    other = serializers.IntegerField(help_text="Other templates saved.")
+    last_saved = serializers.DateTimeField(allow_null=True, help_text="When last saved.")
+    formats = TemplateFormatSerializer(many=True,
+                                       help_text="Their formats - decides whether a template can "
+                                                 "go to another device.")
+
+
+class OptionSerializer(serializers.Serializer):
+    key = serializers.CharField(help_text="The option, e.g. push_interval_seconds.")
+    help = serializers.CharField(help_text="What it does.")
+    current = serializers.CharField(help_text="What the server last set or read (may be empty).")
+
+
+class OptionsSerializer(serializers.Serializer):
+    writable = OptionSerializer(many=True, help_text="The options that can be changed.")
+    reported = serializers.DictField(help_text="Everything the device last reported about itself.")
+
+
+class CommandSerializer(serializers.Serializer):
+    id = serializers.IntegerField(help_text="The command id.")
+    key = serializers.CharField(help_text="What it is, e.g. query_users (may be empty).")
+    body = serializers.CharField(help_text="The command as the device receives it.")
+
+
+class ResultSerializer(serializers.Serializer):
+    id = serializers.IntegerField(help_text="The command id.")
+    key = serializers.CharField(help_text="What it was (may be empty).")
+    command = serializers.CharField(help_text="The command.")
+    returned = serializers.CharField(allow_null=True, help_text="The device's return code.")
+    ok = serializers.BooleanField(help_text="It answered with a code.")
+    at = serializers.DateTimeField(help_text="When.")
+
+
+class CommandsSerializer(serializers.Serializer):
+    waiting = serializers.IntegerField(help_text="Commands not yet answered.")
+    pending = CommandSerializer(many=True, help_text="The next ones it will collect (20 at most).")
+    recent_results = ResultSerializer(many=True, help_text="The last answers (10).")
+
+
+class JobSerializer(serializers.Serializer):
+    running = serializers.BooleanField(help_text="Commands are still waiting or in flight.")
+    waiting = serializers.IntegerField(help_text="Not yet collected.")
+    sent = serializers.IntegerField(help_text="Collected, not yet answered.")
+    done = serializers.IntegerField(help_text="Answered: done (last hour).")
+    refused = serializers.IntegerField(help_text="Answered: refused (last hour).")
+    total = serializers.IntegerField(help_text="All of them.")
+    percent = serializers.IntegerField(help_text="How far, 0-100.")
+    seconds_left = serializers.IntegerField(help_text="About how long is left.")
+    refused_users = serializers.ListField(child=serializers.CharField(help_text="A user number."),
+                                          help_text="Users the device refused.")
+
+
+class LoadSerializer(serializers.Serializer):
+    running = serializers.BooleanField(help_text="People are still being prepared.")
+    stopped = serializers.BooleanField(help_text="It stopped with an error.")
+    total = serializers.IntegerField(help_text="People to prepare.")
+    prepared = serializers.IntegerField(help_text="Prepared.")
+    failed = serializers.IntegerField(help_text="Could not be prepared.")
+    percent = serializers.IntegerField(help_text="How far, 0-100.")
+    failures = serializers.ListField(child=serializers.DictField(help_text="Who and why."),
+                                     help_text="The first ten failures.")
+
+
+class JobsSerializer(serializers.Serializer):
+    commands = JobSerializer(help_text="How the commands queued for it are going.")
+    load = LoadSerializer(allow_null=True,
+                          help_text="Loading employees onto it: the running load, or the last "
+                                    "one within the hour; null otherwise.")

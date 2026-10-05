@@ -5965,3 +5965,13 @@ already-retired device and ending an ended mapping are now refused with a
 message instead of overwriting their dates.
 
 Guide `docs/api/50-devices-setup.md`. Tests `api/tests/test_devices_setup.py`.
+
+### API phase 6, part a — devices: what they sent — 2026-10-05
+
+11 read-only endpoints: device messages (raw text to people only - it can
+hold biometric templates), punches, punches to sort out (+ counts), and per
+device its users (build_roster + why_not_linked), saved templates (summary
+only), settings, command queue and jobs. Tests send real scans through
+/iclock/cdata. Guide `docs/api/60-devices-data-flow.md`. Part b (commands to
+devices, users, load, settings, server address, linking people, pushing scans
+from other devices) next.
