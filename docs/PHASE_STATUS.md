@@ -6049,3 +6049,14 @@ through `MissedScanForm`, `workflow.submit_request / withdraw_request` through
 through `LfaClaimForm`, and the branch manager's day (as
 `request_views.branch_attendance`). Always the login's own record; API keys
 are refused. No panel code changed.
+
+### API phase 11 — reports and the dashboard — 2026-10-05
+
+4 endpoints over the panel's own report code: the list (each report by
+`reports.access.may_see`), a report (`reports.filters.read` from the API's
+names, `report_scope` + the page's `_choices`, `report.build`; a filter
+outside reach is refused rather than dropped, rows paged), its download
+(`reports.views._download`, size-checked first), and the dashboard (the
+panel's figures, `connection.stopped_devices`, `still_in_for`; owner or
+unrestricted administrator only). Each report's gate is its own panel page
+(`OneReportView.panel_page` from the slug). No panel code changed.

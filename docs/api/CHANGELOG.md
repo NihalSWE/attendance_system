@@ -2,6 +2,13 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 11: reports and the dashboard
+
+- **New:** `GET /api/v1/reports` - the reports you may open; run any of the
+  13 (`GET /reports/{slug}`), or download it as Excel or PDF (`…/export`).
+- **New:** `GET /api/v1/dashboard` - headcount, newest people, devices not
+  calling in, people still in after their shift.
+
 ## 2026-10-05 — Phase 10: My account (the employee app)
 
 - **New:** `/api/v1/me` - home; profile, details, photo, education.
