@@ -59,7 +59,7 @@ stale.
 | Daily list | `GET /api/v1/attendance` · `GET /api/v1/attendance/late` |
 | Download it | `GET /api/v1/attendance/export?file_type=xlsx` (or `pdf`) |
 | Who is in now | `GET /api/v1/attendance/now?employee_ids=41,42` |
-| One person's month | `GET /api/v1/attendance/calendar?employee_id=41&year=2026&month=10` |
+| One person's month | `GET /api/v1/attendance/calendar?employee_id=41&year=2026&month=10` · as a PDF: `GET /api/v1/attendance/calendar/export?…` |
 | One day | `GET /api/v1/attendance/days/{employee_id}/{date}` |
 | Days to review | `GET /api/v1/attendance/review` |
 | Fix a day | `POST …/days/{employee_id}/{date}/add-scan` · `…/change-status` · `…/accept-review` · `…/excuse-late` |

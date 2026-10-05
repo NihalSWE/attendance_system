@@ -6,6 +6,7 @@ from api.v1.employees import views
 urlpatterns = [
     path("employees", views.EmployeeListView.as_view(), name="employees"),
     path("employees/choices", views.ChoicesView.as_view(), name="employee_choices"),
+    path("employees/export", views.EmployeeExportView.as_view(), name="employee_export"),
     path("employees/import", pv.ImportView.as_view(), name="employee_import"),
     path("employees/import/demo-file", pv.ImportDemoView.as_view(), name="employee_import_demo"),
     path("employees/<int:employee_id>", views.EmployeeDetailView.as_view(), name="employee"),

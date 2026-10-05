@@ -627,7 +627,11 @@ for it). Finish: `120-build-a-client.md` (run by the tests against a live
 server); the security review is in `06-security.md`, with a whole-API sweep
 test and the `api.security` log for refused signatures and replays.
 
-**All 13 phases (0-12) are done: 301 endpoints.**
+**All 13 phases (0-12) are done.** A check of every panel page and action
+against the API then found two downloads missing (the Employees list, one
+person's calendar), added the same day: **303 endpoints.** Left out on
+purpose: the platform owner's pages (no root API) and the firmware trial
+tools (device engineers, on the panel).
 
 ---
 
