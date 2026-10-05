@@ -1,0 +1,36 @@
+from django.urls import path
+
+from api.v1.me import views
+
+urlpatterns = [
+    path("me", views.HomeView.as_view(), name="me"),
+    path("me/profile", views.ProfileView.as_view(), name="me_profile"),
+    path("me/details", views.DetailsView.as_view(), name="me_details"),
+    path("me/photo", views.PhotoView.as_view(), name="me_photo"),
+    path("me/education", views.EducationListView.as_view(), name="me_education"),
+    path("me/education/<int:row_id>", views.EducationRowView.as_view(), name="me_education_row"),
+    path("me/attendance", views.AttendanceView.as_view(), name="me_attendance"),
+    path("me/attendance/<str:date>", views.AttendanceDayView.as_view(),
+         name="me_attendance_day"),
+    path("me/missed-scans", views.MissedScanListView.as_view(), name="me_missed_scans"),
+    path("me/missed-scans/<int:request_id>/withdraw", views.MissedScanWithdrawView.as_view(),
+         name="me_missed_scan_withdraw"),
+    path("me/leave/summary", views.LeaveYearView.as_view(), name="me_leave_summary"),
+    path("me/leave", views.LeaveListView.as_view(), name="me_leave"),
+    path("me/leave/<int:leave_id>/withdraw", views.LeaveWithdrawView.as_view(),
+         name="me_leave_withdraw"),
+    path("me/leave/<int:leave_id>/document", views.LeaveDocumentView.as_view(),
+         name="me_leave_document"),
+    path("me/branch-attendance", views.BranchAttendanceView.as_view(),
+         name="me_branch_attendance"),
+    path("me/payslips", views.PayslipListView.as_view(), name="me_payslips"),
+    path("me/payslips/<int:payslip_id>", views.PayslipView.as_view(), name="me_payslip"),
+    path("me/payslips/<int:payslip_id>/pdf", views.PayslipPdfView.as_view(),
+         name="me_payslip_pdf"),
+    path("me/lfa", views.LfaView.as_view(), name="me_lfa"),
+    path("me/lfa/claims", views.LfaClaimListView.as_view(), name="me_lfa_claims"),
+    path("me/lfa/claims/<int:claim_id>/withdraw", views.LfaWithdrawView.as_view(),
+         name="me_lfa_withdraw"),
+    path("me/lfa/claims/<int:claim_id>/document", views.LfaDocumentView.as_view(),
+         name="me_lfa_document"),
+]

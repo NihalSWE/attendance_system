@@ -2,6 +2,16 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 10: My account (the employee app)
+
+- **New:** `/api/v1/me` - home; profile, details, photo, education.
+- **New:** my attendance - a month, a day; report and withdraw a missed scan.
+- **New:** my leave - the year (types, balances, taken), requests, ask,
+  withdraw, the document.
+- **New:** my payslips (finalised months) and their PDF; my LFA - may I,
+  claim, claims, withdraw, the proof.
+- **New:** a branch manager's day - their people and how each day went.
+
 ## 2026-10-05 — Phase 9, part b: salary - settings, components, penalty rules, LFA
 
 - **New:** salary settings (currency, pay day) and dated salary rules.

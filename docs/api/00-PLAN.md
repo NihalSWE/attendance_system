@@ -586,6 +586,12 @@ services are; `GET …/payslips` lists a month's payslips; the PDF is
 
 Guide: `100-employee-app.md` (building the mobile app's screens).
 
+**Status: DONE 2026-10-05.** As built: home is `GET /me`; the leave year
+(types, balances, taken) is `GET /me/leave/summary`; LFA claims are
+`GET /me/lfa/claims` beside `GET`/`POST /me/lfa`. Not repeated here: the
+approval inbox is phase 8's `/leave/requests` (open to every login, as on the
+panel) and the password is phase 1's `/auth/password/change`.
+
 ### Phase 11 — Reports & dashboard
 
 | Group | Endpoints |
