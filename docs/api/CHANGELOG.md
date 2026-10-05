@@ -2,6 +2,16 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 9, part a: salary - months, payslips, overtime
+
+- **New:** a month's salary - where it stands, its payslips; generate,
+  submit, approve, send back, undo finalise.
+- **New:** payslips - one in full, the PDF, email it; bonus and deduction
+  lines on a draft; corrections for a finalised month.
+- **New:** waive a penalty, undo a waiver.
+- **New:** overtime - a month's days, one day, approve (all or some) or
+  reject, undo.
+
 ## 2026-10-05 — Phase 8: leave
 
 - **New:** leave types - list, add, change, turn on or off, add the defaults.

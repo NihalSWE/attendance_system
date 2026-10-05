@@ -122,7 +122,8 @@ class PostmanCollectionTests(SimpleTestCase):
                      "/api/docs/guides/shifts-and-calendar/",
                      "/api/docs/guides/devices-setup/",
                      "/api/docs/guides/devices-data-flow/",
-                     "/api/docs/guides/attendance/", "/api/docs/guides/leave/"):
+                     "/api/docs/guides/attendance/", "/api/docs/guides/leave/",
+                     "/api/docs/guides/salary/"):
             self.assertEqual(self.client.get(path).status_code, 200, path)
 
 
