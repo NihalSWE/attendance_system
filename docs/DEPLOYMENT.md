@@ -68,15 +68,19 @@ cd /opt/attendance
 git pull
 venv/bin/pip install -r requirements.txt
 venv/bin/python manage.py migrate
+venv/bin/python manage.py createcachetable
 venv/bin/python manage.py collectstatic --noinput
 systemctl restart attendance_web
 ```
 
-All four in one line:
+All in one line:
 
 ```
-venv/bin/pip install -r requirements.txt && venv/bin/python manage.py migrate && venv/bin/python manage.py collectstatic --noinput && systemctl restart attendance_web
+venv/bin/pip install -r requirements.txt && venv/bin/python manage.py migrate && venv/bin/python manage.py createcachetable && venv/bin/python manage.py collectstatic --noinput && systemctl restart attendance_web
 ```
+
+`createcachetable` makes the API's rate-limit table (`api_cache`) the first
+time and does nothing after; without it every API request fails.
 
 `BIOMETRIC_TEMPLATE_KEY` must be in `/opt/attendance/.env` before templates can
 be saved (its own key per server; see `.env.example`), and `cryptography` comes
@@ -88,6 +92,39 @@ Organisation → Email settings encrypts the password with a key derived from
 can send email until its owner or admin types the password again. It fails
 loudly - sending and the test say "Enter the password again" - but tell the
 companies before you rotate. (Rotating `SECRET_KEY` also signs everyone out.)
+
+## The REST API (2026-10-05)
+
+First deploy of the API (`/api/v1/…`, documentation at `/api/docs/`):
+
+1. **`pip install -r requirements.txt` before restarting.** Passwords are now
+   hashed with Argon2 (`argon2-cffi`); without it nobody can sign in.
+   Existing passwords keep working and are upgraded at the next sign-in.
+2. **`createcachetable`** once (see above).
+3. **`.env`** - add:
+
+   ```ini
+   # Nginx is in front: read the client's address one proxy deep
+   # (the login lockout is per address - without it everyone shares one).
+   API_PROXY_COUNT=1
+   # Nginx terminates HTTPS: trust its X-Forwarded-Proto.
+   SECURE_PROXY_SSL=True
+   # Browsers use https only. Start with an hour; raise to 31536000 (a year)
+   # once the site has run on https without trouble.
+   SECURE_HSTS_SECONDS=3600
+   ```
+
+   Optional: `API_CORS_ORIGINS` (a React/Vue/Next frontend's address, when
+   there is one), `API_PASSWORD_RESET_URL` (that frontend's reset page), and
+   `EMAIL_HOST` / `EMAIL_PORT` / `EMAIL_HOST_USER` / `EMAIL_HOST_PASSWORD` /
+   `EMAIL_USE_TLS` / `DEFAULT_FROM_EMAIL` so password-reset and two-step
+   codes by email are sent (without them the API answers that email is not
+   available).
+4. Check: `curl -s https://workforce.iglweb.com/api/v1/ping` answers
+   `{"status": "ok", …}`; `/api/docs/` opens; the panel still signs in.
+
+An owner or company administrator who uses the API must turn on two-step
+login there (an authenticator app, or email codes); the panels are unchanged.
 
 ## Restarting the services
 
