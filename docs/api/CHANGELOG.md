@@ -2,6 +2,18 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 7: attendance
+
+- **New:** the daily list and late entries (`GET /attendance`,
+  `GET /attendance/late`), with the panel's filters; download as Excel or
+  PDF (`GET /attendance/export`).
+- **New:** who is in now; one person's month (`/attendance/calendar`); one
+  day in full, with every scan and the fixes made.
+- **New:** the days to review, and fixing a day - add a scan, change the
+  status, accept it as it is, approve a late arrival; withdraw a fix.
+- **New:** missed scans - list, approve or reject; enter missing attendance
+  for someone (`POST /employees/{id}/missing-attendance`).
+
 ## 2026-10-05 — Phase 6, part b: devices - telling them
 
 - **New:** ask a device for its users, fingerprints and faces, settings or

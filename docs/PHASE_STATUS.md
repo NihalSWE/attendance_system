@@ -5988,3 +5988,14 @@ checks); and `POST /ingest/punches` - other makes of device push scans with an
 API key (`punches:write`) through `devices.services.ingestion.ingest`, the
 same pipeline as the terminals (batch_id = idempotency key). The firmware
 trial tools stay panel-only.
+
+### API phase 7 — attendance — 2026-10-05
+
+15 endpoints over the panel's own code: the daily list and late entries
+(`daily_list_query` via a request shim; the same export, size-checked first),
+now (`live_status`), the month and the day (`month_view` builders, refreshed
+first), the days to review, the four fixes (`correction_services`, the
+panel's `AddScanForm` / `LateForm` and late-day list), withdraw, and missed
+scans (`scan_requests.reviewable` / `decide` / `enter_for` /
+`enter_and_approve`). Each endpoint uses its panel page's gate; the services
+do the branch checks. No panel code changed.
