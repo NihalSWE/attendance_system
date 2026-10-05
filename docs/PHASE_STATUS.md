@@ -5938,3 +5938,12 @@ At the senior's word the email-only way stays (migration
 `api.0005_two_step_email_option` brings `method` / `pending_method` back): the
 app (recommended) or email codes only; app users keep the email backup;
 changing the way or the phone needs a current code and a confirm.
+
+### API phase 4 — shifts & calendar — 2026-10-05
+
+23 endpoints over `scheduling.services`: the overview (ready / departments
+without a shift), attendance settings, shifts, department shifts (on a day),
+an employee's own shift, weekly offs (weekday names) and holidays (one, or
+many - the year calendar). Each through its panel page's gate and form
+(times HH:MM via ShiftForm; the form derives a night shift's next-day end).
+Guide `docs/api/40-shifts-and-calendar.md`. Tests `api/tests/test_shifts.py`.

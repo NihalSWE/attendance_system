@@ -2,6 +2,17 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 4: shifts & calendar
+
+- **New:** `GET /api/v1/schedule` (is everyone covered by a shift) and the
+  attendance settings (`GET`/`PATCH /api/v1/attendance-settings`).
+- **New:** shifts (list, add, one, change, status), department shifts (list on
+  a day, set from a date), one employee's own shift (list, give, end).
+- **New:** weekly offs (list, add by weekday names, change start, stop) and
+  holidays (list by year, add one, add many, one, change, cancel).
+- **Keys:** `shifts:read` / `shifts:write`.
+- **Guide:** [Shifts & calendar](../guides/shifts-and-calendar/).
+
 ## 2026-10-05 — Phase 3, part 2: the rest of the profile, and import
 
 - **New:** the photo (`GET`/`PUT`/`DELETE …/{id}/photo`), education
