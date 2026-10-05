@@ -2,6 +2,18 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 5: devices - setup
+
+- **New:** devices - list, register, one, change, retire; `serial-check`,
+  `device-models`; `…/setup` (what to type on the terminal).
+- **New:** connections (a live board) and the connection test (start, then
+  ask how it went).
+- **New:** department mappings (list, add, end), enrollments (list, add, one,
+  change), and which devices count (`attendance-rules`: get, change, recheck).
+- **Who:** the owner or an unrestricted company administrator, as on the
+  panel. **Keys:** `devices:read` / `devices:write`.
+- **Guide:** [Devices: setup](../guides/devices-setup/).
+
 ## 2026-10-05 — Phase 4: shifts & calendar
 
 - **New:** `GET /api/v1/schedule` (is everyone covered by a shift) and the

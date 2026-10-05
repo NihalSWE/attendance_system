@@ -44,6 +44,7 @@ from devices.models import (
 from devices.services import (
     attendance_rules,
     connection,
+    device_admin,
     panel_access,
     protocol,
     server_address,
@@ -184,20 +185,9 @@ def _audit(request, action, obj, before=None, after=None):
     before_data must carry every field this change touched — the historical
     resolution in devices/services/policy_history.py depends on that contract.
     """
-    return AuditLog.objects.create(
-        company_id=request.company_id,
-        actor_user=request.user,
-        actor_type=AuditLog.ActorType.USER,
-        action=action,
-        object_app=obj._meta.app_label,
-        object_model=obj._meta.model_name,
-        object_id=str(obj.pk),
-        object_public_id=str(getattr(obj, "public_id", "")),
-        object_display=str(obj)[:255],
-        before_data=before or {},
-        after_data=after or {},
-        ip_address=request.META.get("REMOTE_ADDR"),
-    )
+    return device_admin.audit(actor=request.user, company_id=request.company_id,
+                              action=action, obj=obj, before=before, after=after,
+                              ip=request.META.get("REMOTE_ADDR"))
 
 
 # --------------------------------------------------------------------------
@@ -288,12 +278,8 @@ def _test_query(started, command_id=None):
 def device_register(request):
     form = BiometricDeviceForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        device = form.save()
-        _audit(request, "device.registered", device, after={
-            "name": device.name,
-            "serial_number": device.serial_number,
-            "status": device.status,
-        })
+        device = device_admin.register_device(actor=request.user, company_id=request.company_id,
+                                              form=form, ip=request.META.get("REMOTE_ADDR"))
         if form.issued_comm_key:
             # Carried in the session for exactly one render: the plaintext is
             # never stored, so this is the only chance to show it.
@@ -428,23 +414,11 @@ def device_detail(request, public_id):
 @company_user_required
 def device_edit(request, public_id):
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
-    before = {
-        "name": device.name,
-        "serial_number": device.serial_number,
-        "status": device.status,
-        "timezone": device.timezone,
-        "branch": device.branch_id,
-    }
     form = BiometricDeviceForm(request.POST or None, instance=device)
     if request.method == "POST" and form.is_valid():
-        device = form.save()
-        _audit(request, "device.updated", device, before=before, after={
-            "name": device.name,
-            "serial_number": device.serial_number,
-            "status": device.status,
-            "timezone": device.timezone,
-            "branch": device.branch_id,
-        })
+        device = device_admin.update_device(actor=request.user, company_id=request.company_id,
+                                            device=device, form=form,
+                                            ip=request.META.get("REMOTE_ADDR"))
         if form.issued_comm_key:
             request.session["issued_comm_key"] = form.issued_comm_key
             request.session["issued_comm_key_device"] = str(device.public_id)
@@ -472,14 +446,12 @@ def device_edit(request, public_id):
 def device_retire(request, public_id):
     """Retire a device without deleting any of its history."""
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
-    before = {"status": device.status, "decommissioned_at": None}
-    device.status = BiometricDevice.Status.RETIRED
-    device.decommissioned_at = timezone.now()
-    device.save(update_fields=["status", "decommissioned_at", "updated_at"])
-    _audit(request, "device.retired", device, before=before, after={
-        "status": device.status,
-        "decommissioned_at": device.decommissioned_at.isoformat(),
-    })
+    try:
+        device_admin.retire_device(actor=request.user, company_id=request.company_id,
+                                   device=device, ip=request.META.get("REMOTE_ADDR"))
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return redirect("devices:device_detail", public_id=device.public_id)
     messages.success(
         request,
         f"{device.name} retired. It can no longer send data; its punch history "
@@ -588,31 +560,15 @@ def device_department_add(request, public_id):
     )
     form = DeviceDepartmentForm(request.POST or None, device=device)
     if request.method == "POST" and form.is_valid():
-        link = form.save(commit=False)
-        link.device = device
-        link.company_id = request.company_id
         try:
-            # Savepointed like the enrollment writes, so a rejected insert is
-            # rolled back cleanly and the render below still has a usable
-            # connection.
-            with transaction.atomic():
-                link.save()
-        except IntegrityError:
-            # The form already checks the overlap; this catches the race
-            # between two administrators saving at once, so the loser reads a
-            # sentence instead of a 500.
-            form.add_error(
-                "department",
-                f"{device.name} was mapped to that department while you were "
-                "filling this in. Reload the device page to see the current "
-                "mappings.",
-            )
+            link = device_admin.add_department_link(
+                actor=request.user, company_id=request.company_id, device=device, form=form,
+                ip=request.META.get("REMOTE_ADDR"))
+        except ValidationError as exc:
+            # Two administrators saving at once: a sentence, not a 500.
+            for message in exc.message_dict.get("department", exc.messages):
+                form.add_error("department", message)
         else:
-            _audit(request, "device_department.created", link, after={
-                "device": device.pk,
-                "department": link.department_id,
-                "effective_from": link.effective_from.isoformat(),
-            })
             messages.success(
                 request,
                 f"{device.name} now serves {link.department.name} in "
@@ -635,15 +591,13 @@ def device_department_end(request, pk):
     link = get_object_or_404(
         DeviceDepartment.objects.select_related("device", "department"), pk=pk
     )
-    before = {"status": link.status, "effective_to": None}
-    link.effective_to = timezone.now()
-    link.status = DeviceDepartment.Status.ENDED
-    link.save(update_fields=["effective_to", "status", "updated_at"])
-    _audit(request, "device_department.ended", link, before=before, after={
-        "status": link.status,
-        "effective_to": link.effective_to.isoformat(),
-    })
-    messages.success(request, f"Mapping to {link.department.name} ended.")
+    try:
+        device_admin.end_department_link(actor=request.user, company_id=request.company_id,
+                                         link=link, ip=request.META.get("REMOTE_ADDR"))
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+    else:
+        messages.success(request, f"Mapping to {link.department.name} ended.")
     return redirect("devices:device_detail", public_id=link.device.public_id)
 
 
@@ -690,10 +644,7 @@ def enrollment_list(request):
     })
 
 
-OVERLAP_MESSAGE = (
-    "This enrollment overlaps an existing one for the same employee or user "
-    "number on this device. Edit or end the existing enrollment first."
-)
+OVERLAP_MESSAGE = device_admin.OVERLAP_MESSAGE
 
 
 @login_required
@@ -701,27 +652,18 @@ OVERLAP_MESSAGE = (
 def enrollment_create(request):
     form = DeviceEnrollmentForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
-        enrollment = form.save(commit=False)
-        enrollment.company_id = request.company_id
         try:
-            with transaction.atomic():
-                enrollment.save()
-        except IntegrityError:
-            # The form mirrors both overlap constraints; this only catches a
-            # concurrent save that slipped between the check and the write.
+            enrollment = device_admin.create_enrollment(
+                actor=request.user, company_id=request.company_id, form=form,
+                ip=request.META.get("REMOTE_ADDR"))
+        except ValidationError:
+            # A concurrent save that slipped between the check and the write.
             form.add_error(None, OVERLAP_MESSAGE)
             return render(request, "devices/enrollment_form.html", {
                 "form": form,
                 "title": "Enroll an employee on a device",
                 "submit_label": "Create enrollment",
             })
-        _audit(request, "device_enrollment.created", enrollment, after={
-            "device": enrollment.device_id,
-            "employee": enrollment.employee_id,
-            "device_user_id": enrollment.device_user_id,
-            "attendance_enabled": enrollment.attendance_enabled,
-            "assigned_device_authorized": enrollment.assigned_device_authorized,
-        })
         messages.success(
             request,
             f"{enrollment.employee} enrolled on {enrollment.device} as user "
@@ -742,25 +684,15 @@ def enrollment_edit(request, pk):
     enrollment = get_object_or_404(
         DeviceEnrollment.objects.select_related("device", "employee"), pk=pk
     )
-    # Both policy booleans are captured, because historical resolution reads
-    # before_data to decide what applied when an offline punch happened.
-    before = {
-        "attendance_enabled": enrollment.attendance_enabled,
-        "assigned_device_authorized": enrollment.assigned_device_authorized,
-        "device_user_id": enrollment.device_user_id,
-        "card_number": enrollment.card_number,
-        "device_privilege": enrollment.device_privilege,
-        "effective_from": enrollment.effective_from.isoformat(),
-        "effective_to": (
-            enrollment.effective_to.isoformat() if enrollment.effective_to else None
-        ),
-    }
     form = DeviceEnrollmentForm(request.POST or None, instance=enrollment)
     if request.method == "POST" and form.is_valid():
         try:
-            with transaction.atomic():
-                enrollment = form.save()
-        except IntegrityError:
+            # The audit row carries both policy booleans: historical resolution
+            # reads before_data to decide what applied to an offline punch.
+            enrollment, result = device_admin.update_enrollment(
+                actor=request.user, company_id=request.company_id, enrollment=enrollment,
+                form=form, ip=request.META.get("REMOTE_ADDR"))
+        except ValidationError:
             form.add_error(None, OVERLAP_MESSAGE)
             return render(request, "devices/enrollment_form.html", {
                 "form": form,
@@ -768,28 +700,9 @@ def enrollment_edit(request, pk):
                 "title": f"Edit enrollment for {enrollment.employee}",
                 "submit_label": "Save changes",
             })
-        _audit(request, "device_enrollment.updated", enrollment, before=before, after={
-            "attendance_enabled": enrollment.attendance_enabled,
-            "assigned_device_authorized": enrollment.assigned_device_authorized,
-            "device_user_id": enrollment.device_user_id,
-            "card_number": enrollment.card_number,
-            "device_privilege": enrollment.device_privilege,
-            "effective_from": enrollment.effective_from.isoformat(),
-            "effective_to": (
-                enrollment.effective_to.isoformat()
-                if enrollment.effective_to
-                else None
-            ),
-        })
-        # A card or a role the terminal does not know about is no use: send
-        # the record again wherever this person is, in place, by their number.
+        # A new card or role was sent wherever this person is (the service).
         note = ""
-        if (before["card_number"] != enrollment.card_number
-                or before["device_privilege"] != enrollment.device_privilege):
-            from devices.services import mapping as device_mapping
-
-            result = device_mapping.resend_identity(
-                actor=request.user, employee=enrollment.employee)
+        if result is not None:
             if result.sent:
                 note = (f" The card and role are on their way to "
                         f"{len(result.sent)} device(s); they apply on the next check-in.")
