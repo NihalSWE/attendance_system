@@ -6013,3 +6013,15 @@ refactor, no behaviour change: `leaves.views.leave_rows` (the Leave list's
 query) and `recordable_employees` (Record leave's people), shared with the
 API. `PanelRule` opens My account pages (the inbox) to every login, as the
 panel's gate does; the service decides.
+
+### API phase 9, part a — salary: months, payslips, overtime — 2026-10-05
+
+19 endpoints over the panel's payroll code: the month by
+`/payroll/months/{year}/{month}` (the panel is month-based; the services take
+year and month) with generate / submit / approve / send-back / reopen;
+payslips (`payslip_records`, `payslip_context`, `export_payslip`,
+`email_payslip` with `PayslipEmailForm`), lines by hand and corrections
+(`add_adjustment`, `correct_finalised_month`, `remove_adjustment`), waive /
+unwaive, and overtime (`overtime_scope`, the panel's `overtime_queryset`,
+`overtime_day`, `decide_overtime` with `OvertimeDecisionForm`,
+`undo_overtime_decision`). No panel code changed.
