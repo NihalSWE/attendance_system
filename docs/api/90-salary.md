@@ -45,6 +45,11 @@ things. **API keys:** `payroll:read` / `payroll:write`.
 | Correction | `POST …/payslips/{id}/corrections` (finalised) |
 | Penalties | `POST /api/v1/payroll/penalties/{id}/waive` · `…/unwaive` |
 | Overtime | `GET /api/v1/payroll/overtime?year=&month=&show=waiting` · `GET …/overtime/{day_id}` · `POST …/decide` · `POST …/undo` |
+| Settings & rules | `GET`/`PATCH /api/v1/payroll/settings` · `POST …/settings/rules` |
+| Allowances & deductions | `GET`/`POST /api/v1/payroll/components` · `GET`/`PATCH …/components/{id}` · `POST …/components/{id}/status` |
+| A person's | `GET`/`POST /api/v1/employees/{id}/components` · `POST …/components/{row_id}/end` |
+| Penalty rules | `GET`/`POST /api/v1/payroll/penalty-rules` · `GET …/{id}` · `POST …/{id}/change` · `POST …/{id}/stop` |
+| LFA | `GET`/`PATCH /api/v1/payroll/lfa/settings` · `GET …/lfa/eligibility?employee_id=` · `GET`/`POST …/lfa/claims` · `GET …/claims/{id}` · `POST …/decide` · `…/cancel` · `…/paid` · `GET …/document` |
 
 `send-back` and `reopen` need `{"reason": "…"}`.
 
@@ -75,6 +80,72 @@ POST /api/v1/payroll/overtime/9001/decide
 `paid_minutes` is what the salary rules pay (a minimum, whole blocks).
 Generate a draft month again to include a decision.
 
+### Salary rules
+
+The rules that turn attendance into pay are **dated**: each change applies
+from the 1st of a month, and the months before keep the rules they were paid
+under.
+
+```json
+POST /api/v1/payroll/settings/rules
+{"applies_from": "2026-11", "overtime_multiplier": "1.5",
+ "minimum_overtime_minutes": 30, "overtime_rounding_minutes": 30}
+```
+
+Send only what changes; the rest keeps its value. `GET /payroll/settings`
+shows the rules in force, in plain words too (`summary`), and every version.
+The currency and pay day are plain settings (`PATCH /payroll/settings`).
+
+### Allowances and deductions
+
+The company's list (house rent 40 % of basic, transport 2,000 a month, a loan
+repayment …), then given to people from a date:
+
+```json
+POST /api/v1/payroll/components
+{"code": "HOUSE_RENT", "name": "House rent", "kind": "earning",
+ "method": "percent_of_basic", "default_percent": "40"}
+
+POST /api/v1/employees/41/components
+{"component_id": 4, "effective_from": "2026-10-01"}          // its default
+{"component_id": 4, "percent": "45", "effective_from": "2027-01-01"}  // a change
+```
+
+### Penalty rules
+
+What counts, when, and what it deducts - also from a month:
+
+```json
+POST /api/v1/payroll/penalty-rules
+{"name": "Late more than 10 minutes", "metric": "late_minutes",
+ "operator": "gt", "threshold_minutes": 10,
+ "occurrence_mode": "within_period", "required_occurrences": 3,
+ "deduction_method": "day_fraction", "deduction_value": "0.5",
+ "applies_from": "2026-11"}
+```
+
+Every third late day in a month costs half a day's pay. `…/change` saves a
+new version from a month; `…/stop` ends it from a month. A month's total
+penalties can be capped in the salary rules
+(`maximum_period_deduction_percent`).
+
+### LFA (Leave Fare Assistance)
+
+The company sets the rules (`PATCH /payroll/lfa/settings`): how much (fixed,
+or months of basic or gross salary, with a cap), after how many months of
+service, probation or not, how often, whether leave must be taken with it and
+proof attached, a smaller first year, and whether it is paid on the payslip or
+separately. Employees claim from their app; here, whoever decides:
+
+1. `GET /payroll/lfa/eligibility?employee_id=41` - may they, how much, and
+   which leave it may go with.
+2. `POST /payroll/lfa/claims` - enter a claim for someone (e.g. without a
+   login).
+3. `POST …/claims/{id}/decide` - `approve` (the amount; with salary, the
+   `pay_month`) or `reject` (with a `note`).
+4. Paid with salary: it becomes *paid* once that month is finalised. Paid
+   separately: `POST …/paid` with the date and reference.
+
 ## Who may do what
 
 | | Who |
@@ -82,5 +153,7 @@ Generate a draft month again to include a decision.
 | See the month and payslips | the owner, company administrator, payroll manager; anyone given *View* or *Prepare salary* in a branch (a branch manager in theirs) - those branches' payslips. **HR sees no pay.** |
 | Generate, submit, lines, corrections, email | the owner, company administrator, payroll manager; anyone given *Prepare salary* - for that branch |
 | Approve, undo finalise, waive a penalty | the owner or company administrator |
+| Settings, rules, the list of allowances, penalty rules, LFA settings | the owner or company administrator |
+| Give or end someone's allowance; LFA claims | the owner or company administrator; anyone given *Prepare salary* in the person's branch. Never your own LFA claim |
 | Send back | the owner or company administrator, or whoever submitted it |
 | Overtime | the owner, company administrator, HR; anyone given *View* / *Decide overtime* in a branch; a department head sees (never decides) their department's |

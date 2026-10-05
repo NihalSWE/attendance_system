@@ -2,6 +2,15 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-05 — Phase 9, part b: salary - settings, components, penalty rules, LFA
+
+- **New:** salary settings (currency, pay day) and dated salary rules.
+- **New:** allowances and deductions - the company's list; give one to a
+  person from a date, end it.
+- **New:** penalty rules - list, one, add, change from a month, stop.
+- **New:** LFA - settings, eligibility, claims (list, one, enter for someone,
+  decide, cancel, mark paid, the proof).
+
 ## 2026-10-05 — Phase 9, part a: salary - months, payslips, overtime
 
 - **New:** a month's salary - where it stands, its payslips; generate,

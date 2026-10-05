@@ -6025,3 +6025,15 @@ payslips (`payslip_records`, `payslip_context`, `export_payslip`,
 unwaive, and overtime (`overtime_scope`, the panel's `overtime_queryset`,
 `overtime_day`, `decide_overtime` with `OvertimeDecisionForm`,
 `undo_overtime_decision`). No panel code changed.
+
+### API phase 9, part b — salary: settings, components, penalty rules, LFA — 2026-10-05
+
+21 endpoints over the panel's code: salary settings (`policy.salary_settings_page`,
+`GeneralSettingsForm`, `SalaryRulesForm` started from the rules in force so a
+change sends only what changes, `change_salary_rules`), components
+(`SalaryComponentForm`, `component_services`; a person's through
+`GiveComponentForm` / `EndComponentForm`), penalty rules (`PenaltyRuleForm`,
+`penalties.create/change/stop_penalty_rule`, the settings page's
+`_penalty_rows`), and LFA (`LfaSettingsForm`, `lfa.eligibility`,
+`LfaClaimForm` with the proof as base64, `LfaDecisionForm`, `lfa.decide /
+cancel / mark_paid`). Months travel as YYYY-MM. No panel code changed.
