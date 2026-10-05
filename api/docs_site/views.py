@@ -42,10 +42,11 @@ GUIDES = {
     "postman": ("Testing with Postman", "07-postman.md"),
     "changelog": ("Changelog", "CHANGELOG.md"),
     "company-and-branches": ("Company & branches", "20-company-and-branches.md"),
+    "employees": ("Employees", "30-employees.md"),
 }
 
 #: Each area's guide page, shown first in the area's menu section.
-AREA_GUIDES = {"company": "company-and-branches"}
+AREA_GUIDES = {"company": "company-and-branches", "employees": "employees"}
 
 
 def _markdown(filename):

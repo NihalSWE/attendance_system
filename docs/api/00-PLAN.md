@@ -434,6 +434,15 @@ on save.
 
 Guide: `30-employees.md`.
 
+**Status: DONE 2026-10-05**, in two parts. Part 1: list, choices, create,
+profile, history, details, personal, placement, salary, line manager, end
+employment, inactive, active. Part 2: photo, education, documents, login,
+leave policy and adjustments, overtime, report visibility, set as line
+manager, device permissions, import (check, then confirm - stateless, the same
+file twice) and the demo file. Recording leave and late approval from the
+profile go with Leave (phase 8) and Attendance (phase 7). The late rules are
+the company's (Shifts, phase 4).
+
 ### Phase 4 — Shifts & calendar
 
 | Group | Endpoints |

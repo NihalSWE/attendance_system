@@ -31,7 +31,6 @@ from organization.employee_edit_forms import (
     PlacementForm,
     SalaryForm,
 )
-from access_control.branch_access import scope_queryset
 from organization.services import visible_branches
 from organization.views import _company_or_redirect
 from scheduling import services as schedule
@@ -107,12 +106,8 @@ def edit_sections(request, company_id, pk, *, back):
         raise PermissionDenied("That part of this page is the company's to change.")
 
     with use_company(company_id):
-        branches = visible_branches(membership).filter(status=ActiveStatus.ACTIVE)
-        if not may["company"]:
-            # A placement can only move to a branch where they may edit people.
-            branches = scope_queryset(
-                branches, request.user, company_id, "employees.edit", field="pk"
-            )
+        # A placement can only move to a branch where they may edit people.
+        branches = services.placement_branches(request.user, company_id, membership, may)
 
         details = EmployeeDetailsForm(
             request.POST if section == "details" else None, instance=employee

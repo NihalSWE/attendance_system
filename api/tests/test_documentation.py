@@ -85,7 +85,8 @@ class DocumentationTests(SimpleTestCase):
         ids = [doc.id for doc in endpoints()]
         self.assertEqual(len(ids), len(set(ids)))
         for endpoint_id in ids:
-            reverse("api:docs_endpoint", args=[endpoint_id])
+            response = self.client.get(reverse("api:docs_endpoint", args=[endpoint_id]))
+            self.assertEqual(response.status_code, 200, endpoint_id)
 
 
 class PostmanCollectionTests(SimpleTestCase):
@@ -117,7 +118,7 @@ class PostmanCollectionTests(SimpleTestCase):
 
     def test_the_guide_pages_open(self):
         for path in ("/api/docs/authentication/", "/api/docs/security/", "/api/docs/postman/",
-                     "/api/docs/guides/company-and-branches/"):
+                     "/api/docs/guides/company-and-branches/", "/api/docs/guides/employees/"):
             self.assertEqual(self.client.get(path).status_code, 200, path)
 
 

@@ -83,6 +83,20 @@ def get_employee_for_edit(*, actor, company_id, employee_id, code=None):
     return membership, employee, assignment, compensation
 
 
+def placement_branches(actor, company_id, membership, may):
+    """The branches a placement may move to: the active ones the actor sees -
+    and, for anyone but the company, only where they may edit people. Call
+    inside the company's context."""
+    from access_control.branch_access import scope_queryset
+    from common.choices import ActiveStatus
+    from organization.services import visible_branches
+
+    branches = visible_branches(membership).filter(status=ActiveStatus.ACTIVE)
+    if not may["company"]:
+        branches = scope_queryset(branches, actor, company_id, "employees.edit", field="pk")
+    return branches
+
+
 def card_permissions(actor, company_id, membership, assignment):
     """Which Edit employee cards ``actor`` may use for this employee (A12 part 4)."""
     if is_company_wide(membership):

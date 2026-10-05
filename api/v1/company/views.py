@@ -6,15 +6,12 @@ form for the input (``api/core/forms.py``) and the same service for the
 change - so the API and the panel accept, refuse and record exactly alike.
 """
 
-import base64
-import binascii
-
-from django.core.files.base import ContentFile
 from django.db.models import Count, Q
 from rest_framework.response import Response
 
 from api.core.docs import PATH, QUERY, Param, endpoint
 from api.core.errors import ApiError
+from api.core.files import upload_from
 from api.core.forms import checked, form_data, service_errors
 from api.core.permissions import PanelRule
 from api.core.views import ApiView
@@ -171,12 +168,7 @@ class CompanyLogoView(ApiView):
     def put(self, request):
         data = s.LogoSerializer(data=request.data)
         data.is_valid(raise_exception=True)
-        try:
-            content = base64.b64decode(data.validated_data["content_base64"], validate=True)
-        except (binascii.Error, ValueError):
-            raise ApiError("validation_error",
-                           fields={"content_base64": ["This is not valid base64."]}) from None
-        upload = ContentFile(content, name=data.validated_data["filename"].strip())
+        upload = upload_from(data.validated_data["filename"], data.validated_data["content_base64"])
         return _save_company(request, {}, files={"logo": upload})
 
     @endpoint(

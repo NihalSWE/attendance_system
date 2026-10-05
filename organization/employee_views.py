@@ -55,6 +55,70 @@ def _pay_on_create(user, company_id, branch_ids):
     return "required" if both == set(branch_ids) else "optional"
 
 
+def creation_setup(user, company_id):
+    """Who may add people where, for Create employee - the page and the API.
+
+    ``(membership, branch_ids, pay, branches, employees)``: the branches they
+    may add to, what pay they set (see ``_pay_on_create``), and the branch and
+    manager choices. Call inside the company's context.
+    """
+    from employees.models import Employee
+
+    membership, branch_ids = _creator(user, company_id)
+    pay = _pay_on_create(user, company_id, branch_ids)
+    branches = visible_branches(membership).filter(status=ActiveStatus.ACTIVE)
+    employees = Employee.objects.order_by("first_name", "last_name")
+    if branch_ids is not ALL_BRANCHES:
+        # A12 part 4: only the branches where they may add people, and a
+        # reporting manager from those branches.
+        branches = branches.filter(pk__in=branch_ids)
+        employees = people(branch_ids).order_by("first_name", "last_name")
+    return membership, branch_ids, pay, branches, employees
+
+
+def create_from_form(form, *, user, company_id, membership, branch_ids, pay):
+    """Create the employee from a bound EmployeeCreateForm - the page and the
+    API. Returns ``create_employee``'s result, or None with the reasons on the
+    form."""
+    if not form.is_valid():
+        return None
+    data = form.cleaned_data
+    if branch_ids is not ALL_BRANCHES and data["branch"].pk not in branch_ids:
+        raise PermissionDenied("You can only add people to branches you look after.")
+    branch_pk = data["branch"].pk
+    sets_pay = (can(user, company_id, "salary.prepare", branch_pk)
+                and can(user, company_id, "salary.view", branch_pk))
+    base_rate = data.get("base_rate")
+    # A new employee's pay follows "prepare salary" in that branch (a
+    # branch manager has it); without it they are added without pay.
+    if base_rate is not None and not sets_pay:
+        form.add_error("base_rate", "You do not set pay in this branch. Leave it "
+                                    "empty; whoever prepares its salary sets it.")
+    elif base_rate is None and sets_pay and pay != "none":
+        form.add_error("base_rate", "Enter their pay.")
+    if not form.is_valid():
+        return None
+    try:
+        return create_employee(
+            company=membership.company,
+            first_name=data["first_name"],
+            last_name=data["last_name"],
+            employee_code=data["employee_code"],
+            branch=data["branch"],
+            department=data["department"],
+            designation=data["designation"],
+            manager=data.get("manager"),
+            effective_from=data["effective_from"],
+            pay_basis=data.get("pay_basis") or "monthly",
+            base_rate=base_rate,
+            joining_date=data["effective_from"],
+            created_by=user,
+        )
+    except (ValidationError, IntegrityError) as exc:
+        _apply_errors(form, exc)
+        return None
+
+
 @login_required
 @require_http_methods(["GET", "POST"])
 def employee_create(request):
@@ -62,19 +126,9 @@ def employee_create(request):
     if bail:
         return bail
 
-    membership, branch_ids = _creator(request.user, company_id)
-    pay = _pay_on_create(request.user, company_id, branch_ids)
-
     with use_company(company_id):
-        from employees.models import Employee
-
-        branches = visible_branches(membership).filter(status=ActiveStatus.ACTIVE)
-        employees = Employee.objects.order_by("first_name", "last_name")
-        if branch_ids is not ALL_BRANCHES:
-            # A12 part 4: only the branches where they may add people, and a
-            # reporting manager from those branches.
-            branches = branches.filter(pk__in=branch_ids)
-            employees = people(branch_ids).order_by("first_name", "last_name")
+        membership, branch_ids, pay, branches, employees = creation_setup(
+            request.user, company_id)
 
         if request.method == "POST":
             form = EmployeeCreateForm(
@@ -84,52 +138,19 @@ def employee_create(request):
                 employees=employees,
                 pay=pay,
             )
-            if form.is_valid():
+            result = create_from_form(form, user=request.user, company_id=company_id,
+                                      membership=membership, branch_ids=branch_ids, pay=pay)
+            if result is not None:
                 data = form.cleaned_data
-                if branch_ids is not ALL_BRANCHES and data["branch"].pk not in branch_ids:
-                    raise PermissionDenied("You can only add people to branches you look after.")
-                branch_pk = data["branch"].pk
-                sets_pay = (can(request.user, company_id, "salary.prepare", branch_pk)
-                            and can(request.user, company_id, "salary.view", branch_pk))
-                base_rate = data.get("base_rate")
-                # A new employee's pay follows "prepare salary" in that branch (a
-                # branch manager has it); without it they are added without pay.
-                if base_rate is not None and not sets_pay:
-                    form.add_error("base_rate", "You do not set pay in this branch. Leave it "
-                                                "empty; whoever prepares its salary sets it.")
-                elif base_rate is None and sets_pay and pay != "none":
-                    form.add_error("base_rate", "Enter their pay.")
-            if form.is_valid():
-                data = form.cleaned_data
-                base_rate = data.get("base_rate")
-                try:
-                    result = create_employee(
-                        company=membership.company,
-                        first_name=data["first_name"],
-                        last_name=data["last_name"],
-                        employee_code=data["employee_code"],
-                        branch=data["branch"],
-                        department=data["department"],
-                        designation=data["designation"],
-                        manager=data.get("manager"),
-                        effective_from=data["effective_from"],
-                        pay_basis=data.get("pay_basis") or "monthly",
-                        base_rate=base_rate,
-                        joining_date=data["effective_from"],
-                        created_by=request.user,
-                    )
-                except (ValidationError, IntegrityError) as exc:
-                    _apply_errors(form, exc)
-                else:
-                    employee = result["employee"]
-                    messages.success(
-                        request,
-                        f"{employee.full_name} created as "
-                        f"{data['designation'].name} in {data['department'].name}."
-                        + ("" if result["compensation"] else
-                           " Their pay is set by whoever prepares that branch's salary."),
-                    )
-                    return redirect("employee_list")
+                employee = result["employee"]
+                messages.success(
+                    request,
+                    f"{employee.full_name} created as "
+                    f"{data['designation'].name} in {data['department'].name}."
+                    + ("" if result["compensation"] else
+                       " Their pay is set by whoever prepares that branch's salary."),
+                )
+                return redirect("employee_list")
         else:
             form = EmployeeCreateForm(
                 company=membership.company,

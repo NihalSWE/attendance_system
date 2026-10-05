@@ -5902,3 +5902,39 @@ person sets up the app at the next login). Setup with a current code moves the
 app to a new phone (pending until confirmed). `email_backup` tells the app
 whether this server can send the backup email. The platform owner can reset a
 person's two-step in the Django admin (`api/admin.py`: view and delete only).
+
+### API phase 3, part 1 — employees — 2026-10-05
+
+13 endpoints: the list (the panel's `employee_list_query`, so the same people,
+filters and pay rules), choices and Create employee, the profile and history
+(`employee_detail_services.employee_history`), details, personal, placement,
+salary, line manager, end employment, inactive / active - each through its
+panel page's gate, form and service. Pay for API keys needs `payroll:read` /
+`payroll:write`.
+
+Panel refactor (no behaviour change, organization tests 391 OK):
+`organization.employee_views.creation_setup` / `create_from_form` (Create
+employee's rules, now shared with the API) and
+`employee_edit_services.placement_branches`.
+
+Guide `docs/api/30-employees.md`. Tests `api/tests/test_employees.py`. Part 2
+(photo, education, documents, import, logins, leave policy, overtime and the
+other profile settings) follows.
+
+### API phase 3, part 2 — the rest of the profile, and import — 2026-10-05
+
+Photo, education, documents (files as base64 in JSON, `api/core/files.py`;
+served privately, the panel's rule), the login (give, access, password,
+disable, enable), leave policy and adjustments, overtime, report visibility,
+set as line manager, device permissions, import (check, then `confirm: true`
+with the same file - no server-side state; refused while any row is bad, as
+the panel offers Import only then) and the demo file. A view may now name a
+panel page per method (`panel_page = {"GET": …, "PUT": …}`). A docs test
+opens every endpoint's page.
+
+### API — two-step: email codes stay as an option — 2026-10-05
+
+At the senior's word the email-only way stays (migration
+`api.0005_two_step_email_option` brings `method` / `pending_method` back): the
+app (recommended) or email codes only; app users keep the email backup;
+changing the way or the phone needs a current code and a confirm.

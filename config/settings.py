@@ -308,6 +308,11 @@ SPECTACULAR_SETTINGS = {
     'VERSION': 'v1',
     'SERVE_INCLUDE_SCHEMA': False,
     'SCHEMA_PATH_PREFIX': r'/api/v1',
+    # Choice lists that share a field name ("status") get names of their own.
+    'ENUM_NAME_OVERRIDES': {
+        'ActiveStatusEnum': 'common.choices.ActiveStatus',
+        'EndingStatusEnum': 'organization.employee_detail_services.ENDING_STATUSES',
+    },
 }
 
 # Rate limits are counted in the database, so they hold across every
