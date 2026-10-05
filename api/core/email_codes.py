@@ -1,10 +1,9 @@
-"""Two-step codes by email - the second way (docs/api/02-authentication.md).
+"""Two-step codes by email - the backup way (docs/api/02-authentication.md).
 
-The authenticator app is the main way. A code by email is the other:
-- at login, anyone with two-step login may ask for a code by email instead of
-  the app (the phone is not at hand);
-- an owner or administrator who does not want an app sets two-step login up
-  with email codes only.
+The authenticator app is the main way. When it cannot be used - the phone is
+lost, the app deleted, the account gone - a code by email gets the person in
+at login, so nobody is locked out of their company. Nothing to set up: it goes
+to the login's own email. Once in, they can move the app to a new phone.
 
 A code is 6 digits, works once, for 10 minutes, and dies after 5 wrong tries.
 Only its hash is kept, on the session that asked for it. One email a minute

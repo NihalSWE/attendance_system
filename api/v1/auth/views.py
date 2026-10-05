@@ -8,7 +8,7 @@ from rest_framework.response import Response
 
 from accounts.models import CompanyMembership
 from accounts.services import get_active_memberships
-from api.core import logins, signing
+from api.core import email_codes, logins, signing
 from api.core.auth import ACCESS_COOKIE, REFRESH_COOKIE, cookie_options, enforce_csrf
 from api.core.crypto import decrypt, same
 from api.core.docs import PATH, Param, endpoint
@@ -107,9 +107,8 @@ class LoginView(ApiView):
             "When two-step login is on, the answer is only the challenge fields: send the "
             "challenge and a code to POST /api/v1/auth/login/two-step within 10 minutes. "
             "methods says which codes work: the authenticator app (the main way), a code by "
-            "email (ask for it with POST /api/v1/auth/login/two-step/email-code - or, for a "
-            "login set up with email codes, it is already sent: see email_sent_to) and a "
-            "recovery code.\n\n"
+            "email - the backup when the app cannot be used (ask for it with POST "
+            "/api/v1/auth/login/two-step/email-code) - and a recovery code.\n\n"
             "An owner or company administrator without two-step login gets "
             "two_step_setup_required: true - until they set it up, only two-step setup and "
             "logout work. 5 wrong passwords in 15 minutes lock the login for 15 minutes (10 in "
@@ -167,14 +166,16 @@ class LoginEmailCodeView(ApiView):
         id="auth-login-two-step-email-code", area=AREA, title="Log in: send the code by email",
         summary="The challenge in; a 6-digit code goes to the login's email.",
         what_it_does=[
-            "Emails a two-step code for this login - instead of the authenticator app.",
+            "Emails a two-step code for this login - the backup when the authenticator app "
+            "cannot be used.",
             "Then send that code to the two-step step, as with the app's code.",
         ],
         description=(
-            "For when the phone is not at hand, or the login uses email codes (their first "
-            "code is sent at login already - use this to send another). Works for apps and "
-            "browser frontends alike: finish with POST /api/v1/auth/login/two-step or "
-            "POST /api/v1/auth/web/login/two-step.\n\n"
+            "For when the app cannot be used: the phone is lost or not at hand, the app was "
+            "deleted. Show it as \"Email me a code instead\" on the code screen. Works for apps "
+            "and browser frontends alike: finish with POST /api/v1/auth/login/two-step or "
+            "POST /api/v1/auth/web/login/two-step. Once in, the person can move the app to a "
+            "new phone (POST /api/v1/auth/two-step/setup with this code).\n\n"
             "The code works once, for 10 minutes, and stops after 5 wrong tries. One email a "
             "minute. It is sent through the company's mail account (Organisation -> Email "
             "settings) or the server's; with neither, the answer is email_not_available."
@@ -410,7 +411,7 @@ class MeView(ApiView):
         response_example={
             "email": "rahim@example.com", "name": "Rahim Uddin",
             "companies": [{"id": 12, "name": "Acme Ltd", "role": "company_admin"}],
-            "two_step": {"enabled": True, "method": "app", "required": True},
+            "two_step": {"enabled": True, "email_backup": True, "required": True},
             "session": {"id": "ses_q7Hc2LkP9xWm", "client_type": "mobile",
                         "access_expires_at": "2026-10-04T10:25:00Z"}},
         errors=["not_authenticated", "invalid_token", "token_expired", "session_ended",
@@ -427,7 +428,7 @@ class MeView(ApiView):
             "email": user.email, "name": user.get_full_name() or user.email,
             "companies": companies,
             "two_step": {"enabled": two_step is not None,
-                         "method": two_step.method if two_step else None,
+                         "email_backup": email_codes.available(user),
                          "required": logins.must_use_two_step(user)},
             "session": {"id": session.public_id, "client_type": session.client_type,
                         "access_expires_at": session.access_expires_at},
@@ -666,26 +667,26 @@ class TwoStepSetupView(ApiView):
 
     @endpoint(
         id="auth-two-step-setup", area=AREA, title="Set up two-step login",
-        summary="Start two-step login - with the authenticator app, or with codes by email.",
+        summary="A new authenticator secret, to scan as a QR code.",
         what_it_does=[
-            'method "app" (the main way): answers a secret and an otpauth:// link to scan.',
-            'method "email": emails a code instead - for someone who does not want an app.',
-            "Nothing changes until it is confirmed with a code.",
+            "Starts two-step login: answers a secret and an otpauth:// link to scan.",
+            "Already on: moves it to a new phone (send a current code).",
+            "Nothing changes until it is confirmed with a code from the app.",
         ],
         description=(
-            "app: show otpauth_url as a QR code; the person scans it with an authenticator app "
+            "Show otpauth_url as a QR code; the person scans it with an authenticator app "
             "(Google Authenticator, Microsoft Authenticator, Authy, …), then sends the 6-digit "
-            "code it shows to POST /api/v1/auth/two-step/confirm.\n\n"
-            "email: a code is emailed now; send it to POST /api/v1/auth/two-step/confirm. From "
-            "then on every login emails a code. Needs a mail account on the server or the "
-            "company (Organisation -> Email settings).\n\n"
-            "Already on? This changes the way: send a current code as well. The new way takes "
-            "over when it is confirmed. Required for owners and company administrators; a code "
-            "by email also works at login for those who use the app."),
+            "code it shows to POST /api/v1/auth/two-step/confirm. Required for owners and "
+            "company administrators.\n\n"
+            "The backup needs no setup: when the app cannot be used, a code by email gets the "
+            "person in at login.\n\n"
+            "New phone? Send a current code too - from the app, by email (POST "
+            "/api/v1/auth/two-step/email-code) or a recovery code. The old phone keeps working "
+            "until the new one is confirmed."),
         roles=["A logged-in person (app or web)"],
         request=s.TwoStepSetupInputSerializer, response=s.TwoStepSetupSerializer,
-        request_example={"method": "app"},
-        response_example={"method": "app", "secret": "JBSWY3DPEHPK3PXP",
+        request_example={},
+        response_example={"replacing": False, "secret": "JBSWY3DPEHPK3PXP",
                           "otpauth_url": "otpauth://totp/Attendance%20Management:rahim%40example.com"
                                          "?secret=JBSWY3DPEHPK3PXP&issuer=Attendance%20Management"},
         errors=TWO_STEP_ERRORS,
@@ -706,9 +707,9 @@ class TwoStepEmailCodeView(ApiView):
         id="auth-two-step-email-code", area=AREA, title="Send me a code by email",
         summary="Emails a two-step code to the logged-in person.",
         what_it_does=["Emails a 6-digit code, for the two-step requests that need a code."],
-        description=("Use the code to confirm email setup, change the way, turn two-step login "
-                     "off or get new recovery codes - wherever a code from the app is asked "
-                     "for. It works once, for 10 minutes; one email a minute."),
+        description=("Use it wherever a code from the app is asked for while logged in - "
+                     "moving the app to a new phone, new recovery codes, turning two-step login "
+                     "off. It works once, for 10 minutes; one email a minute."),
         roles=["A logged-in person who has started or set up two-step login"],
         response=s.EmailCodeSentSerializer,
         response_example={"email_sent_to": "r***@example.com", "email_expires_in": 600},
@@ -725,18 +726,18 @@ class TwoStepConfirmView(ApiView):
 
     @endpoint(
         id="auth-two-step-confirm", area=AREA, title="Confirm two-step login",
-        summary="The first code of the new way turns two-step login on.",
-        what_it_does=["Turns two-step login on - or completes a change of way.",
+        summary="The first code from the app turns two-step login on.",
+        what_it_does=["Turns two-step login on - or completes the move to a new phone.",
                       "Answers 10 recovery codes - shown once."],
-        description=("Send the code from the authenticator app (method app) or the code that was "
-                     "emailed (method email). From now on every login asks for a code. Keep the "
-                     "recovery codes somewhere safe: each logs in once if the phone or the email "
-                     "is out of reach."),
+        description=("Send the 6-digit code the authenticator app shows. From now on every login "
+                     "asks for a code; when the app cannot be used, a code by email stands in "
+                     "(email_backup says whether this server can send it). Keep the recovery "
+                     "codes somewhere safe: each logs in once if neither works."),
         roles=["A logged-in person (app or web)"],
         request=s.CodeSerializer, response=s.TwoStepOnSerializer,
         request_example={"code": "492013"},
-        response_example={"method": "app",
-                          "recovery_codes": ["3f9a1c2e-7b4d5e6f", "a81c03d4-55e2f9b0"]},
+        response_example={"recovery_codes": ["3f9a1c2e-7b4d5e6f", "a81c03d4-55e2f9b0"],
+                          "email_backup": True},
         errors=TWO_STEP_ERRORS,
     )
     def post(self, request):

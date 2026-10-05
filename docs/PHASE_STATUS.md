@@ -5891,3 +5891,14 @@ access (permissions, people, one person's grid, save the grid).
   *Overview*), changelog. Postman collection picks the endpoints up by itself.
 
 Tests: `api/tests/test_company.py`, `api/tests/test_access.py`.
+
+### API — two-step: app first, email as the backup — 2026-10-05
+
+The senior's decision: the authenticator app is the main way, a code by email
+the backup for everyone (phone lost, app deleted, account gone), recovery codes
+the last resort. The email-only setup is removed (migration
+`api.0004_two_step_app_with_email_backup` deletes any email-only setup; that
+person sets up the app at the next login). Setup with a current code moves the
+app to a new phone (pending until confirmed). `email_backup` tells the app
+whether this server can send the backup email. The platform owner can reset a
+person's two-step in the Django admin (`api/admin.py`: view and delete only).

@@ -136,19 +136,15 @@ class UsedNonce(models.Model):
 
 
 class TwoStep(models.Model):
-    """A person's two-step login: the way (authenticator app, the main one, or
-    codes by email) and the recovery codes."""
-
-    class Method(models.TextChoices):
-        APP = "app", "Authenticator app"
-        EMAIL = "email", "Code by email"
+    """A person's two-step login: the authenticator app's secret (the main
+    way) and the recovery codes. A code by email is the backup and needs
+    nothing stored here (api/core/email_codes.py)."""
 
     user = models.OneToOneField("accounts.User", on_delete=models.CASCADE,
                                 related_name="api_two_step")
-    method = models.CharField(max_length=10, choices=Method.choices, default=Method.APP)
-    secret_encrypted = models.TextField(blank=True)                   # the app's; empty for email
-    # Changing the way: the new one waits here until it is confirmed with a code.
-    pending_method = models.CharField(max_length=10, choices=Method.choices, blank=True)
+    secret_encrypted = models.TextField(blank=True)
+    # Moving the app to a new phone: the new secret waits here until a code
+    # from the new phone confirms it; the old one works until then.
     pending_secret_encrypted = models.TextField(blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     recovery_hashes = models.JSONField(default=list, blank=True)     # unused codes
