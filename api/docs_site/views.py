@@ -44,11 +44,12 @@ GUIDES = {
     "company-and-branches": ("Company & branches", "20-company-and-branches.md"),
     "employees": ("Employees", "30-employees.md"),
     "shifts-and-calendar": ("Shifts & calendar", "40-shifts-and-calendar.md"),
+    "devices-setup": ("Devices: setup", "50-devices-setup.md"),
 }
 
 #: Each area's guide page, shown first in the area's menu section.
 AREA_GUIDES = {"company": "company-and-branches", "employees": "employees",
-               "shifts": "shifts-and-calendar"}
+               "shifts": "shifts-and-calendar", "devices": "devices-setup"}
 
 
 def _markdown(filename):

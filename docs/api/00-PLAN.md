@@ -471,6 +471,12 @@ Guide: `40-shifts-and-calendar.md`.
 
 Guide: `50-devices-setup.md`.
 
+**Status: DONE 2026-10-05.** Also enrollments (`/device-enrollments`: list,
+add, one, change) and `POST /devices/attendance-rules/recheck`; the connection
+test is `POST` then `GET /devices/{id}/test-connection?since=&command_id=`;
+ending a department mapping is `POST /device-departments/{id}/end`. The
+server-address change stays in phase 6.
+
 ### Phase 6 — Devices: data flow (device ⇄ software)
 
 How it works (explained in the guide with a diagram): the terminal calls the

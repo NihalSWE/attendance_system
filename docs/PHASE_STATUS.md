@@ -5947,3 +5947,21 @@ an employee's own shift, weekly offs (weekday names) and holidays (one, or
 many - the year calendar). Each through its panel page's gate and form
 (times HH:MM via ShiftForm; the form derives a night shift's next-day end).
 Guide `docs/api/40-shifts-and-calendar.md`. Tests `api/tests/test_shifts.py`.
+
+### API phase 5 — devices: setup — 2026-10-05
+
+Devices (list, register, one, change, retire), serial check, models, setup
+lines, connections and the connection test, department mappings, enrollments
+and which devices count (rules, recheck) - each behind the panel's own device
+rule (`panel_access`: owner or unrestricted company admin).
+
+Panel refactor (no behaviour change, devices tests 430 OK): the device writes
+moved from `devices/views/ui.py` into `devices/services/device_admin.py`
+(register, update, retire, department link add/end, enrollment create/update
+with the audit rows), called by the panel and the API. The audit "before" is
+read from the database - a validated ModelForm has already put the new values
+on the instance (a devices test caught that during the move). Retiring an
+already-retired device and ending an ended mapping are now refused with a
+message instead of overwriting their dates.
+
+Guide `docs/api/50-devices-setup.md`. Tests `api/tests/test_devices_setup.py`.
