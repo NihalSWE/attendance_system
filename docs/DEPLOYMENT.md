@@ -129,14 +129,18 @@ login there (an authenticator app, or email codes); the panels are unchanged.
 ## Attendance is read from what is saved (2026-10-06)
 
 The attendance screens no longer work the whole month out again on every load:
-they read the saved days and rebuild only what time alone has changed (a
-shift ending, a day closing), at most every 5 minutes. Every change - a scan,
-a fix, leave, a schedule - still rewrites its days at once. Today and yesterday
-are kept built in the background when a device checks in.
+they read the saved days. Every change - a scan, a fix, leave, a schedule -
+rewrites its days at once. What time alone changes is waited for one
+employee-day at a time: each day not final records its next change (its
+shift's end, then its close; table `attendance_due`), and only the people whose
+moment has come are rebuilt - about twice a day each, however many people
+there are. A device's check-in runs this in the background (a check costs
+under a millisecond when nothing is due).
 
-Deploying it needs only the usual `migrate` (table `attendance_day_build`).
+Deploying it needs only the usual `migrate` (tables `attendance_day_build` and
+`attendance_due`; the first load of each month builds it once).
 **Optional**, for companies whose devices are offline: a timer that runs
-`settle_attendance` every 5 minutes.
+`settle_attendance` every minute (cheap: it does only what is due).
 
 ```
 cat > /etc/systemd/system/attendance_settle.service <<'UNIT'
@@ -152,11 +156,11 @@ UNIT
 
 cat > /etc/systemd/system/attendance_settle.timer <<'UNIT'
 [Unit]
-Description=Attendance: build today's and yesterday's days every 5 minutes
+Description=Attendance: rebuild the days whose shift ended or which closed
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=5min
+OnUnitActiveSec=1min
 
 [Install]
 WantedBy=timers.target

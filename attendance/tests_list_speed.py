@@ -1,11 +1,12 @@
-"""Attendance is read from what is saved, not worked out again on every load
-(2026-10-06).
+"""Attendance is read from what is saved, and what time alone changes is
+waited for one employee-day at a time (2026-10-06).
 
 Measured before: every load of the current month rebuilt every employee's every
 day so far - 677 queries for 21 people on day 6, the second load no cheaper
-than the first. Now a load rebuilds only what time alone has changed since the
-last build (attendance.services.refresh), and a device's check-in keeps today
-and yesterday built in the background (settle_soon).
+than the first. Now a load reads what is saved; each day that is not final
+waits for its next change (its shift's end, then its close) in
+``AttendanceDue``, and only the employee-days whose time has come are rebuilt -
+so the work grows with what changed, not with how many people there are.
 """
 
 import datetime
@@ -18,14 +19,19 @@ from django.urls import reverse
 from django.utils import timezone
 
 from attendance import tests_live
-from attendance.models import AttendanceDayBuild, AttendanceRecord
-from attendance.services import final_from, refresh, settle_recent
+from attendance.models import AttendanceDayBuild, AttendanceDue, AttendanceRecord
+from attendance.services import refresh, settle_due, settle_recent
 from common.tenant import use_company
 from employees.services import create_employee
 from organization.catalogue import adopt_department, adopt_designation
 
 UTC = datetime.timezone.utc
 DHAKA = datetime.timezone(datetime.timedelta(hours=6))
+MONDAY = datetime.date(2026, 8, 10)
+
+
+def at(day, hour, minute=0):
+    return datetime.datetime(day.year, day.month, day.day, hour, minute, tzinfo=DHAKA)
 
 
 class SavedAttendanceCase(tests_live.LiveTestCase):
@@ -52,40 +58,17 @@ class SavedAttendanceCase(tests_live.LiveTestCase):
         self.assertEqual(page.status_code, 200)
         return len(queries)
 
+    def due(self, day=MONDAY):
+        return dict(AttendanceDue.objects.filter(company=self.company, work_date=day)
+                    .values_list("employee_id", "due_at"))
+
 
 class PageLoadTests(SavedAttendanceCase):
     def test_a_second_load_reads_what_is_saved(self):
         first = self.load()
         second = self.load()
-        # The first builds the month once; the second only reads it - a handful
-        # of queries however many people and days there are.
         self.assertGreater(first, 200)
         self.assertLess(second, 60)
-
-    def test_a_day_not_final_is_built_again_once_due(self):
-        self.load()
-        today = timezone.localdate()
-        now = timezone.now()
-        # Within a few minutes: nothing to do.
-        self.assertTrue(refresh(self.company.pk, start=today, end=today, now=now)["unchanged"])
-        # Later on: today can still change with time (a shift ends), so it is
-        # built again.
-        later = now + datetime.timedelta(minutes=6)
-        self.assertNotIn("unchanged", refresh(self.company.pk, start=today, end=today,
-                                              now=later))
-        self.assertEqual(AttendanceDayBuild.objects.get(company=self.company,
-                                                        work_date=today).built_at, later)
-
-    def test_a_final_day_is_never_built_again(self):
-        today = timezone.localdate()
-        old = today - datetime.timedelta(days=3)
-        refresh(self.company.pk, start=old, end=today)
-        built = AttendanceDayBuild.objects.get(company=self.company, work_date=old).built_at
-        self.assertGreaterEqual(built, final_from(old, DHAKA))
-        much_later = timezone.now() + datetime.timedelta(days=1)
-        refresh(self.company.pk, start=old, end=old, now=much_later)
-        self.assertEqual(AttendanceDayBuild.objects.get(company=self.company,
-                                                        work_date=old).built_at, built)
 
     def test_someone_hired_afterwards_gets_their_days(self):
         today = timezone.localdate()
@@ -98,23 +81,76 @@ class PageLoadTests(SavedAttendanceCase):
         with use_company(self.company):
             days = AttendanceRecord.objects.filter(employee=newcomer,
                                                    work_date__lt=today).count()
-        # Every finished working day of theirs is there (absent, or a day off).
         self.assertGreaterEqual(days, max(0, today.day - 2))
 
     def test_a_scan_shows_at_once(self):
-        """A scan arriving rewrites its day straight away (ingestion recalculates
-        the days it touched) - the saved answer is never behind a real change."""
+        """A scan rewrites its day straight away (ingestion recalculates the
+        days it touched) - the saved answer is never behind a real change."""
         from attendance.services import recalculate_for_punches
 
         self.load()
-        today = timezone.localdate()
-        yesterday = today - datetime.timedelta(days=1)
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
         self.punch(yesterday, 9, 5)
         recalculate_for_punches(self.company.pk, [(self.employee.pk, yesterday)])
         self.load()
         with use_company(self.company):
             day = AttendanceRecord.objects.get(employee=self.employee, work_date=yesterday)
         self.assertIsNotNone(day.first_in_at)
+
+
+class DueTimeTests(SavedAttendanceCase):
+    """One working Monday, 09:00-18:00, the day closing at Tuesday's shift start."""
+
+    def setUp(self):
+        super().setUp()
+        self.punch(MONDAY, 9)                    # Rahim came in; nobody else has yet
+        refresh(self.company.pk, start=MONDAY, end=MONDAY, now=at(MONDAY, 12))
+
+    def test_each_day_waits_for_its_own_next_change(self):
+        due = self.due()
+        # Rahim's open day changes at his shift's end; everybody else's when the
+        # day closes (they become absent then, not before).
+        self.assertEqual(due[self.employee.pk], at(MONDAY, 18))
+        others = {when for person, when in due.items() if person != self.employee.pk}
+        self.assertEqual(len(due), self.PEOPLE + 1)
+        self.assertEqual(len(others), 1)
+        self.assertGreater(others.pop(), at(MONDAY, 18))
+
+    def test_nothing_is_rebuilt_before_its_time(self):
+        self.assertEqual(settle_due(self.company.pk, now=at(MONDAY, 17, 59))["days"], 0)
+
+    def test_at_a_shift_end_only_that_person_is_rebuilt(self):
+        result = settle_due(self.company.pk, now=at(MONDAY, 18, 30))
+        # One employee-day, not twenty-one: the work follows what changed.
+        self.assertEqual(result["days"], 1)
+        self.assertGreater(self.due()[self.employee.pk], at(MONDAY, 18, 30))
+
+    def test_after_the_close_the_day_is_final_and_waits_for_nothing(self):
+        tuesday_morning = at(MONDAY + datetime.timedelta(days=1), 10)
+        result = settle_due(self.company.pk, now=tuesday_morning)
+        self.assertEqual(result["days"], self.PEOPLE + 1)
+        self.assertEqual(self.due(), {})
+        with use_company(self.company):
+            statuses = list(AttendanceRecord.objects.filter(work_date=MONDAY)
+                            .values_list("attendance_status", flat=True))
+        self.assertEqual(statuses.count("absent"), self.PEOPLE)
+        self.assertEqual(settle_due(self.company.pk, now=tuesday_morning)["days"], 0)
+
+    def test_a_page_load_does_only_what_is_due(self):
+        self.assertTrue(refresh(self.company.pk, start=MONDAY, end=MONDAY,
+                                now=at(MONDAY, 13))["unchanged"])
+        result = refresh(self.company.pk, start=MONDAY, end=MONDAY, now=at(MONDAY, 18, 5))
+        self.assertEqual(result["days"], 1)
+
+    def test_a_change_rewrites_what_it_waits_for(self):
+        """A scan out after the shift ends: the day is rebuilt by the scan, and
+        its next change is the close."""
+        from attendance.services import recalculate
+
+        self.punch(MONDAY, 18, 10)
+        recalculate(self.company.pk, employee_ids=[self.employee.pk], start=MONDAY,
+                    end=MONDAY, now=at(MONDAY, 18, 15))
+        self.assertGreater(self.due()[self.employee.pk], at(MONDAY, 18, 15))
 
 
 class BackgroundTests(SavedAttendanceCase):
