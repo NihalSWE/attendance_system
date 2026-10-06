@@ -6110,3 +6110,33 @@ webhook uses the same. Migration 0011 clears the old build marks so each open
 day gets its change time once. Measured at 201 people all at work: one
 rebuild of everyone's day 1.94 s; a check with nothing due 0.8 ms; each
 person rebuilt about twice a day.
+
+### Attendance: schedule changes reach built days; no-shift notice — 2026-10-06
+
+Client complaint (Healthy Choice): a woman who scanned daily had an empty
+calendar, and a man who worked almost 12 hours got half days.
+
+- **Causes.** (1) 212 of 272 people sit in the "Unassigned" department, which
+  has no shift, and there is no company shift: attendance is measured against
+  a shift, so no day was written for them (scans kept). (2) Shift W1 07:00-19:00
+  has a 60-minute unpaid break but needed 720 minutes for a full day - every
+  minute of the shift - so 704 worked minutes was a half day; with alternating
+  pairing a scan at a second shed read as going out. (3) A regression from
+  option 2: a schedule change rebuilt nothing, so a fix in the panel changed
+  nothing on screen.
+- **Fix (3).** `update_shift` (when a measuring field changes),
+  `set_department_shift`, `set_employee_shift`, `end_employee_shift` and
+  `update_attendance_settings` call `attendance.services.schedule_changed`:
+  every placed employee's days from the change (dated changes: no further back
+  than last month's start; undated: this month) become due now in
+  `AttendanceDue`; a background thread runs `settle_due` after commit, and
+  `refresh` no longer treats a range with due rows as settled history. Real
+  data: marking 0.4 s, rebuilding 3052 employee-days 29 s in the background.
+  Older months: `manage.py recalculate_attendance`.
+- **Notice.** Daily list: "N people have no shift ... Unassigned (212)" with a
+  Set shifts link; Calendar: "<name> has no shift". (`attendance.views.without_shift`.)
+- **Warning.** `Shift.full_day_warning`: a full day that needs more than the
+  shift's working minutes (length less an unpaid break), or all of them. Shown
+  after saving a shift and as "Too high" in the shift list. Not a refusal.
+- **Client's to decide** (panel): a shift for Unassigned (or a company shift),
+  realistic full/half-day minutes, "first and last scan" pairing for sheds.

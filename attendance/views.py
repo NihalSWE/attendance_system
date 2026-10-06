@@ -194,6 +194,7 @@ def _daily_page(request, *, late_only):
         employees = _pickable(visible).order_by("first_name", "last_name")
         branches = branch_choices(company_id, visible)
         departments = _department_choices(visible, branches)
+        no_shift = without_shift(company_id, visible, _shift_day(daily["first"], daily["last"]))
 
     export_params = request.GET.copy()
     for drop in ("page", "per_page", "table", "draw", "start", "length", "format"):
@@ -223,6 +224,8 @@ def _daily_page(request, *, late_only):
         # Punch times are stored in UTC; people read them in company time.
         "company_tz": membership.company.timezone or "UTC",
         "late_only": late_only,
+        "no_shift": no_shift,
+        "no_shift_total": sum(count for _name, count in no_shift),
         "list_url": "attendance:attendance_late" if late_only else "attendance:attendance_list",
     })
 
@@ -237,6 +240,46 @@ def _department_choices(visible, branches):
     if not visible.is_all and not visible.branches:
         departments = departments.filter(pk__in=visible.departments)
     return departments.order_by("branch__name", "name")
+
+
+def _shift_day(first, last):
+    """The day a page checks shifts on: today in the range shown, else the
+    nearest end of it."""
+    return min(max(timezone.localdate(), first), last)
+
+
+def without_shift(company_id, visible, on, employee_ids=None):
+    """People the viewer sees with no shift on ``on``, by department, most
+    first: ``[(department name, count)]``.
+
+    Attendance is measured against a shift, so for them no day is worked out
+    at all - their scans are kept, and nothing shows until they have one (a
+    department shift, a company shift or their own). Call inside the company.
+    (2026-10-06: 212 people placed in a department without a shift had
+    scanned for weeks with an empty calendar, and nothing said why.)
+    """
+    from collections import Counter
+
+    from employees.models import EmployeeAssignment
+    from scheduling.calendar import WorkCalendar
+
+    placed = people(visible)
+    if employee_ids is not None:
+        placed = placed.filter(pk__in=employee_ids)
+    placements = (
+        EmployeeAssignment.objects.filter(employee__in=placed, effective_to__isnull=True)
+        .exclude(status__in=["cancelled", "draft"])
+        .values_list("employee_id", "department_id", "department__name")
+    )
+    work = WorkCalendar(company_id, on, on)
+    missing, seen = Counter(), set()
+    for employee_id, department_id, department in placements:
+        if employee_id in seen:
+            continue
+        seen.add(employee_id)
+        if work.shift_for(department_id, on, employee_id) is None:
+            missing[department or "No department"] += 1
+    return missing.most_common()
 
 
 def _month_steps(year, month):
@@ -299,6 +342,8 @@ def attendance_calendar(request):
             else None
         )
         has_any_record = access.scope(AttendanceRecord.objects.all(), visible).exists()
+        no_shift = bool(employee) and bool(
+            without_shift(company_id, visible, _shift_day(first, last), [employee.pk]))
 
     # ?format=pdf: the same person's same month, as the page shows it - same
     # view, so the same permissions and the same branch-limited grid.
@@ -315,6 +360,7 @@ def attendance_calendar(request):
         "employees": employees,
         "employee_id": str(employee.pk) if employee else "",
         "has_any_record": has_any_record,
+        "no_shift": no_shift,
         "can_manage": membership.role in STRUCTURE_ROLES,
         "company_tz": company_tz,
         "previous_year": previous[0], "previous_month": previous[1],

@@ -75,6 +75,33 @@ class Shift(TenantOwned, ActorTracked):
     def __str__(self):
         return self.name
 
+    @property
+    def working_minutes(self):
+        """The most a person can work in this shift: its length, less the
+        break unless the break is paid."""
+        unpaid = 0 if self.break_is_paid else (self.default_break_minutes or 0)
+        return (self.scheduled_minutes or 0) - unpaid
+
+    @property
+    def full_day_warning(self):
+        """Why this shift's full day is out of a normal day's reach, or "".
+
+        Allowed - a company may mean it - but said out loud: a full day that
+        needs every minute of the shift turns a minute late into a half day
+        (2026-10-06: a 12-hour shift with a one-hour unpaid break needed 720
+        minutes, and a man who worked almost 12 hours got a half day).
+        """
+        full, most = self.minimum_full_day_minutes or 0, self.working_minutes
+        if not full or most <= 0 or full < most:
+            return ""
+        if full > most:
+            return (f"A full day needs {full} minutes, but this shift has {most} minutes "
+                    f"of work at most once its {self.default_break_minutes}-minute unpaid "
+                    f"break is taken off: nearly every day will be a half day. Lower the "
+                    f"full day below {most}.")
+        return (f"A full day needs all {most} working minutes of this shift: a minute "
+                f"late or a minute early makes it a half day. Lower it to leave some room.")
+
     def clean(self):
         super().clean()
         errors = {}

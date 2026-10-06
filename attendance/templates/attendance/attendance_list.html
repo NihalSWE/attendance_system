@@ -60,6 +60,26 @@
         </div>
     </div>
 
+    {% if no_shift %}
+        <div class="alert alert--warning" role="status">
+            <div>
+                <strong>
+                    {{ no_shift_total }} {{ no_shift_total|pluralize:"person has,people have" }} no shift, so no attendance is worked out for them.
+                </strong>
+                <p>
+                    {% for name, count in no_shift %}{{ name }} ({{ count }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+                    Their scans are kept. Attendance is measured against a shift: give
+                    {% if no_shift|length > 1 %}these departments{% else %}this department{% endif %}
+                    a shift, or set a company shift for every department without one,
+                    and their days are worked out.
+                    {% if can_manage %}
+                        <a href="{% url 'scheduling:schedule_overview' %}">Set shifts</a>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    {% endif %}
+
     <div class="card">
         <div class="card__head">
             <h2>

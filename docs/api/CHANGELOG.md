@@ -8,6 +8,11 @@ Every endpoint added or changed, newest first.
   and `GET /attendance/export` - the department they were placed in that day.
 - **Faster:** attendance is read from what is saved; only what time alone has
   changed is rebuilt, at most every 5 minutes (changes still show at once).
+- **Fixed:** changing a shift, a department's or an employee's shift, or the
+  attendance settings (`/shifts/{id}`, `/department-shifts`,
+  `/employees/{id}/shifts`, `/attendance-settings`) now measures this month's days
+  again - from the change's first day for a dated change, back to last month
+  at most. Before, days already worked out kept the old shift.
 
 ## 2026-10-05 — The last two panel downloads
 

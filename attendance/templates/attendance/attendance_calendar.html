@@ -128,6 +128,23 @@
             </div>
         </div>
 
+        {% if no_shift %}
+            <div class="alert alert--warning" role="status">
+                <div>
+                    <strong>
+                        {{ employee.full_name }} has no shift, so no attendance is worked out.
+                    </strong>
+                    <p>
+                        Their scans are kept. Attendance is measured against a shift:
+                        give their department a shift, set a company shift, or give
+                        them their own, and their days are worked out.
+                        {% if can_manage %}
+                            <a href="{% url 'scheduling:schedule_overview' %}">Set shifts</a>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        {% endif %}
         {% if not has_any_record %}
             <div class="alert alert--info" role="status">
                 <div>
