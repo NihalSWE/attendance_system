@@ -212,3 +212,6 @@ $RECYCLE.BIN/
 # -----------------------------------------------------------------------------
 .ipynb_checkpoints
 *.ipynb_checkpoints/
+
+# Database copies from dump_database: personal data, never committed.
+/db_dumps/
