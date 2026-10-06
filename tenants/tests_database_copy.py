@@ -58,7 +58,7 @@ class DatabaseCopyTests(TestCase):
             # row before the row it points to, and checks them all at the end.
             cursor.execute("SET CONSTRAINTS ALL DEFERRED")
 
-    def dump(self, name="copy.json", *extra):
+    def dump(self, name="copy.jsonl", *extra):
         path = os.path.join(self.folder, name)
         call_command("dump_database", "--output", path, *extra, stdout=StringIO())
         return path
@@ -66,7 +66,8 @@ class DatabaseCopyTests(TestCase):
     def test_every_companys_rows_are_copied(self):
         import json
 
-        rows = json.load(open(self.dump(), encoding="utf-8"))
+        with open(self.dump(), encoding="utf-8") as stream:
+            rows = [json.loads(line) for line in stream if line.strip()]
         names = {row["fields"]["first_name"] for row in rows
                  if row["model"] == "employees.employee"}
         self.assertEqual(names, {"Rahim AAA", "Rahim BBB"})
@@ -81,7 +82,7 @@ class DatabaseCopyTests(TestCase):
     def test_a_copy_replaces_the_local_data(self):
         for compressed in (False, True):
             with self.subTest(compressed=compressed):
-                path = self.dump("copy.json.gz" if compressed else "copy.json")
+                path = self.dump("copy.jsonl.gz" if compressed else "copy.jsonl")
                 stray = onboard_company(code="ZZZ", slug="zzz", name="Only on this PC")
                 self.settle_checks()
                 out = StringIO()
@@ -103,10 +104,18 @@ class DatabaseCopyTests(TestCase):
 
     @override_settings(DEBUG=True)
     def test_a_bad_file_changes_nothing(self):
-        broken = os.path.join(self.folder, "broken.json")
+        broken = os.path.join(self.folder, "broken.jsonl")
         with open(broken, "w", encoding="utf-8") as stream:
-            stream.write('[{"model": "tenants.company", "pk": 1, "fields": {"nope": 1}}]')
+            stream.write('{"model": "tenants.company", "pk": 1, "fields": {"nope": 1}}\n')
         self.settle_checks()
         with self.assertRaises(Exception):
             call_command("load_database", broken, "--noinput", stdout=StringIO())
         self.assertEqual(Company.objects.count(), 2)
+
+    @override_settings(DEBUG=True)
+    def test_a_plain_json_file_is_refused(self):
+        plain = os.path.join(self.folder, "copy.json")
+        with open(plain, "w", encoding="utf-8") as stream:
+            stream.write("[]")
+        with self.assertRaisesRegex(CommandError, "jsonl"):
+            call_command("load_database", plain, "--noinput")

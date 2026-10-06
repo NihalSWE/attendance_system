@@ -1,6 +1,6 @@
 """Replace this PC's database with a copy made by ``dump_database`` (2026-10-06).
 
-    python manage.py load_database db_dumps/attendance_2026-10-06_1830.json
+    python manage.py load_database db_dumps/attendance_2026-10-06_1830.jsonl.gz
 
 Everything in the local database is replaced by the file's: companies,
 employees, attendance, salary, logins. In one go - if the file cannot be
@@ -31,7 +31,7 @@ class Command(BaseCommand):
     help = "Replace the local database with a dump_database file (developers' PCs only)."
 
     def add_arguments(self, parser):
-        parser.add_argument("file", help="The .json or .json.gz from dump_database.")
+        parser.add_argument("file", help="The .jsonl or .jsonl.gz from dump_database.")
         parser.add_argument("--noinput", "--no-input", action="store_false",
                             dest="interactive", help="Do not ask before replacing.")
 
@@ -42,6 +42,10 @@ class Command(BaseCommand):
                                "developer's PC only.")
         if not os.path.exists(file):
             raise CommandError(f"No such file: {file}")
+        if not file.endswith((".jsonl", ".jsonl.gz")):
+            raise CommandError("Use a .jsonl or .jsonl.gz file from dump_database: it is read "
+                               "a line at a time. A plain .json file is read whole into memory, "
+                               "and a live database's copy does not fit in a PC's.")
         database = settings.DATABASES["default"]
         where = f"{database.get('NAME')} on {database.get('HOST') or 'localhost'}"
         if interactive:
