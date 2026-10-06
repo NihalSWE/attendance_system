@@ -24,6 +24,7 @@ class Command(BaseCommand):
         for row in WebhookSettings.all_objects.filter(is_active=True).order_by("company_id"):
             company = Company.objects.get(pk=row.company_id)
             today = timezone.now().astimezone(services.company_zone(company)).date()
-            refresh(company.pk, start=today - datetime.timedelta(days=1), end=today)
+            refresh(company.pk, start=today - datetime.timedelta(days=1), end=today,
+                    fresh_seconds=50)
             received = services.deliver_due(company.pk)
             self.stdout.write(f"{company.name}: {received} event(s) received.")

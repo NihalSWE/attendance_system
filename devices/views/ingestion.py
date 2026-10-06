@@ -176,6 +176,11 @@ def getrequest(request):
     catch_up_after_gap(device, note_poll(device, now), now)
     # The ERP webhook: finished days' check-outs and retries ride on the
     # device's own check-ins (at most once a minute, in the background).
+    # Today's and yesterday's attendance, built in the background so the
+    # screens only read (at most once a minute per company and process).
+    from attendance.services import settle_soon
+
+    settle_soon(device.company_id)
     from webhooks.services import on_device_poll
 
     on_device_poll(device.company_id)

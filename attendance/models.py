@@ -464,3 +464,30 @@ class MissedScanRequest(TenantOwned, ActorTracked):
 
     def __str__(self):
         return f"Missed scan {self.employee_id} {self.scan_at:%Y-%m-%d %H:%M}"
+
+
+class AttendanceDayBuild(models.Model):
+    """When a company's whole day of attendance was last built (2026-10-06).
+
+    The screens read attendance from what is saved. Every change rewrites the
+    days it touches at once - a scan, a fix, leave, a schedule - so what a
+    screen must still bring up to date is only what changes with time alone:
+    a shift ending, a day closing, an absent day appearing. This row says when
+    that was last done for everybody, so a page load does it only when due
+    (``attendance.services.refresh``) instead of rebuilding the month.
+    """
+
+    company = models.ForeignKey("tenants.Company", on_delete=models.CASCADE,
+                                related_name="+")
+    work_date = models.DateField()
+    built_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "attendance_day_build"
+        constraints = [
+            models.UniqueConstraint(fields=["company", "work_date"],
+                                    name="uniq_attendance_day_build"),
+        ]
+
+    def __str__(self):
+        return f"{self.company_id} {self.work_date} built {self.built_at:%Y-%m-%d %H:%M}"

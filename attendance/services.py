@@ -822,16 +822,60 @@ def _pair(day_punches, window, settings, is_closed, now=None):
     )
 
 
-def refresh(company_id, *, employee_ids=None, start, end, now=None):
-    """Bring a range up to date before it is read.
+#: A day that is not final yet (today, yesterday) is taken as up to date for
+#: this long after it was built for everybody. Every change rewrites the days
+#: it touches at once (a scan, a fix, leave, a schedule); this only bounds how
+#: late a change that comes with time alone shows on a screen - a shift ending,
+#: a day closing. The background pass (``settle_soon``) keeps it far fresher.
+PAGE_FRESH_SECONDS = 300
+#: The background pass rebuilds today and yesterday at most this often.
+BACKGROUND_FRESH_SECONDS = 50
 
-    The screens call this: a day whose close has passed, or one never written
-    because its shift had not finished, is rebuilt so the reader sees the
-    finished answer rather than yesterday's provisional one. Days that are
-    already closed and already stored are left alone, so opening a month of
-    settled history costs one query.
+
+def final_from(day, tz):
+    """When ``day`` can no longer change with time: every window that opens on
+    it has closed by then (a window closes at the next shift's start, or 24
+    hours after its own start at the latest)."""
+    return datetime.datetime.combine(day + datetime.timedelta(days=2), datetime.time.min,
+                                     tzinfo=tz)
+
+
+def _spans(days):
+    """Sorted dates -> ``[(first, last)]`` runs of consecutive days."""
+    spans = []
+    for day in days:
+        if spans and day == spans[-1][1] + datetime.timedelta(days=1):
+            spans[-1][1] = day
+        else:
+            spans.append([day, day])
+    return [tuple(span) for span in spans]
+
+
+def refresh(company_id, *, employee_ids=None, start, end, now=None,
+            fresh_seconds=PAGE_FRESH_SECONDS):
+    """Bring a range up to date before it is read - only what is due.
+
+    What is saved is the answer: every change rewrites the days it touches the
+    moment it happens. What a reader may still find out of date is what time
+    alone changes - a shift has ended, a day has closed, nobody came in and
+    the day is now absent. So:
+
+    - settled history (nothing open, before today, already stored) is read as
+      it is, as before;
+    - a day built for everybody after it became final is never rebuilt;
+    - a day not final yet (today, yesterday) is rebuilt only when its last
+      build is older than ``fresh_seconds``;
+    - a day never built is built.
+
+    Opening a page twice therefore costs a few queries, not everybody's month
+    again (2026-10-06: it was a rebuild of every day of the month so far, for
+    everyone, on every load).
     """
+    from attendance.models import AttendanceDayBuild
+
     now = now or timezone.now()
+    tz = _zone(_company_timezone(company_id))
+    today = now.astimezone(tz).date()
     with use_company(company_id):
         stored = AttendanceRecord.objects.filter(
             work_date__gte=start, work_date__lte=end
@@ -840,21 +884,88 @@ def refresh(company_id, *, employee_ids=None, start, end, now=None):
             stored = stored.filter(employee_id__in=list(employee_ids))
         open_days = stored.filter(is_open=True).exists()
         anything_stored = stored.exists()
-        # A day that was never written (nobody had scanned before its shift
-        # ended) has no row to look at, so a range that reaches today always
-        # gets one pass.
-        reaches_today = end >= now.astimezone(
-            _zone(_company_timezone(company_id))
-        ).date()
     # Settled history is left alone, which is what makes opening an old month
     # cost one query. A range holding nothing at all is not settled history —
     # it has simply never been built, and skipping it was how a month that
     # nobody had calculated stayed empty for ever.
-    if anything_stored and not open_days and not reaches_today:
+    if anything_stored and not open_days and end < today:
         return {"days": 0, "unchanged": True}
-    return recalculate(
-        company_id, employee_ids=employee_ids, start=start, end=end, now=now
-    )
+    last = min(end, today)
+    built = dict(AttendanceDayBuild.objects.filter(
+        company_id=company_id, work_date__gte=start, work_date__lte=last,
+    ).values_list("work_date", "built_at"))
+    fresh_after = now - datetime.timedelta(seconds=fresh_seconds)
+    due = []
+    day = start
+    while day <= last:
+        at = built.get(day)
+        if at is None or (at < final_from(day, tz) and at < fresh_after):
+            due.append(day)
+        day += datetime.timedelta(days=1)
+    if not due:
+        return {"days": 0, "unchanged": True}
+
+    summary = defaultdict(int)
+    no_shift = False
+    for first, final in _spans(due):
+        result = recalculate(company_id, employee_ids=employee_ids, start=first, end=final,
+                             now=now)
+        no_shift = no_shift or bool(result.get("no_shift"))
+        for key, value in result.items():
+            if isinstance(value, int) and not isinstance(value, bool):
+                summary[key] += value
+    if employee_ids is None and not no_shift:
+        # Built for everybody: remembered, so the next reader does not redo it.
+        # (A no-shift company built nothing; its first shift rebuilds the days.)
+        for day in due:
+            AttendanceDayBuild.objects.update_or_create(
+                company_id=company_id, work_date=day, defaults={"built_at": now})
+    return dict(summary)
+
+
+def forget_built(company_id, since):
+    """Days from ``since`` must be built again for everybody - someone appeared
+    whose days were never written (a new employee). Their next reader builds
+    them."""
+    from attendance.models import AttendanceDayBuild
+
+    AttendanceDayBuild.objects.filter(company_id=company_id, work_date__gte=since).delete()
+
+
+def settle_recent(company_id, now=None):
+    """Today and yesterday, brought up to date for everybody, if due. The
+    background pass: a device's check-in, or ``manage.py settle_attendance``."""
+    now = now or timezone.now()
+    today = now.astimezone(_zone(_company_timezone(company_id))).date()
+    return refresh(company_id, start=today - datetime.timedelta(days=1), end=today, now=now,
+                   fresh_seconds=BACKGROUND_FRESH_SECONDS)
+
+
+def settle_soon(company_id):
+    """A device checked in: bring today and yesterday up to date in the
+    background, at most once a minute per server process - so a screen opened
+    afterwards finds them already built and only reads."""
+    from django.conf import settings
+    from django.core.cache import cache
+    from django.db import connection
+
+    if not getattr(settings, "ATTENDANCE_SETTLE_IN_BACKGROUND", True):
+        return
+    if not cache.add(f"attendance-settle-{company_id}", 1, BACKGROUND_FRESH_SECONDS + 10):
+        return
+
+    def run():
+        try:
+            settle_recent(company_id)
+        except Exception:  # noqa: BLE001 - the next check-in tries again
+            logger.exception("Attendance: background settling for company %s failed",
+                             company_id)
+        finally:
+            connection.close()
+
+    import threading
+
+    threading.Thread(target=run, name=f"attendance-settle-{company_id}", daemon=True).start()
 
 
 def _company_timezone(company_id):

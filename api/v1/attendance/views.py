@@ -115,6 +115,8 @@ LIST_PARAMS = MONTH_PARAMS + [
           example="2026-10-01"),
     Param("to", QUERY, "string (date)", "To this day.", example="2026-10-31"),
     Param("branch_id", QUERY, "integer", "Only this branch.", example=3),
+    Param("department_id", QUERY, "integer", "Only this department (where they were placed "
+                                             "that day).", example=8),
     Param("employee_id", QUERY, "integer", "Only this person.", example=41),
     Param("status", QUERY, "string", "present, half_day, absent, leave, holiday, weekly_off, "
                                      "incomplete or inactive.", example="absent")]
@@ -126,7 +128,8 @@ def _daily(request, late_only):
     q = request.query_params
     params = {"year": q.get("year", ""), "month": q.get("month", ""), "on": q.get("on", ""),
               "date_from": q.get("from", ""), "date_to": q.get("to", ""),
-              "branch": q.get("branch_id", ""), "employee": q.get("employee_id", ""),
+              "branch": q.get("branch_id", ""), "department": q.get("department_id", ""),
+              "employee": q.get("employee_id", ""),
               "status": q.get("status", "")}
     daily = daily_list_query(_Query(request, params), request.company_id, late_only=late_only)
     if not daily["date_filter"].is_valid():

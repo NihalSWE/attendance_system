@@ -2,6 +2,13 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-06 — Department filter; attendance read from what is saved
+
+- **New:** `department_id` on `GET /api/v1/attendance`, `GET /attendance/late`
+  and `GET /attendance/export` - the department they were placed in that day.
+- **Faster:** attendance is read from what is saved; only what time alone has
+  changed is rebuilt, at most every 5 minutes (changes still show at once).
+
 ## 2026-10-05 — The last two panel downloads
 
 Found by checking every panel page and action against the API:

@@ -1215,7 +1215,8 @@ def on_device_poll(company_id):
 
             company = Company.objects.get(pk=company_id)
             today = timezone.now().astimezone(company_zone(company)).date()
-            refresh(company_id, start=today - datetime.timedelta(days=1), end=today)
+            refresh(company_id, start=today - datetime.timedelta(days=1), end=today,
+                    fresh_seconds=50)
             deliver_due(company_id)
         except Exception:  # noqa: BLE001 - the next poll tries again
             logger.exception("Webhook: poll for company %s failed", company_id)

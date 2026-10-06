@@ -102,6 +102,7 @@ def daily_list_query(request, company_id, late_only=False):
     membership, visible = access.view_scope(request.user, company_id)
     year, month = read_month(request.GET)
     branch_id = request.GET.get("branch", "").strip()
+    department_id = request.GET.get("department", "").strip()
     employee_id = request.GET.get("employee", "").strip()
     status = request.GET.get("status", "").strip()
 
@@ -129,6 +130,9 @@ def daily_list_query(request, company_id, late_only=False):
         month_total = queryset.count()
         if branch_id.isdigit():
             queryset = queryset.filter(branch_id=int(branch_id))
+        if department_id.isdigit():
+            # The department they were placed in that day (as the reports).
+            queryset = queryset.filter(employee_assignment__department_id=int(department_id))
         if employee_id.isdigit():
             queryset = queryset.filter(employee_id=int(employee_id))
         if status in dict(AttendanceRecord.AttendanceStatus.choices):
@@ -137,7 +141,8 @@ def daily_list_query(request, company_id, late_only=False):
 
     return {
         "membership": membership, "visible": visible, "year": year, "month": month,
-        "branch_id": branch_id, "employee_id": employee_id, "status": status,
+        "branch_id": branch_id, "department_id": department_id,
+        "employee_id": employee_id, "status": status,
         "date_filter": date_filter, "date_window": date_window,
         "first": first, "last": last, "queryset": queryset, "month_total": month_total,
         "late_only": late_only,
@@ -188,11 +193,13 @@ def _daily_page(request, *, late_only):
         page = paginate(request, daily["queryset"], search=DAILY_SEARCH, order=DAILY_ORDER)
         employees = _pickable(visible).order_by("first_name", "last_name")
         branches = branch_choices(company_id, visible)
+        departments = _department_choices(visible, branches)
 
     export_params = request.GET.copy()
     for drop in ("page", "per_page", "table", "draw", "start", "length", "format"):
         export_params.pop(drop, None)
     branch_id, employee_id, status = daily["branch_id"], daily["employee_id"], daily["status"]
+    department_id = daily["department_id"]
     return render(request, "attendance/attendance_list.html", {
         **month_context(daily["year"], daily["month"]),
         "page": page,
@@ -200,6 +207,8 @@ def _daily_page(request, *, late_only):
         "employees": employees,
         "branches": branches,
         "branch_id": branch_id,
+        "departments": departments,
+        "department_id": department_id,
         "employee_id": employee_id,
         "status": status,
         "statuses": AttendanceRecord.AttendanceStatus.choices,
@@ -208,13 +217,26 @@ def _daily_page(request, *, late_only):
         "date_window": daily["date_window"],
         "window_start": daily["first"],
         "window_end": daily["last"],
-        "filtered": bool(branch_id or employee_id or status or daily["date_window"]),
+        "filtered": bool(branch_id or department_id or employee_id or status
+                         or daily["date_window"]),
         "export_query": export_params.urlencode(),
         # Punch times are stored in UTC; people read them in company time.
         "company_tz": membership.company.timezone or "UTC",
         "late_only": late_only,
         "list_url": "attendance:attendance_late" if late_only else "attendance:attendance_list",
     })
+
+
+def _department_choices(visible, branches):
+    """The departments the Daily list's filter offers: those of the branches the
+    viewer sees - or, for a department head, the departments they head. Call
+    inside the company."""
+    from organization.models import Department
+
+    departments = Department.objects.filter(branch__in=branches).select_related("branch")
+    if not visible.is_all and not visible.branches:
+        departments = departments.filter(pk__in=visible.departments)
+    return departments.order_by("branch__name", "name")
 
 
 def _month_steps(year, month):
@@ -414,9 +436,17 @@ def _pickable(branches):
     """Who the pickers offer. Call inside the company.
 
     Company logins: every employee, as before. A branch login: people placed now
-    in its branches.
+    in its branches. Each carries ``table_code``, their current Employee ID, so
+    a picker can be searched by ID as well as by name (2026-10-06).
     """
-    return Employee.objects.all() if branches.is_all else people(branches)
+    if not branches.is_all:
+        return people(branches)
+    from django.db.models import Subquery
+
+    from organization.access_services import _current_placement
+
+    return Employee.objects.annotate(
+        table_code=Subquery(_current_placement().values("employee_code")[:1]))
 
 
 def _may_see_calendar(user, company_id, employee_id):

@@ -6073,3 +6073,24 @@ server), `api.security` log for refused signatures and replays
 `.env`), and `api/tests/test_security_sweep.py` (every endpoint without a
 login, as an Employee without grants, with made-up ids; another company's
 records). The API is complete: 301 endpoints.
+
+### Attendance speed, department filter, Employee ID in pickers — 2026-10-06
+
+- **Speed.** `attendance.services.refresh` rebuilt every employee's every day
+  of the range on each load whenever it reached today (the Daily list's
+  default): 677 queries for 21 people on day 6, every load. Now a table
+  `AttendanceDayBuild` (company, day, built_at) remembers when a day was
+  built for everybody: a day built after it became final (two days after) is
+  never rebuilt; today and yesterday only when the last build is older than 5
+  minutes (`PAGE_FRESH_SECONDS`); settled history is read as before. Changes
+  still rewrite their days at once (ingestion, corrections, leave, schedule).
+  `create_employee` forgets the built days from the placement on, so a new
+  person's days are built. Background: `settle_soon` on every device
+  check-in (once a minute per company and process), and `manage.py
+  settle_attendance` for a timer; the ERP webhook keeps its one-minute
+  freshness. Second load: 27 queries.
+- **Department filter** on the Daily list and Late entries (and their
+  downloads, and the API's `department_id`): the department of the day's
+  placement, as the reports. The reports already had it.
+- **Employee ID in pickers**: Calendar (search box always on), Daily list,
+  missed scans - "130106 · A.salam", so the search finds the ID.

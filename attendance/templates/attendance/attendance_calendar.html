@@ -68,10 +68,11 @@
                         <label class="field__label" for="employee">
                             Employee
                         </label>
-                        <select class="input select js-select2" id="employee" name="employee">
+                        {# Searchable by Employee ID as well as by name (2026-10-06). #}
+                        <select class="input select js-select2" id="employee" name="employee" data-search="always">
                             {% for person in employees %}
                                 <option value="{{ person.pk }}" {% if person.pk|stringformat:"s" == employee_id %}selected{% endif %}>
-                                    {{ person.full_name }}
+                                    {% if person.table_code %}{{ person.table_code }} · {% endif %}{{ person.full_name }}
                                 </option>
                             {% endfor %}
                         </select>
