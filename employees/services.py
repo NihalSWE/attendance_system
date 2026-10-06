@@ -108,6 +108,18 @@ def create_employee(
                 created_by=created_by,
             )
 
+    # Their days from the placement on were never written: the attendance
+    # screens build them for everybody again when next opened (2026-10-06).
+    import zoneinfo
+
+    from attendance.services import forget_built
+
+    try:
+        zone = zoneinfo.ZoneInfo(company.timezone or "UTC")
+    except zoneinfo.ZoneInfoNotFoundError:
+        zone = zoneinfo.ZoneInfo("UTC")
+    forget_built(company.pk, effective_from.astimezone(zone).date())
+
     return {
         "employee": employee,
         "assignment": assignment,

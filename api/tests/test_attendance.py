@@ -94,6 +94,20 @@ class ReadingTests(AttendanceApiTestCase):
         bad = self.api("GET", "/api/v1/attendance", query="from=2026-10-05&to=2026-01-01")
         self.assertEqual(bad.status_code, 422)
 
+    def test_the_list_by_department(self):
+        from organization.models import Department
+
+        with use_company(self.company):
+            software = Department.objects.get(code="SW")
+            other = Department.objects.exclude(pk=software.pk).first()
+        mine = self.api("GET", "/api/v1/attendance",
+                        query=f"on={self.late_day}&department_id={software.pk}").json()
+        self.assertEqual(mine["count"], 1)
+        if other is not None:
+            none = self.api("GET", "/api/v1/attendance",
+                            query=f"on={self.late_day}&department_id={other.pk}").json()
+            self.assertEqual(none["count"], 0)
+
     def test_a_month_and_a_day(self):
         month = self.api("GET", "/api/v1/attendance/calendar",
                          query=f"employee_id={self.rahim.pk}&year={self.late_day.year}"

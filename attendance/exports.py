@@ -119,6 +119,13 @@ def export_daily_list(request, company_id, daily, fmt):
     late_only = daily.get("late_only", False)
     shown = [f"Period: {_period_text(first, last, window)}",
              f"Branch: {branch.name if branch else (scope_name or 'All branches')}"]
+    if daily.get("department_id", "").isdigit():
+        from organization.models import Department
+
+        with use_company(company.pk):
+            department = Department.objects.filter(pk=int(daily["department_id"])).first()
+        if department is not None:
+            shown.append(f"Department: {department.name}")
     if employee is not None:
         shown.append(f"Employee: {employee.full_name}")
     if daily["status"] in statuses:
@@ -144,7 +151,8 @@ def export_daily_list(request, company_id, daily, fmt):
                                     widths={0: 1.1, 2: 1.8, 3: 1.3, 4: 1.1, 10: 2})
 
     filters = {"period": [first.isoformat(), last.isoformat()],
-               "branch": daily["branch_id"], "employee": daily["employee_id"],
+               "branch": daily["branch_id"], "department": daily.get("department_id", ""),
+               "employee": daily["employee_id"],
                "status": daily["status"], "table_search": table_search, "sort": sort,
                "late_only": late_only}
     exports.record(actor=request.user, membership=membership, page="attendance",

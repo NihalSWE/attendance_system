@@ -126,6 +126,48 @@ First deploy of the API (`/api/v1/…`, documentation at `/api/docs/`):
 An owner or company administrator who uses the API must turn on two-step
 login there (an authenticator app, or email codes); the panels are unchanged.
 
+## Attendance is read from what is saved (2026-10-06)
+
+The attendance screens no longer work the whole month out again on every load:
+they read the saved days and rebuild only what time alone has changed (a
+shift ending, a day closing), at most every 5 minutes. Every change - a scan,
+a fix, leave, a schedule - still rewrites its days at once. Today and yesterday
+are kept built in the background when a device checks in.
+
+Deploying it needs only the usual `migrate` (table `attendance_day_build`).
+**Optional**, for companies whose devices are offline: a timer that runs
+`settle_attendance` every 5 minutes.
+
+```
+cat > /etc/systemd/system/attendance_settle.service <<'UNIT'
+[Unit]
+Description=Attendance: build today's and yesterday's days
+
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/opt/attendance
+ExecStart=/opt/attendance/venv/bin/python manage.py settle_attendance
+UNIT
+
+cat > /etc/systemd/system/attendance_settle.timer <<'UNIT'
+[Unit]
+Description=Attendance: build today's and yesterday's days every 5 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+
+[Install]
+WantedBy=timers.target
+UNIT
+
+systemctl daemon-reload && systemctl enable --now attendance_settle.timer
+```
+
+Check it: `systemctl list-timers attendance_settle.timer` and
+`journalctl -u attendance_settle -n 20 --no-pager`.
+
 ## Restarting the services
 
 | When | Command |

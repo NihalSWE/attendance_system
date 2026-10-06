@@ -103,6 +103,19 @@
                     </option>
                 {% endfor %}
             </select>
+            <label class="sr-only" for="att-department">
+                Department
+            </label>
+            <select class="input select js-select2" id="att-department" name="department">
+                <option value="">
+                    All departments
+                </option>
+                {% for department in departments %}
+                    <option value="{{ department.pk }}" {% if department_id == department.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ department.name }}{% if branches|length > 1 %} · {{ department.branch.name }}{% endif %}
+                    </option>
+                {% endfor %}
+            </select>
             <label class="sr-only" for="att-employee">
                 Employee
             </label>
@@ -112,7 +125,7 @@
                 </option>
                 {% for employee in employees %}
                     <option value="{{ employee.pk }}" {% if employee_id == employee.pk|stringformat:"s" %}selected{% endif %}>
-                        {{ employee.full_name }}
+                        {% if employee.table_code %}{{ employee.table_code }} · {% endif %}{{ employee.full_name }}
                     </option>
                 {% endfor %}
             </select>

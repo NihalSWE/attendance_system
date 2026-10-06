@@ -149,6 +149,9 @@ WEBHOOK_SEND_IN_BACKGROUND = sys.argv[1:2] != ['test']
 # "Load employees onto this device" prepares people in a background thread
 # (250+ in one request ran past the server's time limit). Tests run it inline.
 DEVICE_LOAD_IN_BACKGROUND = sys.argv[1:2] != ['test']
+# Today and yesterday are brought up to date in the background when a device
+# checks in, so the attendance screens only read (2026-10-06). Tests run it inline.
+ATTENDANCE_SETTLE_IN_BACKGROUND = sys.argv[1:2] != ['test']
 
 
 WSGI_APPLICATION = 'config.wsgi.application'

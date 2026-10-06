@@ -54,7 +54,7 @@
                         <select class="input select js-select2" id="pick-employee" name="employee" required>
                             <option value="">Choose someone</option>
                             {% for person in people %}
-                                <option value="{{ person.pk }}">{{ person.full_name }}</option>
+                                <option value="{{ person.pk }}">{% if person.table_code %}{{ person.table_code }} · {% endif %}{{ person.full_name }}</option>
                             {% endfor %}
                         </select>
                     </div>
