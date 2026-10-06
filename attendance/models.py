@@ -491,3 +491,33 @@ class AttendanceDayBuild(models.Model):
 
     def __str__(self):
         return f"{self.company_id} {self.work_date} built {self.built_at:%Y-%m-%d %H:%M}"
+
+
+class AttendanceDue(models.Model):
+    """When one employee-day next changes with time alone (2026-10-06).
+
+    A day can change without anything new arriving at two moments only: its
+    shift's end (a last scan out becomes the check-out) and its close (the day
+    becomes final - absent, if nobody came). ``recalculate`` writes this row
+    for every day it builds that is not final yet, with the next of those
+    moments; when it passes, ``attendance.services.settle_due`` rebuilds that
+    one employee-day - not everybody's. A final day has no row.
+    """
+
+    company = models.ForeignKey("tenants.Company", on_delete=models.CASCADE,
+                                related_name="+")
+    employee = models.ForeignKey("employees.Employee", on_delete=models.CASCADE,
+                                 related_name="+")
+    work_date = models.DateField()
+    due_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "attendance_due"
+        constraints = [
+            models.UniqueConstraint(fields=["company", "employee", "work_date"],
+                                    name="uniq_attendance_due"),
+        ]
+        indexes = [models.Index(fields=["company", "due_at"])]
+
+    def __str__(self):
+        return f"{self.employee_id} {self.work_date} due {self.due_at:%Y-%m-%d %H:%M}"

@@ -6,12 +6,9 @@ e.g. every 5 minutes. Repeatable.
     python manage.py send_webhooks
 """
 
-import datetime
-
 from django.core.management.base import BaseCommand
-from django.utils import timezone
 
-from attendance.services import refresh
+from attendance.services import settle_recent
 from tenants.models import Company
 from webhooks import services
 from webhooks.models import WebhookSettings
@@ -23,8 +20,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         for row in WebhookSettings.all_objects.filter(is_active=True).order_by("company_id"):
             company = Company.objects.get(pk=row.company_id)
-            today = timezone.now().astimezone(services.company_zone(company)).date()
-            refresh(company.pk, start=today - datetime.timedelta(days=1), end=today,
-                    fresh_seconds=50)
+            settle_recent(company.pk)
             received = services.deliver_due(company.pk)
             self.stdout.write(f"{company.name}: {received} event(s) received.")

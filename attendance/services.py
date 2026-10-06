@@ -53,6 +53,7 @@ from django.utils import timezone
 
 from attendance import corrections as correction_input, day_window, pairing
 from attendance.models import (
+    AttendanceDue,
     AttendanceRecord,
     AttendanceSession,
     PunchAllocation,
@@ -395,6 +396,9 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
     posted = locked_ranges(company_id)
     written = defaultdict(int)
     touched_ids = []
+    # When each day built here next changes with time alone (AttendanceDue).
+    due_rows = []
+    lookback_rebuilt = []
 
     with use_company(company_id):
         settings = CompanyAttendanceSettings.objects.get()
@@ -496,11 +500,14 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                 if any(earlier.contains(p[0]) for p in punches)
                 else start
             )
+            if first_day == lookback:
+                lookback_rebuilt.append(employee_id)
             day = first_day
             while day <= end:
+                window = windows[day]
                 outcome = _write_day(
                     day=day, employee=employee, assignments=assignments,
-                    window=windows[day], punches=punches, settings=settings,
+                    window=window, punches=punches, settings=settings,
                     calendar=calendar, leave_by_key=leave_by_key,
                     company=company, company_tz=company_tz, now=now,
                     locked=_is_locked(day, posted),
@@ -515,9 +522,18 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                     written["skipped"] += 1
                 elif outcome == "locked":
                     written["skipped_locked"] += 1
+                elif outcome == "pending":
+                    written["skipped"] += 1
+                    due_rows.append(AttendanceDue(company_id=company_id,
+                                                  employee_id=employee_id, work_date=day,
+                                                  due_at=window.closes_at))
                 else:
                     touched_ids.append(outcome.pk)
                     written[outcome.attendance_status] += 1
+                    if outcome.is_open:
+                        due_rows.append(AttendanceDue(
+                            company_id=company_id, employee_id=employee_id, work_date=day,
+                            due_at=_next_change(window, now)))
                 day += datetime.timedelta(days=1)
 
         # Days that no longer apply (before joining, no placement, no shift)
@@ -535,6 +551,18 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
         AttendanceSession.objects.filter(attendance_record__in=stale).delete()
         PunchAllocation.objects.filter(attendance_record__in=stale).delete()
         stale.delete()
+
+        # What these days wait for now replaces what they waited for before: a
+        # day built final has nothing left to wait for.
+        dues = AttendanceDue.objects.filter(company_id=company_id)
+        rebuilt = Q(work_date__gte=start, work_date__lte=end)
+        if lookback_rebuilt:
+            rebuilt |= Q(work_date=lookback, employee_id__in=lookback_rebuilt)
+        dues = dues.filter(rebuilt)
+        if employee_ids is not None:
+            dues = dues.filter(employee_id__in=list(employee_ids))
+        dues.delete()
+        AttendanceDue.objects.bulk_create(due_rows, ignore_conflicts=True)
 
     written["days"] = len(touched_ids)
     # The ERP webhook (2026-10-01): check-ins and finished days go to the
@@ -566,7 +594,9 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
                calendar, leave_by_key, company, company_tz, now, locked,
                overtime=None, status_fix=None, accepted_reason=None, late_excused=None,
                inactive=None):
-    """One employee-day. Returns the record, "locked", or None for no record.
+    """One employee-day. Returns the record, "locked", None for no record, or
+    "pending" - no record *yet*: the day has not closed and nobody has come in,
+    so it becomes absent (or leave) when it closes.
 
     ``overtime`` is the approved minutes of a decision on this day (payroll's
     A9), or None when nobody has decided it yet. ``status_fix`` and
@@ -652,7 +682,7 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
                 leave_day=leave, note=note, is_open=not is_closed,
             )
         elif not is_closed:
-            return None
+            return "pending"
         else:
             values.update(
                 attendance_status=AttendanceRecord.AttendanceStatus.LEAVE,
@@ -702,7 +732,7 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
     else:
         if not day_punches and not is_closed:
             # "Not in yet": the shift has not finished, so nobody is absent.
-            return None
+            return "pending"
         paired = _pair(day_punches, window, settings, is_closed, now)
         status, punch_status, fraction, minutes = _classify_working_day(
             window.shift, settings, paired,
@@ -822,22 +852,12 @@ def _pair(day_punches, window, settings, is_closed, now=None):
     )
 
 
-#: A day that is not final yet (today, yesterday) is taken as up to date for
-#: this long after it was built for everybody. Every change rewrites the days
-#: it touches at once (a scan, a fix, leave, a schedule); this only bounds how
-#: late a change that comes with time alone shows on a screen - a shift ending,
-#: a day closing. The background pass (``settle_soon``) keeps it far fresher.
-PAGE_FRESH_SECONDS = 300
-#: The background pass rebuilds today and yesterday at most this often.
-BACKGROUND_FRESH_SECONDS = 50
-
-
-def final_from(day, tz):
-    """When ``day`` can no longer change with time: every window that opens on
-    it has closed by then (a window closes at the next shift's start, or 24
-    hours after its own start at the latest)."""
-    return datetime.datetime.combine(day + datetime.timedelta(days=2), datetime.time.min,
-                                     tzinfo=tz)
+def _next_change(window, now):
+    """When an open day next changes with time alone: its shift's end (a last
+    scan out becomes the check-out), then its close (the day becomes final)."""
+    if window.scheduled_end is not None and now < window.scheduled_end:
+        return window.scheduled_end
+    return window.closes_at
 
 
 def _spans(days):
@@ -851,25 +871,28 @@ def _spans(days):
     return [tuple(span) for span in spans]
 
 
-def refresh(company_id, *, employee_ids=None, start, end, now=None,
-            fresh_seconds=PAGE_FRESH_SECONDS):
+def _add(summary, result):
+    for key, value in result.items():
+        if isinstance(value, int) and not isinstance(value, bool):
+            summary[key] += value
+
+
+def refresh(company_id, *, employee_ids=None, start, end, now=None):
     """Bring a range up to date before it is read - only what is due.
 
     What is saved is the answer: every change rewrites the days it touches the
-    moment it happens. What a reader may still find out of date is what time
-    alone changes - a shift has ended, a day has closed, nobody came in and
-    the day is now absent. So:
+    moment it happens (a scan, a fix, leave, a schedule). What time alone
+    changes - a shift ending, a day closing - is waited for one employee-day
+    at a time (``AttendanceDue``). So a reader:
 
-    - settled history (nothing open, before today, already stored) is read as
-      it is, as before;
-    - a day built for everybody after it became final is never rebuilt;
-    - a day not final yet (today, yesterday) is rebuilt only when its last
-      build is older than ``fresh_seconds``;
-    - a day never built is built.
+    - reads settled history (nothing open, before today, stored) as it is;
+    - builds, once, a day never built for everybody (a new day; a new person);
+    - rebuilds only the employee-days whose next change has come
+      (``settle_due``) - not everybody's, however many people there are.
 
-    Opening a page twice therefore costs a few queries, not everybody's month
-    again (2026-10-06: it was a rebuild of every day of the month so far, for
-    everyone, on every load).
+    (2026-10-06: it was a rebuild of every day of the month so far, for
+    everyone, on every load; then a rebuild of today and yesterday for
+    everyone every few minutes.)
     """
     from attendance.models import AttendanceDayBuild
 
@@ -891,35 +914,67 @@ def refresh(company_id, *, employee_ids=None, start, end, now=None,
     if anything_stored and not open_days and end < today:
         return {"days": 0, "unchanged": True}
     last = min(end, today)
-    built = dict(AttendanceDayBuild.objects.filter(
+    built = set(AttendanceDayBuild.objects.filter(
         company_id=company_id, work_date__gte=start, work_date__lte=last,
-    ).values_list("work_date", "built_at"))
-    fresh_after = now - datetime.timedelta(seconds=fresh_seconds)
-    due = []
+    ).values_list("work_date", flat=True))
+    never = []
     day = start
     while day <= last:
-        at = built.get(day)
-        if at is None or (at < final_from(day, tz) and at < fresh_after):
-            due.append(day)
+        if day not in built:
+            never.append(day)
         day += datetime.timedelta(days=1)
-    if not due:
-        return {"days": 0, "unchanged": True}
 
     summary = defaultdict(int)
     no_shift = False
-    for first, final in _spans(due):
+    for first, final in _spans(never):
         result = recalculate(company_id, employee_ids=employee_ids, start=first, end=final,
                              now=now)
         no_shift = no_shift or bool(result.get("no_shift"))
-        for key, value in result.items():
-            if isinstance(value, int) and not isinstance(value, bool):
-                summary[key] += value
-    if employee_ids is None and not no_shift:
-        # Built for everybody: remembered, so the next reader does not redo it.
-        # (A no-shift company built nothing; its first shift rebuilds the days.)
-        for day in due:
-            AttendanceDayBuild.objects.update_or_create(
-                company_id=company_id, work_date=day, defaults={"built_at": now})
+        _add(summary, result)
+    if never and employee_ids is None and not no_shift:
+        # Built for everybody: from now on only its due employee-days are.
+        # (A no-shift company built nothing; its first shift builds the days.)
+        AttendanceDayBuild.objects.bulk_create(
+            [AttendanceDayBuild(company_id=company_id, work_date=day, built_at=now)
+             for day in never],
+            update_conflicts=True, unique_fields=["company", "work_date"],
+            update_fields=["built_at"])
+    _add(summary, settle_due(company_id, employee_ids=employee_ids, start=start, end=last,
+                             now=now))
+    if not summary.get("days") and not never:
+        return {"days": 0, "unchanged": True}
+    return dict(summary)
+
+
+def settle_due(company_id, *, employee_ids=None, start=None, end=None, now=None):
+    """Rebuild exactly the employee-days whose next change has come - a shift
+    has ended, a day has closed. Cheap when nothing is due (one query), and
+    proportional to what changed, never to how many people there are."""
+    from attendance.models import AttendanceDue
+
+    now = now or timezone.now()
+    due = AttendanceDue.objects.filter(company_id=company_id, due_at__lte=now)
+    if employee_ids is not None:
+        due = due.filter(employee_id__in=list(employee_ids))
+    if start is not None:
+        due = due.filter(work_date__gte=start)
+    if end is not None:
+        due = due.filter(work_date__lte=end)
+    by_employee = defaultdict(list)
+    for employee_id, work_date in due.values_list("employee_id", "work_date"):
+        by_employee[employee_id].append(work_date)
+    if not by_employee:
+        return {"days": 0}
+    # Everybody whose due days form the same run is rebuilt in one pass: at a
+    # shift's end that is one pass for all of that shift's people.
+    people_by_span = defaultdict(list)
+    for employee_id, days in by_employee.items():
+        for span in _spans(sorted(set(days))):
+            people_by_span[span].append(employee_id)
+    summary = defaultdict(int)
+    for (first, final), people in sorted(people_by_span.items()):
+        _add(summary, recalculate(company_id, employee_ids=people, start=first, end=final,
+                                  now=now))
     return dict(summary)
 
 
@@ -932,13 +987,23 @@ def forget_built(company_id, since):
     AttendanceDayBuild.objects.filter(company_id=company_id, work_date__gte=since).delete()
 
 
+#: The background pass runs at most this often per company and server process.
+BACKGROUND_EVERY_SECONDS = 30
+
+
 def settle_recent(company_id, now=None):
-    """Today and yesterday, brought up to date for everybody, if due. The
-    background pass: a device's check-in, or ``manage.py settle_attendance``."""
+    """The background pass (a device's check-in, or ``manage.py
+    settle_attendance``): today and yesterday built for everybody if they never
+    were, and every employee-day whose next change has come rebuilt."""
     now = now or timezone.now()
     today = now.astimezone(_zone(_company_timezone(company_id))).date()
-    return refresh(company_id, start=today - datetime.timedelta(days=1), end=today, now=now,
-                   fresh_seconds=BACKGROUND_FRESH_SECONDS)
+    summary = defaultdict(int)
+    _add(summary, refresh(company_id, start=today - datetime.timedelta(days=1), end=today,
+                          now=now))
+    # Older days still open (a night shift, a day nobody looked at): their
+    # changes are due too.
+    _add(summary, settle_due(company_id, now=now))
+    return dict(summary)
 
 
 def settle_soon(company_id):
@@ -951,7 +1016,7 @@ def settle_soon(company_id):
 
     if not getattr(settings, "ATTENDANCE_SETTLE_IN_BACKGROUND", True):
         return
-    if not cache.add(f"attendance-settle-{company_id}", 1, BACKGROUND_FRESH_SECONDS + 10):
+    if not cache.add(f"attendance-settle-{company_id}", 1, BACKGROUND_EVERY_SECONDS):
         return
 
     def run():

@@ -3,11 +3,12 @@ background, so the attendance screens only read what is saved (2026-10-06).
 
 Devices checking in already do this once a minute for their company. This is
 for a scheduler, so a company whose devices are offline is kept up to date
-too - e.g. every 5 minutes:
+too - e.g. every minute:
 
     python manage.py settle_attendance
 
-Repeatable and cheap: a day already built in the last minute is left alone.
+Repeatable and cheap: only the employee-days whose time has come are rebuilt
+(a shift has ended, a day has closed) - nothing else.
 """
 
 from django.core.management.base import BaseCommand
@@ -27,5 +28,6 @@ class Command(BaseCommand):
             except Exception as exc:  # noqa: BLE001 - one company must not stop the rest
                 self.stderr.write(f"{company.name}: {exc}")
                 continue
-            done = "up to date" if result.get("unchanged") else f"{result.get('days', 0)} day(s) built"
+            days = result.get("days", 0)
+            done = f"{days} day(s) built" if days else "up to date"
             self.stdout.write(f"{company.name}: {done}.")

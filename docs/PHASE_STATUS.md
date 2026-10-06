@@ -6094,3 +6094,19 @@ records). The API is complete: 301 endpoints.
   placement, as the reports. The reports already had it.
 - **Employee ID in pickers**: Calendar (search box always on), Daily list,
   missed scans - "130106 · A.salam", so the search finds the ID.
+
+### Attendance: change times per employee-day (option 2) — 2026-10-06
+
+Replaces the "today and yesterday for everyone every 5 minutes" rebuild.
+`recalculate` writes `AttendanceDue` (company, employee, day, due_at) for every
+day it builds that is not final: an open day waits for its shift's end, then
+its close; a day nobody came in yet ("pending", from `_write_day`) waits for
+its close. `settle_due` rebuilds exactly the rows whose time has come, grouped
+into one pass per span. `refresh` = settled history as before + build once the
+days never built for everybody (`AttendanceDayBuild` now means "seeded") +
+`settle_due` in range. Background: `settle_recent` on device check-in (every
+30 s per company and process) and `manage.py settle_attendance`; the ERP
+webhook uses the same. Migration 0011 clears the old build marks so each open
+day gets its change time once. Measured at 201 people all at work: one
+rebuild of everyone's day 1.94 s; a check with nothing due 0.8 ms; each
+person rebuilt about twice a day.
