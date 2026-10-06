@@ -42,6 +42,7 @@ close has passed. A day inside a posted payroll run is never touched.
 import calendar as month_calendar
 import logging
 import datetime
+import threading
 import zoneinfo
 from collections import defaultdict
 from decimal import Decimal
@@ -910,8 +911,10 @@ def refresh(company_id, *, employee_ids=None, start, end, now=None):
     # Settled history is left alone, which is what makes opening an old month
     # cost one query. A range holding nothing at all is not settled history —
     # it has simply never been built, and skipping it was how a month that
-    # nobody had calculated stayed empty for ever.
-    if anything_stored and not open_days and end < today:
+    # nobody had calculated stayed empty for ever. Nor is a range a schedule
+    # change has made due (``schedule_changed``).
+    if anything_stored and not open_days and end < today and not _due_in(
+            company_id, employee_ids, start, end, now):
         return {"days": 0, "unchanged": True}
     last = min(end, today)
     built = set(AttendanceDayBuild.objects.filter(
@@ -944,6 +947,16 @@ def refresh(company_id, *, employee_ids=None, start, end, now=None):
     if not summary.get("days") and not never:
         return {"days": 0, "unchanged": True}
     return dict(summary)
+
+
+def _due_in(company_id, employee_ids, start, end, now):
+    from attendance.models import AttendanceDue
+
+    due = AttendanceDue.objects.filter(company_id=company_id, due_at__lte=now,
+                                       work_date__gte=start, work_date__lte=end)
+    if employee_ids is not None:
+        due = due.filter(employee_id__in=list(employee_ids))
+    return due.exists()
 
 
 def settle_due(company_id, *, employee_ids=None, start=None, end=None, now=None):
@@ -987,6 +1000,83 @@ def forget_built(company_id, since):
     AttendanceDayBuild.objects.filter(company_id=company_id, work_date__gte=since).delete()
 
 
+def schedule_changed(company_id, since=None):
+    """A shift, a department's or an employee's shift, or the attendance
+    settings changed: the days already worked out from ``since`` are measured
+    again against it. Call it inside the change's transaction.
+
+    - No date (a shift's times or minutes, the settings): this month.
+    - A date (a shift from a day): from that day, but no further back than the
+      start of last month - older months take ``manage.py
+      recalculate_attendance``, so a closed month is never redone by surprise.
+
+    Every employee-day in that range is made due now (``AttendanceDue``), so
+    the next screen rebuilds exactly those if the background has not; the
+    background starts at once after the save (2026-10-06: a schedule change
+    used to wait for nobody - days built before it kept the old shift, and a
+    department given its first shift stayed empty).
+    """
+    from attendance.models import AttendanceDue
+
+    now = timezone.now()
+    tz = _zone(_company_timezone(company_id))
+    today = now.astimezone(tz).date()
+    this_month = today.replace(day=1)
+    if since is None:
+        since = this_month
+    else:
+        last_month = (this_month - datetime.timedelta(days=1)).replace(day=1)
+        since = max(since, last_month)
+    if since > today:
+        return None
+    start_at = datetime.datetime.combine(since, datetime.time.min, tzinfo=tz)
+    end_at = datetime.datetime.combine(today + datetime.timedelta(days=1), datetime.time.min,
+                                       tzinfo=tz)
+    with use_company(company_id):
+        employee_ids = set(
+            EmployeeAssignment.objects.exclude(status="cancelled")
+            .filter(effective_from__lt=end_at)
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=start_at))
+            .values_list("employee_id", flat=True)
+        )
+    days = []
+    day = since
+    while day <= today:
+        days.append(day)
+        day += datetime.timedelta(days=1)
+    AttendanceDue.objects.bulk_create(
+        [AttendanceDue(company_id=company_id, employee_id=employee_id, work_date=day,
+                       due_at=now)
+         for employee_id in employee_ids for day in days],
+        batch_size=2000, update_conflicts=True,
+        unique_fields=["company", "employee", "work_date"], update_fields=["due_at"])
+    transaction.on_commit(lambda: _rebuild_soon(company_id))
+    return since
+
+
+_rebuilding = threading.Lock()
+
+
+def _rebuild_soon(company_id):
+    """The days a schedule change made due, rebuilt in the background."""
+    from django.conf import settings
+    from django.db import connection
+
+    if not getattr(settings, "ATTENDANCE_SETTLE_IN_BACKGROUND", True):
+        return
+
+    def run():
+        try:
+            with _rebuilding:        # one rebuild at a time per server process
+                settle_due(company_id)
+        except Exception:  # noqa: BLE001 - the next screen builds what is left
+            logger.exception("Attendance: rebuilding company %s failed", company_id)
+        finally:
+            connection.close()
+
+    threading.Thread(target=run, name=f"attendance-rebuild-{company_id}", daemon=True).start()
+
+
 #: The background pass runs at most this often per company and server process.
 BACKGROUND_EVERY_SECONDS = 30
 
@@ -1027,8 +1117,6 @@ def settle_soon(company_id):
                              company_id)
         finally:
             connection.close()
-
-    import threading
 
     threading.Thread(target=run, name=f"attendance-settle-{company_id}", daemon=True).start()
 

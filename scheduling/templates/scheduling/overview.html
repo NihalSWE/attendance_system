@@ -183,6 +183,11 @@
                                     </td>
                                     <td class="numeric">
                                         {{ shift.minimum_full_day_minutes }}
+                                        {% if shift.full_day_warning %}
+                                            <span class="badge badge--warning" title="{{ shift.full_day_warning }}">
+                                                Too high
+                                            </span>
+                                        {% endif %}
                                     </td>
                                     <td class="numeric">
                                         {{ shift.minimum_half_day_minutes }}

@@ -95,6 +95,20 @@ def _snapshot(obj, fields):
     return {field: _plain(getattr(obj, field)) for field in fields}
 
 
+# A shift's fields that change how a day is measured (not its code or name).
+MEASURING_FIELDS = tuple(field for field in SHIFT_FIELDS + ("scheduled_minutes",)
+                         if field not in ("code", "name"))
+
+
+def _remeasure(company_id, since=None):
+    """Days already worked out are measured again against the change - this
+    month, or from a changed shift's first day (see
+    ``attendance.services.schedule_changed``)."""
+    from attendance.services import schedule_changed
+
+    schedule_changed(company_id, since)
+
+
 def _check_branch(membership, values):
     branch = values.get("branch")
     if branch is not None:
@@ -193,10 +207,13 @@ def update_attendance_settings(*, actor, company_id, values):
         settings.updated_by = actor
         settings.full_clean()
         settings.save()
+        after = _snapshot(settings, SETTINGS_FIELDS)
+        if after != before:
+            _remeasure(company_id)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="attendance_settings.updated", obj=settings,
-            before=before, after=_snapshot(settings, SETTINGS_FIELDS),
+            before=before, after=after,
         )
     return settings
 
@@ -275,6 +292,7 @@ def set_department_shift(*, actor, company_id, values):
                 created_by=actor,
                 updated_by=actor,
             )
+        _remeasure(company_id, starts)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="department_shift.set", obj=link, before=before,
@@ -422,6 +440,7 @@ def set_employee_shift(*, actor, company_id, values):
                 created_by=actor,
                 updated_by=actor,
             )
+        _remeasure(company_id, first_day)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="employee_shift.set", obj=assignment,
@@ -479,6 +498,7 @@ def end_employee_shift(*, actor, company_id, assignment_id, last_day):
         ).exclude(status=EmployeeShiftAssignment.Status.CANCELLED).update(
             status=EmployeeShiftAssignment.Status.CANCELLED, updated_by=actor,
         )
+        _remeasure(company_id, last_day + datetime.timedelta(days=1))
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
             action="employee_shift.ended", obj=assignment,
@@ -549,10 +569,12 @@ def update_shift(*, actor, company_id, shift_id, values):
         shift.updated_by = actor
         shift.full_clean()
         shift.save()
+        after = _snapshot(shift, SHIFT_FIELDS + ("scheduled_minutes",))
+        if any(after[field] != before[field] for field in MEASURING_FIELDS):
+            _remeasure(company_id)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
-            action="shift.updated", obj=shift,
-            before=before, after=_snapshot(shift, SHIFT_FIELDS + ("scheduled_minutes",)),
+            action="shift.updated", obj=shift, before=before, after=after,
         )
     return shift
 

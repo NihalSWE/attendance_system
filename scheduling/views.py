@@ -50,11 +50,14 @@ def _form_page(request, *, form, title, submit_label, action, success, explanati
     """Shared POST handling: validate the form, call the service, report back."""
     if request.method == "POST" and form.is_valid():
         try:
-            action(form.cleaned_data)
+            saved = action(form.cleaned_data)
         except ValidationError as exc:
             apply_service_errors(form, exc)
         else:
             messages.success(request, success)
+            warning = getattr(saved, "full_day_warning", "")
+            if warning:
+                messages.warning(request, f"{saved.name}: {warning}")
             return redirect("scheduling:schedule_overview")
     return render(request, "scheduling/form.html", {
         "form": form,
@@ -234,8 +237,8 @@ def shift_edit(request, pk):
             submit_label="Save shift",
             success="Shift saved.",
             explanation=(
-                "Changing a shift changes how attendance is calculated from now "
-                "on. Recalculate a month to apply it to past days."
+                "Saving measures this month's days again with the changed shift. "
+                "Earlier months stay as they are; recalculate a month to apply it there."
             ),
             action=lambda data: services.update_shift(
                 actor=request.user, company_id=company_id, shift_id=shift.pk, values=data
