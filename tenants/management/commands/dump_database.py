@@ -3,7 +3,7 @@
 
     venv/bin/python manage.py dump_database
 
-writes ``db_dumps/attendance_<date>.json`` (git-ignored), UTF-8, every
+writes ``db_dumps/attendance_<date>.jsonl`` (git-ignored), UTF-8, every
 company's data. Load it on the PC with ``manage.py load_database <file>``.
 
 It differs from a plain ``dumpdata`` where this project needs it to:
@@ -12,8 +12,11 @@ It differs from a plain ``dumpdata`` where this project needs it to:
   without a company, so the unscoped base managers are used (``--all``);
 - users' Django permissions by name, not id (``auth.permission`` is not
   copied; the PC has its own, with other ids);
-- written straight to the file as it goes, in UTF-8 - a big database is never
-  held in memory, and Windows' own encoding never mangles a Bangla name;
+- JSON Lines, one row per line, written as it goes in UTF-8: a big database
+  is never held in memory - here nor when it is loaded, which reads it a line
+  at a time (a plain JSON file is read whole, and a live database's copy is
+  bigger than a PC's memory) - and Windows' own encoding never mangles a
+  Bangla name;
 - short-lived and secret-bearing rows are left out: sessions, the API's live
   logins, one-time password-reset links, login attempts and replay records.
 
@@ -47,13 +50,14 @@ EXCLUDED = (
 
 
 class Command(BaseCommand):
-    help = "Dump the whole database to db_dumps/attendance_<date>.json (UTF-8), for load_database."
+    help = "Copy the whole database to db_dumps/attendance_<date>.jsonl (UTF-8), for load_database."
 
     def add_arguments(self, parser):
         parser.add_argument("--output", help="Where to write it (default: "
-                                             "db_dumps/attendance_<date-time>.json).")
+                                             "db_dumps/attendance_<date-time>.jsonl). "
+                                             "End it in .jsonl or .jsonl.gz.")
         parser.add_argument("--gzip", action="store_true",
-                            help="Compress it (.json.gz) - much smaller to download; "
+                            help="Compress it (.jsonl.gz) - much smaller to download; "
                                  "load_database reads it as it is.")
 
     def handle(self, *args, output=None, **options):
@@ -61,7 +65,12 @@ class Command(BaseCommand):
         folder = os.path.join(settings.BASE_DIR, "db_dumps")
         os.makedirs(folder, exist_ok=True)
         stamp = timezone.localtime().strftime("%Y-%m-%d_%H%M")
-        path = output or os.path.join(folder, f"attendance_{stamp}.json" + (".gz" if compress else ""))
+        path = output or os.path.join(folder, f"attendance_{stamp}.jsonl" + (".gz" if compress else ""))
+        if not path.endswith((".jsonl", ".jsonl.gz")):
+            self.stderr.write(self.style.ERROR(
+                "The file must end in .jsonl or .jsonl.gz (one row per line, so it loads "
+                "without filling the PC's memory)."))
+            sys.exit(1)
         self.stdout.write("Dumping the database... (a minute or two for a large one)")
         opener = _gzip_open if path.endswith(".gz") else _text_open
         try:
@@ -71,7 +80,7 @@ class Command(BaseCommand):
                     exclude=list(EXCLUDED),
                     use_base_manager=True,       # every company's rows, not one's
                     natural_foreign=True,        # permissions and content types by name
-                    indent=1,
+                    format="jsonl",              # one row per line: read back a line at a time
                     stdout=stream,
                 )
         except Exception as exc:  # noqa: BLE001 - say it plainly and stop
