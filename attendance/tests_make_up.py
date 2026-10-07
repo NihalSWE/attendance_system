@@ -90,14 +90,14 @@ class MakeUpTests(tests_live.LiveTestCase):
         self.assertEqual(record.worked_minutes, 480)
         self.assertEqual(record.calculated_overtime_minutes, 0)    # 60 left, 60 to wait
 
-    def test_first_and_last_takes_an_unpaid_break_off_first(self):
+    def test_first_and_last_after_a_late_start_takes_no_break(self):
         self.office.break_is_paid = False
         self.office.save()
         self.settings(punch_pairing_strategy="first_last")
         record = self.day((13, 0), (22, 0))
-        # 300 in the shift less the unpaid hour = 240; 240 made up.
+        # 300 in the shift: five hours, no lunch break owed; 180 made up.
         self.assertEqual(record.worked_minutes, 480)
-        self.assertEqual(record.calculated_overtime_minutes, 0)
+        self.assertEqual(record.calculated_overtime_minutes, 60)
 
     def test_the_evening_fills_up_to_a_full_day_above_the_work(self):
         # 9-18 with an unpaid hour is 480 of work, but this shift asks 500.

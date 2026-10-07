@@ -337,6 +337,23 @@ def make_up_late(day, *, scheduled_end, full_day_minutes, overtime_after_minutes
     return day
 
 
+#: Arriving within the late grace, or leaving within the leaving-early grace,
+#: counts as on time for worked minutes too - up to this many minutes, whatever
+#: a shift says (a shift form refuses more since 2026-10-07; older shifts may
+#: hold more).
+GRACE_CREDIT_LIMIT_MINUTES = 60
+
+#: "First and last scan" takes an unpaid break only from time worked beyond
+#: this: nobody is owed a lunch break in a short day (the Labour Act's break
+#: is due after five or six hours), and the break never takes a day below it.
+BREAK_AFTER_MINUTES = 300
+
+
+def unpaid_break_taken(worked_minutes, break_minutes):
+    """The part of an unpaid break taken off a "first and last scan" day."""
+    return min(int(break_minutes or 0), max(0, worked_minutes - BREAK_AFTER_MINUTES))
+
+
 BETWEEN_NOTE = "Between check-in and check-out: not counted"
 
 
@@ -351,7 +368,8 @@ def _first_and_last(moments, *, window_seconds, break_minutes, break_is_paid,
     once the shift's end has passed: then the latest scan so far is it, even
     if they left early; a later scan takes over. Before that the day is
     still running. Worked time is check-in to check-out within the shift,
-    less the shift's break unless the break is paid.
+    less the shift's break unless the break is paid - and only from time
+    beyond five hours (``unpaid_break_taken``, 2026-10-07).
 
     The two scans that count go through the usual rules, so lateness, early
     leaving, overtime and a day closing with no check-out work as always.
@@ -372,7 +390,7 @@ def _first_and_last(moments, *, window_seconds, break_minutes, break_is_paid,
     day.is_closed = is_closed
     day.dropped = dropped
     if day.has_check_out and not day.check_out_by_rule and not break_is_paid and break_minutes:
-        day.worked_minutes = max(0, day.worked_minutes - int(break_minutes))
+        day.worked_minutes -= unpaid_break_taken(day.worked_minutes, break_minutes)
     if middle:
         counted = list(day.kept)
         between = [Scan(at=at, punch_event_id=punch_id, direction="ignored", label="ignored",
@@ -384,6 +402,32 @@ def _first_and_last(moments, *, window_seconds, break_minutes, break_is_paid,
             if session.out_index is not None:
                 session.out_index = day.kept.index(counted[session.out_index])
     return day
+
+
+def _grace_credit(day, *, scheduled_start, scheduled_end, grace_in_minutes,
+                  grace_out_minutes):
+    """Minutes missed inside the shift's graces, counted as worked (2026-10-07).
+
+    "Not late" and "not leaving early" were only marks: at 07:04 on a 07:00
+    shift with 5 minutes' grace nobody was late, yet the 4 minutes were still
+    missing from worked time - and a full day that needs the whole shift
+    became a half day. Within the grace, they count as on time.
+    """
+    credit = 0
+    if scheduled_start is not None and day.sessions:
+        first = day.sessions[0]
+        allowed = min(int(grace_in_minutes or 0), GRACE_CREDIT_LIMIT_MINUTES)
+        if (allowed and first.ended_at is not None and not first.needs_review
+                and scheduled_start < first.started_at
+                <= scheduled_start + datetime.timedelta(minutes=allowed)):
+            credit += _minutes(scheduled_start, min(first.started_at, first.ended_at))
+    if (scheduled_end is not None and day.has_check_out and not day.check_out_by_rule
+            and day.last_out_at is not None):
+        allowed = min(int(grace_out_minutes or 0), GRACE_CREDIT_LIMIT_MINUTES)
+        if allowed and (scheduled_end - datetime.timedelta(minutes=allowed)
+                        <= day.last_out_at < scheduled_end):
+            credit += _minutes(day.last_out_at, scheduled_end)
+    return credit
 
 
 def _account(day, *, scheduled_start, scheduled_end, break_minutes,
@@ -435,7 +479,9 @@ def _account(day, *, scheduled_start, scheduled_end, break_minutes,
             if earlier.ended_at is not None
         )
         paid_break = min(shift_break_minutes, int(break_minutes or 0))
-    day.worked_minutes = regular + paid_break
+    day.worked_minutes = regular + paid_break + _grace_credit(
+        day, scheduled_start=scheduled_start, scheduled_end=scheduled_end,
+        grace_in_minutes=grace_in_minutes, grace_out_minutes=grace_out_minutes)
     day.overtime_minutes = overtime
 
     if scheduled_start is not None and day.first_in_at is not None:
