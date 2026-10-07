@@ -2,6 +2,16 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-07 — Late time made up; absent only when nobody came
+
+- **New fields** on `GET/PATCH /api/v1/attendance-settings` (and in
+  `GET /schedule`'s settings): `late_made_up_after_shift` (time after the
+  shift first makes up for coming late; only the rest is overtime) and
+  `came_in_is_half_day` (anyone who came in gets at least a half day). Both
+  `true` by default; a PATCH that leaves them out keeps them as they are.
+- **Changed:** with them on, `worked_minutes` can include time after the
+  shift, and `calculated_overtime_minutes` is only what is left over.
+
 ## 2026-10-06 — Department filter; attendance read from what is saved
 
 - **New:** `department_id` on `GET /api/v1/attendance`, `GET /attendance/late`

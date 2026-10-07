@@ -6140,3 +6140,26 @@ calendar, and a man who worked almost 12 hours got half days.
   after saving a shift and as "Too high" in the shift list. Not a refusal.
 - **Client's to decide** (panel): a shift for Unassigned (or a company shift),
   realistic full/half-day minutes, "first and last scan" pairing for sheds.
+
+### Attendance: late time made up after the shift; absent only when nobody came — 2026-10-07
+
+Nihal's senior. Two company settings (Attendance settings), **on for every
+company** (migration `scheduling/0006`), each can be switched off:
+
+- **`late_made_up_after_shift`** — "Staying after the shift makes up for
+  coming late". On a working day with a check-out, time in the office after
+  the shift's end first fills worked time up to the larger of the shift's
+  normal work (length less an unpaid break) and its full-day minutes; only
+  the rest is overtime, after the shift's "overtime starts after" minutes.
+  Senior's example (9 h shift, unpaid hour, full day 8 h): 4 h late + 4 h
+  after = full day + 1 h overtime. Arriving early still counts nothing; an
+  unclosed overtime session counts nothing; not on days off or part-day
+  leave. `attendance.pairing.make_up_late`, called from
+  `attendance.services._make_up`. The note says "N min after the shift made
+  up for time missed"; lateness is still recorded.
+- **`came_in_is_half_day`** — "Anyone who came in gets at least a half day":
+  a day with scans below the half-day minutes is a half day, not absent.
+  "Treat as absent" for a missing check-out still wins (an explicit choice).
+- Healthy Choice, 1-5 Oct, live copy: present 2 → 68, absent 121 → 73.
+- **Deploy:** migrate, then `recalculate_attendance --since 2026-10-01` so
+  this month's stored days follow the new rules.

@@ -91,7 +91,8 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
                 "The break the shift allows, e.g. 60 for lunch. Unpaid unless ticked below."
             ),
             "overtime_after_minutes": (
-                "Minutes after the shift's end before overtime counts, e.g. 30. 0 = straight away."
+                "Minutes after the shift's end before overtime counts, e.g. 30. 0 = straight "
+                "away. Time making up for coming late comes first, when the company counts it."
             ),
             "minimum_full_day_minutes": (
                 "Worked minutes needed for a full present day. Cannot exceed the "
@@ -165,13 +166,26 @@ class AttendanceSettingsForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = CompanyAttendanceSettings
         fields = ("shift_mode", "company_shift", "missing_punch_policy",
-                  "punch_pairing_strategy")
+                  "punch_pairing_strategy", "late_made_up_after_shift",
+                  "came_in_is_half_day")
         labels = {
             "shift_mode": "How shifts are assigned",
             "missing_punch_policy": "When a punch is missing",
             "punch_pairing_strategy": "Check-in and check-out",
+            "late_made_up_after_shift": "Staying after the shift makes up for coming late",
+            "came_in_is_half_day": "Anyone who came in gets at least a half day",
         }
         help_texts = {
+            "late_made_up_after_shift": (
+                "Came 4 hours late and stayed 4 hours after the shift: the time after "
+                "the shift first fills the day up to the shift's normal work (its "
+                "length, less an unpaid break), and only what is left is overtime - "
+                "after the shift's \"overtime starts after\" minutes."
+            ),
+            "came_in_is_half_day": (
+                "Absent only when they never came. Someone who came in but worked "
+                "less than the shift's half day gets a half day, not absent."
+            ),
             "punch_pairing_strategy": (
                 "Alternate: every scan counts - out and back in is a break, and the "
                 "first scan out after the shift's end is the check-out. First and last: "
@@ -179,7 +193,7 @@ class AttendanceSettingsForm(StyledFormMixin, forms.ModelForm):
                 "between are not counted. The check-out is decided when the shift ends "
                 "(the latest scan by then, even if they left early; a later scan takes "
                 "over), and worked time is check-in to check-out less the shift's break "
-                "unless the break is paid. Changing it applies to days worked out from now."
+                "unless the break is paid. Saving measures this month's days again."
             ),
             "missing_punch_policy": (
                 "A day with an IN but no OUT. Review required marks it for "

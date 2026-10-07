@@ -97,10 +97,12 @@ class Shift(TenantOwned, ActorTracked):
         if full > most:
             return (f"A full day needs {full} minutes, but this shift has {most} minutes "
                     f"of work at most once its {self.default_break_minutes}-minute unpaid "
-                    f"break is taken off: nearly every day will be a half day. Lower the "
+                    f"break is taken off: every day will be a half day, even one made up "
+                    f"after the shift. Lower the "
                     f"full day below {most}.")
         return (f"A full day needs all {most} working minutes of this shift: a minute "
-                f"late or a minute early makes it a half day. Lower it to leave some room.")
+                f"late or a minute early makes it a half day, unless it is made up after "
+                f"the shift. Lower it to leave some room.")
 
     def clean(self):
         super().clean()
@@ -169,6 +171,13 @@ class CompanyAttendanceSettings(TenantOwned, ActorTracked):
     # companies that only want the check-in and the check-out).
     punch_pairing_strategy = models.CharField(
         max_length=32, choices=PairingStrategy.choices, default=PairingStrategy.ALTERNATING)
+    # Nihal's senior, 2026-10-07. Late in the morning, stayed late in the
+    # evening: the evening fills the day up to the shift's normal work first,
+    # and only what is left is overtime.
+    late_made_up_after_shift = models.BooleanField(default=True)
+    # Absent only when they never came: someone who came in gets at least a
+    # half day, however short the day was.
+    came_in_is_half_day = models.BooleanField(default=True)
     device_attendance_scope = models.CharField(
         max_length=32,
         choices=DeviceAttendanceScope.choices,
