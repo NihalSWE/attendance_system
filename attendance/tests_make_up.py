@@ -1,9 +1,9 @@
 """Late time made up after the shift, and absent only when nobody came
 (Nihal's senior, 2026-10-07; two company settings, on by default).
 
-The senior's example: a 9-hour shift with an unpaid hour (8 hours of work),
-full day 8 hours. Four hours late, four hours after the shift: 5 + 3 made up
-= 8, a full day, and 1 hour of overtime - not 4.
+The senior's example: 9:00-18:00 with a paid lunch hour, full day 8 hours.
+Four hours late, four hours after the shift: 5 + 3 made up = 8, a full day,
+and 1 hour of overtime - not 4. On time, 9:00-18:00: a full day, no overtime.
 """
 
 import datetime
@@ -34,7 +34,7 @@ class MakeUpTests(tests_live.LiveTestCase):
                 "start_time": datetime.time(9), "end_time": datetime.time(18),
                 "spans_next_day": False, "grace_in_minutes": 10,
                 "minimum_full_day_minutes": 480, "minimum_half_day_minutes": 240,
-                "default_break_minutes": 60, "break_is_paid": False,
+                "default_break_minutes": 60, "break_is_paid": True,
                 "overtime_after_minutes": overtime_after,
             })
         self.settings(company_shift=shift)
@@ -65,6 +65,19 @@ class MakeUpTests(tests_live.LiveTestCase):
         self.assertEqual(record.attendance_status, Status.HALF_DAY)
         self.assertEqual(record.calculated_overtime_minutes, 0)
 
+    def test_on_time_is_a_full_day_and_no_overtime(self):
+        record = self.day((9, 0), (18, 0))
+        self.assertEqual(record.attendance_status, Status.PRESENT)
+        self.assertEqual(record.worked_minutes, 540)
+        self.assertEqual(record.calculated_overtime_minutes, 0)
+
+    def test_an_hour_late_and_an_hour_after_is_an_hour_over(self):
+        # 8 hours in the shift is already the full day: the evening is overtime.
+        record = self.day((10, 0), (19, 0))
+        self.assertEqual(record.attendance_status, Status.PRESENT)
+        self.assertEqual(record.calculated_overtime_minutes, 60)
+        self.assertNotIn("made up", record.note)
+
     def test_a_full_day_and_more_is_all_overtime(self):
         record = self.day((9, 0), (20, 0))
         self.assertEqual(record.attendance_status, Status.PRESENT)
@@ -77,16 +90,19 @@ class MakeUpTests(tests_live.LiveTestCase):
         self.assertEqual(record.worked_minutes, 480)
         self.assertEqual(record.calculated_overtime_minutes, 0)    # 60 left, 60 to wait
 
-    def test_first_and_last_takes_the_break_off_first(self):
+    def test_first_and_last_takes_an_unpaid_break_off_first(self):
+        self.office.break_is_paid = False
+        self.office.save()
         self.settings(punch_pairing_strategy="first_last")
         record = self.day((13, 0), (22, 0))
         # 300 in the shift less the unpaid hour = 240; 240 made up.
         self.assertEqual(record.worked_minutes, 480)
         self.assertEqual(record.calculated_overtime_minutes, 0)
 
-    def test_a_full_day_above_the_normal_work_is_filled_up_to(self):
+    def test_the_evening_fills_up_to_a_full_day_above_the_work(self):
         # 9-18 with an unpaid hour is 480 of work, but this shift asks 500.
         self.office.minimum_full_day_minutes = 500
+        self.office.break_is_paid = False
         self.office.save()
         self.settings(punch_pairing_strategy="first_last")
         record = self.day((9, 0), (18, 40))     # 540 - 60 = 480 in the shift, 40 after
