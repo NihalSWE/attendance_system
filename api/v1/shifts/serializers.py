@@ -76,6 +76,12 @@ class SettingsSerializer(serializers.Serializer):
     punch_pairing_strategy = serializers.CharField(
         help_text="alternating (every scan counts; out and in is a break) or first_last (the "
                   "first scan is the check-in, the last the check-out).")
+    late_made_up_after_shift = serializers.BooleanField(
+        help_text="Time after the shift first makes up for coming late; only the rest is "
+                  "overtime.")
+    came_in_is_half_day = serializers.BooleanField(
+        help_text="Anyone who came in gets at least a half day: absent only when they never "
+                  "came.")
 
 
 class SettingsInputSerializer(StrictSerializer):
@@ -90,6 +96,11 @@ class SettingsInputSerializer(StrictSerializer):
     punch_pairing_strategy = serializers.ChoiceField(
         choices=Settings.PairingStrategy.choices, required=False,
         help_text="alternating or first_last. Applies to days worked out from now.")
+    late_made_up_after_shift = serializers.BooleanField(
+        required=False,
+        help_text="Time after the shift first makes up for coming late (default true).")
+    came_in_is_half_day = serializers.BooleanField(
+        required=False, help_text="Anyone who came in gets at least a half day (default true).")
 
 
 class DepartmentShiftSerializer(serializers.Serializer):

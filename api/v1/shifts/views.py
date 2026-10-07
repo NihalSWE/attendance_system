@@ -87,13 +87,16 @@ class ScheduleView(ApiView):
 def _settings_out(settings):
     return {"shift_mode": settings.shift_mode, "company_shift": _ref(settings.company_shift),
             "missing_punch_policy": settings.missing_punch_policy,
-            "punch_pairing_strategy": settings.punch_pairing_strategy}
+            "punch_pairing_strategy": settings.punch_pairing_strategy,
+            "late_made_up_after_shift": settings.late_made_up_after_shift,
+            "came_in_is_half_day": settings.came_in_is_half_day}
 
 
 SETTINGS_EXAMPLE = {"shift_mode": "department_shifts",
                     "company_shift": {"id": 2, "name": "Day shift"},
                     "missing_punch_policy": "review_required",
-                    "punch_pairing_strategy": "alternating"}
+                    "punch_pairing_strategy": "alternating",
+                    "late_made_up_after_shift": True, "came_in_is_half_day": True}
 
 
 class OverviewView(ScheduleView):
@@ -163,8 +166,8 @@ class SettingsView(ScheduleView):
         what_it_does=["Changes only the fields sent; records it in the audit log."],
         description=("department_shifts: each person works their department's shift and the "
                      "company shift covers departments without one. company_single_shift: "
-                     "everyone works the company shift (it is then required). The pairing "
-                     "applies to days worked out from now."),
+                     "everyone works the company shift (it is then required). Saving "
+                     "measures this month's days again."),
         roles=ADMINS, scopes=["shifts:write"], request=s.SettingsInputSerializer,
         response=s.SettingsSerializer,
         request_example={"punch_pairing_strategy": "first_last"},

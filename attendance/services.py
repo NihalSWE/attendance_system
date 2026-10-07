@@ -235,6 +235,9 @@ def _classify_working_day(shift, settings, day, *, scheduled_start=None,
         status, fraction = AttendanceRecord.AttendanceStatus.PRESENT, ONE
     elif half and worked >= half:
         status, fraction = AttendanceRecord.AttendanceStatus.HALF_DAY, HALF
+    elif getattr(settings, "came_in_is_half_day", False):
+        # They came in: absent is only for a day nobody came (company setting).
+        status, fraction = AttendanceRecord.AttendanceStatus.HALF_DAY, HALF
     else:
         status, fraction = AttendanceRecord.AttendanceStatus.ABSENT, NONE
 
@@ -246,6 +249,8 @@ def _classify_working_day(shift, settings, day, *, scheduled_start=None,
     notes = []
     if day.check_out_by_rule:
         notes.append("Checked out at the shift end by rule; no scan.")
+    if getattr(day, "made_up_minutes", 0):
+        notes.append(f"{day.made_up_minutes} min after the shift made up for time missed.")
     if day.open_overtime:
         notes.append("Overtime session left open; pays nothing until approved.")
     if day.break_count:
@@ -734,7 +739,8 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         if not day_punches and not is_closed:
             # "Not in yet": the shift has not finished, so nobody is absent.
             return "pending"
-        paired = _pair(day_punches, window, settings, is_closed, now)
+        paired = _make_up(_pair(day_punches, window, settings, is_closed, now), window,
+                          settings)
         status, punch_status, fraction, minutes = _classify_working_day(
             window.shift, settings, paired,
             scheduled_start=window.scheduled_start, scheduled_end=window.scheduled_end,
@@ -851,6 +857,23 @@ def _pair(day_punches, window, settings, is_closed, now=None):
         first_last=first_last,
         shift_over=bool(now and window.scheduled_end and now >= window.scheduled_end),
     )
+
+
+def _make_up(paired, window, settings):
+    """A working day: time after the shift first makes up for time missed in
+    it, when the company says so (``pairing.make_up_late``). Not on a day off
+    (every minute there is paid as it is) nor beside part-day leave."""
+    shift = window.shift
+    if getattr(settings, "late_made_up_after_shift", False) and paired.has_check_out:
+        pairing.make_up_late(
+            paired, scheduled_start=window.scheduled_start,
+            scheduled_end=window.scheduled_end,
+            break_minutes=getattr(shift, "default_break_minutes", 0),
+            break_is_paid=getattr(shift, "break_is_paid", False),
+            overtime_after_minutes=getattr(shift, "overtime_after_minutes", 0),
+            full_day_minutes=getattr(shift, "minimum_full_day_minutes", 0),
+        )
+    return paired
 
 
 def _next_change(window, now):

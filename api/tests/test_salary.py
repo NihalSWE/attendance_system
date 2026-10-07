@@ -118,7 +118,11 @@ class PayslipTests(SalaryApiTestCase):
 class OvertimeTests(SalaryApiTestCase):
     def setUp(self):
         super().setUp()
-        self.long_day = a_weekday(5)
+        # A day of its own: on some dates a_weekday(5) is the late day too, and
+        # its 09:25-18:05 scans would turn this into a day made up after the
+        # shift (2026-10-07) with no overtime left.
+        self.long_day = next(day for day in map(a_weekday, range(5, 40))
+                             if day not in (self.late_day, self.open_day))
         self.punch(self.long_day, 9)
         self.punch(self.long_day, 20)
         self.year, self.month = self.long_day.year, self.long_day.month

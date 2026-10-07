@@ -77,6 +77,7 @@ class Day:
     break_count: int = 0
     worked_minutes: int = 0
     overtime_minutes: int = 0
+    made_up_minutes: int = 0         # time after the shift counted as worked (make_up_late)
     late_minutes: int = 0
     early_out_minutes: int = 0
     is_closed: bool = True
@@ -304,6 +305,38 @@ def build_day(
         grace_out_minutes=grace_out_minutes,
         overtime_after_minutes=overtime_after_minutes,
     )
+    return day
+
+
+def make_up_late(day, *, scheduled_start, scheduled_end, break_minutes, break_is_paid,
+                 overtime_after_minutes=0, full_day_minutes=0):
+    """Time after the shift makes up for time missed in it (Nihal's senior,
+    2026-10-07; a company setting).
+
+    The shift's normal work is its length, less the break unless the break is
+    paid. Time in the office after the shift's end first fills the day up to
+    that - or up to the full day, if a full day needs more - and only what is
+    left is overtime, once the shift's "overtime starts after" minutes have
+    passed. So 4 hours late on a 9-hour shift with an
+    unpaid hour, and 4 hours after it: 5 + 3 made up = 8 worked, a full day,
+    and 1 hour over. Arriving early still counts for nothing, and an overtime
+    session nobody closed counts nothing until it is approved.
+    """
+    if scheduled_start is None or scheduled_end is None:
+        return day
+    unpaid = 0 if break_is_paid else int(break_minutes or 0)
+    normal = max(_minutes(scheduled_start, scheduled_end) - unpaid, int(full_day_minutes or 0))
+    after = sum(
+        _overlap(session.started_at, session.ended_at, scheduled_end, None)
+        for session in day.sessions
+        if session.ended_at is not None and not session.needs_review
+    )
+    made_up = min(after, max(0, normal - day.worked_minutes))
+    if made_up <= 0:
+        return day
+    day.made_up_minutes = made_up
+    day.worked_minutes += made_up
+    day.overtime_minutes = max(0, after - made_up - int(overtime_after_minutes or 0))
     return day
 
 

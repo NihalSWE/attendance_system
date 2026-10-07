@@ -97,6 +97,13 @@ class SettingsAndAssignmentTests(ShiftApiTestCase):
         self.assertEqual((saved.json()["company_shift"]["id"],
                           saved.json()["punch_pairing_strategy"]),
                          (self.shift["id"], "first_last"))
+        # Not sent: kept as they were (on), not read as an unticked box.
+        self.assertEqual((saved.json()["late_made_up_after_shift"],
+                          saved.json()["came_in_is_half_day"]), (True, True))
+        off = self.api("PATCH", "/api/v1/attendance-settings", {"came_in_is_half_day": False})
+        self.assertEqual(off.status_code, 200, off.content)
+        self.assertEqual((off.json()["late_made_up_after_shift"],
+                          off.json()["came_in_is_half_day"]), (True, False))
         overview = self.api("GET", "/api/v1/schedule").json()
         self.assertTrue(overview["ready"])
 
