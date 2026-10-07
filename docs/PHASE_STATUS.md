@@ -6148,11 +6148,11 @@ company** (migration `scheduling/0006`), each can be switched off:
 
 - **`late_made_up_after_shift`** — "Staying after the shift makes up for
   coming late". On a working day with a check-out, time in the office after
-  the shift's end first fills worked time up to the larger of the shift's
-  normal work (length less an unpaid break) and its full-day minutes; only
-  the rest is overtime, after the shift's "overtime starts after" minutes.
-  Senior's example (9 h shift, unpaid hour, full day 8 h): 4 h late + 4 h
-  after = full day + 1 h overtime. Arriving early still counts nothing; an
+  the shift's end first fills worked time up to the shift's full-day
+  minutes; only the rest is overtime, after the shift's "overtime starts
+  after" minutes. Senior's example (9:00-18:00, paid lunch, full day 8 h):
+  4 h late + 4 h after = full day + 1 h overtime; on time 9-18 = full day,
+  no overtime. Arriving early still counts nothing; an
   unclosed overtime session counts nothing; not on days off or part-day
   leave. `attendance.pairing.make_up_late`, called from
   `attendance.services._make_up`. The note says "N min after the shift made

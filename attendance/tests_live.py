@@ -370,12 +370,13 @@ class EmployeeShiftTests(LiveTestCase):
             now=datetime.datetime(2026, 8, 11, 10, tzinfo=DHAKA),
         )
         on_company_shift = self.record(day)
-        # 09–18 shift: five hours late. 14:00–18:00 is in the shift, and the
-        # evening only makes up the missing time (2026-10-07) - no overtime.
+        # 09–18 shift: five hours late. 14:00–18:00 is in the shift; the
+        # evening first makes it up to the full day (400, 2026-10-07), and
+        # only the rest is overtime.
         self.assertEqual(on_company_shift.late_minutes, 290)
-        self.assertEqual(on_company_shift.worked_minutes, 480)
-        self.assertEqual(on_company_shift.calculated_overtime_minutes, 0)
-        self.assertIn("240 min after the shift made up", on_company_shift.note)
+        self.assertEqual(on_company_shift.worked_minutes, 400)
+        self.assertEqual(on_company_shift.calculated_overtime_minutes, 80)
+        self.assertIn("160 min after the shift made up", on_company_shift.note)
 
     def test_a_temporary_shift_ends_and_the_old_one_returns(self):
         self._own_shift(14, 22, datetime.date(2026, 8, 1))

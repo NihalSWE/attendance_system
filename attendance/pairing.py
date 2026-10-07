@@ -308,30 +308,27 @@ def build_day(
     return day
 
 
-def make_up_late(day, *, scheduled_start, scheduled_end, break_minutes, break_is_paid,
-                 overtime_after_minutes=0, full_day_minutes=0):
+def make_up_late(day, *, scheduled_end, full_day_minutes, overtime_after_minutes=0):
     """Time after the shift makes up for time missed in it (Nihal's senior,
     2026-10-07; a company setting).
 
-    The shift's normal work is its length, less the break unless the break is
-    paid. Time in the office after the shift's end first fills the day up to
-    that - or up to the full day, if a full day needs more - and only what is
-    left is overtime, once the shift's "overtime starts after" minutes have
-    passed. So 4 hours late on a 9-hour shift with an
-    unpaid hour, and 4 hours after it: 5 + 3 made up = 8 worked, a full day,
-    and 1 hour over. Arriving early still counts for nothing, and an overtime
-    session nobody closed counts nothing until it is approved.
+    Time in the office after the shift's end first fills worked time up to the
+    shift's full day; only what is left is overtime, once the shift's
+    "overtime starts after" minutes have passed. His example: 9:00-18:00 with
+    a paid lunch, full day 8 hours; 4 hours late and 4 hours after the shift:
+    5 + 3 made up = 8, a full day, and 1 hour of overtime. On time and staying
+    late is all overtime, as before; arriving early still counts for nothing,
+    and an overtime session nobody closed counts nothing until it is approved.
     """
-    if scheduled_start is None or scheduled_end is None:
+    target = int(full_day_minutes or 0)
+    if scheduled_end is None or not target:
         return day
-    unpaid = 0 if break_is_paid else int(break_minutes or 0)
-    normal = max(_minutes(scheduled_start, scheduled_end) - unpaid, int(full_day_minutes or 0))
     after = sum(
         _overlap(session.started_at, session.ended_at, scheduled_end, None)
         for session in day.sessions
         if session.ended_at is not None and not session.needs_review
     )
-    made_up = min(after, max(0, normal - day.worked_minutes))
+    made_up = min(after, max(0, target - day.worked_minutes))
     if made_up <= 0:
         return day
     day.made_up_minutes = made_up

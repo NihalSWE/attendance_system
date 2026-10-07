@@ -866,12 +866,9 @@ def _make_up(paired, window, settings):
     shift = window.shift
     if getattr(settings, "late_made_up_after_shift", False) and paired.has_check_out:
         pairing.make_up_late(
-            paired, scheduled_start=window.scheduled_start,
-            scheduled_end=window.scheduled_end,
-            break_minutes=getattr(shift, "default_break_minutes", 0),
-            break_is_paid=getattr(shift, "break_is_paid", False),
-            overtime_after_minutes=getattr(shift, "overtime_after_minutes", 0),
+            paired, scheduled_end=window.scheduled_end,
             full_day_minutes=getattr(shift, "minimum_full_day_minutes", 0),
+            overtime_after_minutes=getattr(shift, "overtime_after_minutes", 0),
         )
     return paired
 

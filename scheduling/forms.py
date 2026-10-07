@@ -178,9 +178,9 @@ class AttendanceSettingsForm(StyledFormMixin, forms.ModelForm):
         help_texts = {
             "late_made_up_after_shift": (
                 "Came 4 hours late and stayed 4 hours after the shift: the time after "
-                "the shift first fills the day up to the shift's normal work (its "
-                "length, less an unpaid break), and only what is left is overtime - "
-                "after the shift's \"overtime starts after\" minutes."
+                "the shift first fills the day up to the shift's full day, and only "
+                "what is left is overtime - after the shift's \"overtime starts "
+                "after\" minutes. On time and staying late is all overtime, as before."
             ),
             "came_in_is_half_day": (
                 "Absent only when they never came. Someone who came in but worked "
