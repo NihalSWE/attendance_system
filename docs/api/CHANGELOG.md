@@ -2,6 +2,15 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-07 — Fairer day rules; graces at most 60 minutes
+
+- **Changed:** `worked_minutes` counts minutes inside the late and
+  leaving-early graces as worked; "first and last scan" takes an unpaid break
+  only from time beyond 5 hours; a lone scan after the shift no longer makes
+  a half day.
+- **Changed:** `grace_in_minutes` / `grace_out_minutes` on `POST /shifts` and
+  `PATCH /shifts/{id}` are 0-60.
+
 ## 2026-10-07 — Late time made up; absent only when nobody came
 
 - **New fields** on `GET/PATCH /api/v1/attendance-settings` (and in

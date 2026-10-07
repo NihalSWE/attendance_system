@@ -235,8 +235,12 @@ def _classify_working_day(shift, settings, day, *, scheduled_start=None,
         status, fraction = AttendanceRecord.AttendanceStatus.PRESENT, ONE
     elif half and worked >= half:
         status, fraction = AttendanceRecord.AttendanceStatus.HALF_DAY, HALF
-    elif getattr(settings, "came_in_is_half_day", False):
+    elif getattr(settings, "came_in_is_half_day", False) and (
+            scheduled_end is None or day.first_in_at is None
+            or day.first_in_at < scheduled_end):
         # They came in: absent is only for a day nobody came (company setting).
+        # Came in means a scan before the shift ended - a lone scan in the
+        # evening is not coming to work (Arfan, 4 Oct: one scan at 20:15).
         status, fraction = AttendanceRecord.AttendanceStatus.HALF_DAY, HALF
     else:
         status, fraction = AttendanceRecord.AttendanceStatus.ABSENT, NONE

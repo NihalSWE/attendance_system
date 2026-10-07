@@ -168,6 +168,11 @@
                                                 Night
                                             </span>
                                         {% endif %}
+                                        {% if shift.grace_warning %}
+                                            <span class="badge badge--warning" title="{{ shift.grace_warning }}">
+                                                Grace too long
+                                            </span>
+                                        {% endif %}
                                     </td>
                                     <td class="numeric">
                                         {{ shift.start_time|time:"H:i" }}

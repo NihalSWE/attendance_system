@@ -71,8 +71,8 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
         labels = {
             "code": "Shift code",
             "name": "Shift name",
-            "grace_in_minutes": "Late after (minutes)",
-            "grace_out_minutes": "Leaving early after (minutes)",
+            "grace_in_minutes": "Late grace (minutes)",
+            "grace_out_minutes": "Leaving early grace (minutes)",
             "minimum_full_day_minutes": "Full day needs (minutes)",
             "minimum_half_day_minutes": "Half day needs (minutes)",
             "default_break_minutes": "Break (minutes)",
@@ -82,10 +82,12 @@ class ShiftForm(StyledFormMixin, forms.ModelForm):
         help_texts = {
             "code": "Short identifier, unique in this company.",
             "grace_in_minutes": (
-                "Arriving within this many minutes of the start is not late."
+                "Arriving up to this many minutes after the start is on time: not late, "
+                "and those minutes count as worked. E.g. 5. At most 60."
             ),
             "grace_out_minutes": (
-                "Leaving within this many minutes of the end is not leaving early."
+                "Leaving up to this many minutes before the end is on time: not early, "
+                "and those minutes count as worked. E.g. 5. At most 60."
             ),
             "default_break_minutes": (
                 "The break the shift allows, e.g. 60 for lunch. Unpaid unless ticked below."

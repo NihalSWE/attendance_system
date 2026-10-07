@@ -83,6 +83,20 @@ class Shift(TenantOwned, ActorTracked):
         return (self.scheduled_minutes or 0) - unpaid
 
     @property
+    def grace_warning(self):
+        """A grace over an hour, saved before the form refused it (2026-10-07)."""
+        from scheduling.services import MAX_GRACE_MINUTES
+
+        long = [label for label, value in (("late", self.grace_in_minutes),
+                                           ("leaving early", self.grace_out_minutes))
+                if (value or 0) > MAX_GRACE_MINUTES]
+        if not long:
+            return ""
+        return (f"The {' and '.join(long)} grace is over {MAX_GRACE_MINUTES} minutes. A grace "
+                f"is how many minutes late or early still count as on time - not minutes "
+                f"worked. Set it to a few minutes (e.g. 5); saving this shift needs that.")
+
+    @property
     def full_day_warning(self):
         """Why this shift's full day is out of a normal day's reach, or "".
 
@@ -101,8 +115,8 @@ class Shift(TenantOwned, ActorTracked):
                     f"after the shift. Lower the "
                     f"full day below {most}.")
         return (f"A full day needs all {most} working minutes of this shift: a minute "
-                f"late or a minute early makes it a half day, unless it is made up after "
-                f"the shift. Lower it to leave some room.")
+                f"late or a minute early beyond the graces makes it a half day, unless it "
+                f"is made up after the shift. Lower it to leave some room.")
 
     def clean(self):
         super().clean()

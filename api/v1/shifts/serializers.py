@@ -25,9 +25,11 @@ class ShiftSerializer(serializers.Serializer):
         help_text="A night shift: it ends the next day (the end is before the start).")
     scheduled_minutes = serializers.IntegerField(help_text="Its length in minutes.")
     grace_in_minutes = serializers.IntegerField(
-        help_text="Arriving within this many minutes of the start is not late.")
+        help_text="Arriving up to this many minutes after the start is on time (not late, "
+                  "and counted as worked).")
     grace_out_minutes = serializers.IntegerField(
-        help_text="Leaving within this many minutes of the end is not leaving early.")
+        help_text="Leaving up to this many minutes before the end is on time (not early, "
+                  "and counted as worked).")
     minimum_full_day_minutes = serializers.IntegerField(
         help_text="Worked minutes needed for a full present day.")
     minimum_half_day_minutes = serializers.IntegerField(
@@ -46,10 +48,13 @@ class ShiftInputSerializer(StrictSerializer):
     end_time = serializers.CharField(
         max_length=8, help_text=TIME_HELP + " An end before the start (22:00 → 06:00) is a "
                                             "night shift ending the next day.")
-    grace_in_minutes = serializers.IntegerField(min_value=0, required=False,
-                                                help_text="Late after this many minutes.")
+    grace_in_minutes = serializers.IntegerField(
+        min_value=0, max_value=60, required=False,
+        help_text="Late grace: arriving this many minutes late is on time (0-60).")
     grace_out_minutes = serializers.IntegerField(
-        min_value=0, required=False, help_text="Leaving early after this many minutes (0).")
+        min_value=0, max_value=60, required=False,
+        help_text="Leaving early grace: leaving this many minutes early is on time (0-60, "
+                  "default 0).")
     minimum_full_day_minutes = serializers.IntegerField(
         min_value=0, required=False,
         help_text="Worked minutes for a full day; not more than the shift's length.")

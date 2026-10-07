@@ -6163,3 +6163,27 @@ company** (migration `scheduling/0006`), each can be switched off:
 - Healthy Choice, 1-5 Oct, live copy: present 2 → 68, absent 121 → 73.
 - **Deploy:** migrate, then `recalculate_attendance --since 2026-10-01` so
   this month's stored days follow the new rules.
+
+### Attendance: four rules made fair — 2026-10-07
+
+Reviewed with Nihal's senior ("do it right"); no setting, everyone:
+
+1. **Grace is on time for worked minutes too.** Arriving within the late
+   grace / leaving within the leaving-early grace counts those minutes as
+   worked (`pairing._grace_credit`), at most 60 (`GRACE_CREDIT_LIMIT_MINUTES`).
+   Before, 07:04 on a 07:00 shift was "not late" but 4 minutes short.
+2. **"First and last scan" takes an unpaid break only beyond 5 hours**
+   (`pairing.unpaid_break_taken`: `min(break, worked - 300)`): a 4-hour day
+   keeps 4 hours; a 5½-hour day loses 30 minutes; a full day the whole break.
+3. **"Came in" needs a scan before the shift's end**: a lone evening scan is
+   absent, not a half day.
+4. **Graces at most 60 minutes** (form, service, API). Labels now "Late
+   grace" / "Leaving early grace" - Healthy Choice had typed 480/660 (shift
+   length less an hour), reading "Leaving early after" as minutes worked.
+   Older shifts show "Grace too long" in the shift list (`Shift.grace_warning`)
+   and must be fixed before their next save.
+
+Late penalties unchanged: a late day made up after the shift is still late
+(punctuality, not hours); "excuse late" is there for exceptions.
+Live copy, 1-5 Oct: present 68, half 99 → 90, absent 73 → 82 (lone
+after-shift scans). Deploy: pull, restart, `recalculate_attendance --since 2026-10-01`.

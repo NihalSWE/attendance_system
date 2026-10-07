@@ -67,6 +67,11 @@ HOLIDAY_FIELDS = ("branch", "holiday_date", "name", "description", "is_paid")
 # The year calendar: many dates at once, each with its own name.
 HOLIDAY_BATCH_FIELDS = ("branch", "is_paid", "days")
 MAX_HOLIDAYS_PER_BATCH = 366
+# A grace is minutes of "still on time" (2026-10-07). One live company read
+# "Leaving early after (minutes)" as minutes worked and typed 660 on a 12-hour
+# shift: nobody was ever early. More than an hour is not a grace. (Attendance
+# credits at most this much: ``attendance.pairing.GRACE_CREDIT_LIMIT_MINUTES``.)
+MAX_GRACE_MINUTES = 60
 
 
 # --------------------------------------------------------------------------
@@ -162,8 +167,16 @@ def _apply_shift_values(shift, values):
         )
     if shift.scheduled_minutes and shift.grace_out_minutes >= shift.scheduled_minutes:
         errors["grace_out_minutes"] = "Leaving early grace must be shorter than the shift."
+    elif shift.grace_out_minutes > MAX_GRACE_MINUTES:
+        errors["grace_out_minutes"] = (
+            f"At most {MAX_GRACE_MINUTES} minutes: leaving this many minutes before the "
+            f"end is still on time (not a number of minutes worked).")
     if shift.scheduled_minutes and shift.grace_in_minutes >= shift.scheduled_minutes:
         errors["grace_in_minutes"] = "Late grace must be shorter than the shift."
+    elif shift.grace_in_minutes > MAX_GRACE_MINUTES:
+        errors["grace_in_minutes"] = (
+            f"At most {MAX_GRACE_MINUTES} minutes: arriving this many minutes after the "
+            f"start is still on time.")
     if shift.overtime_after_minutes > 24 * 60:
         errors["overtime_after_minutes"] = "Use at most 1440 minutes (24 hours)."
     if errors:
