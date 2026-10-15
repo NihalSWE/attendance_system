@@ -1,0 +1,26 @@
+<div class="card">
+    <div class="card__head"><h2>Sent</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
+    {% if lines %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Item</th><th>Batch</th><th>From bin</th><th>To bin</th><th class="numeric">Sent</th><th class="numeric">Arrived</th><th>Shortage</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    {% for line in lines %}
+                        <tr>
+                            <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                            <td>{{ line.batch.batch_no|default:"—" }}</td>
+                            <td>{{ line.from_location.code|default:"—" }}</td>
+                            <td>{{ line.to_location.code|default:"—" }}</td>
+                            <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                            <td class="numeric">{% if line.qty_received_base is not None %}{{ line.qty_received_base.normalize }} {{ line.item.base_uom.code }}{% else %}—{% endif %}</td>
+                            <td>{% if line.shortage_reason %}{{ line.shortage_base.normalize }}: {{ line.shortage_reason }}{% else %}—{% endif %}</td>
+                            <td>{% include "inventory/store/_remove.html" %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty"><div class="empty__text">Scan the packages, or add lines: without a batch, the first to expire is taken.</div></div>
+    {% endif %}
+</div>

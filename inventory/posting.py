@@ -51,6 +51,9 @@ NEEDS_USABLE_BATCH = frozenset({MoveType.ISSUE, MoveType.PRODUCTION_CONSUME, Mov
 #: Outgoing moves that may use reserved stock: a delivery is what releases
 #: a sales order's reservation.
 MAY_USE_RESERVED = frozenset({MoveType.DELIVERY, MoveType.REVERSAL})
+#: Stores whose stock is not for use: nothing is issued, consumed or
+#: delivered from them (it is transferred out, returned or written off).
+UNUSABLE_STORES = frozenset({"quarantine", "rejected", "transit"})
 
 
 @dataclass
@@ -227,6 +230,9 @@ def post(*, company_id, actor, document_type, document_id, move_type, lines, wor
                           else batch.get_status_display().lower())
                 raise ValidationError(f"Batch {batch.batch_no} of {item.code} is {reason} "
                                       "and cannot be used.")
+            if move_type in NEEDS_USABLE_BATCH and line.warehouse.kind in UNUSABLE_STORES:
+                raise ValidationError(f"{line.warehouse.code} is a {line.warehouse.get_kind_display().lower()} "
+                                      "store: its stock cannot be used.")
             new_qty = balance.qty_on_hand + line.qty
             where = f"{line.warehouse.code}" + (f" / {line.location.code}" if line.location else "")
             which = f" (batch {batch.batch_no})" if batch else ""
@@ -280,6 +286,9 @@ def reverse(*, company_id, actor, document_type, document_id, work_date, note=""
              unit_cost=m.unit_cost, line_id=m.document_line_id, note=note, reverses=m)
         for m in originals
     ]
+    # Stock coming back first, then stock going out: a document that passed
+    # goods through a store (a transfer via transit) never dips it below zero.
+    lines.sort(key=lambda line: line.qty < 0)
     return post(company_id=company_id, actor=actor, document_type=document_type,
                 document_id=document_id, move_type=MoveType.REVERSAL, lines=lines,
                 work_date=work_date)

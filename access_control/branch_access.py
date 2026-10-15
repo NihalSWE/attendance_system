@@ -66,6 +66,9 @@ BRANCH_PERMISSIONS = (
     ("inventory.items", "Set up items, stores, suppliers and customers", "inventory", "edit"),
     ("inventory.labels", "Print and reprint labels", "inventory", "create"),
     ("inventory.issue", "Store requisitions, issues and returns", "inventory", "create"),
+    # Phase 4: the department head's yes (Phase 0, approval chains) as a
+    # permission - heading a department gives nothing by itself (HEAD_ACCESS).
+    ("inventory.issue_approve", "Approve store requisitions", "inventory", "approve"),
     ("inventory.transfer", "Transfer stock between stores", "inventory", "create"),
     ("inventory.adjust", "Enter stock adjustments, counts and opening stock", "inventory", "create"),
     ("inventory.adjust_approve", "Approve and post adjustments and opening stock", "inventory", "approve"),

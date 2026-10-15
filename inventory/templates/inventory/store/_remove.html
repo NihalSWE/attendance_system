@@ -1,0 +1,7 @@
+{% if can_remove %}
+    <form method="post" action="{% url 'inventory:store_line_remove' doc.key row.pk line.pk %}"
+          data-confirm="The line is taken off." data-confirm-title="Remove this line?" data-confirm-button="Remove"
+          data-confirm-tone="danger">
+        {% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button>
+    </form>
+{% endif %}

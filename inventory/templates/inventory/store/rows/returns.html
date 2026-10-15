@@ -1,0 +1,5 @@
+<td><a href="{% url 'inventory:store_detail' doc.key row.pk %}"><strong>{{ row.number }}</strong></a></td>
+<td>{{ row.return_date|date:"d M Y" }}</td>
+<td>{{ row.department.name }}</td>
+<td>{{ row.warehouse.code }}</td>
+<td>{{ row.issue.number|default:"—" }}</td>

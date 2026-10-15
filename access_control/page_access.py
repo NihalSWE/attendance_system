@@ -157,6 +157,16 @@ BRANCH_PAGES = {
     **{f"inventory:{key}": "inventory.labels"
        for key in ("label_print", "label_void", "bin_labels_print", "item_label_print",
                    "package_labels", "batch_label_print")},
+    # Phase 4: store operations. Every page opens to anyone who may view stock
+    # or take part; each service checks the document's store branch and the
+    # exact permission (issue, approve, transfer, adjust, approve adjustments).
+    **{f"inventory:{name}": ("inventory.view", "inventory.issue", "inventory.issue_approve", "inventory.transfer", "inventory.adjust", "inventory.adjust_approve")
+       for name in ("store_list", "store_detail", "store_line_add", "store_line_remove", "store_scan",
+                    "store_action", "transfer_receive", "count_save",
+                    *(f"store_{key}" for key in ("requisitions", "issues", "returns", "transfers",
+                                                 "adjustments", "counts")),
+                    *(f"store_{key}_detail" for key in ("requisitions", "issues", "returns", "transfers",
+                                                        "adjustments", "counts")))},
     # Phase 3: purchase. Every page opens to anyone holding a purchase
     # permission (or viewing stock); each service checks the document's
     # branch and the exact permission again.

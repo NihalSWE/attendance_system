@@ -1,0 +1,27 @@
+<div class="card">
+    <div class="card__head"><h2>Given out</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
+    {% if lines %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Item</th><th>Batch</th><th>Expiry</th><th>Bin</th><th class="numeric">Quantity</th><th class="numeric">In base unit</th><th>Label</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    {% for line in lines %}
+                        <tr>
+                            <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                            <td>{{ line.batch.batch_no|default:"—" }}</td>
+                            <td>{{ line.batch.expiry_date|date:"d M Y"|default:"—" }}</td>
+                            <td>{{ line.location.code|default:"—" }}</td>
+                            <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                            <td class="numeric">{{ line.qty_base.normalize }} {{ line.item.base_uom.code }}</td>
+                            <td>{{ line.label.code|default:"—" }}</td>
+                            <td>{{ line.note }}{% if line.not_fefo_reason %}<div class="t-muted">Not first to expire: {{ line.not_fefo_reason }}</div>{% endif %}</td>
+                            <td>{% include "inventory/store/_remove.html" %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty"><div class="empty__text">Scan the packages, or add lines: without a batch, the first to expire is taken.</div></div>
+    {% endif %}
+</div>

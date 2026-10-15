@@ -3,7 +3,7 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
-from inventory import import_views, label_views, opening_views, stock_views, views
+from inventory import import_views, label_views, opening_views, stock_views, store_views, views
 
 app_name = "inventory"
 
@@ -37,6 +37,23 @@ urlpatterns = [
     path("batches/<int:pk>/label/", label_views.batch_label_print, name="batch_label_print"),
     path("scan/", label_views.scan, name="scan"),
     path("scan/lookup/", label_views.scan_lookup, name="scan_lookup"),
+
+    # Phase 4: store operations, one set of views for the six documents.
+    path("store/transfers/<int:pk>/receive/", store_views.transfer_receive, name="transfer_receive"),
+    path("store/counts/<int:pk>/save/", store_views.count_save, name="count_save"),
+    # Each document's list and page under its own name too (the menu marks
+    # the right entry); the shared names below build the same addresses.
+    *[p for key in store_views.DOCS for p in (
+        path(f"store/{key}/", store_views.doc_list, {"key": key}, name=f"store_{key}"),
+        path(f"store/{key}/<int:pk>/", store_views.doc_detail, {"key": key}, name=f"store_{key}_detail"),
+    )],
+    path("store/<slug:key>/", store_views.doc_list, name="store_list"),
+    path("store/<slug:key>/<int:pk>/", store_views.doc_detail, name="store_detail"),
+    path("store/<slug:key>/<int:pk>/lines/", store_views.doc_line_add, name="store_line_add"),
+    path("store/<slug:key>/<int:pk>/lines/<int:line_pk>/remove/", store_views.doc_line_remove,
+         name="store_line_remove"),
+    path("store/<slug:key>/<int:pk>/scan/", store_views.doc_scan, name="store_scan"),
+    path("store/<slug:key>/<int:pk>/<slug:action>/", store_views.doc_action, name="store_action"),
 
     path("import/<slug:kind>/", import_views.import_page, name="import"),
     path("import/<slug:kind>/confirm/", import_views.import_confirm, name="import_confirm"),

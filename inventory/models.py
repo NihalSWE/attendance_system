@@ -743,3 +743,7 @@ class OpeningStockLine(TenantOwned):
     @property
     def value(self):
         return (self.qty * self.unit_cost).quantize(Decimal("0.0001"))
+
+
+# Phase 4 store documents live in their own module to keep this one readable.
+from inventory.models_store import *  # noqa: E402,F401,F403

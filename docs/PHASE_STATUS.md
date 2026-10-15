@@ -6282,3 +6282,23 @@ Details in [inventory/04-PHASE-3.md](inventory/04-PHASE-3.md).
   Average cost in the flow: 125 → 131.4286 → 125 after the return.
 
 **Deploy:** pull, migrate, collectstatic, restart.
+
+### Inventory Phase 4: store operations — 2026-10-15
+
+Details in [inventory/05-PHASE-4.md](inventory/05-PHASE-4.md).
+
+- Store requisitions (approve with the new `inventory.issue_approve`), store
+  issues (first expiry first, split across batches; a later batch needs a
+  reason; scan package labels; labels used up), material returns (at the
+  issue's cost; damaged to the Rejected store), transfers (dispatch → in
+  transit → receive; shortages written off with a reason; per-store cost
+  carried), stock adjustments (approved by someone else; new batches for
+  found stock), blind stock counts (frozen quantities, scan or type, "Not
+  found = 0"; approval posts the differences as an adjustment).
+- Posting service: nothing is issued, used or delivered from quarantine,
+  rejected or in-transit stores; reversals apply incoming moves first.
+- Tests: 17 more in `inventory` (services and pages); the done-when rules
+  each covered.
+
+**Deploy:** pull, migrate, collectstatic, restart; grant "Approve store
+requisitions" on the Access page.

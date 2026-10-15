@@ -2,6 +2,12 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-15 — Store requisition approval permission
+
+- **Changed:** `GET /api/v1/access/permissions` also lists
+  `inventory.issue_approve` ("Approve store requisitions") for a company with
+  the Store & Inventory module.
+
 ## 2026-10-15 — Purchase permissions
 
 - **Changed:** `GET /api/v1/access/permissions` also lists `purchase.request`,

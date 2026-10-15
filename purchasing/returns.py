@@ -93,6 +93,11 @@ def add_line(*, actor, company_id, return_id, values):
     receipt_line = values.get("receipt_line")
     with use_company(company_id):
         if receipt_line is not None:
+            # As it is now, not as the caller's copy remembers it.
+            receipt_line = values["receipt_line"] = GoodsReceiptLine.objects.select_related(
+                "receipt__warehouse", "item", "batch").filter(pk=receipt_line.pk).first()
+            if receipt_line is None:
+                raise ValidationError({"receipt_line": "That line is not in this company."})
             if receipt_line.receipt.status != GoodsReceipt.Status.POSTED:
                 raise ValidationError({"receipt_line": "That receipt is not posted."})
             if receipt_line.receipt.supplier_id != row.supplier_id:
