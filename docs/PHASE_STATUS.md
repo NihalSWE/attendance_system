@@ -6187,3 +6187,25 @@ Late penalties unchanged: a late day made up after the shift is still late
 (punctuality, not hours); "excuse late" is there for exceptions.
 Live copy, 1-5 Oct: present 68, half 99 → 90, absent 73 → 82 (lone
 after-shift scans). Deploy: pull, restart, `recalculate_attendance --since 2026-10-01`.
+
+### Inventory Phase 0: decisions pack and Excel templates — 2026-10-15
+
+First step of the Store & Inventory module ([inventory/00-PLAN.md](inventory/00-PLAN.md)).
+No code, no migrations; documents for the client meeting only.
+
+- [inventory/01-PHASE-0-DECISIONS.md](inventory/01-PHASE-0-DECISIONS.md): the
+  meeting pack. Each open decision (D2 valuation, D3/D4 labels and hardware,
+  D8 QC/batches/expiry, D9 month-end, D12 VAT/invoices/numbering year, the
+  approval chains, AI channels and the 5 managers, opening stock date) has a
+  recommendation, an answer line and the phase that needs it; sign-off table
+  for the client and the senior.
+- Six Excel templates in `docs/inventory/templates/` (stores + bins, items +
+  pack units, suppliers, customers, BOMs, opening stock), built by
+  `docs/scripts/build_inventory_templates.py`: a How to fill sheet, an
+  Example sheet and the sheet to fill, with dropdowns and number/date checks.
+  The headings are the contract for the Phase 1 importers.
+- Phase 1 may start on the recommendations; only D2 (average per company or
+  per store) shapes a table, and the cost table will hold both.
+
+**Next:** send the templates and hold the meeting; Phase 1 (apps, masters,
+stock ledger and posting service) when the senior says go.
