@@ -134,6 +134,26 @@ COMPANY_MENUS = (
              "inventory:customers_status", needs="inventory.view"),
         item("Inventory settings", "inventory:settings", manage=True, needs="inventory.view"),
     )),
+    # Purchase (Phase 3): requisition -> order -> goods receipt -> QC -> return.
+    ("purchase", "Purchase", (
+        item("Requisitions", "purchasing:requisitions", "purchasing:requisition_detail",
+             "purchasing:requisition_line_add", "purchasing:requisition_line_remove",
+             "purchasing:requisition_submit", "purchasing:requisition_decide",
+             "purchasing:requisition_cancel", needs=("purchase.request", "purchase.approve")),
+        item("Purchase orders", "purchasing:orders", "purchasing:order_detail",
+             "purchasing:order_from_requisitions", "purchasing:order_line_add",
+             "purchasing:order_line_remove", "purchasing:order_email", "purchasing:order_action",
+             needs=("purchase.order", "purchase.approve", "purchase.receive")),
+        item("Goods receipts", "purchasing:receipts", "purchasing:receipt_detail",
+             "purchasing:receipt_line_add", "purchasing:receipt_line_remove",
+             "purchasing:receipt_action", "purchasing:receipt_labels",
+             needs=("purchase.receive", "inventory.view")),
+        item("Quality check", "purchasing:qc", "purchasing:qc_record", needs="purchase.qc"),
+        item("Purchase returns", "purchasing:returns", "purchasing:return_detail",
+             "purchasing:return_line_add", "purchasing:return_line_remove",
+             "purchasing:return_action", needs=("purchase.receive", "purchase.approve")),
+        item("Suppliers", "inventory:suppliers", needs="inventory.view"),
+    )),
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",
              "organization:branch_edit", "organization:branch_status"),
@@ -183,7 +203,8 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
         for entry in entries:
             # ``module_codes``: the module permissions held, empty when the
             # company lacks the module - its entries are then never shown.
-            if entry["needs"] and entry["needs"] not in module_codes:
+            needs = entry["needs"]
+            if needs and not module_codes.intersection((needs,) if isinstance(needs, str) else needs):
                 continue
             if allowed is not None:
                 if not allowed(entry["view"]):

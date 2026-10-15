@@ -157,6 +157,18 @@ BRANCH_PAGES = {
     **{f"inventory:{key}": "inventory.labels"
        for key in ("label_print", "label_void", "bin_labels_print", "item_label_print",
                    "package_labels", "batch_label_print")},
+    # Phase 3: purchase. Every page opens to anyone holding a purchase
+    # permission (or viewing stock); each service checks the document's
+    # branch and the exact permission again.
+    **{f"purchasing:{name}": ("inventory.view", "purchase.request", "purchase.approve", "purchase.order", "purchase.receive", "purchase.qc")
+       for name in ("requisitions", "requisition_detail", "requisition_line_add",
+                    "requisition_line_remove", "requisition_submit", "requisition_decide",
+                    "requisition_cancel", "orders", "order_from_requisitions", "order_detail",
+                    "order_line_add", "order_line_remove", "order_pdf", "order_email",
+                    "order_action", "receipts", "receipt_detail", "receipt_line_add",
+                    "receipt_line_remove", "receipt_labels", "receipt_action", "qc", "qc_record",
+                    "returns", "return_detail", "return_line_add", "return_line_remove",
+                    "return_action")},
 }
 
 

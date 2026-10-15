@@ -1,0 +1,44 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Order from requisitions · Purchase
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'purchasing:orders' %}">Purchase orders</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        From requisitions
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Purchase order from requisitions</h1>
+            <p class="page__sub">Pick the supplier and the approved requisition lines it supplies. Each line is ordered for what is still open; prices start at the items' standard cost - change them on the order before sending it for approval.</p>
+        </div>
+    </div>
+    <div class="card">
+        <form class="card__body stack" method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert--danger">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="grid grid--3">
+                {% for field in form.visible_fields %}
+                    {% if field.name != "requisition_lines" %}{% include "leaves/includes/field.html" %}{% endif %}
+                {% endfor %}
+            </div>
+            {% with field=form.requisition_lines %}
+                {% if field.field.queryset.exists %}
+                    {% include "leaves/includes/field.html" %}
+                {% else %}
+                    <div class="alert alert--info">No approved requisition has anything left to order.</div>
+                {% endif %}
+            {% endwith %}
+            <div class="inv-actions inv-actions--start">
+                <button class="btn btn--primary" type="submit">Make the order</button>
+                <a class="btn btn--ghost" href="{% url 'purchasing:orders' %}">Back</a>
+            </div>
+        </form>
+    </div>
+{% endblock %}

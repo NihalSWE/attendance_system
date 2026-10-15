@@ -6262,3 +6262,23 @@ Details in [inventory/03-PHASE-2.md](inventory/03-PHASE-2.md).
   `inventory_settings` (`inventory.0002_labels`). Tests: 62 in `inventory`.
 
 **Deploy:** pull, migrate, collectstatic, restart.
+
+### Inventory Phase 3: purchase — requisition, order, GRN, QC, return — 2026-10-15
+
+Details in [inventory/04-PHASE-3.md](inventory/04-PHASE-3.md).
+
+- Purchase requisitions (approve / reject), purchase orders (from approved
+  requisition lines or direct; discount, VAT; approve / send back / cancel /
+  close; A4 PDF and email to the supplier through the company's mail account).
+- Goods receipts against orders (partial, filled from the open quantities) or
+  direct: refused-at-the-gate quantities, batch numbers made when empty,
+  expiry from shelf life, GS1 scan fills a line; posting moves stock at cost
+  (average updated), updates the order, and makes one label per package.
+- QC: items needing it arrive in quarantine; pass releases, fail blocks.
+  Purchase returns go out at the receipt's cost (average un-blends exactly).
+- Five `purchase.*` permissions (module-gated); own submissions are approved
+  by someone else unless owner/admin. Purchase menu.
+- Tests: `purchasing` 13 (the done-when flow through services and pages).
+  Average cost in the flow: 125 → 131.4286 → 125 after the return.
+
+**Deploy:** pull, migrate, collectstatic, restart.

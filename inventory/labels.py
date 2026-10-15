@@ -64,8 +64,8 @@ def next_codes(company, kind, count):
     return [f"{row.prefix}{company.pk}-{number:06d}" for number in range(first, first + count)]
 
 
-def _membership(actor, company_id, branch_id=None):
-    return access.require(actor, company_id, CODE, branch_id)
+def _membership(actor, company_id, branch_id=None, code=CODE):
+    return access.require(actor, company_id, code, branch_id)
 
 
 def _audit(actor, membership, action, label, **after):
@@ -160,7 +160,8 @@ def location_labels(*, actor, company_id, location_ids):
 
 @transaction.atomic
 def package_labels(*, actor, company_id, item_id, batch_id=None, uom_id=None, quantity=None,
-                   count=1, warehouse_id=None, location_id=None, source_type="", source_id=None):
+                   count=1, warehouse_id=None, location_id=None, source_type="", source_id=None,
+                   permission=CODE):
     """``count`` package labels of ``quantity`` ``uom`` each (25 bags of 50 KG).
 
     The unit is the item's base unit or one of its packs; the quantity is
@@ -168,7 +169,7 @@ def package_labels(*, actor, company_id, item_id, batch_id=None, uom_id=None, qu
     """
     item = _get(Item, company_id, item_id, "Item")
     warehouse = _get(Warehouse, company_id, warehouse_id, "Store") if warehouse_id else None
-    membership = _membership(actor, company_id, warehouse.branch_id if warehouse else None)
+    membership = _membership(actor, company_id, warehouse.branch_id if warehouse else None, permission)
     batch = _get(Batch, company_id, batch_id, "Batch") if batch_id else None
     location = _get(Location, company_id, location_id, "Bin") if location_id else None
     uom = _get(Uom, company_id, uom_id or item.base_uom_id, "Unit")
@@ -239,7 +240,7 @@ def settings_sizes(company_id):
 
 
 @transaction.atomic
-def print_labels(*, actor, company_id, label_ids, copies=1, reason=""):
+def print_labels(*, actor, company_id, label_ids, copies=1, reason="", permission=CODE):
     """The PDF for these labels, ``copies`` of each, and the print recorded.
 
     A label printed before is a reprint and needs ``reason``. A void label
@@ -265,7 +266,7 @@ def print_labels(*, actor, company_id, label_ids, copies=1, reason=""):
         raise ValidationError(f"At most {MAX_LABELS} labels in one PDF.")
     membership = None
     for branch_id in {label.warehouse.branch_id if label.warehouse else None for label in labels}:
-        membership = _membership(actor, company_id, branch_id)
+        membership = _membership(actor, company_id, branch_id, permission)
     void = [label.code for label in labels if label.status == BarcodeLabel.Status.VOID]
     if void:
         raise ValidationError(f"Void labels are not printed: {', '.join(void)}.")

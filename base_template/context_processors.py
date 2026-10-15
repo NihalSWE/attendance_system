@@ -107,7 +107,10 @@ def _module_codes(user, company_id):
 
     if not inventory_on(company_id):
         return frozenset()
-    return frozenset(code for code in ("inventory.view",) if can(user, company_id, code))
+    from access_control.branch_access import FEATURE_OF
+
+    return frozenset(code for code, feature in FEATURE_OF.items()
+                     if feature == "inventory" and can(user, company_id, code))
 
 
 def _lfa_on(company_id):

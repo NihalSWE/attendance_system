@@ -71,6 +71,14 @@ BRANCH_PERMISSIONS = (
     ("inventory.adjust_approve", "Approve and post adjustments and opening stock", "inventory", "approve"),
     ("inventory.valuation", "See stock costs and values", "inventory", "view"),
     ("inventory.period_close", "Close a stock month", "inventory", "manage"),
+    # Purchase (Phase 3), part of the same module: requisition -> order ->
+    # goods receipt -> quality check -> return. Each follows the document's
+    # branch (the requisition's or order's branch, the receiving store's).
+    ("purchase.request", "Raise purchase requisitions", "inventory", "create"),
+    ("purchase.approve", "Approve purchase requisitions, orders and returns", "inventory", "approve"),
+    ("purchase.order", "Make purchase orders and send them to suppliers", "inventory", "create"),
+    ("purchase.receive", "Receive goods (GRN) and enter purchase returns", "inventory", "create"),
+    ("purchase.qc", "Quality check received goods", "inventory", "approve"),
     ("access.grant", "Give access to others", "access", "manage"),
 )
 CODES = tuple(code for code, *_ in BRANCH_PERMISSIONS)

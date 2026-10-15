@@ -1,0 +1,91 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Quality check · Purchase
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Purchase
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Quality check
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Quality check</h1>
+            <p class="page__sub">Received batches of items that need QC wait in quarantine: nobody can issue or use them until they pass. A failed batch is blocked; return it to the supplier.</p>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head"><h2>Received lines</h2><span class="spacer"></span>
+            <span class="t-muted"><span class="amount">{{ server_table.page.paginator.count }}</span> shown</span></div>
+        <form class="toolbar" method="get">
+            <label class="sr-only" for="qc">QC</label>
+            <select class="input select js-select" id="qc" name="qc">
+                {% for value, label in states %}
+                    <option value="{{ value }}" {% if value == state %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">Apply</button>
+        </form>
+        {% if not rows.object_list %}
+            <div class="empty server-table-empty"><div class="empty__title">Nothing {% if state == "pending" %}waiting for QC{% else %}here{% endif %}</div></div>
+        {% endif %}
+        {% if server_table or rows.object_list %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead><tr><th>Receipt</th><th>Received</th><th>Item</th><th>Batch</th><th class="numeric">Accepted</th><th>Supplier</th><th>QC</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody>
+                        {% for line in rows %}
+                            <tr>
+                                <td><a href="{% url 'purchasing:receipt_detail' line.receipt_id %}">{{ line.receipt.number }}</a></td>
+                                <td>{{ line.receipt.received_date|date:"d M Y" }}</td>
+                                <td>{{ line.item.code }} {{ line.item.name }}</td>
+                                <td>{{ line.batch_no }}{% if line.expiry_date %}<div class="t-muted">Exp {{ line.expiry_date|date:"d M Y" }}</div>{% endif %}</td>
+                                <td class="numeric">{{ line.qty_accepted_base.normalize }} {{ line.item.base_uom.code }}</td>
+                                <td>{{ line.receipt.supplier.name }}</td>
+                                <td>
+                                    {% if line.qc_status == "pending" %}<span class="badge badge--warning">Waiting</span>
+                                    {% elif line.qc_status == "passed" %}<span class="badge badge--success">Passed</span>
+                                    {% else %}<span class="badge badge--danger">Failed</span>{% endif %}
+                                </td>
+                                <td>
+                                    {% if line.qc_status == "pending" %}
+                                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="qc-dialog"
+                                                data-dialog-action="{% url 'purchasing:qc_record' line.pk %}"
+                                                data-dialog-subject="{{ line.item.code }} batch {{ line.batch_no }}">Record QC</button>
+                                    {% elif line.qc_status == "failed" %}
+                                        <a class="btn btn--ghost btn--sm" href="{% url 'purchasing:returns' %}?receipt={{ line.receipt_id }}">Return</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+    <dialog class="modal" id="qc-dialog" aria-labelledby="qc-title">
+        <form class="modal__card" method="post" novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <div class="modal__head"><h2 id="qc-title">QC of <span data-dialog-subject></span></h2>
+                <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <div class="modal__body stack">
+                <p class="t-faint">Passed releases the batch for use. Failed blocks it until it is returned to the supplier.</p>
+                {% for field in qc_form.visible_fields %}{% include "leaves/includes/field.html" %}{% endfor %}
+            </div>
+            <div class="modal__foot">
+                <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                <button class="btn btn--primary" type="submit">Save</button>
+            </div>
+        </form>
+    </dialog>
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

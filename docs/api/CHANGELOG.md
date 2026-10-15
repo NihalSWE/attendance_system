@@ -2,6 +2,13 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-15 — Purchase permissions
+
+- **Changed:** `GET /api/v1/access/permissions` also lists `purchase.request`,
+  `purchase.approve`, `purchase.order`, `purchase.receive` and `purchase.qc`
+  for a company with the Store & Inventory module. No purchase endpoints yet
+  (Phase 9 of docs/inventory/00-PLAN.md).
+
 ## 2026-10-15 — Store & Inventory permissions
 
 - **Changed:** `GET /api/v1/access/permissions` lists the Store & Inventory

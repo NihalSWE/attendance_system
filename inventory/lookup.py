@@ -192,6 +192,16 @@ def _from_gs1(company_id, raw, gs1, today):
         return {"found": False, "code": raw, "kind": "gs1",
                 "message": f"No item has the barcode {gtin}."}
     result = _result("gs1", raw, item=_item_info(item))
+    # What the supplier's barcode says, even for a batch not in the software yet
+    # (a goods receipt fills its new line from it).
+    expiry = ""
+    if len(gs1.get("17", "")) == 6 and gs1["17"].isdigit():
+        yy, mm, dd = int(gs1["17"][:2]), int(gs1["17"][2:4]), int(gs1["17"][4:])
+        try:
+            expiry = datetime.date(2000 + yy, mm, dd or 1).isoformat()
+        except ValueError:
+            expiry = ""
+    result["gs1"] = {"batch": gs1.get("10", ""), "expiry": expiry}
     batch = Batch.objects.filter(item=item, batch_no=gs1["10"]).first() if gs1.get("10") else None
     if gs1.get("10"):
         if batch is None:

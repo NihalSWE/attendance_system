@@ -74,8 +74,8 @@ class BranchAccessTests(TestCase):
         self.grant(self.owner, self.other, "salary.view", self.unit)
         self.assertEqual(AccessPermission.objects.filter(code="salary.view").count(), 1)
         # 11 from A12, plus attendance.view and attendance.fix (N10), plus the
-        # nine Store & Inventory permissions (docs/inventory/00-PLAN.md §6).
-        self.assertEqual(len(BRANCH_PERMISSIONS), 22)
+        # nine Store & Inventory and five purchase permissions (docs/inventory/00-PLAN.md §6).
+        self.assertEqual(len(BRANCH_PERMISSIONS), 27)
 
     def test_owner_everywhere_manager_own_branches_hr_company_wide_leave(self):
         company = self.company.pk
