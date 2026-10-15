@@ -2,6 +2,12 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-15 — Production permissions
+
+- **Changed:** `GET /api/v1/access/permissions` also lists `production.bom`,
+  `production.plan` and `production.execute` for a company with the Store &
+  Inventory module.
+
 ## 2026-10-15 — Store requisition approval permission
 
 - **Changed:** `GET /api/v1/access/permissions` also lists

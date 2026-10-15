@@ -166,6 +166,17 @@ COMPANY_MENUS = (
              "purchasing:return_action", needs=("purchase.receive", "purchase.approve")),
         item("Suppliers", "inventory:suppliers", needs="inventory.view"),
     )),
+    # Production (Phase 5): recipes, runs, and what each run cost.
+    ("production", "Production", (
+        item("Production orders", "production:orders", "production:order_detail", "production:order_output",
+             "production:order_labels", "production:order_action", "production:consumption_detail",
+             "production:consumption_line_add", "production:consumption_line_remove",
+             "production:consumption_scan", "production:consumption_action",
+             needs=("production.plan", "production.execute", "inventory.view")),
+        item("BOMs", "production:boms", "production:bom_detail", "production:bom_line_add",
+             "production:bom_line_remove", "production:bom_action", needs=("production.bom", "inventory.view")),
+        item("Production report", "production:report", needs="inventory.view"),
+    )),
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",
              "organization:branch_edit", "organization:branch_status"),

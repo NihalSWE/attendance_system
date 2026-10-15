@@ -6302,3 +6302,20 @@ Details in [inventory/05-PHASE-4.md](inventory/05-PHASE-4.md).
 
 **Deploy:** pull, migrate, collectstatic, restart; grant "Approve store
 requisitions" on the Access page.
+
+### Inventory Phase 5: production and BOM — 2026-10-15
+
+Details in [inventory/06-PHASE-5.md](inventory/06-PHASE-5.md).
+
+- BOMs in versions (draft → active; a new version copies the materials and
+  archives the old one on activation).
+- Production orders: planned, released by someone else, materials used
+  (planned quantities with scrap, first expiry first, scan labels; unused
+  material returned at its cost), output posted once at the end: a new
+  finished-goods batch (expiry from shelf life, QC quarantine when needed,
+  one label per package) at materials ÷ good quantity; rejects recorded as
+  wastage. Planned vs used per order; production report of completed runs.
+- Three `production.*` permissions; Production menu.
+- Tests: `production` 12 (the done-when run: 16,357 ÷ 990 = 16.5222 a bottle).
+
+**Deploy:** pull, migrate, collectstatic, restart.

@@ -82,6 +82,11 @@ BRANCH_PERMISSIONS = (
     ("purchase.order", "Make purchase orders and send them to suppliers", "inventory", "create"),
     ("purchase.receive", "Receive goods (GRN) and enter purchase returns", "inventory", "create"),
     ("purchase.qc", "Quality check received goods", "inventory", "approve"),
+    # Production (Phase 5): BOMs are the company's (held in any branch);
+    # orders, consumption and output follow the finished-goods store's branch.
+    ("production.bom", "Set up BOMs (recipes)", "inventory", "edit"),
+    ("production.plan", "Plan and release production orders", "inventory", "create"),
+    ("production.execute", "Use materials and record production output", "inventory", "create"),
     ("access.grant", "Give access to others", "access", "manage"),
 )
 CODES = tuple(code for code, *_ in BRANCH_PERMISSIONS)
