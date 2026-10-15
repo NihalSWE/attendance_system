@@ -1,0 +1,20 @@
+{% extends "sales/_list.html" %}
+{% block heading %}Sales returns{% endblock %}
+{% block crumb %}Sales returns{% endblock %}
+{% block heading2 %}Sales returns{% endblock %}
+{% block heading3 %}Sales returns{% endblock %}
+{% block about %}Goods back from customers, at the delivery's cost: good goods to the store, damaged ones to the Rejected store.{% endblock %}
+{% block new_label %}New sales return{% endblock %}
+{% block head %}<th>Number</th><th>Date</th><th>Customer</th><th>Delivery</th><th>Why</th><th>Status</th>{% endblock %}
+{% block row %}
+    <td><a href="{% url 'sales:return_detail' row.pk %}"><strong>{{ row.number }}</strong></a></td>
+    <td>{{ row.return_date|date:"d M Y" }}</td>
+    <td>{{ row.customer.name }}</td>
+    <td>{{ row.delivery.number|default:"—" }}</td>
+    <td>{{ row.reason|truncatechars:50 }}</td>
+    <td>{% include "sales/_status.html" %}</td>
+    <td><a class="btn btn--ghost btn--sm" href="{% url 'sales:return_detail' row.pk %}">Open</a></td>
+{% endblock %}
+{% block dialogs %}
+    {% if new_form %}{% url 'sales:returns' as new_url %}{% include "organization/profile/modal_form.html" with id="new-dialog" title="New sales return" action=new_url form=new_form submit="Start" wide=True %}{% endif %}
+{% endblock %}

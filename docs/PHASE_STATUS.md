@@ -6319,3 +6319,21 @@ Details in [inventory/06-PHASE-5.md](inventory/06-PHASE-5.md).
 - Tests: `production` 12 (the done-when run: 16,357 ÷ 990 = 16.5222 a bottle).
 
 **Deploy:** pull, migrate, collectstatic, restart.
+
+### Inventory Phase 6: sales — order, reserve, deliver, invoice, return — 2026-10-15
+
+Details in [inventory/07-PHASE-6.md](inventory/07-PHASE-6.md).
+
+- Price lists by customer group (from-quantity prices; item sale price as
+  fallback). Sales orders: confirmed by someone else, reserving usable stock
+  first expiry first per order line; credit-limit warning (confirm with a
+  reason); reserve again; cancel/close free the reservation.
+- Delivery challans drafted from the reservation or by scanning cartons,
+  never taking another order's reservation; posting releases it; challan
+  PDF; reversal re-reserves. Invoices: one per delivery, exactly what was
+  delivered at the order's prices (draft → issued → paid), invoice PDF.
+  Sales returns at the delivery's cost (damaged to Rejected).
+- Four `sales.*` permissions; any sales role may view sales pages. Sales menu.
+- Tests: `sales` 13 (the done-when flow: 3,795 invoiced for 150 delivered).
+
+**Deploy:** pull, migrate, collectstatic, restart.

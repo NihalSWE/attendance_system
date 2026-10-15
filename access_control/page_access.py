@@ -157,6 +157,15 @@ BRANCH_PAGES = {
     **{f"inventory:{key}": "inventory.labels"
        for key in ("label_print", "label_void", "bin_labels_print", "item_label_print",
                    "package_labels", "batch_label_print")},
+    # Phase 6: sales. Every page opens to anyone who may view stock or take
+    # part; the services check the order's store branch and the exact
+    # permission (order, confirm, deliver, invoice).
+    **{f"sales:{name}": ("inventory.view", "sales.order", "sales.approve", "sales.deliver", "sales.invoice")
+       for name in ("price_lists", "price_list_detail", "price_remove", "orders", "order_detail",
+                    "order_line_add", "order_line_remove", "order_action", "deliveries", "delivery_detail",
+                    "delivery_line_add", "delivery_line_remove", "delivery_scan", "delivery_pdf",
+                    "delivery_action", "invoices", "invoice_detail", "invoice_pdf", "invoice_action",
+                    "returns", "return_detail", "return_line_add", "return_line_remove", "return_action")},
     # Phase 5: production. Every page opens to anyone who may view stock or
     # take part; the services check the finished-goods store's branch and the
     # exact permission (BOMs, planning, running, QC).

@@ -376,3 +376,32 @@ def ledger_differences(company_id):
                                 "location": None, "ledger": on_hand.get(scope, ZERO),
                                 "balance": cost.qty_basis, "cost": True})
     return differences
+
+
+# --------------------------------------------------------------------------
+# Reservations (sales orders, Phase 6)
+# --------------------------------------------------------------------------
+
+@transaction.atomic
+def change_reserved(company_id, changes):
+    """Add (+) or release (-) reserved quantities: ``[(balance_id, qty_base)]``.
+
+    Rows are locked in id order. Reserved never goes below zero, nor above
+    what is on hand. Returns the locked rows by id.
+    """
+    rows = {row.pk: row for row in StockBalance.all_objects.select_for_update().filter(
+        company_id=company_id, pk__in=sorted({balance_id for balance_id, _qty in changes})).order_by("pk")}
+    for balance_id, qty in changes:
+        row = rows.get(balance_id)
+        if row is None:
+            raise ValidationError("A stock row to reserve was not found.")
+        new = row.qty_reserved + qty
+        if new < 0:
+            new = ZERO
+        if new > row.qty_on_hand:
+            raise ValidationError(f"Only {row.qty_on_hand - row.qty_reserved:f} of item {row.item_id} is free "
+                                  "to reserve on that row.")
+        row.qty_reserved = new
+    for row in rows.values():
+        row.save(update_fields=["qty_reserved", "updated_at"])
+    return rows

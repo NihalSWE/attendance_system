@@ -40,9 +40,14 @@ def may(actor, company_id, code, branch_id=None):
 
 
 def require(actor, company_id, code, branch_id=None):
-    """Membership, once the module is on and ``actor`` holds ``code`` there."""
+    """Membership, once the module is on and ``actor`` holds ``code`` there.
+
+    ``code`` may be a tuple: any one of them is enough (viewing a sales order
+    is open to whoever enters, confirms, delivers or invoices it).
+    """
     membership = require_module(actor, company_id)
-    if not can(actor, company_id, code, branch_id):
+    codes = (code,) if isinstance(code, str) else code
+    if not any(can(actor, company_id, one, branch_id) for one in codes):
         raise PermissionDenied("You do not have access to do this.")
     return membership
 
@@ -50,10 +55,14 @@ def require(actor, company_id, code, branch_id=None):
 def scope_warehouses(queryset, actor, company_id, code, field="branch"):
     """Rows of stores (or of anything with a store) in branches where ``actor``
     holds ``code``. ``field`` is the path to the branch, e.g. ``warehouse__branch``."""
-    branches = branches_for(actor, company_id, code)
-    if branches is ALL_BRANCHES:
-        return queryset
-    return queryset.filter(**{f"{field}__in": branches})
+    codes = (code,) if isinstance(code, str) else code
+    found = set()
+    for one in codes:
+        branches = branches_for(actor, company_id, one)
+        if branches is ALL_BRANCHES:
+            return queryset
+        found |= branches
+    return queryset.filter(**{f"{field}__in": found})
 
 
 def sees_costs(actor, company_id):

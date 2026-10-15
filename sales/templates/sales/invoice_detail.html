@@ -1,0 +1,57 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}{{ invoice.number }} · Sales{% endblock %}
+{% block extra_css %}{% include "inventory/_head.html" %}{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'sales:invoices' %}">Invoices</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ invoice.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ invoice.number }} {% with row=invoice %}{% include "sales/_status.html" %}{% endwith %}</h1>
+            <p class="page__sub">
+                {{ invoice.customer.name }} · {{ invoice.invoice_date|date:"d M Y" }}{% if invoice.due_date %} · due {{ invoice.due_date|date:"d M Y" }}{% endif %}
+                · for <a href="{% url 'sales:delivery_detail' invoice.delivery_id %}">{{ invoice.delivery.number }}</a>
+                {% if invoice.paid_on %}<br>Paid on {{ invoice.paid_on|date:"d M Y" }}{% if invoice.paid_note %}: {{ invoice.paid_note }}{% endif %}{% endif %}
+                {% if invoice.cancel_reason %}<br>Cancelled: {{ invoice.cancel_reason }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'sales:invoice_pdf' invoice.pk %}" target="_blank" rel="noopener">PDF</a>
+            {% if may %}
+                {% if invoice.status == "draft" or invoice.status == "issued" %}
+                    <button class="btn btn--quiet" type="button" data-open-dialog="reason-dialog" data-dialog-action="{% url 'sales:invoice_action' invoice.pk 'cancel' %}" data-dialog-subject="Cancel {{ invoice.number }}">Cancel</button>
+                {% endif %}
+                {% if invoice.status == "draft" %}
+                    <form method="post" action="{% url 'sales:invoice_action' invoice.pk 'issue' %}" data-confirm="Total {{ invoice.total|floatformat:2 }} to {{ invoice.customer.name }}; due after their payment terms." data-confirm-title="Issue {{ invoice.number }}?" data-confirm-button="Issue">{% csrf_token %}<button class="btn btn--primary" type="submit">Issue</button></form>
+                {% elif invoice.status == "issued" %}
+                    <button class="btn btn--primary" type="button" data-open-dialog="paid-dialog">Mark paid</button>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head"><h2>Invoiced</h2><span class="spacer"></span>
+            <span class="t-muted">Amount <span class="amount">{{ invoice.amount|floatformat:2 }}</span> · VAT <span class="amount">{{ invoice.vat|floatformat:2 }}</span> · Total <strong class="amount">{{ invoice.total|floatformat:2 }}</strong></span></div>
+        <div class="table-wrap"><table class="table">
+            <thead><tr><th>Item</th><th class="numeric">Quantity</th><th class="numeric">Price</th><th class="numeric">Disc %</th><th class="numeric">VAT %</th><th class="numeric">VAT</th><th class="numeric">Amount</th></tr></thead>
+            <tbody>
+                {% for line in lines %}
+                    <tr><td>{{ line.item.code }} {{ line.item.name }}</td><td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td><td class="numeric">{{ line.unit_price|floatformat:2 }}</td><td class="numeric">{{ line.discount_pct.normalize }}</td><td class="numeric">{{ line.vat_rate.normalize }}</td><td class="numeric">{{ line.vat_amount|floatformat:2 }}</td><td class="numeric">{{ line.amount|floatformat:2 }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table></div>
+    </div>
+    {% if may %}
+        {% include "inventory/includes/action_dialog.html" with id="reason-dialog" form=reason_form submit="Cancel the invoice" danger=True note="A cancelled invoice is kept; the delivery can then be reversed or invoiced again." %}
+        {% url 'sales:invoice_action' invoice.pk 'paid' as paid_url %}
+        {% include "organization/profile/modal_form.html" with id="paid-dialog" title="Mark "|add:invoice.number|add:" paid" action=paid_url form=paid_form submit="Mark paid" %}
+    {% endif %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}{% include "inventory/_js.html" %}{% endblock %}

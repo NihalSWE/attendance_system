@@ -2,6 +2,12 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-15 — Sales permissions
+
+- **Changed:** `GET /api/v1/access/permissions` also lists `sales.order`,
+  `sales.approve`, `sales.deliver` and `sales.invoice` for a company with the
+  Store & Inventory module.
+
 ## 2026-10-15 — Production permissions
 
 - **Changed:** `GET /api/v1/access/permissions` also lists `production.bom`,

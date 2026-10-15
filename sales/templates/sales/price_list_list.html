@@ -1,0 +1,18 @@
+{% extends "sales/_list.html" %}
+{% block heading %}Price lists{% endblock %}
+{% block crumb %}Price lists{% endblock %}
+{% block heading2 %}Price lists{% endblock %}
+{% block heading3 %}Price lists{% endblock %}
+{% block about %}Prices by customer group. A customer uses the list named on their record (e.g. Distributor); without one, the item's sale price.{% endblock %}
+{% block new_label %}New price list{% endblock %}
+{% block head %}<th>Name</th><th>From</th><th>Until</th><th>Status</th>{% endblock %}
+{% block row %}
+    <td><a href="{% url 'sales:price_list_detail' row.pk %}"><strong>{{ row.name }}</strong></a></td>
+    <td>{{ row.valid_from|date:"d M Y"|default:"—" }}</td>
+    <td>{{ row.valid_to|date:"d M Y"|default:"—" }}</td>
+    <td>{{ row.get_status_display }}</td>
+    <td><a class="btn btn--ghost btn--sm" href="{% url 'sales:price_list_detail' row.pk %}">Open</a></td>
+{% endblock %}
+{% block dialogs %}
+    {% if new_form %}{% url 'sales:price_lists' as new_url %}{% include "organization/profile/modal_form.html" with id="new-dialog" title="New price list" action=new_url form=new_form submit="Make" %}{% endif %}
+{% endblock %}

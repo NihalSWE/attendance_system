@@ -177,6 +177,22 @@ COMPANY_MENUS = (
              "production:bom_line_remove", "production:bom_action", needs=("production.bom", "inventory.view")),
         item("Production report", "production:report", needs="inventory.view"),
     )),
+    # Sales (Phase 6): order, reserve, deliver, invoice, return.
+    ("sales", "Sales", (
+        item("Sales orders", "sales:orders", "sales:order_detail", "sales:order_line_add",
+             "sales:order_line_remove", "sales:order_action",
+             needs=("sales.order", "sales.approve", "sales.deliver", "inventory.view")),
+        item("Deliveries", "sales:deliveries", "sales:delivery_detail", "sales:delivery_line_add",
+             "sales:delivery_line_remove", "sales:delivery_scan", "sales:delivery_action", "sales:delivery_pdf",
+             needs=("sales.deliver", "inventory.view")),
+        item("Invoices", "sales:invoices", "sales:invoice_detail", "sales:invoice_action", "sales:invoice_pdf",
+             needs=("sales.invoice", "inventory.view")),
+        item("Sales returns", "sales:returns", "sales:return_detail", "sales:return_line_add",
+             "sales:return_line_remove", "sales:return_action", needs=("sales.deliver", "inventory.view")),
+        item("Customers", "inventory:customers", needs="inventory.view"),
+        item("Price lists", "sales:price_lists", "sales:price_list_detail", "sales:price_remove",
+             needs=("sales.order", "inventory.view")),
+    )),
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",
              "organization:branch_edit", "organization:branch_status"),
