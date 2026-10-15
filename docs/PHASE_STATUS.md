@@ -6209,3 +6209,33 @@ No code, no migrations; documents for the client meeting only.
 
 **Next:** send the templates and hold the meeting; Phase 1 (apps, masters,
 stock ledger and posting service) when the senior says go.
+
+### Inventory Phase 1: foundation, masters, stock ledger, opening stock — 2026-10-15
+
+Store & Inventory, Phase 1 of [inventory/00-PLAN.md](inventory/00-PLAN.md);
+details in [inventory/02-PHASE-1.md](inventory/02-PHASE-1.md).
+
+- New apps `inventory`, `purchasing` (Supplier), `sales` (Customer),
+  `production` (empty shell); 17 tables. Feature `inventory` ("Store &
+  Inventory", `tenants.0008`), off for every company until root enables it.
+- **Posting service** (`inventory/posting.py`): the only writer of the
+  immutable `StockMove` ledger and the locked `StockBalance`; no negative
+  stock, no issue from quarantined/expired batches, reserved stock kept,
+  closed months refused, moving weighted average (per company or per store),
+  reversal by counter-moves, per-type yearly numbering, nightly
+  `check_stock`.
+- Masters with server-side tables, Add/Edit in modals, deactivate behind a
+  confirmation: units (+ standard units), categories, items (+ pack units,
+  item page with stock card), stores, bins, suppliers, customers, settings.
+- Opening stock: draft → post → reverse; Excel import of the Phase 0
+  templates for stores+bins, items+packs, suppliers, customers and opening
+  stock (preview, then all-or-nothing confirm; existing codes skipped).
+- Nine `inventory.*` branch permissions, offered (Access page, API) only with
+  the module; inventory pages open to Employee logins given access.
+- Menu "Inventory" via `base_template/navigation.py`; new icon in
+  `navigation_icon.html` (Ajay to review; `sidebar.html` untouched).
+- Tests: 42 in `inventory` (posting rules, every form POSTed, gates, the
+  whole done-when flow from the templates).
+
+**Deploy:** pull, migrate, collectstatic, restart. Nothing changes for a
+company until root enables Store & Inventory.

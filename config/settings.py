@@ -89,6 +89,12 @@ INSTALLED_APPS = [
     'auditlog',
     # The ERP webhook: attendance pushed to a company's own system.
     'webhooks',
+    # Store & Inventory (docs/inventory/00-PLAN.md): masters, the stock ledger,
+    # purchase, production and sales. On per company with the "inventory" feature.
+    'inventory',
+    'purchasing',
+    'production',
+    'sales',
     # The REST API (docs/api/00-PLAN.md): the panels' functions for apps,
     # frontends and the ERP. Calls the same services the panels use.
     'rest_framework',

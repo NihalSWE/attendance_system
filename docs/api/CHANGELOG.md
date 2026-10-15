@@ -2,6 +2,16 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-15 — Store & Inventory permissions
+
+- **Changed:** `GET /api/v1/access/permissions` lists the Store & Inventory
+  permissions (`inventory.view`, `inventory.items`, `inventory.labels`,
+  `inventory.issue`, `inventory.transfer`, `inventory.adjust`,
+  `inventory.adjust_approve`, `inventory.valuation`, `inventory.period_close`)
+  only for a company the platform owner enabled the "Store & Inventory"
+  module for; granting one to a company without it is refused (400). No
+  inventory endpoints yet (Phase 9 of docs/inventory/00-PLAN.md).
+
 ## 2026-10-07 — Fairer day rules; graces at most 60 minutes
 
 - **Changed:** `worked_minutes` counts minutes inside the late and

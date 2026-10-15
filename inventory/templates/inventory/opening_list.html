@@ -1,0 +1,70 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Opening stock · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:stock' %}">Inventory</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Opening stock
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">Opening stock</h1>
+            <p class="page__sub">
+                What was counted on the opening day. Enter or import it as a draft, check it, then post it:
+                posting puts the stock on hand and sets each item's first average cost.
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_enter %}
+                <a class="btn btn--ghost" href="{% url 'inventory:import' 'opening' %}">Import from Excel</a>
+                <button class="btn btn--primary" type="button" data-open-dialog="new-dialog">New opening stock</button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>Opening stock</h2>
+            <span class="spacer"></span>
+            <span class="t-muted"><span class="amount">{{ server_table.page.paginator.count }}</span> total</span>
+        </div>
+        {% if not rows.object_list %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">No opening stock yet</div>
+                <div class="empty__text">Start one, or import the filled opening stock template.</div>
+            </div>
+        {% endif %}
+        {% if server_table or rows.object_list %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead><tr><th>Number</th><th>Opening day</th><th>Status</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody>
+                        {% for d in rows %}
+                            <tr>
+                                <td><a href="{% url 'inventory:opening_detail' d.pk %}">{{ d.number }}</a></td>
+                                <td>{{ d.work_date|date:"d M Y" }}</td>
+                                <td>{% include "inventory/_document_status.html" with status=d.status label=d.get_status_display %}</td>
+                                <td>{{ d.note|default:"—" }}</td>
+                                <td><a class="btn btn--ghost btn--sm" href="{% url 'inventory:opening_detail' d.pk %}">Open</a></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+    {% if can_enter %}
+        {% url 'inventory:opening' as new_url %}
+        {% include "organization/profile/modal_form.html" with id="new-dialog" title="New opening stock" action=new_url form=new_form submit="Start" note="Every line is dated this day. Its number is given when it is started." %}
+    {% endif %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

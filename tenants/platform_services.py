@@ -131,6 +131,9 @@ def ensure_feature_catalogue(*, actor):
     # Off for every company until the platform owner enables it (2026-10-06).
     Feature.objects.get_or_create(code="developer_api",
                                   defaults={"name": "Developer's API", "sort_order": 90})
+    # Store & Inventory (docs/inventory/00-PLAN.md): off until enabled.
+    Feature.objects.get_or_create(code="inventory",
+                                  defaults={"name": "Store & Inventory", "sort_order": 50})
 
 
 @transaction.atomic

@@ -23,6 +23,8 @@ urlpatterns = [
     path("attendance/", include("attendance.urls")),
     path("salary/", include("payroll.urls")),
     path("reports/", include("reports.urls")),
+    # Store & Inventory (docs/inventory/00-PLAN.md).
+    path("inventory/", include("inventory.urls")),
     # An Employee or Branch manager login's own pages.
     path("me/", include("base_template.me_urls")),
     # Device integration. Mounted at the root because the /iclock/ paths are

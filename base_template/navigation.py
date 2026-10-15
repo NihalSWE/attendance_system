@@ -8,7 +8,7 @@ from django.urls import reverse
 
 
 def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False,
-         salary=False, group="", report_kind="", people=""):
+         salary=False, group="", report_kind="", people="", needs=""):
     # record: shown to people who may record leave (HR as well as administrators).
     # salary: shown to people who see pay (the payroll manager as well; not HR).
     # group: the dropdown inside its menu the item sits in (Reports: "Attendance
@@ -16,9 +16,12 @@ def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, r
     # report_kind: whose rules decide who may open it (reports.access).
     # people: the employees permission that also opens it for HR, who views and
     # edits employees in every branch (Ajay, 2026-09-27).
+    # needs: a module permission the viewer must hold somewhere (Store &
+    # Inventory); such an entry is hidden when the company lacks the module.
     return {"label": label, "view": view, "aliases": aliases, "fragment": fragment,
             "manage": manage, "unrestricted": unrestricted, "record": record,
-            "salary": salary, "group": group, "report_kind": report_kind, "people": people}
+            "salary": salary, "group": group, "report_kind": report_kind, "people": people,
+            "needs": needs}
 
 
 def report_item(slug):
@@ -103,6 +106,31 @@ COMPANY_MENUS = (
         report_item("overtime"),
         report_item("entry-logs"),
     )),
+    # Store & Inventory (docs/inventory/00-PLAN.md, Phase 1). Shown once the
+    # platform owner enables the module, to those holding "View stock and items".
+    ("inventory", "Inventory", (
+        item("Stock on hand", "inventory:stock", "inventory:home", needs="inventory.view"),
+        item("Items", "inventory:items", "inventory:items_edit", "inventory:items_status",
+             "inventory:item_detail", "inventory:pack_unit_add", "inventory:pack_unit_remove",
+             needs="inventory.view"),
+        item("Opening stock", "inventory:opening", "inventory:opening_detail",
+             "inventory:opening_line_add", "inventory:opening_line_remove",
+             "inventory:opening_post", "inventory:opening_cancel", "inventory:opening_reverse",
+             needs="inventory.view"),
+        item("Stores", "inventory:stores", "inventory:stores_edit", "inventory:stores_status",
+             needs="inventory.view"),
+        item("Bins", "inventory:bins", "inventory:bins_edit", "inventory:bins_status",
+             needs="inventory.view"),
+        item("Units", "inventory:units", "inventory:units_edit", "inventory:units_status",
+             "inventory:standard_units", needs="inventory.view"),
+        item("Item categories", "inventory:categories", "inventory:categories_edit",
+             "inventory:categories_status", needs="inventory.view"),
+        item("Suppliers", "inventory:suppliers", "inventory:suppliers_edit",
+             "inventory:suppliers_status", needs="inventory.view"),
+        item("Customers", "inventory:customers", "inventory:customers_edit",
+             "inventory:customers_status", needs="inventory.view"),
+        item("Inventory settings", "inventory:settings", manage=True, needs="inventory.view"),
+    )),
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",
              "organization:branch_edit", "organization:branch_status"),
@@ -130,7 +158,8 @@ COMPANY_MENUS = (
 
 
 def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=None,
-                  can_see_salary=None, report_kinds=None, allowed=None, people_codes=None):
+                  can_see_salary=None, report_kinds=None, allowed=None, people_codes=None,
+                  module_codes=frozenset()):
     """The company menus for this request.
 
     ``allowed`` (A12): for a branch manager or a person given access, a check
@@ -149,6 +178,10 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
             continue
         links = []
         for entry in entries:
+            # ``module_codes``: the module permissions held, empty when the
+            # company lacks the module - its entries are then never shown.
+            if entry["needs"] and entry["needs"] not in module_codes:
+                continue
             if allowed is not None:
                 if not allowed(entry["view"]):
                     continue

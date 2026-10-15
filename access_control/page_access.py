@@ -127,6 +127,27 @@ BRANCH_PAGES = {
     "organization:employee_overtime": ("employees.edit", "overtime.decide"),
     "organization:employee_reports": "employees.edit",
     "organization:employee_report_visibility": "employees.edit",
+    # Store & Inventory (docs/inventory/00-PLAN.md): a store keeper is usually
+    # an Employee login given access. Every page also needs the company to
+    # have the module; stock and stores show only the viewer's branches, and
+    # the services check each store's branch again. Settings are not listed.
+    **{f"inventory:{key}": "inventory.view"
+       for key in ("home", "stock", "item_detail", "units", "categories", "items", "stores",
+                   "bins", "suppliers", "customers", "opening", "opening_detail")},
+    **{f"inventory:{key}_{action}": "inventory.items"
+       for key in ("units", "categories", "items", "stores", "bins", "suppliers", "customers")
+       for action in ("edit", "status")},
+    "inventory:standard_units": "inventory.items",
+    "inventory:pack_unit_add": "inventory.items",
+    "inventory:pack_unit_remove": "inventory.items",
+    "inventory:import": ("inventory.items", "inventory.adjust"),
+    "inventory:import_confirm": ("inventory.items", "inventory.adjust"),
+    "inventory:import_template": ("inventory.items", "inventory.adjust"),
+    "inventory:opening_line_add": "inventory.adjust",
+    "inventory:opening_line_remove": "inventory.adjust",
+    "inventory:opening_cancel": "inventory.adjust",
+    "inventory:opening_post": "inventory.adjust_approve",
+    "inventory:opening_reverse": "inventory.adjust_approve",
 }
 
 

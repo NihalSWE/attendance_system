@@ -1,0 +1,6 @@
+<td>{{ row.code }}</td>
+<td>{{ row.name }}{% if row.email %}<div class="t-muted">{{ row.email }}</div>{% endif %}</td>
+<td>{{ row.get_customer_type_display }}</td>
+<td>{{ row.phone|default:"—" }}{% if row.whatsapp %}<div class="t-muted">WhatsApp {{ row.whatsapp }}</div>{% endif %}</td>
+<td>{{ row.territory|default:"—" }}</td>
+{% include "inventory/rows/_status.html" %}
