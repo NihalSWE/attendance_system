@@ -1,0 +1,137 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    Labels · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:stock' %}">Inventory</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Labels
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Labels</h1>
+            <p class="page__sub">
+                Every label the software made: where it came from, how often it was printed, and whether it
+                still scans. Print item and batch labels from the item page, bin labels from Bins, package
+                labels from the item page or a posted opening stock.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'inventory:scan' %}">Scan a label</a>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>Label register</h2>
+            <span class="spacer"></span>
+            <span class="t-muted"><span class="amount">{{ server_table.page.paginator.count }}</span> total</span>
+        </div>
+        <form class="toolbar" method="get">
+            <label class="sr-only" for="kind">Kind</label>
+            <select class="input select js-select" id="kind" name="kind">
+                <option value="">All kinds</option>
+                {% for value, label in kinds %}
+                    <option value="{{ value }}" {% if value == kind %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="status">Status</label>
+            <select class="input select js-select" id="status" name="status">
+                <option value="">All statuses</option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if value == status %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">Apply</button>
+            {% if kind or status %}<a class="btn btn--quiet" href="{% url 'inventory:labels' %}">Clear</a>{% endif %}
+        </form>
+        {% if not rows.object_list %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">No labels yet</div>
+                <div class="empty__text">Labels appear here once they are printed from an item, a bin or an opening stock.</div>
+            </div>
+        {% endif %}
+        {% if server_table or rows.object_list %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th>Code</th><th>Kind</th><th>Item</th><th>Batch</th><th class="numeric">Quantity</th>
+                            <th>Where</th><th class="numeric">Printed</th><th>Last printed</th><th>Status</th>
+                            <th><span class="sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for label in rows %}
+                            <tr>
+                                <td><strong>{{ label.code }}</strong></td>
+                                <td>{{ label.get_kind_display }}</td>
+                                <td>{% if label.item %}<a href="{% url 'inventory:item_detail' label.item_id %}">{{ label.item.code }}</a> {{ label.item.name }}{% else %}—{% endif %}</td>
+                                <td>{{ label.batch.batch_no|default:"—" }}</td>
+                                <td class="numeric">{% if label.quantity is not None %}{{ label.quantity.normalize }} {{ label.uom.code }}{% else %}—{% endif %}</td>
+                                <td>{% if label.warehouse %}{{ label.warehouse.code }}{% if label.location %} / {{ label.location.code }}{% endif %}{% else %}—{% endif %}</td>
+                                <td class="numeric">{{ label.printed_count }}</td>
+                                <td>{{ label.last_printed_at|date:"d M Y H:i"|default:"—" }}</td>
+                                <td>
+                                    {% if label.status == 'active' %}<span class="badge badge--success">Active</span>
+                                    {% elif label.status == 'void' %}<span class="badge badge--danger" title="{{ label.void_reason }}">Void</span>
+                                    {% else %}<span class="badge badge--neutral">{{ label.get_status_display }}</span>{% endif %}
+                                </td>
+                                <td>
+                                    {% if can_print and label.status != 'void' %}
+                                        <div class="inv-actions">
+                                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="print-dialog"
+                                                    data-dialog-action="{% url 'inventory:label_print' label.pk %}"
+                                                    data-dialog-subject="{{ label.code }}"
+                                                    data-dialog-reprint="{% if label.printed_count %}1{% else %}0{% endif %}">
+                                                {% if label.printed_count %}Reprint{% else %}Print{% endif %}
+                                            </button>
+                                            <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="void-dialog"
+                                                    data-dialog-action="{% url 'inventory:label_void' label.pk %}"
+                                                    data-dialog-subject="{{ label.code }}">
+                                                Void
+                                            </button>
+                                        </div>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+
+    {% if can_print %}
+        {% include "inventory/includes/print_dialog.html" %}
+        <dialog class="modal" id="void-dialog" aria-labelledby="void-dialog-title">
+            <form class="modal__card" method="post" novalidate>
+                {% csrf_token %}
+                <div class="modal__head">
+                    <h2 id="void-dialog-title">Void <span data-dialog-subject></span>?</h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <div class="modal__body stack">
+                    <p class="t-faint">A void label no longer scans: it is refused with the reason. Peel it off and print a new one if needed.</p>
+                    {% with field=void_form.reason %}{% include "leaves/includes/field.html" %}{% endwith %}
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn--danger" type="submit">Void</button>
+                </div>
+            </form>
+        </dialog>
+    {% endif %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

@@ -148,6 +148,15 @@ BRANCH_PAGES = {
     "inventory:opening_cancel": "inventory.adjust",
     "inventory:opening_post": "inventory.adjust_approve",
     "inventory:opening_reverse": "inventory.adjust_approve",
+    # Phase 2: labels and scanning. The register and the Scan page to viewers;
+    # printing and voiding to "Print and reprint labels" (the services check
+    # the store's branch for bin and package labels).
+    "inventory:labels": "inventory.view",
+    "inventory:scan": "inventory.view",
+    "inventory:scan_lookup": "inventory.view",
+    **{f"inventory:{key}": "inventory.labels"
+       for key in ("label_print", "label_void", "bin_labels_print", "item_label_print",
+                   "package_labels", "batch_label_print")},
 }
 
 

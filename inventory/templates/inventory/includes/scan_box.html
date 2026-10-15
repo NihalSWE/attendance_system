@@ -1,0 +1,36 @@
+{% load static %}
+{% comment %}
+    The scan box (inventory/js/scanbox.js). Include it on any page that takes scans:
+    with show_result=True it lists what was scanned under it; a document page
+    listens for the "scan:result" event instead.
+{% endcomment %}
+<div class="scanbox" data-scan-box data-lookup-url="{% url 'inventory:scan_lookup' %}">
+    <label class="field__label" for="scan-input">Scan or type a code</label>
+    <div class="scanbox__row">
+        <input class="input scanbox__input" id="scan-input" data-scan-input autocomplete="off"
+               autocapitalize="off" spellcheck="false" autofocus
+               placeholder="Point the scanner here and scan">
+        <button class="btn btn--ghost" type="button" data-scan-camera>Camera</button>
+    </div>
+    <span class="field__help">A barcode scanner types the code and presses Enter. On a phone, use Camera.</span>
+    {% if show_result %}
+        <div class="scanbox__result" data-scan-result aria-live="polite"
+             data-item-url="{% url 'inventory:item_detail' 0 %}"></div>
+    {% endif %}
+    <dialog class="modal" data-scan-camera-dialog aria-labelledby="scan-camera-title">
+        <div class="modal__card">
+            <div class="modal__head">
+                <h2 id="scan-camera-title">Scan with the camera</h2>
+                <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+            </div>
+            <div class="modal__body stack">
+                <div id="scan-camera-view" class="scanbox__camera" data-scan-camera-view></div>
+                <p class="t-muted" data-scan-camera-note aria-live="polite"></p>
+            </div>
+            <div class="modal__foot">
+                <button class="btn btn--ghost" type="button" data-close-dialog>Close</button>
+            </div>
+        </div>
+    </dialog>
+</div>
+<script defer src="{% static 'inventory/js/scanbox.js' %}"></script>

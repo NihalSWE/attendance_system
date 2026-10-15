@@ -6239,3 +6239,26 @@ details in [inventory/02-PHASE-1.md](inventory/02-PHASE-1.md).
 
 **Deploy:** pull, migrate, collectstatic, restart. Nothing changes for a
 company until root enables Store & Inventory.
+
+### Inventory Phase 2: barcodes, labels and scanning — 2026-10-15
+
+Details in [inventory/03-PHASE-2.md](inventory/03-PHASE-2.md).
+
+- Labels for items (EAN-13 or Code 128), batches and packages (QR + Code 128,
+  optional GS1-128) and bins, as PDFs one page per label in the chosen sizes
+  (50×25 / 40×30 / 60×40 and 100×50 / 100×75 / 75×50 mm). Codes
+  `P|B|L<company id>-000001`.
+- Label register: print, reprint (reason required, logged), void (a void label's
+  scan is refused). Print buttons on the item page, Bins, Stores and posted
+  opening stock lines; package labels for N packages of a quantity.
+- One lookup for every scan (our QR, GS1-128 in every scanner form, label
+  codes, product and pack barcodes, item codes) and the Scan page with a scan
+  box for keyboard scanners (queued) and phone cameras (html5-qrcode).
+- Proven in software: labels rendered at 203 dpi and read back by zxing-cpp
+  resolve to the right item, batch, expiry and quantity (test runs where the
+  decoder is installed). **Still to do on site:** the client's printer,
+  scanner and a phone on the live https:// address.
+- Tables `inventory_barcode_label`, `inventory_label_print`; label settings on
+  `inventory_settings` (`inventory.0002_labels`). Tests: 62 in `inventory`.
+
+**Deploy:** pull, migrate, collectstatic, restart.

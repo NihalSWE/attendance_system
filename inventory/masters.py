@@ -265,7 +265,7 @@ def units_for(item):
     return factors
 
 
-SETTINGS_FIELDS = ("valuation_scope", "expiry_alert_days")
+SETTINGS_FIELDS = ("valuation_scope", "expiry_alert_days", "small_label", "large_label", "gs1_labels")
 
 
 @transaction.atomic

@@ -203,6 +203,8 @@ def _list(request, page, *, new_form=None, edit_form=None, edit_row=None, open_d
         "edit_row": edit_row, "open_dialog": open_dialog,
         "edit_view": f"inventory:{page.key}_edit", "status_view": f"inventory:{page.key}_status",
         "sees_costs": access.sees_costs(request.user, company_id),
+        "can_print_labels": access.may(request.user, company_id, "inventory.labels"),
+        "print_form": forms.PrintForm(),
     })
 
 

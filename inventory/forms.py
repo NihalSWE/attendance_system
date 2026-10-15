@@ -4,11 +4,14 @@ Database-backed choices start empty (the default managers are
 tenant-scoped); each form is given the company and fills its own lists.
 """
 
+from decimal import Decimal
+
 from django import forms
 
 from common.choices import ActiveStatus
 from common.forms import StyledFormMixin, date_widget
 from inventory.models import (
+    Batch,
     InventorySettings,
     Item,
     ItemCategory,
@@ -179,7 +182,7 @@ class StatusForm(StyledFormMixin, forms.Form):
 class SettingsForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = InventorySettings
-        fields = ("valuation_scope", "expiry_alert_days")
+        fields = ("valuation_scope", "expiry_alert_days", "small_label", "large_label", "gs1_labels")
         labels = {"valuation_scope": "Average cost", "expiry_alert_days": "Warn before expiry (days)"}
 
 
@@ -236,3 +239,53 @@ class ImportForm(StyledFormMixin, forms.Form):
 class OpeningImportForm(StyledFormMixin, forms.Form):
     work_date = forms.DateField(label="Opening day", widget=date_widget())
     upload = forms.FileField(label="Filled opening stock template (.xlsx, .xls or .csv)")
+
+
+class PrintForm(StyledFormMixin, forms.Form):
+    copies = forms.IntegerField(min_value=1, max_value=20, initial=1, label="Copies of each")
+    reason = forms.CharField(max_length=255, required=False, label="Why print again",
+                             help_text="Needed when a label was printed before: torn, lost, unreadable.")
+
+
+class VoidForm(StyledFormMixin, forms.Form):
+    reason = forms.CharField(max_length=255, label="Why it is void",
+                             help_text="A scan of it is refused with this reason.")
+
+
+class PackageLabelForm(StyledFormMixin, forms.Form):
+    """Labels for packages of one item (and batch): 25 bags of 50 KG."""
+
+    batch = forms.ModelChoiceField(queryset=Batch.all_objects.none(), label="Batch", required=False)
+    count = forms.IntegerField(min_value=1, max_value=500, initial=1, label="Packages")
+    quantity = forms.DecimalField(min_value=Decimal("0.0001"), max_digits=18, decimal_places=4,
+                                  label="In each package")
+    uom = forms.ModelChoiceField(queryset=Uom.all_objects.none(), label="Unit")
+    warehouse = forms.ModelChoiceField(queryset=Warehouse.all_objects.none(), label="Store",
+                                       required=False)
+    location = forms.ModelChoiceField(queryset=Location.all_objects.none(), label="Bin",
+                                      required=False)
+
+    def __init__(self, *args, item, branch_ids=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.item = item
+        company_id = item.company_id
+        self.fields["batch"].queryset = Batch.all_objects.filter(
+            company_id=company_id, item=item).order_by("expiry_date", "batch_no")
+        self.fields["batch"].required = item.track_batch
+        units = [item.base_uom_id, *ItemUom.all_objects.filter(item=item).values_list("uom_id", flat=True)]
+        self.fields["uom"].queryset = Uom.all_objects.filter(pk__in=units).order_by("code")
+        stores = Warehouse.all_objects.filter(company_id=company_id, status=ActiveStatus.ACTIVE)
+        if branch_ids is not None:
+            stores = stores.filter(branch_id__in=branch_ids)
+        self.fields["warehouse"].queryset = stores.order_by("name")
+        bins = Location.all_objects.filter(company_id=company_id, warehouse__in=stores,
+                                           status=ActiveStatus.ACTIVE).select_related("warehouse")
+        self.fields["location"].queryset = bins.order_by("warehouse__code", "code")
+        self.fields["location"].label_from_instance = lambda b: f"{b.warehouse.code} / {b.code}"
+
+    def clean(self):
+        data = super().clean()
+        location, warehouse = data.get("location"), data.get("warehouse")
+        if location is not None and warehouse is not None and location.warehouse_id != warehouse.pk:
+            self.add_error("location", "This bin is in another store.")
+        return data

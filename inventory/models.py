@@ -67,6 +67,34 @@ class InventorySettings(TenantOwned, ActorTracked):
         help_text="Warn this many days before a batch expires (an item can say otherwise).",
     )
 
+    class SmallLabel(models.TextChoices):
+        """Item and bin labels (D3/D4): the label stock in the printer, in mm."""
+
+        S50X25 = "50x25", "50 × 25 mm"
+        S40X30 = "40x30", "40 × 30 mm"
+        S60X40 = "60x40", "60 × 40 mm"
+
+    class LargeLabel(models.TextChoices):
+        """Batch and package labels: room for a QR code and the details."""
+
+        L100X50 = "100x50", "100 × 50 mm"
+        L100X75 = "100x75", "100 × 75 mm"
+        L75X50 = "75x50", "75 × 50 mm"
+
+    small_label = models.CharField(
+        "Item and bin label size", max_length=8, choices=SmallLabel.choices,
+        default=SmallLabel.S50X25,
+    )
+    large_label = models.CharField(
+        "Batch and package label size", max_length=8, choices=LargeLabel.choices,
+        default=LargeLabel.L100X50,
+    )
+    gs1_labels = models.BooleanField(
+        "GS1-128 on package labels", default=False,
+        help_text="Adds a GS1-128 barcode (item, batch, expiry, quantity) for items with a "
+                  "13- or 14-digit barcode. Only when a customer asks for GS1.",
+    )
+
     class Meta:
         db_table = "inventory_settings"
         constraints = [
@@ -337,6 +365,116 @@ class Batch(TenantOwned, ActorTracked):
         if self.status != self.Status.RELEASED:
             return False
         return self.expiry_date is None or self.expiry_date >= day
+
+
+class BarcodeLabel(TenantOwned, ActorTracked):
+    """A label the software printed (D3). Its code resolves to exactly one record.
+
+    - **item**: the item's own barcode (EAN-13) or its code - a shelf card or
+      a loose item. One per item.
+    - **batch**: one batch of an item, no quantity - the batch's card.
+    - **package**: one bag, drum, carton or roll: item + batch + quantity
+      (+ store/bin where it was put). Scanning it fills all of them at once.
+    - **location**: a bin. One active label per bin.
+
+    Generated codes are ``P<company id>-000001`` (package), ``B<id>-...``
+    (batch) and ``L<id>-...`` (bin): letters, digits and a dash only, so
+    every keyboard-wedge scanner types them right, short enough for a 40 mm
+    label, and the company number stops one company's label resolving in
+    another's software.
+    """
+
+    class Kind(models.TextChoices):
+        ITEM = "item", "Item"
+        BATCH = "batch", "Batch"
+        PACKAGE = "package", "Package"
+        LOCATION = "location", "Bin"
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CONSUMED = "consumed", "Used up"
+        VOID = "void", "Void"
+
+    code = models.CharField(max_length=64)
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    item = models.ForeignKey(Item, null=True, blank=True, on_delete=models.PROTECT, related_name="labels")
+    batch = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.PROTECT, related_name="labels")
+    uom = models.ForeignKey(Uom, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    quantity = models.DecimalField(**QTY, null=True, blank=True,
+                                   validators=[MinValueValidator(Decimal("0.0001"))])
+    warehouse = models.ForeignKey(Warehouse, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    location = models.ForeignKey(Location, null=True, blank=True, on_delete=models.PROTECT, related_name="labels")
+    # Where it was made, for the register: e.g. opening_stock_line 12.
+    source_type = models.CharField(max_length=32, blank=True)
+    source_id = models.PositiveBigIntegerField(null=True, blank=True)
+    printed_count = models.PositiveIntegerField(default=0)
+    last_printed_at = models.DateTimeField(null=True, blank=True)
+    last_printed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    void_reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "inventory_barcode_label"
+        ordering = ("-pk",)
+        constraints = [
+            models.UniqueConstraint(fields=["company", "code"], name="uniq_label_code_per_company"),
+            models.UniqueConstraint(
+                fields=["company", "location"],
+                condition=Q(kind="location", status="active"),
+                name="uniq_active_label_per_location",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["company", "item"], name="inv_label_item"),
+            models.Index(fields=["company", "batch"], name="inv_label_batch"),
+        ]
+
+    def __str__(self):
+        return self.code
+
+    def clean(self):
+        super().clean()
+        need = {
+            self.Kind.ITEM: ("item",),
+            self.Kind.BATCH: ("item", "batch"),
+            self.Kind.PACKAGE: ("item", "uom", "quantity"),
+            self.Kind.LOCATION: ("warehouse", "location"),
+        }.get(self.kind, ())
+        missing = [field for field in need if getattr(self, f"{field}_id", getattr(self, field, None)) in (None, "")]
+        if missing:
+            raise ValidationError({field: "Required for this kind of label." for field in missing})
+        if self.batch_id and self.item_id and Batch.all_objects.filter(pk=self.batch_id).exclude(
+                item_id=self.item_id).exists():
+            raise ValidationError({"batch": "This batch is of another item."})
+        if self.kind == self.Kind.PACKAGE and self.item_id and not self.batch_id and Item.all_objects.filter(
+                pk=self.item_id, track_batch=True).exists():
+            raise ValidationError({"batch": "This item keeps batches: a package label names its batch."})
+        if self.location_id and self.warehouse_id and Location.all_objects.filter(
+                pk=self.location_id).exclude(warehouse_id=self.warehouse_id).exists():
+            raise ValidationError({"location": "This bin is in another store."})
+
+
+class LabelPrint(TenantOwned):
+    """Every time a label was printed: who, when, how many, and why for a reprint."""
+
+    label = models.ForeignKey(BarcodeLabel, on_delete=models.CASCADE, related_name="prints")
+    printed_at = models.DateTimeField()
+    printed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    copies = models.PositiveSmallIntegerField(default=1)
+    reprint = models.BooleanField(default=False)
+    reason = models.CharField(max_length=255, blank=True)
+    size = models.CharField(max_length=8)
+
+    class Meta:
+        db_table = "inventory_label_print"
+        ordering = ("-printed_at", "-pk")
+
+    def __str__(self):
+        return f"{self.label_id} x{self.copies}"
 
 
 class MoveType(models.TextChoices):

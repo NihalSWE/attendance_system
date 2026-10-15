@@ -60,6 +60,17 @@ def _detail(request, company_id, pk, line_form=None, open_dialog=""):
                      .order_by("pk"))
     can_enter = document.editable and access.may(request.user, company_id, "inventory.adjust")
     can_post = access.may(request.user, company_id, "inventory.adjust_approve")
+    # Once posted, each line's packages can be labelled (the count day: label
+    # every bag as it is counted). The batch exists only after posting.
+    can_label = (document.status == DocumentStatus.POSTED
+                 and access.may(request.user, company_id, "inventory.labels"))
+    if can_label:
+        from inventory.models import Batch
+
+        batches = {(b.item_id, b.batch_no): b.pk for b in Batch.all_objects.filter(
+            company_id=company_id, item_id__in={line.item_id for line in lines})}
+        for line in lines:
+            line.batch_pk = batches.get((line.item_id, line.batch_no))
     if can_enter and line_form is None:
         line_form = forms.OpeningLineForm(company_id=company_id,
                                           branch_ids=branch_ids(request.user, company_id,
@@ -69,6 +80,7 @@ def _detail(request, company_id, pk, line_form=None, open_dialog=""):
         "total": sum((line.value for line in lines), Decimal("0")),
         "can_enter": can_enter, "can_post": can_post and document.editable and bool(lines),
         "can_reverse": can_post and document.status == DocumentStatus.POSTED,
+        "can_label": can_label,
         "line_form": line_form, "reason_form": forms.ReasonForm(), "open_dialog": open_dialog,
     })
 

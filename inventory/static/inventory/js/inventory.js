@@ -13,7 +13,19 @@ document.addEventListener("DOMContentLoaded", function () {
         var opener = event.target.closest("[data-open-dialog]");
         if (opener) {
             event.preventDefault();
-            open(document.getElementById(opener.dataset.openDialog));
+            var dialog = document.getElementById(opener.dataset.openDialog);
+            // One dialog shared by every row (Print, Void on the label register):
+            // the button says where its form posts and what it is about.
+            if (dialog && opener.dataset.dialogAction) {
+                var form = dialog.querySelector("form");
+                if (form) form.action = opener.dataset.dialogAction;
+                var subject = dialog.querySelector("[data-dialog-subject]");
+                if (subject) subject.textContent = opener.dataset.dialogSubject || "";
+                dialog.querySelectorAll("[data-reprint-only]").forEach(function (part) {
+                    part.hidden = opener.dataset.dialogReprint !== "1";
+                });
+            }
+            open(dialog);
             return;
         }
         var closer = event.target.closest("[data-close-dialog]");

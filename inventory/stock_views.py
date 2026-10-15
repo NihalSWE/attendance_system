@@ -107,7 +107,25 @@ def _item_context(request, company_id, item, *, pack_form=None, open_dialog=""):
         "on_hand": sum((b.qty_on_hand for b in balances), Decimal("0")),
         "cost": cost, "sees_costs": costs_in is ALL_BRANCHES,
         "can_manage": can_manage, "pack_form": pack_form, "open_dialog": open_dialog,
+        "can_print": access.may(request.user, company_id, "inventory.labels"),
+        "print_form": forms.PrintForm(),
+        **_printed(company_id, item, balances),
     }
+
+
+def _printed(company_id, item, balances):
+    """Which of the item's labels were printed before (their Print asks why)."""
+    from inventory.models import BarcodeLabel
+
+    with use_company(company_id):
+        printed = BarcodeLabel.objects.filter(item=item, status=BarcodeLabel.Status.ACTIVE,
+                                              printed_count__gt=0)
+        return {
+            "item_label_printed": printed.filter(kind=BarcodeLabel.Kind.ITEM).exists(),
+            "printed_batches": set(printed.filter(
+                kind=BarcodeLabel.Kind.BATCH,
+                batch__in=[b.batch_id for b in balances if b.batch_id]).values_list("batch_id", flat=True)),
+        }
 
 
 @login_required

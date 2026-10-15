@@ -92,6 +92,9 @@
                                             {% csrf_token %}
                                             <button class="btn btn--quiet btn--sm" type="submit">Remove</button>
                                         </form>
+                                    {% elif can_label %}
+                                        <a class="btn btn--ghost btn--sm"
+                                           href="{% url 'inventory:package_labels' line.item_id %}?warehouse={{ line.warehouse_id }}{% if line.location_id %}&amp;location={{ line.location_id }}{% endif %}{% if line.batch_pk %}&amp;batch={{ line.batch_pk }}{% endif %}&amp;uom={{ line.uom_id }}&amp;quantity={{ line.qty.normalize }}&amp;source_type=opening_stock_line&amp;source_id={{ line.pk }}">Labels</a>
                                     {% endif %}
                                 </td>
                             </tr>

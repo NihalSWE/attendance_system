@@ -1,0 +1,33 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Scan · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:stock' %}">Inventory</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Scan
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Scan</h1>
+            <p class="page__sub">
+                Scan any label to see what it is: a package (item, batch, expiry, quantity), a batch card,
+                an item, a bin, or a supplier's GS1 barcode. Nothing changes; it only looks.
+            </p>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__body">
+            {% include "inventory/includes/scan_box.html" with show_result=True %}
+        </div>
+    </div>
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

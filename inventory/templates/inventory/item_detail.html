@@ -25,6 +25,13 @@
             </p>
         </div>
         <div class="page__actions">
+            {% if can_print %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="print-dialog"
+                        data-dialog-action="{% url 'inventory:item_label_print' item.pk %}"
+                        data-dialog-subject="the item label ({% if item.barcode %}{{ item.barcode }}{% else %}{{ item.code }}{% endif %})"
+                        data-dialog-reprint="{% if item_label_printed %}1{% else %}0{% endif %}">Print item label</button>
+                <a class="btn btn--ghost" href="{% url 'inventory:package_labels' item.pk %}">Package labels</a>
+            {% endif %}
             {% if can_manage %}
                 <a class="btn btn--ghost" href="{% url 'inventory:items' %}?edit={{ item.pk }}">
                     Edit item
@@ -103,7 +110,7 @@
         {% if balances %}
             <div class="table-wrap">
                 <table class="table">
-                    <thead><tr><th>Store</th><th>Bin</th><th>Batch</th><th>Expiry</th><th class="numeric">On hand</th><th class="numeric">Reserved</th></tr></thead>
+                    <thead><tr><th>Store</th><th>Bin</th><th>Batch</th><th>Expiry</th><th class="numeric">On hand</th><th class="numeric">Reserved</th>{% if can_print %}<th><span class="sr-only">Labels</span></th>{% endif %}</tr></thead>
                     <tbody>
                         {% for b in balances %}
                             <tr>
@@ -113,6 +120,19 @@
                                 <td>{{ b.batch.expiry_date|date:"d M Y"|default:"—" }}</td>
                                 <td class="numeric">{{ b.qty_on_hand.normalize }}</td>
                                 <td class="numeric">{{ b.qty_reserved.normalize }}</td>
+                                {% if can_print %}
+                                    <td>
+                                        <div class="inv-actions">
+                                            {% if b.batch %}
+                                                <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="print-dialog"
+                                                        data-dialog-action="{% url 'inventory:batch_label_print' b.batch_id %}"
+                                                        data-dialog-subject="the card of batch {{ b.batch.batch_no }}"
+                                                        data-dialog-reprint="{% if b.batch_id in printed_batches %}1{% else %}0{% endif %}">Batch card</button>
+                                            {% endif %}
+                                            <a class="btn btn--ghost btn--sm" href="{% url 'inventory:package_labels' item.pk %}?warehouse={{ b.warehouse_id }}{% if b.batch_id %}&amp;batch={{ b.batch_id }}{% endif %}{% if b.location_id %}&amp;location={{ b.location_id }}{% endif %}">Package labels</a>
+                                        </div>
+                                    </td>
+                                {% endif %}
                             </tr>
                         {% endfor %}
                     </tbody>
@@ -152,6 +172,9 @@
         {% endif %}
     </div>
 
+    {% if can_print %}
+        {% include "inventory/includes/print_dialog.html" %}
+    {% endif %}
     {% if can_manage %}
         {% url 'inventory:pack_unit_add' item.pk as pack_url %}
         {% include "organization/profile/modal_form.html" with id="pack-dialog" title="Add a pack unit" action=pack_url form=pack_form submit="Add" note="For example 1 CARTON = 24, when the base unit is PCS." %}

@@ -109,10 +109,14 @@ class MasterPageTests(InventoryFixture, TestCase):
 
     def test_settings_by_posting_the_form(self):
         self.client.post(reverse("inventory:settings"), {"valuation_scope": "warehouse",
-                                                         "expiry_alert_days": "45"})
+                                                         "expiry_alert_days": "45",
+                                                         "small_label": "40x30",
+                                                         "large_label": "100x75"})
         from inventory.posting import settings_for
 
-        self.assertEqual(settings_for(self.company.pk).expiry_alert_days, 45)
+        saved = settings_for(self.company.pk)
+        self.assertEqual((saved.expiry_alert_days, saved.small_label, saved.large_label, saved.gs1_labels),
+                         (45, "40x30", "100x75", False))
 
     def test_standard_units_button(self):
         with use_company(self.company):

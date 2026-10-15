@@ -143,6 +143,15 @@
                                 {% include page_def.row_template %}
                                 <td>
                                     <div class="inv-actions">
+                                        {% if can_print_labels and page_def.key == "bins" and row.status == 'active' %}
+                                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="print-dialog"
+                                                    data-dialog-action="{% url 'inventory:bin_labels_print' %}?location={{ row.pk }}"
+                                                    data-dialog-subject="the label of bin {{ row.code }}" data-dialog-reprint="1">Label</button>
+                                        {% elif can_print_labels and page_def.key == "stores" and row.bin_count %}
+                                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="print-dialog"
+                                                    data-dialog-action="{% url 'inventory:bin_labels_print' %}?store={{ row.pk }}"
+                                                    data-dialog-subject="every bin label of {{ row.code }}" data-dialog-reprint="1">Bin labels</button>
+                                        {% endif %}
                                         {% if page_def.key == "items" %}
                                             <a class="btn btn--ghost btn--sm" href="{% url 'inventory:item_detail' row.pk %}">
                                                 Open
@@ -175,6 +184,9 @@
         {% endif %}
     </div>
 
+    {% if can_print_labels and page_def.key == "bins" or can_print_labels and page_def.key == "stores" %}
+        {% include "inventory/includes/print_dialog.html" %}
+    {% endif %}
     {% if can_manage %}
         {% include "organization/profile/modal_form.html" with id="new-dialog" title="Add "|add:page_def.singular action=page_def.url form=new_form submit="Add" wide=True %}
         {% if edit_form %}

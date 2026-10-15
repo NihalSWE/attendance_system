@@ -1,0 +1,41 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Package labels · {{ item.code }}
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:item_detail' item.pk %}">{{ item.code }}</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Package labels
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Package labels</h1>
+            <p class="page__sub">
+                {{ item.code }} · {{ item.name }}. One label for each bag, drum, carton or roll: scanning it later
+                fills the item, batch, expiry and quantity in one go. For example 25 packages of 50 KG.
+            </p>
+        </div>
+    </div>
+    <div class="card">
+        <form class="card__body stack" method="post" target="_blank" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert--danger">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="grid grid--3">
+                {% for field in form.visible_fields %}
+                    {% include "leaves/includes/field.html" %}
+                {% endfor %}
+            </div>
+            <p class="t-faint">The labels are made and their PDF opens in a new tab. They are in the label register for reprints.</p>
+            <div class="inv-actions inv-actions--start">
+                <button class="btn btn--primary" type="submit">Make and print</button>
+                <a class="btn btn--ghost" href="{% url 'inventory:item_detail' item.pk %}">Back to the item</a>
+            </div>
+        </form>
+    </div>
+{% endblock %}
