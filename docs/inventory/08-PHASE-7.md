@@ -165,5 +165,5 @@ status 1 on trouble, so a failure shows in the journal.
 
 ## 6. Next
 
-Phase 8 - the AI sales order assistant (email orders in Bangla or English →
-draft sales orders, manager summaries, daily and weekly reports).
+Phase 8 - the AI sales order assistant ([09-PHASE-8.md](09-PHASE-8.md)): email orders in Bangla or English →
+draft sales orders, manager summaries, daily and weekly reports.

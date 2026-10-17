@@ -204,6 +204,11 @@ COMPANY_MENUS = (
         item("Customers", "inventory:customers", needs="inventory.view"),
         item("Price lists", "sales:price_lists", "sales:price_list_detail", "sales:price_remove",
              needs=("sales.order", "inventory.view")),
+        # Phase 8: orders read by the AI into drafts; a person confirms each.
+        item("AI order inbox", "ai_assistant:inbox", "ai_assistant:message", "ai_assistant:message_action",
+             needs=("sales.order", "sales.approve")),
+        item("AI assistant settings", "ai_assistant:settings", "ai_assistant:recipient_add",
+             "ai_assistant:recipient_remove", manage=True, needs=("sales.order", "inventory.view")),
     )),
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",

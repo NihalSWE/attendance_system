@@ -6358,3 +6358,26 @@ Details in [inventory/08-PHASE-7.md](inventory/08-PHASE-7.md).
 
 **Deploy:** pull, migrate, collectstatic, restart; alert addresses in
 Inventory settings; the `inventory_alerts` and `inventory_check` timers.
+
+### Inventory Phase 8: mixed-store sales orders and the AI sales order assistant — 2026-10-17
+
+Details in [inventory/09-PHASE-8.md](inventory/09-PHASE-8.md).
+
+- Sales order lines each have their own store (juice from finished goods,
+  sugar from the raw material store, one order); one delivery challan per
+  store; existing orders keep their order's store.
+- AI order assistant (`ai_assistant`), off until the client's written
+  consent is recorded: the order inbox (IMAP) and pasted WhatsApp text are
+  read by Claude into strict JSON; our code matches customer, items, units
+  and stores, prices from our price lists, and makes a draft sales order
+  with problems listed (stock, credit, repeats, unsure matches). A person
+  reviews (matched words remembered as aliases) and confirms; the managers
+  get the order summary. Daily and weekly reports with figures from the ERP
+  and a short AI paragraph. Every AI call logged with cost; daily limit;
+  key and inbox password encrypted.
+- Tests: `ai_assistant` 12 (fake Claude and inbox), `sales` mixed-store 4.
+
+**Deploy:** pull, `pip install -r requirements.txt` (new: anthropic), migrate,
+collectstatic, restart; the `ai_inbox`, `ai_report_daily` and
+`ai_report_weekly` timers; settings with the client (consent, key, inbox,
+managers).

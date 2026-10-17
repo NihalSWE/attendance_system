@@ -176,6 +176,10 @@ BRANCH_PAGES = {
                     "order_detail", "order_output", "order_labels", "order_action", "consumption_detail",
                     "consumption_line_add", "consumption_line_remove", "consumption_scan",
                     "consumption_action", "report")},
+    # Phase 8: the AI order inbox to whoever enters or confirms sales orders
+    # (the services check again; confirming needs "Confirm sales orders" in
+    # the order's branch). Its settings are the owner's and admin's: not listed.
+    **{f"ai_assistant:{name}": ("sales.order", "sales.approve") for name in ("inbox", "message", "message_action")},
     # Phase 7: the dashboard to viewers; each report to the permissions it
     # names (any one), month-end close to "Close a stock month".
     "inventory:dashboard": "inventory.view",

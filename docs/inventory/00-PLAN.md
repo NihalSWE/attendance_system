@@ -377,8 +377,9 @@ is ready. Estimates are for two developers and are rough.
   juice from the finished-goods store and sugar from the raw-material store.
   Each order line gets its own store (the order's store is the default);
   reservation, delivery (one challan per store), invoice (one per order or
-  per challan) and returns follow the line's store and its branch. Until
-  then such an order is entered as two orders, one per store.
+  per challan) and returns follow the line's store and its branch. **Done
+  2026-10-17** ([09-PHASE-8.md](09-PHASE-8.md)): one challan per store,
+  one invoice per challan.
 - **Done when:** a real email order in Bangla or English becomes a correct
   draft sales order with stock status in under a minute; a person confirms it;
   the 5 managers receive the order summary; daily and weekly reports arrive on
