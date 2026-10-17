@@ -14,6 +14,7 @@ from inventory import labels, masters, posting
 from inventory.models import (
     Batch,
     BarcodeLabel,
+    Item,
     ItemKind,
     MoveType,
     StockBalance,
@@ -119,6 +120,30 @@ class DoneWhenTests(SalesFixture, TestCase):
         deliveries.mark_paid(**self.kw, invoice_id=invoice.pk, paid_on=DAY, note="bKash 77AB")
         self.assertEqual(SalesInvoice.all_objects.get(pk=invoice.pk).status, "paid")
         self.assertEqual(posting.ledger_differences(self.company.pk), [])
+
+
+class RawMaterialSaleTests(SalesFixture, TestCase):
+    def test_raw_material_is_sold_from_its_store_like_finished_goods(self):
+        """Sugar sold to a customer straight from the raw material store, at the item's sale price."""
+        Item.all_objects.filter(pk=self.sugar.pk).update(sale_price=D("95"), vat_rate=D("5"))
+        sugar = Item.all_objects.get(pk=self.sugar.pk)
+        s1 = Batch.all_objects.create(company=self.company, item=sugar, batch_no="S1", source="opening",
+                                      expiry_date=datetime.date(2027, 9, 30))
+        posting.post(company_id=self.company.pk, actor=self.owner, document_type="opening", document_id=2,
+                     move_type=MoveType.OPENING, work_date=datetime.date(2026, 9, 1), lines=[
+                         posting.Line(item=sugar, warehouse=self.rms, batch=s1, qty=D("500"), unit_cost=D("80"))])
+        order = orders.create_order(**self.kw, values={
+            "customer": self.customer, "warehouse": self.rms, "order_date": DAY, "delivery_date": None,
+            "source": "manual", "customer_ref": "", "delivery_address": "", "note": ""})
+        orders.add_line(**self.kw, order_id=order.pk, values={"item": sugar, "qty": D("200"), "uom": self.kg})
+        orders.confirm(**self.kw, order_id=order.pk)
+        self.assertEqual(StockBalance.all_objects.get(batch=s1).qty_reserved, D("200"))
+        delivery = deliveries.create_delivery(**self.kw, values={"order": order, "delivery_date": DAY,
+                                                                 "vehicle_no": "", "driver": "", "note": ""})
+        deliveries.post_delivery(**self.kw, delivery_id=delivery.pk)
+        self.assertEqual(StockBalance.all_objects.get(batch=s1).qty_on_hand, D("300"))
+        invoice = deliveries.create_invoice(**self.kw, delivery_id=delivery.pk)
+        self.assertEqual((invoice.amount, invoice.vat, invoice.total), (D("19000"), D("950"), D("19950")))
 
 
 class RuleTests(SalesFixture, TestCase):

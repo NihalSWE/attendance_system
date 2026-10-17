@@ -353,6 +353,10 @@ is ready. Estimates are for two developers and are rough.
 - Customers, price lists, sales orders (manual) with stock check and
   reservation, credit-limit warning, delivery challan by scan (FEFO), invoice
   (PDF), sales return.
+- **Any item can be sold**, not only finished goods: raw materials (sugar,
+  flavours, tea leaves), packaging, spares - from the store that holds them,
+  at the customer's price list or the item's sale price (client, 2026-10-15;
+  in place since Phase 6, proven by `sales.tests_flow.RawMaterialSaleTests`).
 - **Done when:** an order reserves stock, a delivery picks FEFO batches by
   scan and releases the reservation, and the invoice matches the delivery.
 
@@ -369,6 +373,12 @@ is ready. Estimates are for two developers and are rough.
   the nightly balance check reports zero differences.
 
 ### Phase 8 — AI sales order assistant (2 weeks) — see section 8
+- **First, mixed-store sales orders** (client, 2026-10-15): one order for
+  juice from the finished-goods store and sugar from the raw-material store.
+  Each order line gets its own store (the order's store is the default);
+  reservation, delivery (one challan per store), invoice (one per order or
+  per challan) and returns follow the line's store and its branch. Until
+  then such an order is entered as two orders, one per store.
 - **Done when:** a real email order in Bangla or English becomes a correct
   draft sales order with stock status in under a minute; a person confirms it;
   the 5 managers receive the order summary; daily and weekly reports arrive on

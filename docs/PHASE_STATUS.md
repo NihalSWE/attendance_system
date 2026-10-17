@@ -6337,3 +6337,24 @@ Details in [inventory/07-PHASE-6.md](inventory/07-PHASE-6.md).
 - Tests: `sales` 13 (the done-when flow: 3,795 invoiced for 150 delivered).
 
 **Deploy:** pull, migrate, collectstatic, restart.
+
+### Inventory Phase 7: valuation, monitoring and reports — 2026-10-15
+
+Details in [inventory/08-PHASE-7.md](inventory/08-PHASE-7.md).
+
+- Inventory dashboard: value by type and store, low stock, expiring and
+  expired batches, quarantine, the work waiting, today's production and sales.
+- 14 reports with Excel and PDF downloads (stock on hand, item card,
+  movement, valuation at any date, batch and expiry, aging, slow-moving,
+  reorder, consumption by department, purchase and GRN registers,
+  production yield, sales register, customer and item sales). Values only
+  for those who see stock costs.
+- Valuation read from the stock ledger: any past day equals what the
+  balances held that evening; back-dated entries change only their days on.
+- Month-end close (refused while documents in the month wait or the stock
+  check finds differences; reopen with a reason). Morning reorder and expiry
+  alert by email (`stock_alerts`), addresses in Inventory settings.
+- Tests: `inventory.tests_reports` 15 (the done-when: 21,887.50 at 12 Sep).
+
+**Deploy:** pull, migrate, collectstatic, restart; alert addresses in
+Inventory settings; the `inventory_alerts` and `inventory_check` timers.

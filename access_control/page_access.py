@@ -13,6 +13,8 @@ page follow this list, so a page appears the moment it is added.
 """
 
 from access_control.branch_access import CODES, can
+from base_template.navigation import INVENTORY_REPORT_CODES as REPORT_CODES
+from inventory.reports import REPORTS as INVENTORY_REPORTS
 from reports.catalogue import REPORTS
 
 # view name -> the branch permission it needs, or a tuple: any one of them.
@@ -174,6 +176,13 @@ BRANCH_PAGES = {
                     "order_detail", "order_output", "order_labels", "order_action", "consumption_detail",
                     "consumption_line_add", "consumption_line_remove", "consumption_scan",
                     "consumption_action", "report")},
+    # Phase 7: the dashboard to viewers; each report to the permissions it
+    # names (any one), month-end close to "Close a stock month".
+    "inventory:dashboard": "inventory.view",
+    "inventory:reports": ("inventory.view", "inventory.valuation", *REPORT_CODES),
+    **{report.url_name: report.code for report in INVENTORY_REPORTS},
+    "inventory:period_close": "inventory.period_close",
+    "inventory:period_reopen": "inventory.period_close",
     # Phase 4: store operations. Every page opens to anyone who may view stock
     # or take part; each service checks the document's store branch and the
     # exact permission (issue, approve, transfer, adjust, approve adjustments).

@@ -6,6 +6,15 @@ Aliases keep an area's item selected while editing one of its records.
 
 from django.urls import reverse
 
+from inventory.reports import REPORTS as INVENTORY_REPORTS
+
+#: The inventory reports open under "Reports" (Phase 7); any of their
+#: permissions shows the entry.
+REPORT_URLS = tuple(report.url_name for report in INVENTORY_REPORTS)
+INVENTORY_REPORT_CODES = tuple(dict.fromkeys(
+    code for report in INVENTORY_REPORTS
+    for code in ((report.code,) if isinstance(report.code, str) else report.code)))
+
 
 def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False,
          salary=False, group="", report_kind="", people="", needs=""):
@@ -109,7 +118,10 @@ COMPANY_MENUS = (
     # Store & Inventory (docs/inventory/00-PLAN.md, Phase 1). Shown once the
     # platform owner enables the module, to those holding "View stock and items".
     ("inventory", "Inventory", (
-        item("Stock on hand", "inventory:stock", "inventory:home", needs="inventory.view"),
+        item("Dashboard", "inventory:dashboard", "inventory:home", needs="inventory.view"),
+        item("Stock on hand", "inventory:stock", needs="inventory.view"),
+        item("Reports", "inventory:reports", *REPORT_URLS, needs=("inventory.view", *INVENTORY_REPORT_CODES)),
+        item("Month-end close", "inventory:period_close", needs="inventory.period_close"),
         item("Items", "inventory:items", "inventory:items_edit", "inventory:items_status",
              "inventory:item_detail", "inventory:pack_unit_add", "inventory:pack_unit_remove",
              needs="inventory.view"),

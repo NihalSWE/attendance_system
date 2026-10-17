@@ -3,14 +3,21 @@
 from django.urls import path
 from django.views.generic import RedirectView
 
-from inventory import import_views, label_views, opening_views, stock_views, store_views, views
+from inventory import import_views, label_views, opening_views, report_views, stock_views, store_views, views
+from inventory.reports import REPORTS
 
 app_name = "inventory"
 
 MASTERS = ("units", "categories", "items", "stores", "bins", "suppliers", "customers")
 
 urlpatterns = [
-    path("", RedirectView.as_view(pattern_name="inventory:stock"), name="home"),
+    path("", RedirectView.as_view(pattern_name="inventory:dashboard"), name="home"),
+    path("dashboard/", report_views.dashboard, name="dashboard"),
+    path("reports/", report_views.report_index, name="reports"),
+    *[path(f"reports/{report.slug}/", report_views.report, {"slug": report.slug},
+           name=report.url_name.split(":", 1)[1]) for report in REPORTS],
+    path("month-end/", report_views.period_close, name="period_close"),
+    path("month-end/<int:pk>/reopen/", report_views.period_reopen, name="period_reopen"),
     path("stock/", stock_views.stock, name="stock"),
     path("items/<int:pk>/", stock_views.item_detail, name="item_detail"),
     path("items/<int:pk>/packs/", stock_views.pack_unit_add, name="pack_unit_add"),

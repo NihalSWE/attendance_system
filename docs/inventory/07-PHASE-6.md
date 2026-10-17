@@ -89,6 +89,6 @@ customers (Distributor, Dealer, Retailer...).
 
 ## 6. Next
 
-Phase 7 - valuation, monitoring and reports: dashboard, stock on hand and
+Phase 7 - valuation, monitoring and reports ([08-PHASE-7.md](08-PHASE-7.md)): dashboard, stock on hand and
 valuation at any date, batch/expiry, slow-moving, purchase/sales registers,
 reorder and expiry alerts by email, month-end close.

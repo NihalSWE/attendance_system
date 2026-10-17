@@ -95,6 +95,17 @@ class InventorySettings(TenantOwned, ActorTracked):
                   "13- or 14-digit barcode. Only when a customer asks for GS1.",
     )
 
+    # Phase 7: the slow-moving report and the morning alert.
+    slow_moving_days = models.PositiveIntegerField(
+        "Slow-moving after (days)", default=90, validators=[MinValueValidator(7), MaxValueValidator(3650)],
+        help_text="An item in stock not issued, used or sold for this long is slow-moving.",
+    )
+    alert_emails = models.TextField(
+        "Send the daily stock alert to", blank=True,
+        help_text="Email addresses, one per line or separated by commas. Every morning they get "
+                  "what is below its reorder point and what is expired or expiring. Empty: no alert.",
+    )
+
     class Meta:
         db_table = "inventory_settings"
         constraints = [
