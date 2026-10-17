@@ -2,6 +2,28 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-17 — Store & Inventory (inventory plan Phase 9)
+
+- **New:** 205 endpoints under four menu areas - Store & inventory, Purchase,
+  Production, Sales. Guide: [Store & inventory](../inventory/).
+- **Masters:** items, units, categories, stores, bins, suppliers, customers
+  (list, add, one, change, status).
+- **Stock:** `GET /api/v1/inventory/stock`, `…/items/{id}/ledger`,
+  `…/batches`, `…/labels/lookup`.
+- **Documents**, one shape for all: store requisitions, issues, material
+  returns, transfers, adjustments, counts, opening stock; purchase
+  requisitions, orders, goods receipts (with QC), returns; BOMs, production
+  orders (use, output, QC), material use; sales orders (confirm, reserve,
+  deliver), deliveries (invoice), invoices (issue, paid), returns - each with
+  list, start, one, lines, scan where the panel scans, and every action.
+- **New:** `POST /api/v1/sales/intake` - orders from other systems (lines by
+  code, or text for the AI order inbox); a repeat order is a conflict.
+- **Reports:** `GET /api/v1/inventory/reports`, `…/reports/{slug}`,
+  `…/reports/{slug}/export`; `GET /api/v1/inventory/dashboard`; month-end
+  close `GET`/`POST /api/v1/inventory/periods`, `POST …/periods/{id}/reopen`.
+- **New API key scopes:** `inventory:read`/`write`, `purchase:read`/`write`,
+  `production:read`/`write`, `sales:read`/`write`.
+
 ## 2026-10-15 — Sales permissions
 
 - **Changed:** `GET /api/v1/access/permissions` also lists `sales.order`,

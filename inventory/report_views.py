@@ -229,23 +229,18 @@ def report_index(request):
     return render(request, "inventory/reports/index.html", {"groups": groups})
 
 
-@login_required
-@require_http_methods(["GET"])
-def report(request, slug):
-    report = catalogue.BY_SLUG.get(slug)
-    if report is None:
-        raise Http404("No such report.")
-    company_id, bail = company_or_bail(request)
-    if bail:
-        return bail
-    membership = access.require(request.user, company_id, report.code)
+def build(user, company_id, report, params):
+    """Run ``report`` for ``user`` with the filters in ``params`` (the page's
+    query string, or the API's): ``(membership, filters, result, described, choices)``.
+    The panel page and the API both call it, so they show the same figures."""
+    membership = access.require(user, company_id, report.code)
     company = membership.company
     zone = zoneinfo.ZoneInfo(company.timezone or "Asia/Dhaka")
     today = local_today(company)
-    f = read_filters(request.GET, report, today)
+    f = read_filters(params, report, today)
     with use_company(company_id):
         stores = list(access.scope_warehouses(Warehouse.objects.select_related("branch").order_by("code"),
-                                              request.user, company_id, report.code))
+                                              user, company_id, report.code))
         choices = {
             "stores": stores,
             "items": list(Item.objects.order_by("code").only("pk", "code", "name"))
@@ -270,15 +265,28 @@ def report(request, slug):
         if f.kind:
             items = items.filter(kind=f.kind)
         item_ids = list(items.values_list("pk", flat=True))
-    branches = _branches(request.user, company_id, report.code)
+    branches = _branches(user, company_id, report.code)
     if f.store and covered:
         branches = {covered[0].branch_id}
-    ctx = catalogue.Ctx(company_id=company_id, company=company, actor=request.user, f=f, today=today,
+    ctx = catalogue.Ctx(company_id=company_id, company=company, actor=user, f=f, today=today,
                         stores=covered, branches=branches,
-                        costs=_sees_costs_in(request.user, company_id, covered), item_ids=item_ids)
+                        costs=_sees_costs_in(user, company_id, covered), item_ids=item_ids)
     with timezone.override(zone), use_company(company_id):
         result = report.build(ctx)
-    described = _described(f, report, choices)
+    return membership, f, result, _described(f, report, choices), choices
+
+
+@login_required
+@require_http_methods(["GET"])
+def report(request, slug):
+    report = catalogue.BY_SLUG.get(slug)
+    if report is None:
+        raise Http404("No such report.")
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    membership, f, result, described, choices = build(request.user, company_id, report, request.GET)
+    today = local_today(membership.company)
 
     fmt = request.GET.get("format")
     if fmt in exports.FORMATS:
@@ -311,13 +319,18 @@ def _download(request, report, result, f, described, membership, fmt):
         params = request.GET.copy()
         params.pop("format", None)
         return redirect(f"{request.path}?{params.urlencode()}")
+    return export(report, result, rows, f, described, membership, fmt, request.user)
+
+
+def export(report, result, rows, f, described, membership, fmt, user):
+    """The report as an Excel or PDF download (the panel's and the API's)."""
     company = membership.company
     now = timezone.localtime(timezone.now(), zoneinfo.ZoneInfo(company.timezone or "Asia/Dhaka"))
     lines = [" · ".join(described)]
     if result.summary:
         lines.append(" · ".join(f"{label}: {value}" for label, value in result.summary))
     lines.append(f"{len(rows)} row{'s' if len(rows) != 1 else ''} · downloaded {now:%d %b %Y %H:%M} "
-                 f"by {request.user.get_username()}")
+                 f"by {user.get_username()}")
     if result.note:
         lines.append(result.note)
     title = f"{company.name} — {report.title}"
@@ -332,7 +345,7 @@ def _download(request, report, result, f, described, membership, fmt):
         shown = [[display(v, c) for v, c in zip(row, result.columns)] for row in rows]
         content = exports.table_pdf(title=title, lines=lines, headers=headers, rows=shown, numeric=numeric,
                                     widths=widths, compact=len(headers) > 11)
-    exports.record(actor=request.user, membership=membership, page=f"inventory-report:{report.slug}",
+    exports.record(actor=user, membership=membership, page=f"inventory-report:{report.slug}",
                    fmt=fmt, filters={"described": described}, count=len(rows))
     return exports.response(content, fmt, exports.filename(report.slug, company.name, f.slug(), fmt))
 
@@ -348,8 +361,13 @@ def dashboard(request):
     company_id, bail = company_or_bail(request)
     if bail:
         return bail
-    membership = access.require(request.user, company_id, "inventory.view")
-    user, company = request.user, membership.company
+    return render(request, "inventory/dashboard.html", dashboard_figures(request.user, company_id))
+
+
+def dashboard_figures(user, company_id):
+    """The dashboard's figures for ``user`` (the panel page's and the API's)."""
+    membership = access.require(user, company_id, "inventory.view")
+    company = membership.company
     today = local_today(company)
     with use_company(company_id):
         stores = list(access.scope_warehouses(Warehouse.objects.select_related("branch").order_by("code"),
@@ -382,7 +400,7 @@ def dashboard(request):
                       .filter(warehouse__kind="quarantine").aggregate(rows=Count("pk"))["rows"])
         waiting = _waiting(user, company_id)
         produced, sold = _today(user, company_id, today)
-    return render(request, "inventory/dashboard.html", {
+    return {
         "today": today, "costs": costs, "total": total.quantize(CENT),
         "stock_items": len({i for (i, _s), (q, _v) in held.items() if q > 0}),
         "by_store": [line for line in by_store.values() if line["items"]],
@@ -391,7 +409,7 @@ def dashboard(request):
         "expired_count": sum(1 for row in expiring if row.days_left < 0), "alert_days": alert_days,
         "quarantine": quarantine, "waiting": waiting, "produced": produced, "sold": sold,
         "reports": bool(visible_reports(user, company_id)),
-    })
+    }
 
 
 def _waiting(user, company_id):

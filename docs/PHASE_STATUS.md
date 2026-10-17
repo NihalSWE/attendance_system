@@ -6381,3 +6381,22 @@ Details in [inventory/09-PHASE-8.md](inventory/09-PHASE-8.md).
 collectstatic, restart; the `ai_inbox`, `ai_report_daily` and
 `ai_report_weekly` timers; settings with the client (consent, key, inbox,
 managers).
+
+### Inventory Phase 9: the Store & Inventory API — 2026-10-17
+
+Details in [inventory/10-PHASE-9.md](inventory/10-PHASE-9.md); client guide
+[api/130-inventory.md](api/130-inventory.md).
+
+- 205 new API endpoints (508 in all) under Store & inventory, Purchase,
+  Production and Sales: masters, stock, ledger, batches, label lookup, every
+  store / purchase / production / sales document with its lines, scans and
+  actions, the 14 inventory reports (data, Excel, PDF), the dashboard and
+  month-end close.
+- `POST /api/v1/sales/intake`: orders from the client's other systems (by
+  code, or text for the AI inbox), never taken twice.
+- Built from the panels' own forms and services (one spec per document kind),
+  one response shape for every document; new API key scopes.
+- Tests: `api.tests.test_inventory` 12; the documentation test covers every
+  new endpoint and field.
+
+**Deploy:** pull, collectstatic, restart; API keys with the new scopes.

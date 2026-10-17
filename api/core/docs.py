@@ -45,6 +45,11 @@ AREAS = (
     ("attendance", "Attendance"),
     ("leave", "Leave"),
     ("salary", "Salary"),
+    # Store & Inventory (docs/inventory/00-PLAN.md Phase 9).
+    ("inventory", "Store & inventory"),
+    ("purchase", "Purchase"),
+    ("production", "Production"),
+    ("sales", "Sales"),
     ("me", "My account"),
     ("reports", "Reports"),
     ("integrations", "Integrations"),

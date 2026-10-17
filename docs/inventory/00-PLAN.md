@@ -389,6 +389,7 @@ is ready. Estimates are for two developers and are rough.
 - Same conventions as the existing API: items, stock, labels lookup,
   documents (create/submit/approve/post), sales orders (incl. an order-intake
   endpoint for the client's other systems), reports; docs pages + Postman.
+- **Done 2026-10-17** ([10-PHASE-9.md](10-PHASE-9.md)): 205 endpoints.
 
 ### Phase 10 — Go-live (2 weeks)
 - Load masters; **stock count day**: count everything, print and stick

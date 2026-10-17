@@ -206,5 +206,5 @@ systemctl daemon-reload && systemctl enable --now ai_inbox.timer ai_report_daily
 
 ## 8. Next
 
-Phase 9 - the API: items, stock, labels lookup, documents, sales orders
+Phase 9 - the API ([10-PHASE-9.md](10-PHASE-9.md)): items, stock, labels lookup, documents, sales orders
 (with an order-intake endpoint for the client's other systems), reports.

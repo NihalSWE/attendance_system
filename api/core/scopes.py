@@ -18,6 +18,15 @@ SCOPES = {
     "leave:write": "Record, change and decide leave.",
     "payroll:read": "Read salary runs, payslips, components, overtime.",
     "payroll:write": "Run and change salary.",
-    "reports:read": "Read reports and exports.",
+    "reports:read": "Read reports and exports (the inventory reports too).",
+    # Store & Inventory (Phase 9 of the inventory plan).
+    "inventory:read": "Read items, stores, stock, batches, labels and store documents.",
+    "inventory:write": "Change items and stores; enter, approve and post store documents and month-end close.",
+    "purchase:read": "Read purchase requisitions, orders, goods receipts and returns.",
+    "purchase:write": "Enter, approve and post purchase documents; record quality checks.",
+    "production:read": "Read BOMs, production orders and material use.",
+    "production:write": "Set up BOMs; plan, release and run production; record output.",
+    "sales:read": "Read sales orders, deliveries, invoices and returns.",
+    "sales:write": "Enter and confirm sales orders, send orders in, deliver, invoice and record payments.",
     "webhook:manage": "Manage the ERP webhook.",
 }
