@@ -122,6 +122,8 @@ COMPANY_MENUS = (
         item("Stock on hand", "inventory:stock", needs="inventory.view"),
         item("Reports", "inventory:reports", *REPORT_URLS, needs=("inventory.view", *INVENTORY_REPORT_CODES)),
         item("Month-end close", "inventory:period_close", needs="inventory.period_close"),
+        item("Go-live", "inventory:golive", "inventory:golive_count_sheet", "inventory:golive_compare",
+             needs=("inventory.adjust", "inventory.adjust_approve")),
         item("Items", "inventory:items", "inventory:items_edit", "inventory:items_status",
              "inventory:item_detail", "inventory:pack_unit_add", "inventory:pack_unit_remove",
              needs="inventory.view"),

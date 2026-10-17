@@ -45,6 +45,12 @@
                     <button class="btn btn--primary" type="submit">Post</button>
                 </form>
             {% endif %}
+            {% if can_label %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="print-dialog"
+                        data-dialog-action="{% url 'inventory:opening_labels' document.pk %}"
+                        data-dialog-subject="every batch's label (count day)"
+                        data-dialog-reprint="{% if labels_printed %}1{% else %}0{% endif %}">Print all labels</button>
+            {% endif %}
             {% if can_reverse %}
                 <button class="btn btn--danger" type="button" data-open-dialog="reverse-dialog">Reverse</button>
             {% endif %}
@@ -113,6 +119,9 @@
     {% if can_enter %}
         {% url 'inventory:opening_line_add' document.pk as line_url %}
         {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add counted stock" action=line_url form=line_form submit="Add line" wide=True note="Quantity and cost in the unit you choose: the item's base unit or one of its packs." %}
+    {% endif %}
+    {% if can_label %}
+        {% include "inventory/includes/print_dialog.html" %}
     {% endif %}
     {% if can_reverse %}
         {% url 'inventory:opening_reverse' document.pk as reverse_url %}

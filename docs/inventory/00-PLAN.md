@@ -396,6 +396,10 @@ is ready. Estimates are for two developers and are rough.
   labels, load opening stock; train each role (store, purchase, QC,
   production, sales, managers); one to two weeks of parallel run with the old
   method; then switch. Hypercare after go-live.
+- **Software ready 2026-10-17** ([11-GO-LIVE.md](11-GO-LIVE.md)): the Go-live
+  checklist, count sheets that import as opening stock, opening stock labels,
+  the parallel-run comparison, the runbook and training sheets. The go-live
+  itself follows the runbook on site.
 
 **Total: about 19 weeks (4–5 months)** for two developers. Phases 1–4 are the
 minimum useful system (stores + purchase + barcodes); the client can start

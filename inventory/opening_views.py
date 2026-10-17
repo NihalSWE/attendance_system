@@ -71,6 +71,11 @@ def _detail(request, company_id, pk, line_form=None, open_dialog=""):
             company_id=company_id, item_id__in={line.item_id for line in lines})}
         for line in lines:
             line.batch_pk = batches.get((line.item_id, line.batch_no))
+        from inventory.models import BarcodeLabel
+
+        labels_printed = BarcodeLabel.all_objects.filter(
+            company_id=company_id, batch_id__in=[line.batch_pk for line in lines if line.batch_pk],
+            printed_count__gt=0).exists()
     if can_enter and line_form is None:
         line_form = forms.OpeningLineForm(company_id=company_id,
                                           branch_ids=branch_ids(request.user, company_id,
@@ -80,7 +85,8 @@ def _detail(request, company_id, pk, line_form=None, open_dialog=""):
         "total": sum((line.value for line in lines), Decimal("0")),
         "can_enter": can_enter, "can_post": can_post and document.editable and bool(lines),
         "can_reverse": can_post and document.status == DocumentStatus.POSTED,
-        "can_label": can_label,
+        "can_label": can_label, "print_form": forms.PrintForm() if can_label else None,
+        "labels_printed": can_label and labels_printed,
         "line_form": line_form, "reason_form": forms.ReasonForm(), "open_dialog": open_dialog,
     })
 

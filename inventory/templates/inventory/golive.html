@@ -1,0 +1,89 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}Go-live · Inventory{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+    <link rel="stylesheet" href="{% static 'reports/css/report.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:dashboard' %}">Inventory</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Go-live
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Go-live</h1>
+            <p class="page__sub">Everything to have in place before the switch: masters, people, the count day and its labels, and the parallel run with the old system.</p>
+        </div>
+    </div>
+
+    {% if sections %}
+        <div class="report-kpis">
+            <div class="report-kpi{% if totals.fail %} report-kpi--danger{% endif %}"><span class="report-kpi__value">{{ totals.fail|default:0 }}</span><span class="report-kpi__label">To fix</span></div>
+            <div class="report-kpi{% if totals.warn %} report-kpi--warning{% endif %}"><span class="report-kpi__value">{{ totals.warn|default:0 }}</span><span class="report-kpi__label">To look at</span></div>
+            <div class="report-kpi report-kpi--success"><span class="report-kpi__value">{{ totals.ok|default:0 }}</span><span class="report-kpi__label">Ready</span></div>
+        </div>
+        <div class="grid grid--2">
+            {% for title, checks in sections %}
+                <div class="card">
+                    <div class="card__head"><h2>{{ forloop.counter }}. {{ title }}</h2></div>
+                    <div class="table-wrap"><table class="table">
+                        <tbody>
+                            {% for check in checks %}
+                                <tr>
+                                    <td style="width: 6rem">{% if check.status == "ok" %}<span class="badge badge--success">Ready</span>{% elif check.status == "fail" %}<span class="badge badge--danger">Fix</span>{% elif check.status == "warn" %}<span class="badge badge--warning">Look at</span>{% else %}<span class="badge badge--info">Note</span>{% endif %}</td>
+                                    <td><strong>{{ check.title }}</strong>{% if check.detail %}<br><span class="t-muted">{{ check.detail }}</span>{% endif %}</td>
+                                    <td class="numeric">{% if check.url and check.status != "ok" %}<a href="{% url check.url %}">Open</a>{% endif %}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table></div>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head"><h2>Count sheets</h2></div>
+            <form class="card__body stack" method="get" action="{% url 'inventory:golive_count_sheet' %}">
+                <p class="t-muted">One per store for the count day. The Excel sheet is the opening stock import's own layout: write the quantities (and batch and expiry), then import it under Opening stock → Import. Rows left without a quantity are skipped.</p>
+                {% for field in count_form.visible_fields %}{% include "leaves/includes/field.html" %}{% endfor %}
+                <div><button class="btn btn--primary" type="submit">Download</button></div>
+            </form>
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>Parallel run: compare with the old system</h2></div>
+            <form class="card__body stack" method="post" action="{% url 'inventory:golive_compare' %}" enctype="multipart/form-data" novalidate>
+                {% csrf_token %}
+                <p class="t-muted">During the weeks both systems run, export the old system's stock and upload it: every item (and store) whose quantity differs is listed.</p>
+                {% for field in compare_form.visible_fields %}{% include "leaves/includes/field.html" %}{% endfor %}
+                <div><button class="btn btn--primary" type="submit">Compare</button></div>
+            </form>
+        </div>
+    </div>
+
+    {% if comparison %}
+        <div class="card" id="comparison">
+            <div class="card__head"><h2>Comparison</h2><span class="spacer"></span>
+                {% if comparison.differ %}<span class="badge badge--warning">{{ comparison.differ }} of {{ comparison.rows|length }} differ</span>{% else %}<span class="badge badge--success">Everything matches</span>{% endif %}</div>
+            {% if comparison.problems %}
+                <div class="card__body"><div class="alert alert--warning"><strong>Rows not compared:</strong><ul>{% for p in comparison.problems|slice:":20" %}<li>{{ p }}</li>{% endfor %}</ul>{% if comparison.problems|length > 20 %}… and {{ comparison.problems|length|add:"-20" }} more.{% endif %}</div></div>
+            {% endif %}
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>Item</th><th>Store</th><th class="numeric">Old system</th><th class="numeric">Software</th><th class="numeric">Difference</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for row in comparison.rows %}
+                        {% if row.status != "Same" %}
+                            <tr><td>{{ row.item }} {{ row.name }}</td><td>{{ row.store }}</td><td class="numeric">{{ row.old.normalize }} {{ row.unit }}</td><td class="numeric">{{ row.ours.normalize }}</td><td class="numeric">{{ row.difference.normalize }}</td><td><span class="badge badge--warning">{{ row.status }}</span></td></tr>
+                        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table></div>
+        </div>
+    {% endif %}
+{% endblock %}
+{% block extra_js %}{% include "inventory/_js.html" %}{% endblock %}

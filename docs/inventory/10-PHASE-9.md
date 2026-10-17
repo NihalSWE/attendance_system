@@ -65,5 +65,5 @@ scopes each needs.
 
 ## 6. Next
 
-Phase 10 - go-live: masters loaded, the stock count day, labels, training,
+Phase 10 - go-live ([11-GO-LIVE.md](11-GO-LIVE.md)): masters loaded, the stock count day, labels, training,
 the parallel run, then the switch.

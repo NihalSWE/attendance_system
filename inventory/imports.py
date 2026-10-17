@@ -513,6 +513,11 @@ def _check_opening(actor, company_id, data, work_date):
         row = Row("Opening stock", raw["line"],
                   f"{store_code} · {item_code} {raw.get('batch_no', '')}".strip())
         p = []
+        if not (raw.get("qty") or "").strip():
+            # A count sheet's row nobody wrote a quantity on: not counted (Phase 10).
+            row.action, row.note = "skip", "No quantity: not counted, left out."
+            rows.append(row)
+            continue
         store, item = stores.get(store_code), items.get(item_code)
         if store is None:
             p.append(f"Store {store_code or '(empty)'} is not set up.")

@@ -6400,3 +6400,27 @@ Details in [inventory/10-PHASE-9.md](inventory/10-PHASE-9.md); client guide
   new endpoint and field.
 
 **Deploy:** pull, collectstatic, restart; API keys with the new scopes.
+
+### Inventory Phase 10: go-live tools and runbook — 2026-10-17
+
+Details in [inventory/11-GO-LIVE.md](inventory/11-GO-LIVE.md); training
+sheets in [inventory/training/](inventory/training/).
+
+- Inventory → Go-live: the readiness checklist (decisions, masters, people
+  and permissions with someone to approve, opening stock and its labels, the
+  ledger, mail and alerts), each item linking to where it is fixed; the same
+  as `python manage.py golive_check --company ID` (exit 1 while anything
+  must be fixed).
+- Count sheets per store (Excel in the opening stock import's own layout,
+  or PDF): count, fill in, import; rows without a quantity are skipped as
+  not counted.
+- Opening stock → Print all labels (a label per batch, per item without
+  batches).
+- Parallel run: upload the old system's stock list and see every item and
+  store that differs (or download it as Excel).
+- The go-live runbook (timeline, count day, parallel run, switch criteria,
+  rollback, hypercare) and one training sheet per role.
+- Tests: `inventory.tests_golive` 5.
+
+**Deploy:** pull, collectstatic, restart. The go-live itself is on site with
+the client, following the runbook.

@@ -176,6 +176,13 @@ BRANCH_PAGES = {
                     "order_detail", "order_output", "order_labels", "order_action", "consumption_detail",
                     "consumption_line_add", "consumption_line_remove", "consumption_scan",
                     "consumption_action", "report")},
+    # Phase 10: going live - the checklist to whoever enters or approves the
+    # count; count sheets to who enters it; the comparison to viewers; the
+    # opening stock's labels to "Print and reprint labels".
+    "inventory:golive": ("inventory.adjust", "inventory.adjust_approve"),
+    "inventory:golive_count_sheet": "inventory.adjust",
+    "inventory:golive_compare": ("inventory.view", "inventory.adjust", "inventory.adjust_approve"),
+    "inventory:opening_labels": "inventory.labels",
     # Phase 8: the AI order inbox to whoever enters or confirms sales orders
     # (the services check again; confirming needs "Confirm sales orders" in
     # the order's branch). Its settings are the owner's and admin's: not listed.
