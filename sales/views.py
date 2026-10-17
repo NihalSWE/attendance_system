@@ -172,12 +172,17 @@ def order_list(request):
                   "new_form": form or (_order_form(request) if can_new else None)})
 
 
+def _line_form(request, data=None):
+    return forms.OrderLineForm(data, company_id=request.company_id,
+                               branch_ids=branch_ids(request.user, request.company_id, "sales.order"))
+
+
 def _order_page(request, pk, line_form=None, open_dialog=""):
     company_id = request.company_id
     _, order = orders.get_order(actor=request.user, company_id=company_id, pk=pk, code=VIEW)
     branch = order.warehouse.branch_id
     with use_company(company_id):
-        lines = list(order.lines.select_related("item__base_uom", "uom").order_by("pk"))
+        lines = list(order.lines.select_related("item__base_uom", "uom", "warehouse").order_by("pk"))
         figures = orders.totals(order)
         available = orders.availability(order) if order.status == "draft" else {}
         over, credit_message = orders.credit_check(order) if order.status == "draft" else (False, "")
@@ -185,15 +190,18 @@ def _order_page(request, pk, line_form=None, open_dialog=""):
     for line in lines:
         line.available = available.get(line.pk)
     may_order = access.may(request.user, company_id, "sales.order", branch)
+    stores = {line.warehouse_id for line in lines}
     return render(request, "sales/order_detail.html", {
+        "mixed": bool(stores - {order.warehouse_id}),
         "order": order, "lines": lines, "totals": figures, "deliveries": made,
         "over_credit": over, "credit_message": credit_message,
         "can_edit": order.status == "draft" and may_order, "may_order": may_order,
         "can_confirm": order.status == "draft" and bool(lines) and access.may(request.user, company_id,
                                                                               "sales.approve", branch),
-        "can_deliver": order.deliverable and access.may(request.user, company_id, "sales.deliver", branch),
-        "line_form": line_form or (forms.OrderLineForm(company_id=company_id)
-                                   if order.status == "draft" and may_order else None),
+        "can_deliver": order.deliverable and any(
+            access.may(request.user, company_id, "sales.deliver", store.branch_id)
+            for store in deliveries.open_stores(order)),
+        "line_form": line_form or (_line_form(request) if order.status == "draft" and may_order else None),
         "credit_form": forms.NoteForm(auto_id="credit_%s"), "cancel_form": forms.NoteForm(auto_id="cancel_%s"),
         "close_form": forms.NoteForm(auto_id="close_%s"), "open_dialog": open_dialog,
     })
@@ -214,7 +222,7 @@ def order_line_add(request, pk):
     if bail:
         return bail
     orders.get_order(actor=request.user, company_id=company_id, pk=pk)
-    form = forms.OrderLineForm(request.POST, company_id=company_id)
+    form = _line_form(request, request.POST)
     if form.is_valid():
         try:
             orders.add_line(actor=request.user, company_id=company_id, order_id=pk, values=form.cleaned_data)
@@ -245,16 +253,21 @@ def order_action(request, pk, action):
         from inventory.doc_common import local_today
 
         try:
-            delivery = deliveries.create_delivery(actor=request.user, company_id=company_id, values={
-                "order": order, "delivery_date": max(order.order_date, local_today(order.company)),
-                "vehicle_no": "", "driver": "", "note": ""})
+            made, skipped = deliveries.deliver_order(
+                actor=request.user, company_id=company_id, order_id=order.pk,
+                delivery_date=max(order.order_date, local_today(order.company)))
         except ValidationError as exc:
             messages.error(request, "; ".join(exc.messages))
             return redirect("sales:order_detail", pk=pk)
-        short = getattr(delivery, "shortages", [])
-        messages.success(request, f"{delivery.number} drafted from the reserved stock." + (
-            " Short: " + "; ".join(short) + "." if short else " Check it or scan the cartons, then post it."))
-        return redirect("sales:delivery_detail", pk=delivery.pk)
+        # One challan per store (Phase 8).
+        short = [s for delivery in made for s in getattr(delivery, "shortages", [])]
+        names = ", ".join(f"{d.number} ({d.warehouse.code})" for d in made) if len(made) > 1 else made[0].number
+        messages.success(request, f"{names} drafted from the reserved stock." + (
+            " Short: " + "; ".join(short) + "." if short else " Check, or scan the cartons, then post.")
+            + (" Not drafted: " + "; ".join(skipped) + "." if skipped else ""))
+        if len(made) > 1:
+            return redirect("sales:order_detail", pk=pk)
+        return redirect("sales:delivery_detail", pk=made[0].pk)
     simple = {
         "confirm": (lambda cid: orders.confirm(actor=request.user, company_id=cid, order_id=pk, credit_note=note),
                     "{obj.number} confirmed: stock reserved."),
@@ -299,8 +312,8 @@ def delivery_list(request):
         if done:
             return done
     with use_company(company_id):
-        rows = access.scope_warehouses(Delivery.objects.select_related("order__customer", "order__warehouse"),
-                                       request.user, company_id, VIEW, field="order__warehouse__branch")
+        rows = access.scope_warehouses(Delivery.objects.select_related("order__customer", "warehouse"),
+                                       request.user, company_id, VIEW, field="warehouse__branch")
     return _list(request, "sales/delivery_list.html", rows,
                  ("number", "order__number", "order__customer__name", "vehicle_no", "driver"),
                  ("number", "delivery_date", "order__customer__name", "order__number", "vehicle_no", "status", None),
@@ -312,7 +325,7 @@ def delivery_list(request):
 def _delivery_page(request, pk, line_form=None, open_dialog=""):
     company_id = request.company_id
     _, delivery = deliveries.get_delivery(actor=request.user, company_id=company_id, pk=pk, code=VIEW)
-    branch = delivery.order.warehouse.branch_id
+    branch = delivery.warehouse.branch_id
     with use_company(company_id):
         lines = list(delivery.lines.select_related("item__base_uom", "batch", "location", "uom", "label")
                      .order_by("pk"))
@@ -324,7 +337,7 @@ def _delivery_page(request, pk, line_form=None, open_dialog=""):
         "can_edit": editable, "can_post": editable and bool(lines),
         "can_reverse": delivery.status == "posted" and may,
         "can_invoice": delivery.status == "posted" and invoice is None and access.may(
-            request.user, company_id, "sales.invoice", branch),
+            request.user, company_id, "sales.invoice", delivery.order.warehouse.branch_id),
         "line_form": line_form or (forms.DeliveryLineForm(company_id=company_id, delivery=delivery)
                                    if editable else None),
         "reason_form": ReasonForm(), "open_dialog": open_dialog,

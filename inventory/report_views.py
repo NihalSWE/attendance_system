@@ -429,7 +429,7 @@ def _waiting(user, company_id):
         SalesOrder.objects.filter(status__in=["confirmed", "partly_delivered"]), "warehouse__branch", "sales:orders")
     add("Deliveries to invoice", "sales.invoice",
         Delivery.objects.filter(status="posted").exclude(invoices__status__in=["draft", "issued", "paid"]),
-        "order__warehouse__branch", "sales:deliveries")
+        "warehouse__branch", "sales:deliveries")
     return found
 
 
@@ -450,7 +450,7 @@ def _today(user, company_id, today):
     if any(access.may(user, company_id, c) for c in catalogue.SALES_CODES + ("sales.deliver",)):
         codes = catalogue.SALES_CODES + ("sales.deliver",)
         deliveries = access.scope_warehouses(Delivery.objects.filter(status="posted", delivery_date=today),
-                                             user, company_id, codes, field="order__warehouse__branch")
+                                             user, company_id, codes, field="warehouse__branch")
         invoices = access.scope_warehouses(
             SalesInvoice.objects.filter(status__in=["issued", "paid"], invoice_date=today),
             user, company_id, codes, field="delivery__order__warehouse__branch")

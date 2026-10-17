@@ -146,6 +146,82 @@ class RawMaterialSaleTests(SalesFixture, TestCase):
         self.assertEqual((invoice.amount, invoice.vat, invoice.total), (D("19000"), D("950"), D("19950")))
 
 
+class MixedStoreTests(SalesFixture, TestCase):
+    """Phase 8: one order, juice from finished goods and sugar from the raw material store."""
+
+    def setUp(self):
+        super().setUp()
+        Item.all_objects.filter(pk=self.sugar.pk).update(sale_price=D("95"), vat_rate=D("5"))
+        self.sugar = Item.all_objects.get(pk=self.sugar.pk)
+        self.s1 = Batch.all_objects.create(company=self.company, item=self.sugar, batch_no="S1", source="opening",
+                                           expiry_date=datetime.date(2027, 9, 30))
+        posting.post(company_id=self.company.pk, actor=self.owner, document_type="opening", document_id=2,
+                     move_type=MoveType.OPENING, work_date=datetime.date(2026, 9, 1), lines=[
+                         posting.Line(item=self.sugar, warehouse=self.rms, batch=self.s1, qty=D("500"),
+                                      unit_cost=D("80"))])
+        self.mixed = self.order(qty="120")                       # juice, from the order's store FGW
+        orders.add_line(**self.kw, order_id=self.mixed.pk, values={
+            "item": self.sugar, "warehouse": self.rms, "qty": D("200"), "uom": self.kg})
+
+    def test_one_order_two_stores_two_challans(self):
+        with use_company(self.company):
+            stores = dict(self.mixed.lines.values_list("item__code", "warehouse__code"))
+        self.assertEqual(stores, {"FG-0001": "FGW", "RM-0001": "RMS"})
+        orders.confirm(**self.kw, order_id=self.mixed.pk)
+        # Each line reserved in its own store.
+        self.assertEqual(self.on_hand(self.j1), (D("100"), D("100")))
+        self.assertEqual(self.on_hand(self.s1, self.rms), (D("500"), D("200")))
+
+        with self.assertRaisesMessage(ValidationError, "goes from FGW, RMS: choose the store"):
+            deliveries.create_delivery(**self.kw, values={"order": self.mixed, "delivery_date": DAY})
+        made, skipped = deliveries.deliver_order(**self.kw, order_id=self.mixed.pk, delivery_date=DAY)
+        self.assertEqual(([d.warehouse.code for d in made], skipped), (["FGW", "RMS"], []))
+        juice_dc, sugar_dc = made
+        with use_company(self.company):
+            self.assertEqual(set(juice_dc.lines.values_list("item__code", flat=True)), {"FG-0001"})
+            self.assertEqual(list(sugar_dc.lines.values_list("item__code", "qty")), [("RM-0001", D("200"))])
+            sugar_line = self.mixed.lines.get(item=self.sugar)
+        # A line goes out only on its own store's challan.
+        with self.assertRaisesMessage(ValidationError, "goes from RMS; this challan is from FGW"):
+            deliveries.add_line(**self.kw, delivery_id=juice_dc.pk,
+                                values={"order_line": sugar_line, "qty": D("1"), "uom": self.kg})
+        with self.assertRaisesMessage(ValidationError, "A draft delivery of this order from RMS is open"):
+            deliveries.create_delivery(**self.kw, values={"order": self.mixed, "warehouse": self.rms,
+                                                          "delivery_date": DAY})
+
+        deliveries.post_delivery(**self.kw, delivery_id=sugar_dc.pk)
+        self.assertEqual(SalesOrder.all_objects.get(pk=self.mixed.pk).status, "partly_delivered")
+        self.assertEqual(self.on_hand(self.s1, self.rms), (D("300"), D("0")))
+        deliveries.post_delivery(**self.kw, delivery_id=juice_dc.pk)
+        self.assertEqual(SalesOrder.all_objects.get(pk=self.mixed.pk).status, "delivered")
+        self.assertEqual(self.on_hand(self.j1), (D("0"), D("0")))
+        self.assertEqual(set(StockMove.all_objects.filter(document_type="delivery").values_list(
+            "document_id", "warehouse__code")), {(juice_dc.pk, "FGW"), (sugar_dc.pk, "RMS")})
+
+        # One invoice per challan; a return goes back to the challan's store.
+        sugar_bill = deliveries.create_invoice(**self.kw, delivery_id=sugar_dc.pk)
+        juice_bill = deliveries.create_invoice(**self.kw, delivery_id=juice_dc.pk)
+        self.assertEqual((sugar_bill.total, juice_bill.total), (D("19950"), D("3036")))   # 200 x 95 + 5 %; 120 x 22 + 15 %
+        back = deliveries.create_return(**self.kw, values={"delivery": sugar_dc, "return_date": DAY,
+                                                           "reason": "Wet bags"})
+        self.assertEqual(back.warehouse, self.rms)
+        self.assertEqual(posting.ledger_differences(self.company.pk), [])
+
+    def test_a_line_store_must_be_one_goods_are_sold_from(self):
+        quarantine = self.store("QRN", "Quarantine", Warehouse.Kind.QUARANTINE)
+        with self.assertRaisesMessage(ValidationError, "QRN is not a store goods are sold from"):
+            orders.add_line(**self.kw, order_id=self.mixed.pk, values={
+                "item": self.sugar, "warehouse": quarantine, "qty": D("1"), "uom": self.kg})
+
+    def test_reversing_a_challan_reserves_again_in_its_store(self):
+        orders.confirm(**self.kw, order_id=self.mixed.pk)
+        made, _ = deliveries.deliver_order(**self.kw, order_id=self.mixed.pk, delivery_date=DAY)
+        sugar_dc = next(d for d in made if d.warehouse == self.rms)
+        deliveries.post_delivery(**self.kw, delivery_id=sugar_dc.pk)
+        deliveries.reverse_delivery(**self.kw, delivery_id=sugar_dc.pk, reason="Wrong truck")
+        self.assertEqual(self.on_hand(self.s1, self.rms), (D("500"), D("200")))
+
+
 class RuleTests(SalesFixture, TestCase):
     def test_price_from_quantity_and_item_price(self):
         order = self.order(qty="600")

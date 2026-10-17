@@ -16,7 +16,7 @@
             <h1 class="page__title">{{ order.number }} {% with row=order %}{% include "sales/_status.html" %}{% endwith %}</h1>
             <p class="page__sub">
                 {{ order.customer.name }} · {{ order.order_date|date:"d M Y" }} · {{ order.get_source_display }}{% if order.customer_ref %} · their ref. {{ order.customer_ref }}{% endif %}
-                {% if order.delivery_date %} · deliver by {{ order.delivery_date|date:"d M Y" }}{% endif %} · from {{ order.warehouse }}
+                {% if order.delivery_date %} · deliver by {{ order.delivery_date|date:"d M Y" }}{% endif %} · from {{ order.warehouse }}{% if mixed %} and other stores (see each line){% endif %}
                 {% if order.confirmed_at %}<br>Confirmed by {{ order.confirmed_by.get_full_name|default:order.confirmed_by.email }} on {{ order.confirmed_at|date:"d M Y H:i" }}{% endif %}
                 {% if order.credit_note %}<br>Over the credit limit: {{ order.credit_note }}{% endif %}
                 {% if order.closed_note %}<br>{{ order.closed_note }}{% endif %}
@@ -51,12 +51,13 @@
             <span class="t-muted">Amount <span class="amount">{{ totals.amount|floatformat:2 }}</span> · VAT <span class="amount">{{ totals.vat|floatformat:2 }}</span> · Total <strong class="amount">{{ totals.total|floatformat:2 }}</strong></span></div>
         {% if lines %}
             <div class="table-wrap"><table class="table">
-                <thead><tr><th>Item</th><th class="numeric">Quantity</th><th class="numeric">Price</th><th class="numeric">Disc %</th><th class="numeric">VAT %</th><th class="numeric">Amount</th>
+                <thead><tr><th>Item</th>{% if mixed %}<th>From</th>{% endif %}<th class="numeric">Quantity</th><th class="numeric">Price</th><th class="numeric">Disc %</th><th class="numeric">VAT %</th><th class="numeric">Amount</th>
                     {% if order.status == "draft" %}<th class="numeric">Available now</th>{% else %}<th class="numeric">Reserved</th><th class="numeric">Delivered</th>{% endif %}<th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                     {% for line in lines %}
                         <tr>
                             <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                            {% if mixed %}<td>{{ line.warehouse.code }}</td>{% endif %}
                             <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
                             <td class="numeric">{{ line.unit_price|floatformat:2 }}</td>
                             <td class="numeric">{{ line.discount_pct.normalize }}</td>
@@ -79,8 +80,8 @@
     </div>
     {% if deliveries %}
         <div class="card"><div class="card__head"><h2>Deliveries</h2></div>
-            <div class="table-wrap"><table class="table"><thead><tr><th>Number</th><th>Date</th><th>Status</th></tr></thead><tbody>
-                {% for d in deliveries %}<tr><td><a href="{% url 'sales:delivery_detail' d.pk %}">{{ d.number }}</a></td><td>{{ d.delivery_date|date:"d M Y" }}</td><td>{% with row=d %}{% include "sales/_status.html" %}{% endwith %}</td></tr>{% endfor %}
+            <div class="table-wrap"><table class="table"><thead><tr><th>Number</th><th>From</th><th>Date</th><th>Status</th></tr></thead><tbody>
+                {% for d in deliveries %}<tr><td><a href="{% url 'sales:delivery_detail' d.pk %}">{{ d.number }}</a></td><td>{{ d.warehouse.code }}</td><td>{{ d.delivery_date|date:"d M Y" }}</td><td>{% with row=d %}{% include "sales/_status.html" %}{% endwith %}</td></tr>{% endfor %}
             </tbody></table></div></div>
     {% endif %}
     {% if line_form %}

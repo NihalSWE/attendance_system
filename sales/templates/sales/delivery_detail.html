@@ -15,7 +15,7 @@
         <div>
             <h1 class="page__title">{{ delivery.number }} {% with row=delivery %}{% include "sales/_status.html" %}{% endwith %}</h1>
             <p class="page__sub">
-                To {{ order.customer.name }} · {{ delivery.delivery_date|date:"d M Y" }} · for <a href="{% url 'sales:order_detail' order.pk %}">{{ order.number }}</a> · from {{ order.warehouse }}
+                To {{ order.customer.name }} · {{ delivery.delivery_date|date:"d M Y" }} · for <a href="{% url 'sales:order_detail' order.pk %}">{{ order.number }}</a> · from {{ delivery.warehouse }}
                 {% if delivery.vehicle_no %} · vehicle {{ delivery.vehicle_no }}{% endif %}{% if delivery.driver %} · {{ delivery.driver }}{% endif %}
                 {% if invoice %}<br>Invoiced on <a href="{% url 'sales:invoice_detail' invoice.pk %}">{{ invoice.number }}</a>{% endif %}
                 {% if delivery.reversed_at %}<br>Reversed {{ delivery.reversed_at|date:"d M Y H:i" }}: {{ delivery.reverse_reason }}{% endif %}
@@ -28,7 +28,7 @@
                 <button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">Add line</button>
             {% endif %}
             {% if can_post %}
-                <form method="post" action="{% url 'sales:delivery_action' delivery.pk 'post' %}" data-confirm="The goods leave {{ order.warehouse.code }} for {{ order.customer.name }}; their reservation is released." data-confirm-title="Post {{ delivery.number }}?" data-confirm-button="Post">{% csrf_token %}<button class="btn btn--primary" type="submit">Post</button></form>
+                <form method="post" action="{% url 'sales:delivery_action' delivery.pk 'post' %}" data-confirm="The goods leave {{ delivery.warehouse.code }} for {{ order.customer.name }}; their reservation is released." data-confirm-title="Post {{ delivery.number }}?" data-confirm-button="Post">{% csrf_token %}<button class="btn btn--primary" type="submit">Post</button></form>
             {% endif %}
             {% if can_invoice %}
                 <form method="post" action="{% url 'sales:delivery_action' delivery.pk 'invoice' %}">{% csrf_token %}<button class="btn btn--primary" type="submit">Make invoice</button></form>

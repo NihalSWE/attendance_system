@@ -118,7 +118,7 @@ def challan(delivery):
                                                     if order.delivery_address else ""), s["body"]),
                 Paragraph("<br/>".join(_esc(x) for x in (
                     f"Date: {delivery.delivery_date:%d %b %Y}", f"Order: {order.number}",
-                    f"From: {order.warehouse}",
+                    f"From: {delivery.warehouse}",
                     f"Vehicle: {delivery.vehicle_no}" if delivery.vehicle_no else "",
                     f"Driver: {delivery.driver}" if delivery.driver else "") if x), s["body"])]],
               colWidths=[100 * mm, 80 * mm], style=TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")])),

@@ -78,16 +78,24 @@ class OrderForm(ServiceForm):
 
 class OrderLineForm(ServiceForm):
     item = _choice(Item, "Item")
+    warehouse = _choice(Warehouse, "From store", required=False)
     uom = _choice(Uom, "Unit")
 
     class Meta:
         model = SalesOrderLine
-        fields = ("item", "qty", "uom", "unit_price", "discount_pct", "vat_rate", "note")
+        fields = ("item", "warehouse", "qty", "uom", "unit_price", "discount_pct", "vat_rate", "note")
         help_texts = {"unit_price": "Left empty: the customer's price list, else the item's sale price.",
-                      "vat_rate": "Left empty: the item's VAT."}
+                      "vat_rate": "Left empty: the item's VAT.",
+                      "warehouse": "Left empty: the order's store. Pick another to sell, say, sugar from "
+                                   "the raw material store on the same order."}
+
+    def __init__(self, *args, branch_ids=None, **kwargs):
+        self.branch_ids = branch_ids
+        super().__init__(*args, **kwargs)
 
     def limit_choices(self):
         self.fields["item"].queryset = self._active(Item).order_by("code")
+        self.fields["warehouse"].queryset = _sellable_stores(self)
         self.fields["uom"].queryset = self._active(Uom).order_by("code")
         for name in ("unit_price", "discount_pct", "vat_rate"):
             self.fields[name].required = False
@@ -99,10 +107,13 @@ class NoteForm(StyledFormMixin, forms.Form):
 
 class DeliveryForm(ServiceForm):
     order = _choice(SalesOrder, "Sales order")
+    warehouse = _choice(Warehouse, "From store", required=False)
 
     class Meta:
         model = Delivery
-        fields = ("order", "delivery_date", "vehicle_no", "driver", "note")
+        fields = ("order", "warehouse", "delivery_date", "vehicle_no", "driver", "note")
+        help_texts = {"warehouse": "Needed only when the order goes from more than one store: one challan "
+                                   "per store."}
         widgets = {"delivery_date": date_widget()}
 
     def limit_choices(self):
@@ -110,6 +121,7 @@ class DeliveryForm(ServiceForm):
             company_id=self.company_id, status__in=["confirmed", "partly_delivered"]).select_related(
             "customer").order_by("-order_date")
         self.fields["order"].label_from_instance = lambda o: f"{o.number} · {o.customer.name}"
+        self.fields["warehouse"].queryset = _sellable_stores(self)
 
 
 class DeliveryLineForm(ServiceForm):
@@ -128,15 +140,16 @@ class DeliveryLineForm(ServiceForm):
 
     def limit_choices(self):
         order = self.delivery.order if self.delivery else None
-        self.fields["order_line"].queryset = (SalesOrderLine.all_objects.filter(order=order).select_related(
-            "item__base_uom") if order else SalesOrderLine.all_objects.none())
+        self.fields["order_line"].queryset = (SalesOrderLine.all_objects.filter(
+            order=order, warehouse=self.delivery.warehouse).select_related("item__base_uom")
+            if order else SalesOrderLine.all_objects.none())
         self.fields["order_line"].label_from_instance = lambda l: (
             f"{l.item.code} {l.item.name} · {l.qty_open_base.normalize():f} {l.item.base_uom.code} to deliver")
         self.fields["batch"].queryset = Batch.all_objects.filter(company_id=self.company_id).select_related(
             "item").order_by("item__code", "expiry_date")
         self.fields["batch"].label_from_instance = lambda b: (
             f"{b.item.code} · {b.batch_no}" + (f" · exp {b.expiry_date:%d %b %Y}" if b.expiry_date else ""))
-        self.fields["location"].queryset = (self._active(Location).filter(warehouse=order.warehouse)
+        self.fields["location"].queryset = (self._active(Location).filter(warehouse=self.delivery.warehouse)
                                             if order else Location.all_objects.none())
         self.fields["uom"].queryset = self._active(Uom).order_by("code")
 

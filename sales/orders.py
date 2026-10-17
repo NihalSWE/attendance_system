@@ -10,8 +10,13 @@ quantity" the line reaches), else the item's sale price.
 Partly delivered -> Delivered; Closed when the rest will not go; Cancelled
 while nothing is delivered.
 
+**Stores** (Phase 8): each line goes from its own store - the order's unless
+it names another (juice from finished goods, sugar from the raw material
+store, on one order). A line from another branch's store needs
+``sales.order`` there too.
+
 **Reservation**: confirming reserves usable stock (released, unexpired
-batches in the store, first expiry first) for every line. Reserved stock
+batches in the line's store, first expiry first) for every line. Reserved stock
 cannot be issued, used or transferred - only delivered. What could not be
 reserved is shown as short; "Reserve again" tries later (after production).
 Delivering releases what it delivers; cancelling or closing releases the rest.
@@ -57,7 +62,9 @@ FOUR = Decimal("0.0001")
 Status = SalesOrder.Status
 FIELDS = ("customer", "warehouse", "order_date", "delivery_date", "source", "customer_ref", "delivery_address",
           "note")
-LINE_FIELDS = ("item", "qty", "uom", "unit_price", "discount_pct", "vat_rate", "note")
+LINE_FIELDS = ("item", "warehouse", "qty", "uom", "unit_price", "discount_pct", "vat_rate", "note")
+#: Stores whose stock is not for sale.
+NOT_SOLD_FROM = ("quarantine", "rejected", "transit")
 
 
 # --------------------------------------------------------------------------
@@ -137,6 +144,14 @@ def price_for(customer, item, uom, qty, day):
 # Sales orders
 # --------------------------------------------------------------------------
 
+def check_store(warehouse, company_id):
+    """A store goods may be sold from: active, this company's, and not quarantine, rejected or transit."""
+    if warehouse is None or warehouse.status != ActiveStatus.ACTIVE or warehouse.company_id != company_id:
+        raise ValidationError({"warehouse": "Choose an active store."})
+    if warehouse.kind in NOT_SOLD_FROM:
+        raise ValidationError({"warehouse": f"{warehouse.code} is not a store goods are sold from."})
+
+
 def get_order(*, actor, company_id, pk, code="sales.order"):
     order = get(SalesOrder, company_id, pk, "Sales order")
     return require(actor, company_id, code, order.warehouse.branch_id), order
@@ -160,10 +175,7 @@ def create_order(*, actor, company_id, values):
     customer, warehouse = values.get("customer"), values.get("warehouse")
     if customer is None or customer.status != ActiveStatus.ACTIVE:
         raise ValidationError({"customer": "Choose an active customer."})
-    if warehouse is None or warehouse.status != ActiveStatus.ACTIVE:
-        raise ValidationError({"warehouse": "Choose an active store."})
-    if warehouse.kind in ("quarantine", "rejected", "transit"):
-        raise ValidationError({"warehouse": f"{warehouse.code} is not a store goods are sold from."})
+    check_store(warehouse, company_id)
     if values.get("order_date") is None:
         raise ValidationError({"order_date": "Give the date."})
     values.setdefault("source", SalesOrder.Source.MANUAL)
@@ -188,6 +200,12 @@ def add_line(*, actor, company_id, order_id, values):
     item = values.get("item")
     if item is None:
         raise ValidationError({"item": "Choose the item."})
+    # Each line goes from its own store (the order's unless it names another):
+    # juice from finished goods and sugar from the raw material store, one order.
+    warehouse = values["warehouse"] = values.get("warehouse") or order.warehouse
+    check_store(warehouse, company_id)
+    if warehouse.pk != order.warehouse_id:
+        require(actor, company_id, "sales.order", warehouse.branch_id)
     factor = unit_factor(item, values.get("uom"))
     check_qty(item, values.get("qty"), factor)
     if values.get("unit_price") is None:
@@ -251,12 +269,12 @@ def reserve_order(order, day=None):
     expiry first. Returns ``[shortage messages]``. Call inside a transaction."""
     day = day or order.order_date
     short = []
-    for line in SalesOrderLine.all_objects.filter(order=order).select_related("item__base_uom"):
+    for line in SalesOrderLine.all_objects.filter(order=order).select_related("item__base_uom", "warehouse"):
         want = line.qty_open_base - line.qty_reserved_base
         if want <= 0:
             continue
         changes = []
-        for row in fefo.usable_rows(order.company_id, line.item, order.warehouse, day):
+        for row in fefo.usable_rows(order.company_id, line.item, line.warehouse, day):
             if want <= 0:
                 break
             take = min(row.available, want)
@@ -275,7 +293,8 @@ def reserve_order(order, day=None):
             line.qty_reserved_base += sum((qty for _b, qty in changes), Decimal("0"))
             line.save(update_fields=["qty_reserved_base"])
         if want > 0:
-            short.append(f"{line.item.code} short by {want.normalize():f} {line.item.base_uom.code}")
+            short.append(f"{line.item.code} short by {want.normalize():f} {line.item.base_uom.code}"
+                         + (f" in {line.warehouse.code}" if line.warehouse_id != order.warehouse_id else ""))
     return short
 
 
@@ -394,8 +413,8 @@ def refresh_status(order):
 def availability(order):
     """``{line_id: usable stock not reserved for other orders}`` for a draft's lines."""
     out = {}
-    for line in SalesOrderLine.all_objects.filter(order=order).select_related("item"):
-        rows = fefo.usable_rows(order.company_id, line.item, order.warehouse, order.order_date)
+    for line in SalesOrderLine.all_objects.filter(order=order).select_related("item", "warehouse"):
+        rows = fefo.usable_rows(order.company_id, line.item, line.warehouse, order.order_date)
         out[line.pk] = sum((r.available for r in rows), Decimal("0")) + line.qty_reserved_base
     return out
 

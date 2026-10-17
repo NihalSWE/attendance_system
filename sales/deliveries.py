@@ -1,7 +1,8 @@
 """Delivery challans, invoices and sales returns (Phase 6).
 
-**Delivery** (``sales.deliver`` in the order's store branch): against a
-confirmed order. Started from the order, it is filled from the stock the
+**Delivery** (``sales.deliver`` in the challan's store branch): against a
+confirmed order, one challan per store (Phase 8) - an order with juice from
+finished goods and sugar from the raw material store goes out on two. Started from the order, it is filled from the stock the
 order reserved, first expiry first; package labels can be scanned in. A
 delivery may use stock reserved for its own order, and free stock - never
 another order's reservation. Posting takes the goods out, releases the
@@ -53,7 +54,17 @@ def _draft(row):
 
 def get_delivery(*, actor, company_id, pk, code="sales.deliver"):
     row = get(Delivery, company_id, pk, "Delivery")
-    return require(actor, company_id, code, row.order.warehouse.branch_id), row
+    return require(actor, company_id, code, row.warehouse.branch_id), row
+
+
+def open_stores(order):
+    """The stores with something still to deliver on ``order``, the order's own first."""
+    found = {}
+    lines = SalesOrderLine.all_objects.filter(order=order).select_related("warehouse").order_by("pk")
+    for line in sorted(lines, key=lambda l: l.warehouse_id != order.warehouse_id):
+        if line.qty_open_base > 0:
+            found.setdefault(line.warehouse_id, line.warehouse)
+    return list(found.values())
 
 
 def _rows_for_line(order_line, warehouse, day):
@@ -82,7 +93,7 @@ def _rows_for_line(order_line, warehouse, day):
 
 @transaction.atomic
 def create_delivery(*, actor, company_id, values, fill=True):
-    values = _writable(values, ("order", "delivery_date", "vehicle_no", "driver", "note"))
+    values = _writable(values, ("order", "warehouse", "delivery_date", "vehicle_no", "driver", "note"))
     order = values.get("order")
     if order is None:
         raise ValidationError({"order": "Choose the sales order."})
@@ -92,20 +103,31 @@ def create_delivery(*, actor, company_id, values, fill=True):
                                         "confirmed order is delivered."})
     if values.get("delivery_date") is None:
         raise ValidationError({"delivery_date": "Give the date."})
-    membership = require(actor, company_id, "sales.deliver", order.warehouse.branch_id)
+    pending = open_stores(order)
+    warehouse = values.get("warehouse")
+    if warehouse is None:
+        if len(pending) > 1:
+            raise ValidationError({"warehouse": f"{order.number} goes from "
+                                                f"{', '.join(w.code for w in pending)}: choose the store."})
+        warehouse = pending[0] if pending else order.warehouse
+    if warehouse.pk not in {w.pk for w in pending}:
+        raise ValidationError({"warehouse": f"Nothing is left to deliver on {order.number} from {warehouse.code}."})
+    values["warehouse"] = warehouse
+    membership = require(actor, company_id, "sales.deliver", warehouse.branch_id)
     short = []
     with use_company(company_id):
-        if order.deliveries.filter(status="draft").exists():
-            raise ValidationError({"order": "A draft delivery of this order is open: post or cancel it first."})
+        if order.deliveries.filter(status="draft", warehouse=warehouse).exists():
+            raise ValidationError({"order": f"A draft delivery of this order from {warehouse.code} is open: "
+                                            "post or cancel it first."})
         row = Delivery(company=membership.company, created_by=actor, updated_by=actor,
                        number=posting.next_number(company_id, Delivery.DOC_TYPE, Delivery.PREFIX,
                                                   values["delivery_date"].year), **values)
         row.full_clean()
         row.save()
         if fill:
-            for line in order.lines.select_related("item__base_uom", "uom"):
+            for line in order.lines.filter(warehouse=warehouse).select_related("item__base_uom", "uom"):
                 want = line.qty_open_base
-                for balance in _rows_for_line(line, order.warehouse, row.delivery_date):
+                for balance in _rows_for_line(line, warehouse, row.delivery_date):
                     if want <= 0:
                         break
                     take = min(balance.free_for_line, want)
@@ -118,9 +140,38 @@ def create_delivery(*, actor, company_id, values, fill=True):
                     want -= take
                 if want > 0:
                     short.append(f"{line.item.code} short by {want.normalize():f} {line.item.base_uom.code}")
-        audit(actor, membership, "sales.delivery.created", row, after={"number": row.number, "order": order.number})
+        audit(actor, membership, "sales.delivery.created", row,
+              after={"number": row.number, "order": order.number, "store": warehouse.code})
     row.shortages = short
     return row
+
+
+@transaction.atomic
+def deliver_order(*, actor, company_id, order_id, delivery_date):
+    """Draft a challan from every store with something left to deliver on the
+    order (and no draft open there), from the reserved stock.
+
+    Returns ``(made, skipped)``: the new drafts, and why a store got none
+    (a draft already open, or no "Deliver goods" in its branch).
+    """
+    from inventory.access import may
+
+    order = get(SalesOrder, company_id, order_id, "Sales order")
+    made, skipped = [], []
+    for warehouse in open_stores(order):
+        if not may(actor, company_id, "sales.deliver", warehouse.branch_id):
+            skipped.append(f"{warehouse.code}: you do not deliver from there")
+            continue
+        if Delivery.all_objects.filter(order=order, warehouse=warehouse, status="draft").exists():
+            skipped.append(f"{warehouse.code}: a draft is open already")
+            continue
+        made.append(create_delivery(actor=actor, company_id=company_id, values={
+            "order": order, "warehouse": warehouse, "delivery_date": delivery_date,
+            "vehicle_no": "", "driver": "", "note": ""}))
+    if not made:
+        reason = "; ".join(skipped) if skipped else "nothing is left to deliver"
+        raise ValidationError(f"No delivery drafted: {reason}.")
+    return made, skipped
 
 
 @transaction.atomic
@@ -131,6 +182,9 @@ def add_line(*, actor, company_id, delivery_id, values, label=None):
     line = values.get("order_line")
     if line is None or line.order_id != row.order_id:
         raise ValidationError({"order_line": "Choose a line of this order."})
+    if line.warehouse_id != row.warehouse_id:
+        raise ValidationError({"order_line": f"{line.item.code} goes from {line.warehouse.code}; this challan is "
+                                             f"from {row.warehouse.code}."})
     item = line.item
     factor = unit_factor(item, values.get("uom"))
     check_qty(item, values.get("qty"), factor, active=False)
@@ -142,7 +196,7 @@ def add_line(*, actor, company_id, delivery_id, values, label=None):
         if qty_base + on_draft > line.qty_open_base:
             raise ValidationError({"qty": f"More than ordered: {line.qty_open_base - on_draft:f} "
                                           f"{item.base_uom.code} of {item.code} is still to deliver."})
-        rows = _rows_for_line(line, row.order.warehouse, row.delivery_date)
+        rows = _rows_for_line(line, row.warehouse, row.delivery_date)
         # What this draft already takes from each row is not free any more.
         taken = {}
         for other in row.lines.all():
@@ -167,7 +221,7 @@ def add_line(*, actor, company_id, delivery_id, values, label=None):
                                                         qty=qty, uom=uom, factor=line_factor))
                 want -= take
             if want > 0:
-                raise ValidationError(f"Not enough {item.code} free for this order in {row.order.warehouse.code}: "
+                raise ValidationError(f"Not enough {item.code} free for this order in {row.warehouse.code}: "
                                       f"{(qty_base - want).normalize():f} {item.base_uom.code} can go.")
             return made
         match = [b for b in rows if b.batch_id == (batch.pk if batch else None)
@@ -198,12 +252,13 @@ def add_line(*, actor, company_id, delivery_id, values, label=None):
 @transaction.atomic
 def scan_into_delivery(*, actor, company_id, delivery_id, code):
     _, row = get_delivery(actor=actor, company_id=company_id, pk=delivery_id)
-    values, label = label_from_scan(company_id, code, row.order.warehouse)
+    values, label = label_from_scan(company_id, code, row.warehouse)
     with use_company(company_id):
-        line = next((l for l in row.order.lines.filter(item=values["item"]).order_by("pk")
+        line = next((l for l in row.order.lines.filter(item=values["item"], warehouse=row.warehouse).order_by("pk")
                      if l.qty_open_base > 0), None)
     if line is None:
-        raise ValidationError(f"{values['item'].code} is not (or no longer) to deliver on {row.order.number}.")
+        raise ValidationError(f"{values['item'].code} is not (or no longer) to deliver on {row.order.number} "
+                              f"from {row.warehouse.code}.")
     return add_line(actor=actor, company_id=company_id, delivery_id=delivery_id, label=label, values={
         "order_line": line, "batch": values.get("batch"), "location": values.get("location"),
         "qty": values["qty"], "uom": values["uom"],
@@ -239,11 +294,14 @@ def post_delivery(*, actor, company_id, delivery_id):
                      .order_by("pk"))
         if not lines:
             raise ValidationError("Add what goes out before posting.")
+        store = row.warehouse
+        if any(line.order_line.warehouse_id != store.pk for line in lines):
+            raise ValidationError(f"Every line of {row.number} must go from {store.code}.")
         # Per order line: no more than it still needs; per row: never another order's reservation.
         per_line, per_row = {}, {}
         for line in lines:
             per_line[line.order_line_id] = per_line.get(line.order_line_id, Decimal("0")) + line.qty_base
-            key = (line.order_line_id, _balance_id(company_id, line, order.warehouse))
+            key = (line.order_line_id, _balance_id(company_id, line, store))
             per_row[key] = per_row.get(key, Decimal("0")) + line.qty_base
         for line_id, qty in per_line.items():
             order_line = SalesOrderLine.objects.select_for_update().get(pk=line_id)
@@ -266,7 +324,7 @@ def post_delivery(*, actor, company_id, delivery_id):
         moves = posting.post(
             company_id=company_id, actor=actor, document_type=Delivery.DOC_TYPE, document_id=row.pk,
             move_type=MoveType.DELIVERY, work_date=row.delivery_date,
-            lines=[posting.Line(item=l.item, warehouse=order.warehouse, location=l.location, batch=l.batch,
+            lines=[posting.Line(item=l.item, warehouse=store, location=l.location, batch=l.batch,
                                 qty=-l.qty_base, line_id=l.pk, note=f"{row.number} to {order.customer.name}"[:255])
                    for l in lines])
         for line_id, qty in per_line.items():
@@ -442,7 +500,7 @@ def create_return(*, actor, company_id, values):
         if delivery.status != Delivery.Status.POSTED:
             raise ValidationError({"delivery": f"{delivery.number} is not delivered."})
         values["customer"] = delivery.order.customer
-        values["warehouse"] = values.get("warehouse") or delivery.order.warehouse
+        values["warehouse"] = values.get("warehouse") or delivery.warehouse
     warehouse = values.get("warehouse")
     if values.get("customer") is None:
         raise ValidationError({"customer": "Choose the customer."})

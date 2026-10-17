@@ -134,7 +134,9 @@ class SalesOrder(TenantOwned, ActorTracked):
     number = models.CharField(max_length=32)
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="orders")
     warehouse = models.ForeignKey("inventory.Warehouse", on_delete=models.PROTECT, related_name="+",
-                                  verbose_name="Deliver from store")
+                                  verbose_name="Deliver from store",
+                                  help_text="The order's store: its branch, and the store a line uses "
+                                            "unless the line names another.")
     order_date = models.DateField()
     delivery_date = models.DateField("Deliver by", null=True, blank=True)
     source = models.CharField(max_length=16, choices=Source.choices, default=Source.MANUAL)
@@ -163,6 +165,10 @@ class SalesOrder(TenantOwned, ActorTracked):
 class SalesOrderLine(TenantOwned):
     order = models.ForeignKey(SalesOrder, on_delete=models.CASCADE, related_name="lines")
     item = models.ForeignKey("inventory.Item", on_delete=models.PROTECT, related_name="+")
+    # Phase 8: each line goes from its own store - juice from finished goods,
+    # sugar from the raw material store - on one order.
+    warehouse = models.ForeignKey("inventory.Warehouse", on_delete=models.PROTECT, related_name="+",
+                                  verbose_name="From store")
     qty = models.DecimalField("Quantity", **QTY, validators=[MinValueValidator(FOUR)])
     uom = models.ForeignKey("inventory.Uom", on_delete=models.PROTECT, related_name="+")
     factor = _factor()
@@ -224,6 +230,9 @@ class Delivery(TenantOwned, ActorTracked):
 
     number = models.CharField(max_length=32)
     order = models.ForeignKey(SalesOrder, on_delete=models.PROTECT, related_name="deliveries")
+    # Phase 8: one challan per store - the goods leave from here.
+    warehouse = models.ForeignKey("inventory.Warehouse", on_delete=models.PROTECT, related_name="+",
+                                  verbose_name="From store")
     delivery_date = models.DateField()
     vehicle_no = models.CharField("Vehicle no.", max_length=32, blank=True)
     driver = models.CharField("Driver", max_length=128, blank=True)

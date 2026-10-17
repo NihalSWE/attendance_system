@@ -1,5 +1,7 @@
 """Sales pages: every form POSTed through order -> delivery -> invoice -> return."""
 
+import datetime
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -80,6 +82,27 @@ class SalesPageTests(SalesFixture, TestCase):
         self.client.post(reverse("sales:price_list_detail", args=[retailer.pk]),
                          {"item": self.juice.pk, "uom": self.pcs.pk, "price": "24"})
         self.assertContains(self.client.get(reverse("sales:price_list_detail", args=[retailer.pk])), "24.00")
+
+    def test_a_mixed_store_order_through_the_pages(self):
+        from inventory.models import Batch, Item, MoveType
+        from inventory import posting
+
+        Item.all_objects.filter(pk=self.sugar.pk).update(sale_price=D("95"))
+        s1 = Batch.all_objects.create(company=self.company, item=self.sugar, batch_no="S1", source="opening")
+        posting.post(company_id=self.company.pk, actor=self.owner, document_type="opening", document_id=2,
+                     move_type=MoveType.OPENING, work_date=datetime.date(2026, 9, 1), lines=[
+                         posting.Line(item=self.sugar, warehouse=self.rms, batch=s1, qty=D("50"), unit_cost=D("80"))])
+        order = self.order(qty="10")
+        self.client.post(reverse("sales:order_line_add", args=[order.pk]), {
+            "item": self.sugar.pk, "warehouse": self.rms.pk, "qty": "20", "uom": self.kg.pk})
+        page = self.client.get(reverse("sales:order_detail", args=[order.pk]))
+        self.assertContains(page, "<th>From</th>", html=False)
+        self.client.post(reverse("sales:order_action", args=[order.pk, "confirm"]))
+        page = self.client.post(reverse("sales:order_action", args=[order.pk, "deliver"]), follow=True)
+        made = list(Delivery.all_objects.order_by("pk"))
+        self.assertEqual([d.warehouse.code for d in made], ["FGW", "RMS"])
+        self.assertContains(page, f"{made[0].number} (FGW), {made[1].number} (RMS) drafted")
+        self.assertContains(self.client.get(reverse("sales:delivery_detail", args=[made[1].pk])), "from RMS")
 
     def test_over_the_credit_limit_asks_why(self):
         self.customer.credit_limit = D("1000")

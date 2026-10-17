@@ -653,7 +653,7 @@ def _invoices(ctx):
 
     f = ctx.f
     return SalesInvoice.all_objects.filter(
-        company_id=ctx.company_id, delivery__order__warehouse_id__in=ctx.store_ids,
+        company_id=ctx.company_id, delivery__warehouse_id__in=ctx.store_ids,
         invoice_date__gte=f.date_from, invoice_date__lte=f.date_to,
         status__in=[SalesInvoice.Status.ISSUED, SalesInvoice.Status.PAID])
 
