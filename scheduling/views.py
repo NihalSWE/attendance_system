@@ -41,9 +41,12 @@ from scheduling.forms import (
     ShiftForm,
     ShiftStatusForm,
     WeeklyOffForm,
+    WorkingDayForm,
 )
 from scheduling.calendar import WEEKLY_OFF, WorkCalendar
-from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
+from scheduling.models import (
+    CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule, WorkingDay,
+)
 
 
 def _form_page(request, *, form, title, submit_label, action, success, explanation=""):
@@ -621,3 +624,128 @@ def holiday_cancel(request, pk):
             messages.success(request, f"{holiday.name} cancelled.")
         return redirect("scheduling:holiday_list")
     return render(request, "scheduling/holiday_cancel.html", {"holiday": holiday})
+
+
+# --------------------------------------------------------------------------
+# Working days (2026-10-17)
+# --------------------------------------------------------------------------
+
+def _added_messages(request, working):
+    """What adding a working day changed, said after the save."""
+    messages.success(
+        request,
+        f"{working.work_date:%a %d %b %Y} is now a working day"
+        f"{' for ' + working.branch.name if working.branch_id else ''}. "
+        "Its attendance is being worked out again.",
+    )
+    if working.leave_around:
+        messages.warning(
+            request,
+            "Leave spans this date for: " + "; ".join(working.leave_around)
+            + ". Their leave did not include it, so they show absent unless their "
+            "leave is changed.",
+        )
+    if working.cleared_overtime:
+        count = len(working.cleared_overtime)
+        messages.info(
+            request,
+            f"{count} overtime decision{'' if count == 1 else 's'} on this date "
+            f"{'was' if count == 1 else 'were'} dropped and will be worked out again.",
+        )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def working_day_list(request):
+    """The dates worked although a weekly off falls on them, and adding one.
+
+    The Add modal posts here; a refused form comes back on this page with the
+    modal open and the reasons in it.
+    """
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    membership = require_company_membership(request.user, company_id)
+    can_manage = membership.role in STRUCTURE_ROLES
+
+    today = timezone.localdate()
+    year = _year_or(request.GET.get("year"), today.year)
+    status = request.GET.get("status", "").strip()
+    raw_branch = request.GET.get("branch", "").strip()
+
+    with use_company(company_id):
+        branches = visible_branches(membership).order_by("name")
+        form = None
+        if can_manage:
+            form = WorkingDayForm(
+                request.POST if request.method == "POST" else None, branches=branches,
+                initial={"work_date": request.GET.get("date") or None},
+            )
+            if request.method == "POST" and form.is_valid():
+                try:
+                    working = services.add_working_day(
+                        actor=request.user, company_id=company_id, values=form.cleaned_data
+                    )
+                except ValidationError as exc:
+                    apply_service_errors(form, exc)
+                else:
+                    _added_messages(request, working)
+                    return redirect(
+                        f"{reverse('scheduling:working_day_list')}?year={working.work_date.year}")
+        elif request.method == "POST":
+            require_structure_manager(request.user, company_id)
+
+        queryset = WorkingDay.objects.select_related("branch", "created_by").filter(
+            work_date__year=year)
+        total = queryset.count()
+        if status in dict(WorkingDay.Status.choices):
+            queryset = queryset.filter(status=status)
+        branch_id = int(raw_branch) if raw_branch.isdigit() else None
+        if branch_id is not None:
+            queryset = queryset.filter(branch_id=branch_id)
+        filtered_total = queryset.count()
+        page = paginate(request, queryset.order_by("-work_date", "branch__name"),
+                        search=("reason", "branch__name", "status"),
+                        order=("work_date", "branch__name", "reason", "status", None))
+        years = sorted(
+            {d.year for d in WorkingDay.objects.dates("work_date", "year")}
+            | {today.year, today.year + 1},
+            reverse=True,
+        )
+
+    return render(request, "scheduling/working_day_list.html", {
+        "page": page,
+        "form": form,
+        "open_add": bool(form is not None and form.is_bound and form.errors)
+                    or bool(request.GET.get("date")),
+        "year": year,
+        "years": years,
+        "status": status,
+        "statuses": WorkingDay.Status.choices,
+        "branches": list(branches),
+        "branch_id": branch_id,
+        "total": total,
+        "filtered_total": filtered_total,
+        "can_manage": can_manage,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def working_day_cancel(request, pk):
+    company_id, bail = _company_or_redirect(request)
+    if bail:
+        return bail
+    try:
+        working = services.cancel_working_day(
+            actor=request.user, company_id=company_id, working_day_id=pk
+        )
+    except ValidationError as exc:
+        messages.error(request, " ".join(exc.messages))
+        return redirect("scheduling:working_day_list")
+    messages.success(
+        request,
+        f"{working.work_date:%a %d %b %Y} is a weekly off again. "
+        "Its attendance is being worked out again.",
+    )
+    return redirect(f"{reverse('scheduling:working_day_list')}?year={working.work_date.year}")

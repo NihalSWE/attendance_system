@@ -2,6 +2,17 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-10-17 — Working days on a weekly off
+
+- **New:** `GET/POST /api/v1/working-days`, `GET /working-days/{id}` and
+  `POST /working-days/{id}/cancel`: a weekly-off date worked as a normal day,
+  for every branch or one. Adding one drops overtime already decided on that
+  date and answers `leave_around` (people whose leave spans it) and
+  `overtime_decisions_cleared`.
+- **Fixed:** adding, changing or cancelling a holiday, and adding or stopping
+  a weekly off, now work out again the attendance already built for the dates
+  they touch (they used to wait for `recalculate_attendance`).
+
 ## 2026-10-07 — Fairer day rules; graces at most 60 minutes
 
 - **Changed:** `worked_minutes` counts minutes inside the late and

@@ -294,8 +294,8 @@ class EndWeeklyOffForm(StyledFormMixin, forms.Form):
     effective_to = forms.DateField(
         label="Stops from",
         help_text=(
-            "The first day it no longer applies. Earlier dates keep it, so past "
-            "attendance does not change."
+            "The first day it no longer applies. Earlier dates keep it; days from "
+            "this date that are already worked out are worked out again."
         ),
         widget=_date_widget("Select end date"),
     )
@@ -399,6 +399,28 @@ class HolidayForm(StyledFormMixin, forms.ModelForm):
             "holiday_date": _date_widget("Select date"),
             "description": forms.TextInput(),
         }
+
+    def __init__(self, *args, branches=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if branches is not None:
+            self.fields["branch"].queryset = branches
+
+
+class WorkingDayForm(StyledFormMixin, forms.Form):
+    """Make one weekly-off date a working day (2026-10-17)."""
+
+    work_date = forms.DateField(label="Date", widget=_date_widget("Select date"))
+    branch = forms.ModelChoiceField(
+        queryset=Branch.all_objects.none(),
+        required=False,
+        label="Branch",
+        empty_label="All branches",
+        help_text="Leave as All branches when the whole company works that day.",
+    )
+    reason = forms.CharField(
+        label="Reason", max_length=255,
+        help_text="For example: Eid holiday moved, factory works this Friday.",
+    )
 
     def __init__(self, *args, branches=None, **kwargs):
         super().__init__(*args, **kwargs)

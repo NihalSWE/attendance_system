@@ -232,3 +232,24 @@ class HolidayYearSerializer(StrictSerializer):
                                                   "the lot and is named.")
 
 
+class WorkingDaySerializer(serializers.Serializer):
+    id = serializers.IntegerField(help_text="The working day id.")
+    date = serializers.DateField(source="work_date", help_text="The weekly-off date worked.")
+    branch = RefSerializer(allow_null=True, help_text="Its branch; null: every branch.")
+    reason = serializers.CharField(help_text="Why that day is worked.")
+    status = serializers.CharField(help_text="active or cancelled.")
+
+
+class WorkingDayAddedSerializer(WorkingDaySerializer):
+    leave_around = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="People whose leave spans the date (their leave did not include it).")
+    overtime_decisions_cleared = serializers.IntegerField(
+        help_text="Overtime decisions on that date that were dropped.")
+
+
+class WorkingDayInputSerializer(StrictSerializer):
+    date = serializers.DateField(help_text="A weekly-off date.")
+    branch_id = serializers.IntegerField(required=False, allow_null=True,
+                                         help_text="Only this branch; null: every branch.")
+    reason = serializers.CharField(max_length=255, help_text="Why that day is worked.")

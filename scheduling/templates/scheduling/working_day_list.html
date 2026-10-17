@@ -1,0 +1,203 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Working days · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'base_template/js/platform.js' %}">
+    </script>
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'scheduling:holiday_list' %}">
+            Holidays
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Working days
+    </div>
+    <div class="page__head"{% if open_add %} data-open-on-load="working-day-dialog"{% endif %}>
+        <div>
+            <h1 class="page__title">
+                Working days
+            </h1>
+            <p class="page__sub">
+                Weekly-off dates the company works as normal days. Late, half day, absence and overtime follow the shift, as on any working day.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'scheduling:holiday_list' %}?year={{ year }}">
+                Holidays
+            </a>
+            {% if can_manage %}
+                <button class="btn btn--primary" type="button" data-open-dialog="working-day-dialog">
+                    Make a day a working day
+                </button>
+            {% else %}
+                <button class="btn btn--primary" type="button" disabled
+                        title="Adding working days requires owner or company administrator access">
+                    Make a day a working day
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if can_manage %}
+        {% url 'scheduling:working_day_list' as add_url %}
+        {% include "organization/profile/modal_form.html" with id="working-day-dialog" title="Make a day a working day" action=add_url form=form submit="Make it a working day" note="Choose a weekly-off date. Attendance for that date is worked out again within a minute. To give another day off instead, add it as a holiday." %}
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Working days in {{ year }}
+            </h2>
+            <span class="badge badge--neutral">
+                {{ filtered_total }} of {{ total }}
+            </span>
+        </div>
+        <form method="get" class="toolbar">
+            <label class="sr-only" for="working-day-year">
+                Year
+            </label>
+            <select class="input select js-select" id="working-day-year" name="year">
+                {% for option in years %}
+                    <option value="{{ option }}" {% if option == year %}selected{% endif %}>
+                        {{ option }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="working-day-branch">
+                Branch
+            </label>
+            <select class="input select js-select2" id="working-day-branch" name="branch">
+                <option value="">
+                    All branches
+                </option>
+                {% for branch in branches %}
+                    <option value="{{ branch.pk }}" {% if branch.pk == branch_id %}selected{% endif %}>
+                        {{ branch.name }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="working-day-status">
+                Status
+            </label>
+            <select class="input select js-select" id="working-day-status" name="status">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if status == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+        </form>
+        {% if server_table or page.object_list %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th class="numeric">
+                                Date
+                            </th>
+                            <th>
+                                Applies to
+                            </th>
+                            <th>
+                                Reason
+                            </th>
+                            <th>
+                                Status
+                            </th>
+                            <th class="no-sort">
+                                Action
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for working in page.object_list %}
+                            <tr>
+                                <td class="numeric">
+                                    {{ working.work_date|date:"D, d M Y" }}
+                                </td>
+                                <td>
+                                    {% if working.branch %}
+                                        {{ working.branch.name }}
+                                    {% else %}
+                                        All branches
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ working.reason }}
+                                    {% if working.created_by %}
+                                        <div class="t-faint">
+                                            Added by {{ working.created_by.email }}
+                                        </div>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if working.status == 'active' %}
+                                        <span class="badge badge--success">
+                                            Active
+                                        </span>
+                                    {% else %}
+                                        <span class="badge badge--neutral">
+                                            Cancelled
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if can_manage and working.status == 'active' %}
+                                        <form method="post" action="{% url 'scheduling:working_day_cancel' working.pk %}"
+                                              data-confirm="{{ working.work_date|date:'l d M Y' }} becomes a weekly off again for {% if working.branch %}{{ working.branch.name }}{% else %}all branches{% endif %}. Its attendance is worked out again and overtime decided on it is dropped."
+                                              data-confirm-title="Cancel this working day?"
+                                              data-confirm-button="Cancel working day"
+                                              data-confirm-tone="danger">
+                                            {% csrf_token %}
+                                            <button class="btn btn--quiet btn--sm" type="submit">
+                                                Cancel
+                                            </button>
+                                        </form>
+                                    {% else %}
+                                        <span class="t-faint">
+                                            —
+                                        </span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">
+                    {% if status or branch_id %}
+                        Nothing matches that filter
+                    {% else %}
+                        No working days in {{ year }}
+                    {% endif %}
+                </div>
+                <div class="empty__text">
+                    When the company works on its weekly off, add the date here so that day counts like any other working day.
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

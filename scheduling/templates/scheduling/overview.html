@@ -361,6 +361,10 @@
                 <span class="badge badge--neutral">
                     {{ server_table.total }}
                 </span>
+                <a class="btn btn--ghost btn--sm" href="{% url 'scheduling:working_day_list' %}"
+                   title="Weekly-off dates worked as normal days">
+                    Working days
+                </a>
                 {% if can_manage %}
                     <a class="btn btn--primary btn--sm" href="{% url 'scheduling:weekly_off_create' %}">
                         Add weekly off days

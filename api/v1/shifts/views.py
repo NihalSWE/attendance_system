@@ -39,8 +39,11 @@ from scheduling.forms import (
     EndWeeklyOffForm,
     HolidayForm,
     ShiftForm,
+    WorkingDayForm,
 )
-from scheduling.models import CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule
+from scheduling.models import (
+    CompanyAttendanceSettings, Holiday, Shift, WeeklyOffRule, WorkingDay,
+)
 from tenants.models import Company
 
 AREA = "shifts"
@@ -841,3 +844,127 @@ class HolidayCancelView(ScheduleView):
             services.cancel_holiday(actor=request.user, company_id=request.company_id,
                                     holiday_id=holiday.pk)
         return Response(s.HolidaySerializer(_holiday(holiday_id)).data)
+
+
+# Working days (2026-10-17): a weekly-off date worked as a normal day.
+
+WORKING_DAY_EXAMPLE = {"id": 3, "date": "2026-10-16", "branch": None,
+                       "reason": "Factory works this Friday", "status": "active"}
+WORKING_DAY_PARAM = Param("working_day_id", PATH, "integer", "The working day id.",
+                          required=True, example=3)
+WORKING_DAY_NAMES = {"work_date": "date", "branch": "branch_id"}
+
+
+def _working_day(working_day_id):
+    working = WorkingDay.objects.select_related("branch").filter(pk=working_day_id).first()
+    if working is None:
+        raise ApiError("not_found", "No such working day in this company.")
+    return working
+
+
+class WorkingDayListView(ScheduleView):
+    permission_classes = [PanelRule]
+    panel_page = "scheduling:working_day_list"
+
+    @endpoint(
+        id="working-days-list", area=AREA, title="Working days",
+        summary="The weekly-off dates of a year that are worked as normal days.",
+        what_it_does=["Lists the year's working days, newest first (this year unless given)."],
+        description="Filter by status (active or cancelled) and branch_id.",
+        roles=READERS, scopes=["shifts:read"], paginated=True,
+        params=[Param("year", QUERY, "integer", "The year; this year when left out.", example=2026),
+                Param("status", QUERY, "string", "active or cancelled.", example="active"),
+                Param("branch_id", QUERY, "integer", "Only this branch's.", example=1)],
+        response=s.WorkingDaySerializer,
+        response_example={"count": 1, "next": None, "previous": None,
+                          "results": [WORKING_DAY_EXAMPLE]},
+        errors=READ_ERRORS,
+    )
+    def get(self, request):
+        _membership(request)
+        raw = request.query_params.get("year", "")
+        year = int(raw) if raw.isdigit() and 2000 <= int(raw) <= 2100 else timezone.localdate().year
+        rows = WorkingDay.objects.select_related("branch").filter(work_date__year=year)
+        if request.query_params.get("status") in dict(WorkingDay.Status.choices):
+            rows = rows.filter(status=request.query_params["status"])
+        branch_id = request.query_params.get("branch_id", "")
+        if branch_id.isdigit():
+            rows = rows.filter(branch_id=int(branch_id))
+        return self.paginated(request, rows.order_by("-work_date", "branch__name"),
+                              s.WorkingDaySerializer)
+
+    @endpoint(
+        id="working-days-create", area=AREA, title="Make a day a working day",
+        summary="One weekly-off date worked as a normal day, for every branch or one.",
+        what_it_does=["Adds it: late, half day, absence and overtime follow the shift that day.",
+                      "Drops overtime already decided on that date; it is worked out again.",
+                      "Works that date's attendance out again in the background."],
+        description="The date must be a weekly off for that branch (or any, for every branch), "
+                    "not a holiday (cancel the holiday instead), not already a working day, and "
+                    "not in a month whose salary is posted. leave_around names people whose "
+                    "leave spans the date: their leave did not include it.",
+        roles=ADMINS, scopes=["shifts:write"], response_status=201,
+        request=s.WorkingDayInputSerializer, response=s.WorkingDayAddedSerializer,
+        request_example={"date": "2026-10-16", "reason": "Factory works this Friday"},
+        response_example={**WORKING_DAY_EXAMPLE, "leave_around": [],
+                          "overtime_decisions_cleared": 0},
+        errors=WRITE_ERRORS,
+    )
+    def post(self, request):
+        membership = require_structure_manager(request.user, request.company_id)
+        data = s.WorkingDayInputSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        values = data.validated_data
+        form = checked(WorkingDayForm, {
+            "work_date": values["date"].isoformat(),
+            "branch": values.get("branch_id") or "",
+            "reason": values["reason"],
+        }, WORKING_DAY_NAMES, branches=visible_branches(membership))
+        with service_errors(WORKING_DAY_NAMES):
+            working = services.add_working_day(actor=request.user, company_id=request.company_id,
+                                               values=form.cleaned_data)
+        body = dict(s.WorkingDaySerializer(_working_day(working.pk)).data)
+        body["leave_around"] = working.leave_around
+        body["overtime_decisions_cleared"] = len(working.cleared_overtime)
+        return Response(body, status=201)
+
+
+class WorkingDayDetailView(ScheduleView):
+    permission_classes = [PanelRule]
+    panel_page = "scheduling:working_day_list"
+
+    @endpoint(
+        id="working-days-get", area=AREA, title="One working day",
+        summary="One working day's details.",
+        what_it_does=["Answers the working day."],
+        description="Another company's working day answers not_found.",
+        roles=READERS, scopes=["shifts:read"], params=[WORKING_DAY_PARAM],
+        response=s.WorkingDaySerializer, response_example=WORKING_DAY_EXAMPLE,
+        errors=READ_ERRORS + ["not_found"],
+    )
+    def get(self, request, working_day_id):
+        _membership(request)
+        return Response(s.WorkingDaySerializer(_working_day(working_day_id)).data)
+
+
+class WorkingDayCancelView(ScheduleView):
+    permission_classes = [PanelRule]
+    panel_page = "scheduling:working_day_cancel"
+
+    @endpoint(
+        id="working-days-cancel", area=AREA, title="Cancel a working day",
+        summary="The date is a weekly off again.",
+        what_it_does=["Cancels it; it stays listed as cancelled, for the record.",
+                      "Drops overtime decided on that date and works its attendance out again."],
+        description="Refused when that month's salary is posted.",
+        roles=ADMINS, scopes=["shifts:write"], params=[WORKING_DAY_PARAM],
+        response=s.WorkingDaySerializer,
+        response_example={**WORKING_DAY_EXAMPLE, "status": "cancelled"},
+        errors=WRITE_ERRORS + ["not_found"],
+    )
+    def post(self, request, working_day_id):
+        working = _working_day(working_day_id)
+        with service_errors(WORKING_DAY_NAMES):
+            services.cancel_working_day(actor=request.user, company_id=request.company_id,
+                                        working_day_id=working.pk)
+        return Response(s.WorkingDaySerializer(_working_day(working_day_id)).data)

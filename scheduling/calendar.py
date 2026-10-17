@@ -24,6 +24,7 @@ from scheduling.models import (
     EmployeeShiftAssignment,
     Holiday,
     WeeklyOffRule,
+    WorkingDay,
 )
 from tenants.models import Company
 
@@ -62,6 +63,13 @@ class WorkCalendar:
                     status=Holiday.Status.ACTIVE,
                     holiday_date__gte=start,
                     holiday_date__lte=end,
+                )
+            )
+            self.working_days = list(
+                WorkingDay.objects.filter(
+                    status=WorkingDay.Status.ACTIVE,
+                    work_date__gte=start,
+                    work_date__lte=end,
                 )
             )
             settings = (
@@ -144,12 +152,16 @@ class WorkCalendar:
         return self.shift
 
     def day(self, branch_id, on):
-        """Classify one date. A holiday wins over a weekly off on the same day."""
+        """Classify one date. A holiday wins over everything; a working day
+        (2026-10-17) wins over a weekly off on the same day."""
         # Days off are always paid (A5c), including legacy rows whose retained
         # is_paid column is False. Daily/hourly pay still follows salary rules.
         for holiday in self.holidays:
             if holiday.holiday_date == on and holiday.branch_id in (None, branch_id):
                 return DayInfo(HOLIDAY, True, holiday.name)
+        for working in self.working_days:
+            if working.work_date == on and working.branch_id in (None, branch_id):
+                return DayInfo(WORKING, True, working.reason)
         for rule in self.rules:
             if (
                 rule.weekday == on.weekday()

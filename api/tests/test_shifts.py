@@ -176,3 +176,30 @@ class CalendarTests(ShiftApiTestCase):
         self.assertEqual(cancelled.json()["status"], "cancelled")
         listed = self.api("GET", "/api/v1/holidays", query="year=2026&status=active").json()
         self.assertEqual(listed["count"], 2)
+
+    def test_working_days(self):
+        self.api("POST", "/api/v1/weekly-offs", {"weekdays": ["friday"], "from_date": "2026-01-01"})
+        made = self.api("POST", "/api/v1/working-days",
+                        {"date": "2026-09-11", "reason": "Factory works this Friday"})
+        self.assertEqual(made.status_code, 201, made.content)
+        self.assertEqual((made.json()["date"], made.json()["branch"], made.json()["leave_around"],
+                          made.json()["overtime_decisions_cleared"]),
+                         ("2026-09-11", None, [], 0))
+        thursday = self.api("POST", "/api/v1/working-days",
+                            {"date": "2026-09-10", "reason": "Not a day off"})
+        self.assertIn("date", self.fields(thursday))
+        missing = self.api("POST", "/api/v1/working-days", {"date": "2026-09-18"})
+        self.assertIn("reason", self.fields(missing))
+        one = self.api("GET", f"/api/v1/working-days/{made.json()['id']}")
+        self.assertEqual(one.json()["reason"], "Factory works this Friday")
+        cancelled = self.api("POST", f"/api/v1/working-days/{made.json()['id']}/cancel")
+        self.assertEqual(cancelled.json()["status"], "cancelled")
+        listed = self.api("GET", "/api/v1/working-days", query="year=2026&status=active").json()
+        self.assertEqual(listed["count"], 0)
+        self.person("hr@example.test", role="hr")
+        hr = self.logged_in("hr@example.test")
+        self.assertEqual(self.api("GET", "/api/v1/working-days", query="year=2026",
+                                  session=hr).json()["count"], 1)
+        self.assertEqual(self.api("POST", "/api/v1/working-days",
+                                  {"date": "2026-09-18", "reason": "x"}, session=hr).status_code,
+                         403)
