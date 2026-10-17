@@ -1,6 +1,12 @@
 # Make a day a working day — plan (2026-10-17)
 
-Status: **plan, waiting for the senior's OK** (it changes pay). Nothing is built.
+Status: **small version built 2026-10-17** (see `docs/PHASE_STATUS.md`,
+"Working days on a weekly off"). The senior chose the defaults: normal rules
+on the worked date, overtime only after the shift at the normal rate, past
+dates allowed unless posted, one employee working a day off later. Dropped
+from this plan for now: the linked swap day (add an ordinary holiday) and
+adding the day to leave automatically (people on leave are named instead).
+The rest of this file is the original, larger plan.
 
 ## 1. The problem
 

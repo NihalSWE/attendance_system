@@ -1078,6 +1078,52 @@ def schedule_changed(company_id, since=None):
     return since
 
 
+def dates_changed(company_id, dates, branch_id=None):
+    """The calendar changed on these dates - a holiday, a weekly off or a
+    working day was added, moved or cancelled (2026-10-17): the people placed
+    in that branch (everybody, without one) have those days measured again.
+    Call it inside the change's transaction.
+
+    Unlike ``schedule_changed`` there is no limit on how far back: somebody
+    chose these exact dates. Future dates have nothing built yet, and days
+    inside a posted payroll run are skipped by ``recalculate`` as always.
+    Returns the dates made due.
+    """
+    from attendance.models import AttendanceDue
+
+    now = timezone.now()
+    tz = _zone(_company_timezone(company_id))
+    today = now.astimezone(tz).date()
+    dates = sorted({day for day in dates if day <= today})
+    if not dates:
+        return []
+
+    def midnight(day):
+        return datetime.datetime.combine(day, datetime.time.min, tzinfo=tz)
+
+    with use_company(company_id):
+        placements = (
+            EmployeeAssignment.objects.exclude(status="cancelled")
+            .filter(effective_from__lt=midnight(dates[-1] + datetime.timedelta(days=1)))
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=midnight(dates[0])))
+        )
+        if branch_id:
+            placements = placements.filter(branch_id=branch_id)
+        placed = list(placements.values_list("employee_id", "effective_from", "effective_to"))
+    rows = {}
+    for day in dates:
+        start_at, end_at = midnight(day), midnight(day + datetime.timedelta(days=1))
+        for employee_id, first, until in placed:
+            if first < end_at and (until is None or until > start_at):
+                rows[(employee_id, day)] = AttendanceDue(
+                    company_id=company_id, employee_id=employee_id, work_date=day, due_at=now)
+    AttendanceDue.objects.bulk_create(
+        list(rows.values()), batch_size=2000, update_conflicts=True,
+        unique_fields=["company", "employee", "work_date"], update_fields=["due_at"])
+    transaction.on_commit(lambda: _rebuild_soon(company_id))
+    return dates
+
+
 _rebuilding = threading.Lock()
 
 

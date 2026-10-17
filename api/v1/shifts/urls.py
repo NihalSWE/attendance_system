@@ -23,4 +23,9 @@ urlpatterns = [
     path("holidays/<int:holiday_id>", views.HolidayDetailView.as_view(), name="holiday"),
     path("holidays/<int:holiday_id>/cancel", views.HolidayCancelView.as_view(),
          name="holiday_cancel"),
+    path("working-days", views.WorkingDayListView.as_view(), name="working_days"),
+    path("working-days/<int:working_day_id>", views.WorkingDayDetailView.as_view(),
+         name="working_day"),
+    path("working-days/<int:working_day_id>/cancel", views.WorkingDayCancelView.as_view(),
+         name="working_day_cancel"),
 ]

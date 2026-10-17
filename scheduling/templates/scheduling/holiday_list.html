@@ -29,6 +29,9 @@
             </p>
         </div>
         <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'scheduling:working_day_list' %}?year={{ year }}">
+                Working days
+            </a>
             {% if can_manage %}
                 <a class="btn btn--ghost" href="{% url 'scheduling:holiday_create' %}">
                     Add one holiday

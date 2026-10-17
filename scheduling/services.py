@@ -39,6 +39,7 @@ from scheduling.models import (
     Holiday,
     Shift,
     WeeklyOffRule,
+    WorkingDay,
 )
 
 SHIFT_FIELDS = (
@@ -66,6 +67,7 @@ WEEKLY_OFF_RULE_FIELDS = ("branch", "weekday", "is_paid", "effective_from")
 HOLIDAY_FIELDS = ("branch", "holiday_date", "name", "description", "is_paid")
 # The year calendar: many dates at once, each with its own name.
 HOLIDAY_BATCH_FIELDS = ("branch", "is_paid", "days")
+WORKING_DAY_FIELDS = ("branch", "work_date", "reason")
 MAX_HOLIDAYS_PER_BATCH = 366
 # A grace is minutes of "still on time" (2026-10-07). One live company read
 # "Leaving early after (minutes)" as minutes worked and typed 660 on a 12-hour
@@ -669,7 +671,28 @@ def add_weekly_offs(*, actor, company_id, values):
                 after=_snapshot(rule, WEEKLY_OFF_RULE_FIELDS),
             )
             rules.append(rule)
+            _calendar_changed(company_id, _weekday_dates(rule.company, rule.weekday,
+                                                         rule.effective_from), rule.branch_id)
     return rules
+
+
+def _weekday_dates(company, weekday, since):
+    """Every date on that weekday from ``since`` up to today, company time."""
+    today = timezone.now().astimezone(_company_zone(company)).date()
+    day = since + datetime.timedelta(days=(weekday - since.weekday()) % 7)
+    dates = []
+    while day <= today:
+        dates.append(day)
+        day += datetime.timedelta(days=7)
+    return dates
+
+
+def _calendar_changed(company_id, dates, branch_id):
+    """Days already worked out on these dates are measured again (2026-10-17:
+    adding a holiday or a weekly off used to leave them as they were)."""
+    from attendance.services import dates_changed
+
+    dates_changed(company_id, dates, branch_id)
 
 
 def _lock_weekly_offs(company_id):
@@ -815,6 +838,8 @@ def end_weekly_off(*, actor, company_id, rule_id, effective_to):
             before=before,
             after={"effective_to": effective_to.isoformat(), "status": rule.status},
         )
+        _calendar_changed(company_id, _weekday_dates(rule.company, rule.weekday, effective_to),
+                          rule.branch_id)
     return rule
 
 
@@ -865,6 +890,7 @@ def create_holiday(*, actor, company_id, values):
             action="holiday.created", obj=holiday,
             after=_snapshot(holiday, HOLIDAY_FIELDS),
         )
+        _calendar_changed(company_id, [holiday.holiday_date], holiday.branch_id)
     return holiday
 
 
@@ -927,6 +953,7 @@ def add_holidays(*, actor, company_id, values):
                 after={**_snapshot(holiday, HOLIDAY_FIELDS), "from": "year_calendar"},
             )
             holidays.append(holiday)
+        _calendar_changed(company_id, dates, branch.pk if branch else None)
     return holidays
 
 
@@ -956,6 +983,7 @@ def update_holiday(*, actor, company_id, holiday_id, values):
             {**_snapshot_values(holiday), **values}, exclude_pk=holiday.pk
         )
         before = _snapshot(holiday, HOLIDAY_FIELDS)
+        was = (holiday.holiday_date, holiday.branch_id)
         for field, value in values.items():
             setattr(holiday, field, value)
         holiday.updated_by = actor
@@ -966,6 +994,9 @@ def update_holiday(*, actor, company_id, holiday_id, values):
             action="holiday.updated", obj=holiday,
             before=before, after=_snapshot(holiday, HOLIDAY_FIELDS),
         )
+        now = (holiday.holiday_date, holiday.branch_id)
+        for day, branch_id in {was, now}:
+            _calendar_changed(company_id, [day], branch_id)
     return holiday
 
 
@@ -990,4 +1021,192 @@ def cancel_holiday(*, actor, company_id, holiday_id):
             before={"status": Holiday.Status.ACTIVE},
             after={"status": holiday.status},
         )
+        _calendar_changed(company_id, [holiday.holiday_date], holiday.branch_id)
     return holiday
+
+
+# --------------------------------------------------------------------------
+# Working days (2026-10-17): a weekly-off date worked as a normal day
+# --------------------------------------------------------------------------
+
+def _scope_words(branch):
+    return f"for {branch.name}" if branch is not None else "for all branches"
+
+
+def _placed_on(company_id, day, branch_id):
+    """Ids of the people placed in the branch (anywhere, without one) on a date."""
+    from employees.models import EmployeeAssignment
+    from tenants.models import Company
+
+    tz = _company_zone(Company.objects.get(pk=company_id))
+    start, end = _midnight(tz, day), _midnight(tz, day + datetime.timedelta(days=1))
+    placements = EmployeeAssignment.objects.exclude(status="cancelled").filter(
+        effective_from__lt=end).filter(Q(effective_to__isnull=True) | Q(effective_to__gt=start))
+    if branch_id:
+        placements = placements.filter(branch_id=branch_id)
+    return set(placements.values_list("employee_id", flat=True))
+
+
+def _refuse_posted(company_id, day):
+    from attendance.services import _is_locked, locked_ranges
+
+    if _is_locked(day, locked_ranges(company_id)):
+        raise ValidationError({"work_date": (
+            f"Salary for {day:%B %Y} is posted, so {day:%d %b} cannot change. "
+            "Reopen that month first.")})
+
+
+def _clear_overtime_decisions(company_id, day, employee_ids):
+    """Overtime decided on the date was decided under the old rule (every
+    minute on a day off, or only after the shift): it is dropped and worked
+    out again. Returns what was dropped, for the audit row."""
+    from payroll.models import OvertimeDecision
+
+    decisions = list(
+        OvertimeDecision.objects.select_related("employee")
+        .filter(work_date=day, employee_id__in=employee_ids)
+        .order_by("employee__first_name")
+    )
+    cleared = [
+        {"employee": d.employee.full_name, "status": d.status,
+         "approved_minutes": d.approved_minutes}
+        for d in decisions
+    ]
+    OvertimeDecision.objects.filter(pk__in=[d.pk for d in decisions]).delete()
+    return cleared
+
+
+def _leave_around(day, employee_ids):
+    """People with leave asked for or approved over the date. Leave books
+    working days only, so the date is not in it: they are listed for HR to
+    look at, nothing is changed."""
+    from leaves.models import LeaveRequest, LeaveRequestSegment
+
+    live = (LeaveRequest.Status.SUBMITTED, LeaveRequest.Status.PENDING,
+            LeaveRequest.Status.APPROVED, LeaveRequest.Status.PARTIALLY_CANCELLED)
+    segments = (
+        LeaveRequestSegment.objects.select_related("leave_request__employee")
+        .filter(status=LeaveRequestSegment.Status.ACTIVE, start_date__lte=day,
+                end_date__gte=day, leave_request__status__in=live,
+                leave_request__employee_id__in=employee_ids)
+        .order_by("leave_request__employee__first_name", "start_date")
+    )
+    return [
+        f"{s.leave_request.employee.full_name} ({s.start_date:%d %b} to {s.end_date:%d %b})"
+        for s in segments
+    ]
+
+
+def _weekly_off_applies(branch, day):
+    """True when a weekly-off rule makes the date a day off in this scope.
+    Company-wide: a rule for any branch is enough."""
+    rules = WeeklyOffRule.objects.filter(weekday=day.weekday(), effective_from__lte=day).filter(
+        Q(effective_to__isnull=True) | Q(effective_to__gt=day))
+    if branch is not None:
+        rules = rules.filter(Q(branch__isnull=True) | Q(branch=branch))
+    return rules.exists()
+
+
+@transaction.atomic
+def add_working_day(*, actor, company_id, values):
+    """Make one weekly-off date a working day, company-wide or for a branch.
+
+    The date must be a weekly off in that scope and not a holiday (cancel the
+    holiday instead), and its month's salary must not be posted. Overtime
+    already decided on it is dropped, and its attendance is rebuilt in the
+    background. Returns the row with ``leave_around`` (people whose leave
+    spans the date, for HR to check) and ``cleared_overtime``.
+    """
+    membership = require_structure_manager(actor, company_id)
+    values = _writable(values, WORKING_DAY_FIELDS)
+    values["reason"] = (values.get("reason") or "").strip()
+    day = values.get("work_date")
+    if day is None:
+        raise ValidationError({"work_date": "Choose the date."})
+
+    with use_company(company_id):
+        _lock_weekly_offs(company_id)
+        _check_branch(membership, values)
+        branch = values.get("branch")
+        _refuse_posted(company_id, day)
+        holidays = Holiday.objects.filter(holiday_date=day, status=Holiday.Status.ACTIVE)
+        if branch is not None:
+            holidays = holidays.filter(Q(branch__isnull=True) | Q(branch=branch))
+        holiday = holidays.first()
+        if holiday is not None:
+            raise ValidationError({"work_date": (
+                f"{day:%d %b %Y} is a holiday ({holiday.name}). "
+                "Cancel the holiday instead to make it a working day.")})
+        if not _weekly_off_applies(branch, day):
+            raise ValidationError({"work_date": (
+                f"{day:%A %d %b %Y} is not a weekly off {_scope_words(branch)}, "
+                "so it is already a working day.")})
+        if WorkingDay.objects.filter(
+                work_date=day, branch=branch, status=WorkingDay.Status.ACTIVE).exists():
+            raise ValidationError({"work_date": (
+                f"{day:%d %b %Y} is already a working day {_scope_words(branch)}.")})
+
+        working = create_validated(
+            WorkingDay,
+            company=membership.company,
+            created_by=actor,
+            updated_by=actor,
+            **values,
+        )
+        people = _placed_on(company_id, day, branch.pk if branch else None)
+        cleared = _clear_overtime_decisions(company_id, day, people)
+        working.leave_around = _leave_around(day, people)
+        working.cleared_overtime = cleared
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="working_day.added", obj=working,
+            after={**_snapshot(working, WORKING_DAY_FIELDS),
+                   "overtime_decisions_cleared": cleared},
+        )
+        from attendance.services import dates_changed
+
+        dates_changed(company_id, [day], branch.pk if branch else None)
+    return working
+
+
+def get_working_day_for_edit(*, actor, company_id, working_day_id):
+    membership = require_structure_manager(actor, company_id)
+    with use_company(company_id):
+        working = WorkingDay.objects.select_related("branch").filter(pk=working_day_id).first()
+        if working is None:
+            raise PermissionDenied("Working day not found in this company.")
+        if working.branch_id:
+            assert_branch_in_scope(membership, working.branch)
+    return membership, working
+
+
+@transaction.atomic
+def cancel_working_day(*, actor, company_id, working_day_id):
+    """The date is a weekly off again. Kept on record as cancelled; overtime
+    decided on it is dropped and its attendance rebuilt, as when added."""
+    membership, working = get_working_day_for_edit(
+        actor=actor, company_id=company_id, working_day_id=working_day_id
+    )
+    if working.status == WorkingDay.Status.CANCELLED:
+        raise ValidationError("This working day is already cancelled.")
+    with use_company(company_id):
+        _refuse_posted(company_id, working.work_date)
+        working.status = WorkingDay.Status.CANCELLED
+        working.cancelled_at = timezone.now()
+        working.cancelled_by = actor
+        working.updated_by = actor
+        working.full_clean()
+        working.save()
+        people = _placed_on(company_id, working.work_date, working.branch_id)
+        cleared = _clear_overtime_decisions(company_id, working.work_date, people)
+        working.cleared_overtime = cleared
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="working_day.cancelled", obj=working,
+            before={"status": WorkingDay.Status.ACTIVE},
+            after={"status": working.status, "overtime_decisions_cleared": cleared},
+        )
+        from attendance.services import dates_changed
+
+        dates_changed(company_id, [working.work_date], working.branch_id)
+    return working

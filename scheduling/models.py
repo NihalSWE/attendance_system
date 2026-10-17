@@ -464,6 +464,59 @@ class Holiday(TenantOwned, ActorTracked):
         return f"{self.name} ({self.holiday_date})"
 
 
+class WorkingDay(TenantOwned, ActorTracked):
+    """A weekly-off date that is worked as a normal day (2026-10-17).
+
+    "This Friday we work": company-wide (no branch) or for one branch. The
+    weekly-off rule stays as it is; only this date is a working day. A holiday
+    on the same date still wins. A day given off in return is an ordinary
+    Holiday.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CANCELLED = "cancelled", "Cancelled"
+
+    branch = models.ForeignKey(
+        "organization.Branch",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="working_days",
+    )
+    work_date = models.DateField()
+    reason = models.CharField(max_length=255)
+    status = models.CharField(
+        max_length=16, choices=Status.choices, default=Status.ACTIVE
+    )
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cancelled_working_days",
+    )
+
+    class Meta:
+        db_table = "scheduling_working_day"
+        constraints = [
+            models.UniqueConstraint(
+                "company",
+                "work_date",
+                _BRANCH_SCOPE,
+                condition=models.Q(status="active"),
+                name="uniq_active_working_day_per_scope_date",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["company", "work_date"]),
+        ]
+
+    def __str__(self):
+        return f"Working day {self.work_date}"
+
+
 class HolidayWorkAssignment(TenantOwned, ActorTracked):
     """Approval for an employee to work on a holiday or a recurring weekly off.
 

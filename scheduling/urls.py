@@ -25,4 +25,8 @@ urlpatterns = [
     path("holidays/calendar/", views.holiday_year, name="holiday_year"),
     path("holidays/<int:pk>/edit/", views.holiday_edit, name="holiday_edit"),
     path("holidays/<int:pk>/cancel/", views.holiday_cancel, name="holiday_cancel"),
+
+    path("working-days/", views.working_day_list, name="working_day_list"),
+    path("working-days/<int:pk>/cancel/", views.working_day_cancel,
+         name="working_day_cancel"),
 ]

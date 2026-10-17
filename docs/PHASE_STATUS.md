@@ -6187,3 +6187,33 @@ Late penalties unchanged: a late day made up after the shift is still late
 (punctuality, not hours); "excuse late" is there for exceptions.
 Live copy, 1-5 Oct: present 68, half 99 → 90, absent 73 → 82 (lone
 after-shift scans). Deploy: pull, restart, `recalculate_attendance --since 2026-10-01`.
+
+### Working days on a weekly off; calendar changes reach built days — 2026-10-17
+
+Decided by the senior (2026-10-17, the small version of
+`docs/working-day/00-PLAN.md`): a worked weekly-off date follows the normal
+rules (late, half day, absent with the cut, overtime only after the shift at
+the normal rate); past dates allowed unless that month's salary is posted;
+one employee working a day off waits.
+
+- **`scheduling.WorkingDay`** (migration `scheduling.0007_working_day`):
+  date, branch (empty: every branch), reason, active/cancelled.
+  `WorkCalendar.day()` order: holiday → working day → weekly off.
+- **Services** `add_working_day` / `cancel_working_day`: only a weekly-off
+  date, not a holiday ("cancel the holiday instead"), not twice, not in a
+  posted month; overtime decisions on the date are dropped (listed in the
+  audit row); people whose leave spans the date are named (leave books
+  working days only, so they show absent until HR changes the leave).
+- **`attendance.services.dates_changed`**: the given dates made due for the
+  people placed there, rebuilt in the background. Now also called by
+  holiday add / year calendar / edit / cancel and weekly off add / stop
+  (before, those left built days unchanged until `recalculate_attendance`).
+  A swap day off is an ordinary holiday.
+- **Screen** Shifts → Holidays → **Working days**
+  (`/shifts/working-days/`): server-side list (year, branch, status,
+  count), "Make a day a working day" modal, Cancel by confirm modal. Links
+  from the Holidays page and the Weekly off days card. Sidebar unchanged.
+- **API** `GET/POST /api/v1/working-days`, `GET /working-days/{id}`,
+  `POST /working-days/{id}/cancel` (CHANGELOG).
+- Tests: `scheduling/tests_working_day.py` (22), `api.tests.test_shifts`.
+- Deploy: pull, `migrate`, restart. No recalculation needed.
