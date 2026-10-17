@@ -142,9 +142,14 @@ class OvertimeTests(SalaryApiTestCase):
         self.assertEqual((decided.json()["state"], decided.json()["approved_minutes"],
                           decided.json()["decided_by"]),
                          ("approved", 60, "admin@example.test"))
-        waiting = self.api("GET", "/api/v1/payroll/overtime",
-                           query=f"year={self.year}&month={self.month}&show=approved").json()
-        self.assertEqual(waiting["count"], 1)
+        # "approved" also lists days paid automatically, and on some dates the
+        # late day (09:25-18:05, 5 minutes over) falls in the same month.
+        approved = self.api("GET", "/api/v1/payroll/overtime",
+                            query=f"year={self.year}&month={self.month}&show=approved").json()
+        self.assertEqual({r["state"] for r in approved["results"]} - {"approved", "automatic"},
+                         set())
+        self.assertEqual([r["state"] for r in approved["results"]
+                          if r["date"] == self.long_day.isoformat()], ["approved"])
         undone = self.api("POST", f"/api/v1/payroll/overtime/{day['id']}/undo")
         self.assertEqual(undone.json()["state"], "automatic")
 
