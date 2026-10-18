@@ -47,3 +47,22 @@ uritemplate==4.2.0
 argon2-cffi==25.1.0
 argon2-cffi-bindings==26.1.0
 PyOTP==2.10.0
+# Inventory Phase 8: the AI sales order assistant calls Claude through the
+# official Anthropic SDK (off per company until the client's consent is
+# recorded). Its own requirements follow.
+anthropic==1.15.0
+anyio==4.15.1
+docstring-parser==0.18.0
+httpx2==2.13.1
+httpcore2==2.13.1
+h11==0.16.0
+idna==3.20
+truststore==0.10.5
+jiter==0.17.0
+opentelemetry-api==1.45.1
+pydantic==2.14.1
+pydantic-core==2.50.1
+annotated-types==0.8.0
+typing-inspection==0.4.4
+typing-extensions==4.16.0
+sniffio==1.3.1

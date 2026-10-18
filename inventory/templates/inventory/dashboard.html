@@ -1,0 +1,113 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}Dashboard · Inventory{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+    <link rel="stylesheet" href="{% static 'reports/css/report.css' %}">
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Inventory
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Inventory dashboard</h1>
+            <p class="page__sub">Stock in your stores now, {{ today|date:"d M Y" }}: what is low, what is expiring, and the work waiting.</p>
+        </div>
+        <div class="page__actions">
+            {% if reports %}<a class="btn btn--ghost" href="{% url 'inventory:reports' %}">Reports</a>{% endif %}
+            <a class="btn btn--ghost" href="{% url 'inventory:stock' %}">Stock on hand</a>
+        </div>
+    </div>
+
+    <div class="report-kpis" data-dashboard-kpis>
+        {% if costs %}<div class="report-kpi"><span class="report-kpi__value">{{ total|floatformat:"2g" }}</span><span class="report-kpi__label">Stock value</span></div>{% endif %}
+        <div class="report-kpi"><span class="report-kpi__value">{{ stock_items }}</span><span class="report-kpi__label">Items in stock</span></div>
+        <div class="report-kpi{% if low_count %} report-kpi--warning{% endif %}"><span class="report-kpi__value">{{ low_count }}</span><span class="report-kpi__label">To reorder</span></div>
+        <div class="report-kpi{% if expiring_count %} report-kpi--warning{% endif %}"><span class="report-kpi__value">{{ expiring_count }}</span><span class="report-kpi__label">Batches expiring in {{ alert_days }} days</span></div>
+        <div class="report-kpi{% if expired_count %} report-kpi--danger{% endif %}"><span class="report-kpi__value">{{ expired_count }}</span><span class="report-kpi__label">Expired, still in stock</span></div>
+        <div class="report-kpi{% if quarantine %} report-kpi--info{% endif %}"><span class="report-kpi__value">{{ quarantine }}</span><span class="report-kpi__label">Stock rows in quarantine</span></div>
+    </div>
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head"><h2>By item type</h2></div>
+            {% if by_kind %}
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>Type</th><th class="numeric">Items</th>{% if costs %}<th class="numeric">Value</th>{% endif %}</tr></thead>
+                    <tbody>{% for line in by_kind %}<tr><td>{{ line.label }}</td><td class="numeric">{{ line.items|length }}</td>{% if costs %}<td class="numeric">{{ line.value|floatformat:"2g" }}</td>{% endif %}</tr>{% endfor %}</tbody>
+                </table></div>
+            {% else %}<div class="empty"><div class="empty__text">No stock yet.</div></div>{% endif %}
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>By store</h2></div>
+            {% if by_store %}
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>Store</th><th class="numeric">Items</th>{% if costs %}<th class="numeric">Value</th>{% endif %}</tr></thead>
+                    <tbody>{% for line in by_store %}<tr><td>{{ line.store.code }} · {{ line.store.name }}</td><td class="numeric">{{ line.items|length }}</td>{% if costs %}<td class="numeric">{{ line.value|floatformat:"2g" }}</td>{% endif %}</tr>{% endfor %}</tbody>
+                </table></div>
+            {% else %}<div class="empty"><div class="empty__text">No stock yet.</div></div>{% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head"><h2>Low stock</h2><span class="spacer"></span>{% if low_count %}<a class="t-muted" href="{% url 'inventory:report_reorder' %}">All {{ low_count }} →</a>{% endif %}</div>
+            {% if low %}
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>Item</th><th class="numeric">Available</th><th class="numeric">Reorder at</th><th class="numeric">On order</th></tr></thead>
+                    <tbody>{% for item, available, coming, wanted, status in low %}
+                        <tr><td>{{ item.code }} {{ item.name }}{% if status == "Below minimum" %} <span class="badge badge--danger">Below minimum</span>{% endif %}</td>
+                            <td class="numeric">{{ available.normalize }} {{ item.base_uom.code }}</td><td class="numeric">{{ item.reorder_point.normalize|default:"—" }}</td><td class="numeric">{{ coming.normalize }}</td></tr>
+                    {% endfor %}</tbody>
+                </table></div>
+            {% else %}<div class="empty"><div class="empty__text">Nothing is at or below its reorder point.</div></div>{% endif %}
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>Expiring soon</h2><span class="spacer"></span>{% if expiring_count %}<a class="t-muted" href="{% url 'inventory:report_batch_expiry' %}?days={{ alert_days }}">All {{ expiring_count }} →</a>{% endif %}</div>
+            {% if expiring %}
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>Item</th><th>Batch</th><th>Store</th><th>Expires</th><th class="numeric">Quantity</th></tr></thead>
+                    <tbody>{% for row in expiring %}
+                        <tr><td>{{ row.item.code }} {{ row.item.name }}</td><td>{{ row.batch.batch_no }}</td><td>{{ row.warehouse.code }}</td>
+                            <td>{% if row.days_left < 0 %}<span class="badge badge--danger">Expired</span>{% else %}<span class="badge badge--warning">{{ row.days_left }} day{{ row.days_left|pluralize }}</span>{% endif %} {{ row.batch.expiry_date|date:"d M Y" }}</td>
+                            <td class="numeric">{{ row.qty_on_hand.normalize }} {{ row.item.base_uom.code }}</td></tr>
+                    {% endfor %}</tbody>
+                </table></div>
+            {% else %}<div class="empty"><div class="empty__text">No batch expires in the next {{ alert_days }} days.</div></div>{% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head"><h2>Waiting</h2></div>
+            {% if waiting %}
+                <div class="table-wrap"><table class="table">
+                    <tbody>{% for label, number, url in waiting %}
+                        <tr><td><a href="{% url url %}">{{ label }}</a></td><td class="numeric">{% if number %}<span class="badge badge--warning">{{ number }}</span>{% else %}<span class="t-faint">0</span>{% endif %}</td></tr>
+                    {% endfor %}</tbody>
+                </table></div>
+            {% else %}<div class="empty"><div class="empty__text">Nothing for you to do here.</div></div>{% endif %}
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>Today</h2></div>
+            <div class="card__body stack">
+                {% if produced is not None %}
+                    <div><strong>Production</strong>
+                        {% if produced %}
+                            <ul>{% for run in produced %}<li>{{ run.number }}: {{ run.item.code }} {{ run.item.name }} - {{ run.good.normalize }} {{ run.unit }} good{% if run.rejected %}, {{ run.rejected.normalize }} rejected{% endif %}</li>{% endfor %}</ul>
+                        {% else %}<p class="t-faint">No output recorded today.</p>{% endif %}
+                    </div>
+                {% endif %}
+                {% if sold is not None %}
+                    <div><strong>Sales</strong>
+                        <p>{{ sold.deliveries }} deliver{{ sold.deliveries|pluralize:"y,ies" }} posted · {{ sold.invoices }} invoice{{ sold.invoices|pluralize }} for {{ sold.total|floatformat:"2g" }}</p>
+                    </div>
+                {% endif %}
+                {% if produced is None and sold is None %}<p class="t-faint">Production and sales show here for those who take part in them.</p>{% endif %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

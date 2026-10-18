@@ -1,0 +1,76 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ bom }} · Production
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'production:boms' %}">BOMs</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ bom }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ bom.item.name }} · v{{ bom.version }}
+                {% if bom.status == "active" %}<span class="badge badge--success">Active</span>{% elif bom.status == "draft" %}<span class="badge badge--info">Draft</span>{% else %}<span class="badge badge--neutral">Archived</span>{% endif %}
+            </h1>
+            <p class="page__sub">{{ bom.item.code }} · one batch makes <strong>{{ bom.batch_size.normalize }} {{ bom.batch_uom.code }}</strong>{% if bom.note %} · {{ bom.note }}{% endif %}{% if bom.activated_at %} · active since {{ bom.activated_at|date:"d M Y" }}{% endif %}</p>
+        </div>
+        <div class="page__actions">
+            {% if can_edit %}
+                {% if is_draft %}
+                    <form method="post" action="{% url 'production:bom_action' bom.pk 'delete' %}" data-confirm="The draft and its materials are removed." data-confirm-title="Delete {{ bom }}?" data-confirm-button="Delete" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet" type="submit">Delete draft</button></form>
+                    <button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">Add material</button>
+                    {% if lines %}
+                        <form method="post" action="{% url 'production:bom_action' bom.pk 'activate' %}" data-confirm="New production orders of {{ bom.item.code }} will use this version; the current active version is archived (orders already made keep theirs)." data-confirm-title="Activate {{ bom }}?" data-confirm-button="Activate">{% csrf_token %}<button class="btn btn--primary" type="submit">Activate</button></form>
+                    {% endif %}
+                {% else %}
+                    <form method="post" action="{% url 'production:bom_action' bom.pk 'new_version' %}" data-confirm="A draft copy of these materials, to change and then activate." data-confirm-title="New version of {{ bom.item.code }}?" data-confirm-button="Start">{% csrf_token %}<button class="btn btn--primary" type="submit">New version</button></form>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head"><h2>Materials per batch</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} material{{ lines|length|pluralize }}</span></div>
+        {% if lines %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Material</th><th class="numeric">Per batch</th><th class="numeric">Scrap %</th><th>Kind</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody>
+                        {% for line in lines %}
+                            <tr>
+                                <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                                <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                                <td class="numeric">{{ line.scrap_pct.normalize }}</td>
+                                <td>{% if line.is_packaging %}Packaging{% else %}Ingredient{% endif %}</td>
+                                <td>{{ line.note }}</td>
+                                <td>{% if can_edit and is_draft %}<form method="post" action="{% url 'production:bom_line_remove' bom.pk line.pk %}" data-confirm="The material is taken off this draft." data-confirm-title="Remove {{ line.item.code }}?" data-confirm-button="Remove" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button></form>{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty"><div class="empty__text">Add each ingredient and packaging material for one batch.</div></div>
+        {% endif %}
+    </div>
+    {% if versions|length > 1 %}
+        <div class="card">
+            <div class="card__head"><h2>Versions</h2></div>
+            <div class="table-wrap"><table class="table"><thead><tr><th>Version</th><th>Status</th><th>Batch</th></tr></thead><tbody>
+                {% for v in versions %}<tr><td><a href="{% url 'production:bom_detail' v.pk %}">v{{ v.version }}</a></td><td>{{ v.get_status_display }}</td><td>{{ v.batch_size.normalize }}</td></tr>{% endfor %}
+            </tbody></table></div>
+        </div>
+    {% endif %}
+    {% if line_form %}
+        {% url 'production:bom_line_add' bom.pk as line_url %}
+        {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add a material" action=line_url form=line_form submit="Add" wide=True note="Quantity for one batch, in the unit chosen. Scrap % is normal wastage, added when production is planned." %}
+    {% endif %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

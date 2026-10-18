@@ -1,0 +1,41 @@
+<div class="card">
+    <div class="card__head"><h2>Counted</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
+    {% if lines %}
+        <form method="post" action="{% url 'inventory:count_save' row.pk %}">
+            {% csrf_token %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Item</th><th>Batch</th><th>Bin</th><th class="numeric">System</th><th class="numeric">Counted</th><th class="numeric">Difference</th><th>Note</th></tr></thead>
+                    <tbody>
+                        {% for line in lines %}
+                            <tr>
+                                <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                                <td>{{ line.batch.batch_no|default:"—" }}</td>
+                                <td>{{ line.location.code|default:"—" }}</td>
+                                <td class="numeric">{% if row.status == "counting" %}<span class="t-faint">hidden</span>{% else %}{{ line.system_qty.normalize }}{% endif %}</td>
+                                <td class="numeric">
+                                    {% if can_edit %}
+                                        <label class="sr-only" for="counted_{{ line.pk }}">Counted {{ line.item.code }}</label>
+                                        <input class="input" id="counted_{{ line.pk }}" name="counted_{{ line.pk }}" inputmode="decimal"
+                                               value="{% if line.counted_qty is not None %}{{ line.counted_qty.normalize }}{% endif %}" size="8">
+                                    {% else %}
+                                        {% if line.counted_qty is not None %}{{ line.counted_qty.normalize }}{% else %}—{% endif %}
+                                    {% endif %}
+                                    {{ line.item.base_uom.code }}
+                                </td>
+                                <td class="numeric">{% if row.status != "counting" and line.difference is not None %}{% if line.difference > 0 %}+{% endif %}{{ line.difference.normalize }}{% else %}—{% endif %}</td>
+                                <td class="t-muted">{{ line.note }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if can_edit %}
+                <div class="card__body"><button class="btn btn--primary" type="submit">Save counts</button>
+                    <span class="t-faint">The software's quantities stay hidden while counting, so the count is honest.</span></div>
+            {% endif %}
+        </form>
+    {% else %}
+        <div class="empty"><div class="empty__text">The store had no stock when the count started. Add what is found.</div></div>
+    {% endif %}
+</div>

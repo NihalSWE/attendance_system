@@ -1,0 +1,6 @@
+<td>{{ row.code }}</td>
+<td>{{ row.name }}{% if row.email %}<div class="t-muted">{{ row.email }}</div>{% endif %}</td>
+<td>{{ row.contact_person|default:"—" }}</td>
+<td>{{ row.phone|default:"—" }}</td>
+<td>{% if row.payment_terms_days %}{{ row.payment_terms_days }} days{% else %}Cash{% endif %}</td>
+{% include "inventory/rows/_status.html" %}

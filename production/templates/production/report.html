@@ -1,0 +1,54 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    Production report · Production
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Production
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Report
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Production report</h1>
+            <p class="page__sub">Every completed run: planned against made, wastage, yield and what one unit cost. Open a run for planned against used per material.</p>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head"><h2>Completed runs</h2><span class="spacer"></span>{% if sees_costs %}<span class="t-muted">Materials in all runs <span class="amount">{{ total_cost|floatformat:2 }}</span></span>{% endif %}</div>
+        {% if not rows.object_list %}
+            <div class="empty server-table-empty"><div class="empty__title">No completed runs yet</div></div>
+        {% endif %}
+        {% if server_table or rows.object_list %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead><tr><th>Order</th><th>Completed</th><th>Product</th><th class="numeric">Planned</th><th class="numeric">Good</th><th class="numeric">Rejected</th><th class="numeric">Yield</th><th class="numeric">Materials</th><th class="numeric">Unit cost</th></tr></thead>
+                    <tbody>
+                        {% for order in rows %}
+                            <tr>
+                                <td><a href="{% url 'production:order_detail' order.pk %}">{{ order.number }}</a></td>
+                                <td>{{ order.completed_at|date:"d M Y" }}</td>
+                                <td>{{ order.item.code }} {{ order.item.name }}</td>
+                                <td class="numeric">{{ order.planned_base.normalize }} {{ order.item.base_uom.code }}</td>
+                                <td class="numeric">{{ order.good_qty_base.normalize }}</td>
+                                <td class="numeric">{{ order.rejected_qty_base.normalize }}</td>
+                                <td class="numeric">{{ order.yield_pct|default:"—" }}%</td>
+                                <td class="numeric">{% if sees_costs %}{{ order.material_cost|floatformat:2 }}{% else %}<span class="t-faint">—</span>{% endif %}</td>
+                                <td class="numeric">{% if sees_costs %}{{ order.unit_cost|floatformat:4 }}{% else %}<span class="t-faint">—</span>{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+{% endtimezone %}
+{% endblock %}

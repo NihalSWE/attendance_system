@@ -1,0 +1,158 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    {{ doc.number }} · Purchase
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'purchasing:receipts' %}">Goods receipts</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ doc.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ doc.number }} {% include "purchasing/_status.html" %}</h1>
+            <p class="page__sub">
+                {{ doc.supplier.name }} · into {{ doc.warehouse }} · {{ doc.received_date|date:"d M Y" }}
+                {% if doc.order %} · against <a href="{% url 'purchasing:order_detail' doc.order_id %}">{{ doc.order.number }}</a>{% else %} · direct{% endif %}
+                {% if doc.challan_no %}<br>Challan {{ doc.challan_no }}{% endif %}{% if doc.invoice_no %} · invoice {{ doc.invoice_no }}{% endif %}{% if doc.vehicle_no %} · vehicle {{ doc.vehicle_no }}{% endif %}
+                {% if doc.posted_at %}<br>Posted {{ doc.posted_at|date:"d M Y H:i" }}{% endif %}
+                {% if doc.reversed_at %} · reversed {{ doc.reversed_at|date:"d M Y H:i" }}: {{ doc.reverse_reason }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_edit %}
+                <form method="post" action="{% url 'purchasing:receipt_action' doc.pk 'cancel' %}"
+                      data-confirm="The draft is kept for the record but cannot be posted." data-confirm-title="Cancel {{ doc.number }}?"
+                      data-confirm-button="Cancel it" data-confirm-tone="danger">
+                    {% csrf_token %}<button class="btn btn--quiet" type="submit">Cancel draft</button>
+                </form>
+                <button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">Add line</button>
+            {% endif %}
+            {% if can_post %}
+                <form method="post" action="{% url 'purchasing:receipt_action' doc.pk 'post' %}"
+                      data-confirm="The accepted quantities go into {{ doc.warehouse.code }}, dated {{ doc.received_date|date:'d M Y' }}. Items needing QC wait in quarantine. Package labels are made for lines that say how many packages."
+                      data-confirm-title="Post {{ doc.number }}?" data-confirm-button="Post">
+                    {% csrf_token %}<button class="btn btn--primary" type="submit">Post</button>
+                </form>
+            {% endif %}
+            {% if can_print %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="print-dialog"
+                        data-dialog-action="{% url 'purchasing:receipt_labels' doc.pk %}"
+                        data-dialog-subject="the {{ labels|length }} package label{{ labels|length|pluralize }}"
+                        data-dialog-reprint="1">Print labels</button>
+            {% endif %}
+            {% if doc.status == "posted" %}
+                <a class="btn btn--ghost" href="{% url 'purchasing:returns' %}?receipt={{ doc.pk }}">Return goods</a>
+            {% endif %}
+            {% if can_reverse %}
+                <button class="btn btn--danger" type="button" data-open-dialog="reverse-dialog">Reverse</button>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if can_edit %}
+        <div class="card">
+            <div class="card__body">
+                {% include "inventory/includes/scan_box.html" %}
+                <p class="t-faint">Scan a supplier's GS1 barcode or an item barcode to fill a new line.</p>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head"><h2>What arrived</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
+        {% if lines %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Item</th><th class="numeric">Received</th><th class="numeric">Refused</th><th class="numeric">Accepted</th>
+                            {% if sees_costs %}<th class="numeric">Unit cost</th><th class="numeric">Value</th>{% endif %}
+                            <th>Batch</th><th>Expiry</th><th class="numeric">Packages</th><th>QC</th><th><span class="sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in lines %}
+                            <tr>
+                                <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}{% if line.location %}<div class="t-muted">Bin {{ line.location.code }}</div>{% endif %}</td>
+                                <td class="numeric">{{ line.qty_received.normalize }} {{ line.uom.code }}</td>
+                                <td class="numeric">{{ line.qty_rejected.normalize }}</td>
+                                <td class="numeric">{{ line.qty_accepted_base.normalize }} {{ line.item.base_uom.code }}</td>
+                                {% if sees_costs %}<td class="numeric">{{ line.unit_cost|floatformat:2 }}</td><td class="numeric">{{ line.value|floatformat:2 }}</td>{% endif %}
+                                <td>{{ line.batch_no|default:"—" }}{% if line.supplier_batch_no %}<div class="t-muted">Supplier {{ line.supplier_batch_no }}</div>{% endif %}</td>
+                                <td>{{ line.expiry_date|date:"d M Y"|default:"—" }}</td>
+                                <td class="numeric">{{ line.packages|default:"—" }}</td>
+                                <td>
+                                    {% if line.qc_status == "pending" %}<span class="badge badge--warning">Waiting for QC</span>
+                                    {% elif line.qc_status == "passed" %}<span class="badge badge--success">Passed</span>
+                                    {% elif line.qc_status == "failed" %}<span class="badge badge--danger">Failed</span>
+                                    {% elif line.item.qc_required and doc.status == "draft" %}<span class="t-muted">QC after posting</span>
+                                    {% else %}<span class="t-faint">—</span>{% endif %}
+                                </td>
+                                <td>
+                                    {% if can_edit %}
+                                        <form method="post" action="{% url 'purchasing:receipt_line_remove' doc.pk line.pk %}"
+                                              data-confirm="The line is taken off the receipt." data-confirm-title="Remove this line?" data-confirm-button="Remove" data-confirm-tone="danger">
+                                            {% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button>
+                                        </form>
+                                    {% elif can_qc and line.qc_status == "pending" %}
+                                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="qc-dialog"
+                                                data-dialog-action="{% url 'purchasing:qc_record' line.pk %}"
+                                                data-dialog-subject="{{ line.item.code }} batch {{ line.batch_no }}">QC</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty"><div class="empty__text">Add what arrived, or scan it.</div></div>
+        {% endif %}
+    </div>
+
+    {% if can_edit %}
+        {% url 'purchasing:receipt_line_add' doc.pk as line_url %}
+        {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add what arrived" action=line_url form=line_form submit="Add line" wide=True note="Quantities and cost in the unit you choose. Refused at the gate never enters stock." %}
+    {% endif %}
+    {% if can_reverse %}
+        {% url 'purchasing:receipt_action' doc.pk 'reverse' as reverse_url %}
+        {% include "organization/profile/modal_form.html" with id="reverse-dialog" title="Reverse "|add:doc.number action=reverse_url form=reason_form submit="Reverse" danger=True note="Counter-moves dated today take its goods back out and void its labels. Refused if they were used or returned." %}
+    {% endif %}
+    {% if can_print %}
+        {% include "inventory/includes/print_dialog.html" %}
+    {% endif %}
+    {% if can_qc %}
+        <dialog class="modal" id="qc-dialog" aria-labelledby="qc-title">
+            <form class="modal__card" method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <div class="modal__head"><h2 id="qc-title">QC of <span data-dialog-subject></span></h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                <div class="modal__body stack">
+                    <p class="t-faint">Passed releases the batch for use. Failed blocks it until it is returned to the supplier.</p>
+                    {% for field in qc_form.visible_fields %}{% include "leaves/includes/field.html" %}{% endfor %}
+                </div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn--primary" type="submit">Save</button>
+                </div>
+            </form>
+        </dialog>
+    {% endif %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+    {% if can_edit %}
+        {% load static %}
+        <script defer src="{% static 'purchasing/js/receipt_scan.js' %}"></script>
+    {% endif %}
+{% endblock %}

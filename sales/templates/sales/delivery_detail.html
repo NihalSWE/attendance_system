@@ -1,0 +1,83 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}{{ delivery.number }} · Sales{% endblock %}
+{% block extra_css %}{% include "inventory/_head.html" %}{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'sales:deliveries' %}">Deliveries</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ delivery.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ delivery.number }} {% with row=delivery %}{% include "sales/_status.html" %}{% endwith %}</h1>
+            <p class="page__sub">
+                To {{ order.customer.name }} · {{ delivery.delivery_date|date:"d M Y" }} · for <a href="{% url 'sales:order_detail' order.pk %}">{{ order.number }}</a> · from {{ delivery.warehouse }}
+                {% if delivery.vehicle_no %} · vehicle {{ delivery.vehicle_no }}{% endif %}{% if delivery.driver %} · {{ delivery.driver }}{% endif %}
+                {% if invoice %}<br>Invoiced on <a href="{% url 'sales:invoice_detail' invoice.pk %}">{{ invoice.number }}</a>{% endif %}
+                {% if delivery.reversed_at %}<br>Reversed {{ delivery.reversed_at|date:"d M Y H:i" }}: {{ delivery.reverse_reason }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'sales:delivery_pdf' delivery.pk %}" target="_blank" rel="noopener">Challan</a>
+            {% if can_edit %}
+                <form method="post" action="{% url 'sales:delivery_action' delivery.pk 'cancel' %}" data-confirm="The draft is dropped; nothing moved." data-confirm-title="Cancel {{ delivery.number }}?" data-confirm-button="Cancel it" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet" type="submit">Cancel draft</button></form>
+                <button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">Add line</button>
+            {% endif %}
+            {% if can_post %}
+                <form method="post" action="{% url 'sales:delivery_action' delivery.pk 'post' %}" data-confirm="The goods leave {{ delivery.warehouse.code }} for {{ order.customer.name }}; their reservation is released." data-confirm-title="Post {{ delivery.number }}?" data-confirm-button="Post">{% csrf_token %}<button class="btn btn--primary" type="submit">Post</button></form>
+            {% endif %}
+            {% if can_invoice %}
+                <form method="post" action="{% url 'sales:delivery_action' delivery.pk 'invoice' %}">{% csrf_token %}<button class="btn btn--primary" type="submit">Make invoice</button></form>
+            {% endif %}
+            {% if delivery.status == "posted" %}<a class="btn btn--ghost" href="{% url 'sales:returns' %}?delivery={{ delivery.pk }}">Return goods</a>{% endif %}
+            {% if can_reverse %}<button class="btn btn--danger" type="button" data-open-dialog="reason-dialog" data-dialog-action="{% url 'sales:delivery_action' delivery.pk 'reverse' %}" data-dialog-subject="Reverse {{ delivery.number }}">Reverse</button>{% endif %}
+        </div>
+    </div>
+    {% if can_edit %}
+        <div class="card" id="scan">
+            <form class="card__body" method="post" action="{% url 'sales:delivery_scan' delivery.pk %}">
+                {% csrf_token %}
+                <label class="field__label" for="scan-code">Scan a carton label</label>
+                <div class="scanbox__row">
+                    <input class="input scanbox__input" id="scan-code" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus required placeholder="Point the scanner here and scan">
+                    <button class="btn btn--ghost" type="submit">Add</button>
+                </div>
+                <span class="field__help">Each carton scanned is added to its order line; its label is marked used up when posted.</span>
+            </form>
+        </div>
+    {% endif %}
+    <div class="card">
+        <div class="card__head"><h2>Going out</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
+        {% if lines %}
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>Item</th><th>Batch</th><th>Expiry</th><th>Bin</th><th class="numeric">Quantity</th><th>Label</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    {% for line in lines %}
+                        <tr>
+                            <td>{{ line.item.code }} {{ line.item.name }}{% if line.not_fefo_reason %}<div class="t-muted">Not first to expire: {{ line.not_fefo_reason }}</div>{% endif %}</td>
+                            <td>{{ line.batch.batch_no|default:"—" }}</td>
+                            <td>{{ line.batch.expiry_date|date:"d M Y"|default:"—" }}</td>
+                            <td>{{ line.location.code|default:"—" }}</td>
+                            <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                            <td>{{ line.label.code|default:"—" }}</td>
+                            <td>{% if can_edit %}<form method="post" action="{% url 'sales:delivery_line_remove' delivery.pk line.pk %}" data-confirm="The line is taken off." data-confirm-title="Remove this line?" data-confirm-button="Remove" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button></form>{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table></div>
+        {% else %}
+            <div class="empty"><div class="empty__text">Scan the cartons, or add lines: without a batch, the first to expire is taken.</div></div>
+        {% endif %}
+    </div>
+    {% if line_form %}
+        {% url 'sales:delivery_line_add' delivery.pk as line_url %}
+        {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add" action=line_url form=line_form submit="Add" wide=True %}
+    {% endif %}
+    {% include "inventory/includes/action_dialog.html" with id="reason-dialog" form=reason_form submit="Reverse" danger=True note="The goods come back into the store and are reserved for the order again. Refused once invoiced." %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}{% include "inventory/_js.html" %}{% endblock %}

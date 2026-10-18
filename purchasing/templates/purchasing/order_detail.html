@@ -1,0 +1,137 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    {{ doc.number }} · Purchase
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'purchasing:orders' %}">Purchase orders</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ doc.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ doc.number }} {% include "purchasing/_status.html" %}</h1>
+            <p class="page__sub">
+                {{ doc.supplier.name }} · for {{ doc.branch.name }} · {{ doc.order_date|date:"d M Y" }}{% if doc.expected_date %} · delivery by {{ doc.expected_date|date:"d M Y" }}{% endif %}
+                {% if doc.approved_at %}<br>Approved by {{ doc.approved_by.get_full_name|default:doc.approved_by.email }} on {{ doc.approved_at|date:"d M Y H:i" }}{% endif %}
+                {% if doc.sent_at %} · sent to {{ doc.sent_to }} on {{ doc.sent_at|date:"d M Y H:i" }}{% endif %}
+                {% if doc.closed_note %}<br>{{ doc.closed_note }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'purchasing:order_pdf' doc.pk %}" target="_blank" rel="noopener">PDF</a>
+            {% if may_order %}
+                {% if doc.status == "draft" or doc.status == "submitted" or doc.status == "approved" %}
+                    <button class="btn btn--quiet" type="button" data-open-dialog="cancel-dialog">Cancel order</button>
+                {% elif doc.status == "partly_received" %}
+                    <button class="btn btn--quiet" type="button" data-open-dialog="close-dialog">Close</button>
+                {% endif %}
+                {% if doc.status == "approved" or doc.status == "partly_received" %}
+                    <button class="btn btn--ghost" type="button" data-open-dialog="email-dialog">Email to supplier</button>
+                {% endif %}
+            {% endif %}
+            {% if can_edit %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">Add line</button>
+                {% if lines %}
+                    <form method="post" action="{% url 'purchasing:order_action' doc.pk 'submit' %}"
+                          data-confirm="Total {{ totals.total|floatformat:2 }}. It goes to the approver and cannot change while it waits."
+                          data-confirm-title="Send {{ doc.number }} for approval?" data-confirm-button="Send">
+                        {% csrf_token %}<button class="btn btn--primary" type="submit">Send for approval</button>
+                    </form>
+                {% endif %}
+            {% endif %}
+            {% if can_decide %}
+                <button class="btn btn--quiet" type="button" data-open-dialog="send-back-dialog">Send back</button>
+                <form method="post" action="{% url 'purchasing:order_action' doc.pk 'approve' %}"
+                      data-confirm="{{ doc.supplier.name }}, total {{ totals.total|floatformat:2 }}. Once approved it can be sent and received."
+                      data-confirm-title="Approve {{ doc.number }}?" data-confirm-button="Approve">
+                    {% csrf_token %}<button class="btn btn--primary" type="submit">Approve</button>
+                </form>
+            {% endif %}
+            {% if can_receive %}
+                <a class="btn btn--primary" href="{% url 'purchasing:receipts' %}?order={{ doc.pk }}">Receive goods</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head"><h2>Ordered</h2><span class="spacer"></span>
+            <span class="t-muted">Amount <span class="amount">{{ totals.amount|floatformat:2 }}</span> · VAT <span class="amount">{{ totals.vat|floatformat:2 }}</span> · Total <strong class="amount">{{ totals.total|floatformat:2 }}</strong></span></div>
+        {% if lines %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Item</th><th class="numeric">Quantity</th><th class="numeric">Unit price</th><th class="numeric">Disc %</th><th class="numeric">VAT %</th><th class="numeric">Amount</th><th class="numeric">Received</th><th class="numeric">Open</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody>
+                        {% for line in lines %}
+                            <tr>
+                                <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}{% if line.requisition_line %}<div class="t-muted">{{ line.requisition_line.requisition.number }}</div>{% endif %}</td>
+                                <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                                <td class="numeric">{{ line.unit_price|floatformat:2 }}</td>
+                                <td class="numeric">{{ line.discount_pct.normalize }}</td>
+                                <td class="numeric">{{ line.vat_rate.normalize }}</td>
+                                <td class="numeric">{{ line.amount|floatformat:2 }}</td>
+                                <td class="numeric">{{ line.qty_received_base.normalize }} {{ line.item.base_uom.code }}</td>
+                                <td class="numeric">{{ line.qty_open_base.normalize }}</td>
+                                <td>
+                                    {% if can_edit %}
+                                        <form method="post" action="{% url 'purchasing:order_line_remove' doc.pk line.pk %}"
+                                              data-confirm="The line is taken off the order." data-confirm-title="Remove this line?" data-confirm-button="Remove" data-confirm-tone="danger">
+                                            {% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button>
+                                        </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty"><div class="empty__text">Add what is ordered, or make the order from approved requisitions.</div></div>
+        {% endif %}
+        {% if doc.terms %}<div class="card__body t-muted">Terms: {{ doc.terms }}</div>{% endif %}
+    </div>
+
+    {% if receipts %}
+        <div class="card">
+            <div class="card__head"><h2>Goods receipts</h2></div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Number</th><th>Received</th><th>Store</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for r in receipts %}
+                            <tr><td><a href="{% url 'purchasing:receipt_detail' r.pk %}">{{ r.number }}</a></td><td>{{ r.received_date|date:"d M Y" }}</td><td>{{ r.warehouse.code }}</td><td>{% include "purchasing/_status.html" with doc=r %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if can_edit %}
+        {% url 'purchasing:order_line_add' doc.pk as line_url %}
+        {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add a line" action=line_url form=line_form submit="Add line" wide=True note="The price is for one unit written in Unit, before VAT." %}
+    {% endif %}
+    {% if may_order %}
+        {% url 'purchasing:order_email' doc.pk as email_url %}
+        {% include "organization/profile/modal_form.html" with id="email-dialog" title="Email "|add:doc.number action=email_url form=email_form submit="Send" note="The order goes as a PDF from the company's email account (Organisation → Email settings)." %}
+        {% url 'purchasing:order_action' doc.pk 'cancel' as cancel_url %}
+        {% include "organization/profile/modal_form.html" with id="cancel-dialog" title="Cancel "|add:doc.number action=cancel_url form=cancel_form submit="Cancel the order" danger=True note="Requisition lines it took go back to approved." %}
+        {% url 'purchasing:order_action' doc.pk 'close' as close_url %}
+        {% include "organization/profile/modal_form.html" with id="close-dialog" title="Close "|add:doc.number action=close_url form=close_form submit="Close" danger=True note="What is still open will not come. Say why." %}
+    {% endif %}
+    {% if can_decide %}
+        {% url 'purchasing:order_action' doc.pk 'send_back' as back_url %}
+        {% include "organization/profile/modal_form.html" with id="send-back-dialog" title="Send "|add:doc.number|add:" back" action=back_url form=back_form submit="Send back" danger=True note="It goes back to draft. Say what must change." %}
+    {% endif %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

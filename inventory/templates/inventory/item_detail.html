@@ -1,0 +1,186 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    {{ item.code }} · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:items' %}">Items</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ item.code }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">
+                {{ item.name }}
+            </h1>
+            <p class="page__sub">
+                {{ item.code }} · {{ item.get_kind_display }} · {{ item.category.name }}{% if item.name_bn %} · {{ item.name_bn }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_print %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="print-dialog"
+                        data-dialog-action="{% url 'inventory:item_label_print' item.pk %}"
+                        data-dialog-subject="the item label ({% if item.barcode %}{{ item.barcode }}{% else %}{{ item.code }}{% endif %})"
+                        data-dialog-reprint="{% if item_label_printed %}1{% else %}0{% endif %}">Print item label</button>
+                <a class="btn btn--ghost" href="{% url 'inventory:package_labels' item.pk %}">Package labels</a>
+            {% endif %}
+            {% if can_manage %}
+                <a class="btn btn--ghost" href="{% url 'inventory:items' %}?edit={{ item.pk }}">
+                    Edit item
+                </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head"><h2>Details</h2></div>
+            <div class="card__body">
+                <dl class="inv-facts">
+                    <dt>Base unit</dt><dd>{{ item.base_uom.code }}</dd>
+                    <dt>Batches</dt><dd>{% if item.track_batch %}Kept{% if item.track_expiry %}, with expiry{% if item.shelf_life_days %} ({{ item.shelf_life_days }} days shelf life){% endif %}{% endif %}{% else %}Not kept{% endif %}</dd>
+                    <dt>QC before use</dt><dd>{{ item.qc_required|yesno:"Yes,No" }}</dd>
+                    <dt>Barcode</dt><dd>{{ item.barcode|default:"—" }}</dd>
+                    <dt>Usual store</dt><dd>{{ item.default_warehouse|default:"—" }}</dd>
+                    <dt>Reorder at</dt><dd>{% if item.reorder_point is not None %}{{ item.reorder_point.normalize }} {{ item.base_uom.code }}{% if item.reorder_qty %} (order {{ item.reorder_qty.normalize }}){% endif %}{% else %}—{% endif %}</dd>
+                    <dt>Min / max</dt><dd>{{ item.min_stock.normalize|default:"—" }} / {{ item.max_stock.normalize|default:"—" }}</dd>
+                    {% if sees_costs %}
+                        <dt>Average cost</dt><dd>{% if cost %}{{ cost.avg_cost|floatformat:4 }} per {{ item.base_uom.code }}{% else %}—{% endif %}</dd>
+                        <dt>Standard cost</dt><dd>{{ item.standard_cost|floatformat:2|default:"—" }}</dd>
+                    {% endif %}
+                    <dt>Sale price</dt><dd>{{ item.sale_price|floatformat:2|default:"—" }}</dd>
+                    <dt>VAT %</dt><dd>{{ item.vat_rate|default:"—" }}</dd>
+                    <dt>Status</dt><dd>{{ item.get_status_display }}</dd>
+                </dl>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card__head">
+                <h2>Pack units</h2>
+                <span class="spacer"></span>
+                {% if can_manage %}
+                    <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="pack-dialog">Add pack unit</button>
+                {% endif %}
+            </div>
+            {% if packs %}
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th>Pack</th><th>Equals</th><th>Barcode</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                        <tbody>
+                            {% for pack in packs %}
+                                <tr>
+                                    <td>1 {{ pack.uom.code }}</td>
+                                    <td>{{ pack.factor.normalize }} {{ item.base_uom.code }}</td>
+                                    <td>{{ pack.barcode|default:"—" }}</td>
+                                    <td>
+                                        {% if can_manage %}
+                                            <form method="post" action="{% url 'inventory:pack_unit_remove' item.pk pack.pk %}"
+                                                  data-confirm="Documents can no longer be entered in {{ pack.uom.code }} for this item. Entries already made are kept."
+                                                  data-confirm-title="Remove 1 {{ pack.uom.code }}?" data-confirm-button="Remove" data-confirm-tone="danger">
+                                                {% csrf_token %}
+                                                <button class="btn btn--quiet btn--sm" type="submit">Remove</button>
+                                            </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <div class="empty"><div class="empty__text">Only {{ item.base_uom.code }}. Add a pack (1 carton = 24 pieces) to enter documents in it.</div></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>Stock now</h2>
+            <span class="spacer"></span>
+            <span class="t-muted"><span class="amount">{{ on_hand.normalize }}</span> {{ item.base_uom.code }}</span>
+        </div>
+        {% if balances %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Store</th><th>Bin</th><th>Batch</th><th>Expiry</th><th class="numeric">On hand</th><th class="numeric">Reserved</th>{% if can_print %}<th><span class="sr-only">Labels</span></th>{% endif %}</tr></thead>
+                    <tbody>
+                        {% for b in balances %}
+                            <tr>
+                                <td>{{ b.warehouse }}</td>
+                                <td>{{ b.location.code|default:"—" }}</td>
+                                <td>{{ b.batch.batch_no|default:"—" }}{% if b.batch and b.batch.status != 'released' %} <span class="badge badge--warning">{{ b.batch.get_status_display }}</span>{% endif %}</td>
+                                <td>{{ b.batch.expiry_date|date:"d M Y"|default:"—" }}</td>
+                                <td class="numeric">{{ b.qty_on_hand.normalize }}</td>
+                                <td class="numeric">{{ b.qty_reserved.normalize }}</td>
+                                {% if can_print %}
+                                    <td>
+                                        <div class="inv-actions">
+                                            {% if b.batch %}
+                                                <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="print-dialog"
+                                                        data-dialog-action="{% url 'inventory:batch_label_print' b.batch_id %}"
+                                                        data-dialog-subject="the card of batch {{ b.batch.batch_no }}"
+                                                        data-dialog-reprint="{% if b.batch_id in printed_batches %}1{% else %}0{% endif %}">Batch card</button>
+                                            {% endif %}
+                                            <a class="btn btn--ghost btn--sm" href="{% url 'inventory:package_labels' item.pk %}?warehouse={{ b.warehouse_id }}{% if b.batch_id %}&amp;batch={{ b.batch_id }}{% endif %}{% if b.location_id %}&amp;location={{ b.location_id }}{% endif %}">Package labels</a>
+                                        </div>
+                                    </td>
+                                {% endif %}
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty"><div class="empty__text">No stock of this item.</div></div>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <div class="card__head"><h2>Stock card</h2><span class="spacer"></span><span class="t-muted">Every movement, newest first</span></div>
+        {% if not moves.object_list %}
+            <div class="empty server-table-empty"><div class="empty__text">Nothing has moved yet.</div></div>
+        {% endif %}
+        {% if server_table or moves.object_list %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead><tr><th>Posted</th><th>Date</th><th>Movement</th><th>Store</th><th>Batch</th><th class="numeric">Quantity</th><th class="numeric">Cost</th><th>Note</th></tr></thead>
+                    <tbody>
+                        {% for m in moves %}
+                            <tr>
+                                <td>{{ m.posted_at|date:"d M Y H:i" }}</td>
+                                <td>{{ m.work_date|date:"d M Y" }}</td>
+                                <td>{{ m.get_move_type_display }}</td>
+                                <td>{{ m.warehouse.code }}{% if m.location %} / {{ m.location.code }}{% endif %}</td>
+                                <td>{{ m.batch.batch_no|default:"—" }}</td>
+                                <td class="numeric">{% if m.qty > 0 %}+{% endif %}{{ m.qty.normalize }}</td>
+                                <td class="numeric">{% if sees_costs %}{{ m.unit_cost|floatformat:2 }}{% else %}<span class="t-faint">—</span>{% endif %}</td>
+                                <td>{{ m.note|default:"" }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+
+    {% if can_print %}
+        {% include "inventory/includes/print_dialog.html" %}
+    {% endif %}
+    {% if can_manage %}
+        {% url 'inventory:pack_unit_add' item.pk as pack_url %}
+        {% include "organization/profile/modal_form.html" with id="pack-dialog" title="Add a pack unit" action=pack_url form=pack_form submit="Add" note="For example 1 CARTON = 24, when the base unit is PCS." %}
+    {% endif %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

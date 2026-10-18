@@ -1,0 +1,40 @@
+{% extends "base_template/base.html" %}
+{% block title %}{{ price_list.name }} · Sales{% endblock %}
+{% block extra_css %}{% include "inventory/_head.html" %}{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'sales:price_lists' %}">Price lists</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ price_list.name }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ price_list.name }}</h1>
+            <p class="page__sub">Customers whose price list is “{{ price_list.name }}” get these prices{% if price_list.valid_from %} from {{ price_list.valid_from|date:"d M Y" }}{% endif %}{% if price_list.valid_to %} until {{ price_list.valid_to|date:"d M Y" }}{% endif %}. A line from a quantity applies when the order reaches it.</p>
+        </div>
+        <div class="page__actions">{% if can_edit %}<button class="btn btn--primary" type="button" data-open-dialog="price-dialog">Set a price</button>{% endif %}</div>
+    </div>
+    <div class="card">
+        <div class="card__head"><h2>Prices</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }}</span></div>
+        {% if lines %}
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>Item</th><th>Unit</th><th class="numeric">From quantity</th><th class="numeric">Price</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    {% for line in lines %}
+                        <tr><td>{{ line.item.code }} {{ line.item.name }}</td><td>{{ line.uom.code }}</td><td class="numeric">{{ line.min_qty.normalize }}</td><td class="numeric">{{ line.price|floatformat:2 }}</td>
+                            <td>{% if can_edit %}<form method="post" action="{% url 'sales:price_remove' price_list.pk line.pk %}" data-confirm="This price is taken off the list." data-confirm-title="Remove the price of {{ line.item.code }}?" data-confirm-button="Remove" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button></form>{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table></div>
+        {% else %}
+            <div class="empty"><div class="empty__text">Set the price of each item sold to this group.</div></div>
+        {% endif %}
+    </div>
+    {% if can_edit %}
+        {% url 'sales:price_list_detail' price_list.pk as price_url %}
+        {% include "organization/profile/modal_form.html" with id="price-dialog" title="Set a price" action=price_url form=price_form submit="Save" wide=True note="The same item, unit and from quantity again changes that price." %}
+    {% endif %}
+{% endblock %}
+{% block extra_js %}{% include "inventory/_js.html" %}{% endblock %}

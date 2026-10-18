@@ -1,0 +1,62 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}AI assistant settings · Sales{% endblock %}
+{% block extra_css %}{% include "inventory/_head.html" %}{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'ai_assistant:inbox' %}">AI order inbox</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Settings
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">AI assistant settings</h1>
+            <p class="page__sub">The AI reads orders into drafts; a person always confirms. It never sets prices, confirms orders or moves stock.</p>
+        </div>
+    </div>
+    <div class="alert alert--info">Order text and report figures are sent to Anthropic, the AI provider. Switch the assistant on only after the client's written consent is received and recorded below. The key is stored encrypted and never shown again.</div>
+    <div class="card">
+        <form class="card__body stack" method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert--danger">{{ form.non_field_errors }}</div>{% endif %}
+            <p class="t-muted">Key: {% if own.has_key %}saved{% else %}not saved{% endif %} · inbox password: {% if own.imap_password_encrypted %}saved{% else %}not saved{% endif %}{% if own.last_inbox_check %} · inbox last read {{ own.last_inbox_check|date:"d M Y H:i" }}{% endif %}{% if own.last_inbox_error %} · <span class="badge badge--danger">{{ own.last_inbox_error }}</span>{% endif %} · today's AI cost about US$ {{ spent|floatformat:2 }}</p>
+            <div class="grid grid--2">
+                {% for field in form.visible_fields %}
+                    {% include "leaves/includes/field.html" %}
+                {% endfor %}
+            </div>
+            <div><button class="btn btn--primary" type="submit">Save</button></div>
+        </form>
+    </div>
+    <div class="card">
+        <div class="card__head"><h2>Who receives order summaries and reports</h2><span class="spacer"></span><button class="btn btn--ghost btn--sm" type="button" data-open-dialog="recipient-dialog">Add</button></div>
+        {% if people %}
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>Name</th><th>Email</th><th>New orders</th><th>Daily</th><th>Weekly</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>{% for person in people %}
+                    <tr><td>{{ person.name }}{% if person.designation %}<br><span class="t-muted">{{ person.designation }}</span>{% endif %}</td><td>{{ person.email }}</td>
+                        <td>{{ person.gets_orders|yesno:"Yes,—" }}</td><td>{{ person.gets_daily|yesno:"Yes,—" }}</td><td>{{ person.gets_weekly|yesno:"Yes,—" }}</td>
+                        <td><form method="post" action="{% url 'ai_assistant:recipient_remove' person.pk %}" data-confirm="{{ person.email }} gets nothing more." data-confirm-title="Remove {{ person.name }}?" data-confirm-button="Remove" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button></form></td></tr>
+                {% endfor %}</tbody>
+            </table></div>
+        {% else %}
+            <div class="empty"><div class="empty__text">Add the managers who get new orders and the daily and weekly reports.</div></div>
+        {% endif %}
+    </div>
+    {% if calls %}
+        <div class="card">
+            <div class="card__head"><h2>Latest AI calls</h2></div>
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>When</th><th>For</th><th>Model</th><th class="numeric">Cost (US$)</th><th>Result</th></tr></thead>
+                <tbody>{% for call in calls %}<tr><td>{{ call.created_at|date:"d M Y H:i" }}</td><td>{{ call.get_kind_display }}</td><td>{{ call.served_by|default:call.model }}</td><td class="numeric">{{ call.cost|floatformat:4 }}</td><td>{% if call.error %}<span class="badge badge--danger">{{ call.error }}</span>{% else %}<span class="badge badge--success">OK</span>{% endif %}</td></tr>{% endfor %}</tbody>
+            </table></div>
+        </div>
+    {% endif %}
+    {% url 'ai_assistant:recipient_add' as recipient_url %}
+    {% include "organization/profile/modal_form.html" with id="recipient-dialog" title="Add a recipient" action=recipient_url form=recipient_form submit="Add" %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}{% include "inventory/_js.html" %}{% endblock %}

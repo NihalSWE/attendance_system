@@ -6329,3 +6329,240 @@ Built, not run on live: deleting stored uploads needs the senior's go-ahead.
   the table while it runs) to give the space back to the disk; take a
   database backup first. The Messages page will list fewer uploads.
 - Tests: `devices/tests_message_prune.py` (5). No migration, no `.env` change.
+
+### Inventory Phase 0: decisions pack and Excel templates — 2026-10-15
+
+First step of the Store & Inventory module ([inventory/00-PLAN.md](inventory/00-PLAN.md)).
+No code, no migrations; documents for the client meeting only.
+
+- [inventory/01-PHASE-0-DECISIONS.md](inventory/01-PHASE-0-DECISIONS.md): the
+  meeting pack. Each open decision (D2 valuation, D3/D4 labels and hardware,
+  D8 QC/batches/expiry, D9 month-end, D12 VAT/invoices/numbering year, the
+  approval chains, AI channels and the 5 managers, opening stock date) has a
+  recommendation, an answer line and the phase that needs it; sign-off table
+  for the client and the senior.
+- Six Excel templates in `docs/inventory/templates/` (stores + bins, items +
+  pack units, suppliers, customers, BOMs, opening stock), built by
+  `docs/scripts/build_inventory_templates.py`: a How to fill sheet, an
+  Example sheet and the sheet to fill, with dropdowns and number/date checks.
+  The headings are the contract for the Phase 1 importers.
+- Phase 1 may start on the recommendations; only D2 (average per company or
+  per store) shapes a table, and the cost table will hold both.
+
+**Next:** send the templates and hold the meeting; Phase 1 (apps, masters,
+stock ledger and posting service) when the senior says go.
+
+### Inventory Phase 1: foundation, masters, stock ledger, opening stock — 2026-10-15
+
+Store & Inventory, Phase 1 of [inventory/00-PLAN.md](inventory/00-PLAN.md);
+details in [inventory/02-PHASE-1.md](inventory/02-PHASE-1.md).
+
+- New apps `inventory`, `purchasing` (Supplier), `sales` (Customer),
+  `production` (empty shell); 17 tables. Feature `inventory` ("Store &
+  Inventory", `tenants.0008`), off for every company until root enables it.
+- **Posting service** (`inventory/posting.py`): the only writer of the
+  immutable `StockMove` ledger and the locked `StockBalance`; no negative
+  stock, no issue from quarantined/expired batches, reserved stock kept,
+  closed months refused, moving weighted average (per company or per store),
+  reversal by counter-moves, per-type yearly numbering, nightly
+  `check_stock`.
+- Masters with server-side tables, Add/Edit in modals, deactivate behind a
+  confirmation: units (+ standard units), categories, items (+ pack units,
+  item page with stock card), stores, bins, suppliers, customers, settings.
+- Opening stock: draft → post → reverse; Excel import of the Phase 0
+  templates for stores+bins, items+packs, suppliers, customers and opening
+  stock (preview, then all-or-nothing confirm; existing codes skipped).
+- Nine `inventory.*` branch permissions, offered (Access page, API) only with
+  the module; inventory pages open to Employee logins given access.
+- Menu "Inventory" via `base_template/navigation.py`; new icon in
+  `navigation_icon.html` (Ajay to review; `sidebar.html` untouched).
+- Tests: 42 in `inventory` (posting rules, every form POSTed, gates, the
+  whole done-when flow from the templates).
+
+**Deploy:** pull, migrate, collectstatic, restart. Nothing changes for a
+company until root enables Store & Inventory.
+
+### Inventory Phase 2: barcodes, labels and scanning — 2026-10-15
+
+Details in [inventory/03-PHASE-2.md](inventory/03-PHASE-2.md).
+
+- Labels for items (EAN-13 or Code 128), batches and packages (QR + Code 128,
+  optional GS1-128) and bins, as PDFs one page per label in the chosen sizes
+  (50×25 / 40×30 / 60×40 and 100×50 / 100×75 / 75×50 mm). Codes
+  `P|B|L<company id>-000001`.
+- Label register: print, reprint (reason required, logged), void (a void label's
+  scan is refused). Print buttons on the item page, Bins, Stores and posted
+  opening stock lines; package labels for N packages of a quantity.
+- One lookup for every scan (our QR, GS1-128 in every scanner form, label
+  codes, product and pack barcodes, item codes) and the Scan page with a scan
+  box for keyboard scanners (queued) and phone cameras (html5-qrcode).
+- Proven in software: labels rendered at 203 dpi and read back by zxing-cpp
+  resolve to the right item, batch, expiry and quantity (test runs where the
+  decoder is installed). **Still to do on site:** the client's printer,
+  scanner and a phone on the live https:// address.
+- Tables `inventory_barcode_label`, `inventory_label_print`; label settings on
+  `inventory_settings` (`inventory.0002_labels`). Tests: 62 in `inventory`.
+
+**Deploy:** pull, migrate, collectstatic, restart.
+
+### Inventory Phase 3: purchase — requisition, order, GRN, QC, return — 2026-10-15
+
+Details in [inventory/04-PHASE-3.md](inventory/04-PHASE-3.md).
+
+- Purchase requisitions (approve / reject), purchase orders (from approved
+  requisition lines or direct; discount, VAT; approve / send back / cancel /
+  close; A4 PDF and email to the supplier through the company's mail account).
+- Goods receipts against orders (partial, filled from the open quantities) or
+  direct: refused-at-the-gate quantities, batch numbers made when empty,
+  expiry from shelf life, GS1 scan fills a line; posting moves stock at cost
+  (average updated), updates the order, and makes one label per package.
+- QC: items needing it arrive in quarantine; pass releases, fail blocks.
+  Purchase returns go out at the receipt's cost (average un-blends exactly).
+- Five `purchase.*` permissions (module-gated); own submissions are approved
+  by someone else unless owner/admin. Purchase menu.
+- Tests: `purchasing` 13 (the done-when flow through services and pages).
+  Average cost in the flow: 125 → 131.4286 → 125 after the return.
+
+**Deploy:** pull, migrate, collectstatic, restart.
+
+### Inventory Phase 4: store operations — 2026-10-15
+
+Details in [inventory/05-PHASE-4.md](inventory/05-PHASE-4.md).
+
+- Store requisitions (approve with the new `inventory.issue_approve`), store
+  issues (first expiry first, split across batches; a later batch needs a
+  reason; scan package labels; labels used up), material returns (at the
+  issue's cost; damaged to the Rejected store), transfers (dispatch → in
+  transit → receive; shortages written off with a reason; per-store cost
+  carried), stock adjustments (approved by someone else; new batches for
+  found stock), blind stock counts (frozen quantities, scan or type, "Not
+  found = 0"; approval posts the differences as an adjustment).
+- Posting service: nothing is issued, used or delivered from quarantine,
+  rejected or in-transit stores; reversals apply incoming moves first.
+- Tests: 17 more in `inventory` (services and pages); the done-when rules
+  each covered.
+
+**Deploy:** pull, migrate, collectstatic, restart; grant "Approve store
+requisitions" on the Access page.
+
+### Inventory Phase 5: production and BOM — 2026-10-15
+
+Details in [inventory/06-PHASE-5.md](inventory/06-PHASE-5.md).
+
+- BOMs in versions (draft → active; a new version copies the materials and
+  archives the old one on activation).
+- Production orders: planned, released by someone else, materials used
+  (planned quantities with scrap, first expiry first, scan labels; unused
+  material returned at its cost), output posted once at the end: a new
+  finished-goods batch (expiry from shelf life, QC quarantine when needed,
+  one label per package) at materials ÷ good quantity; rejects recorded as
+  wastage. Planned vs used per order; production report of completed runs.
+- Three `production.*` permissions; Production menu.
+- Tests: `production` 12 (the done-when run: 16,357 ÷ 990 = 16.5222 a bottle).
+
+**Deploy:** pull, migrate, collectstatic, restart.
+
+### Inventory Phase 6: sales — order, reserve, deliver, invoice, return — 2026-10-15
+
+Details in [inventory/07-PHASE-6.md](inventory/07-PHASE-6.md).
+
+- Price lists by customer group (from-quantity prices; item sale price as
+  fallback). Sales orders: confirmed by someone else, reserving usable stock
+  first expiry first per order line; credit-limit warning (confirm with a
+  reason); reserve again; cancel/close free the reservation.
+- Delivery challans drafted from the reservation or by scanning cartons,
+  never taking another order's reservation; posting releases it; challan
+  PDF; reversal re-reserves. Invoices: one per delivery, exactly what was
+  delivered at the order's prices (draft → issued → paid), invoice PDF.
+  Sales returns at the delivery's cost (damaged to Rejected).
+- Four `sales.*` permissions; any sales role may view sales pages. Sales menu.
+- Tests: `sales` 13 (the done-when flow: 3,795 invoiced for 150 delivered).
+
+**Deploy:** pull, migrate, collectstatic, restart.
+
+### Inventory Phase 7: valuation, monitoring and reports — 2026-10-15
+
+Details in [inventory/08-PHASE-7.md](inventory/08-PHASE-7.md).
+
+- Inventory dashboard: value by type and store, low stock, expiring and
+  expired batches, quarantine, the work waiting, today's production and sales.
+- 14 reports with Excel and PDF downloads (stock on hand, item card,
+  movement, valuation at any date, batch and expiry, aging, slow-moving,
+  reorder, consumption by department, purchase and GRN registers,
+  production yield, sales register, customer and item sales). Values only
+  for those who see stock costs.
+- Valuation read from the stock ledger: any past day equals what the
+  balances held that evening; back-dated entries change only their days on.
+- Month-end close (refused while documents in the month wait or the stock
+  check finds differences; reopen with a reason). Morning reorder and expiry
+  alert by email (`stock_alerts`), addresses in Inventory settings.
+- Tests: `inventory.tests_reports` 15 (the done-when: 21,887.50 at 12 Sep).
+
+**Deploy:** pull, migrate, collectstatic, restart; alert addresses in
+Inventory settings; the `inventory_alerts` and `inventory_check` timers.
+
+### Inventory Phase 8: mixed-store sales orders and the AI sales order assistant — 2026-10-17
+
+Details in [inventory/09-PHASE-8.md](inventory/09-PHASE-8.md).
+
+- Sales order lines each have their own store (juice from finished goods,
+  sugar from the raw material store, one order); one delivery challan per
+  store; existing orders keep their order's store.
+- AI order assistant (`ai_assistant`), off until the client's written
+  consent is recorded: the order inbox (IMAP) and pasted WhatsApp text are
+  read by Claude into strict JSON; our code matches customer, items, units
+  and stores, prices from our price lists, and makes a draft sales order
+  with problems listed (stock, credit, repeats, unsure matches). A person
+  reviews (matched words remembered as aliases) and confirms; the managers
+  get the order summary. Daily and weekly reports with figures from the ERP
+  and a short AI paragraph. Every AI call logged with cost; daily limit;
+  key and inbox password encrypted.
+- Tests: `ai_assistant` 12 (fake Claude and inbox), `sales` mixed-store 4.
+
+**Deploy:** pull, `pip install -r requirements.txt` (new: anthropic), migrate,
+collectstatic, restart; the `ai_inbox`, `ai_report_daily` and
+`ai_report_weekly` timers; settings with the client (consent, key, inbox,
+managers).
+
+### Inventory Phase 9: the Store & Inventory API — 2026-10-17
+
+Details in [inventory/10-PHASE-9.md](inventory/10-PHASE-9.md); client guide
+[api/130-inventory.md](api/130-inventory.md).
+
+- 205 new API endpoints (508 in all) under Store & inventory, Purchase,
+  Production and Sales: masters, stock, ledger, batches, label lookup, every
+  store / purchase / production / sales document with its lines, scans and
+  actions, the 14 inventory reports (data, Excel, PDF), the dashboard and
+  month-end close.
+- `POST /api/v1/sales/intake`: orders from the client's other systems (by
+  code, or text for the AI inbox), never taken twice.
+- Built from the panels' own forms and services (one spec per document kind),
+  one response shape for every document; new API key scopes.
+- Tests: `api.tests.test_inventory` 12; the documentation test covers every
+  new endpoint and field.
+
+**Deploy:** pull, collectstatic, restart; API keys with the new scopes.
+
+### Inventory Phase 10: go-live tools and runbook — 2026-10-17
+
+Details in [inventory/11-GO-LIVE.md](inventory/11-GO-LIVE.md); training
+sheets in [inventory/training/](inventory/training/).
+
+- Inventory → Go-live: the readiness checklist (decisions, masters, people
+  and permissions with someone to approve, opening stock and its labels, the
+  ledger, mail and alerts), each item linking to where it is fixed; the same
+  as `python manage.py golive_check --company ID` (exit 1 while anything
+  must be fixed).
+- Count sheets per store (Excel in the opening stock import's own layout,
+  or PDF): count, fill in, import; rows without a quantity are skipped as
+  not counted.
+- Opening stock → Print all labels (a label per batch, per item without
+  batches).
+- Parallel run: upload the old system's stock list and see every item and
+  store that differs (or download it as Excel).
+- The go-live runbook (timeline, count day, parallel run, switch criteria,
+  rollback, hypercare) and one training sheet per role.
+- Tests: `inventory.tests_golive` 5.
+
+**Deploy:** pull, collectstatic, restart. The go-live itself is on site with
+the client, following the runbook.

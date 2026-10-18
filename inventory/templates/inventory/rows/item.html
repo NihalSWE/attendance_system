@@ -1,0 +1,16 @@
+<td><a href="{% url 'inventory:item_detail' row.pk %}">{{ row.code }}</a></td>
+<td>
+    {{ row.name }}
+    {% if row.name_bn %}<div class="t-muted">{{ row.name_bn }}</div>{% endif %}
+</td>
+<td>{{ row.get_kind_display }}</td>
+<td>{{ row.category.name }}</td>
+<td>{{ row.base_uom.code }}</td>
+<td>
+    {% if row.track_batch %}
+        <span class="badge badge--info">{% if row.track_expiry %}Batch + expiry{% else %}Batch{% endif %}</span>
+    {% else %}
+        <span class="t-faint">—</span>
+    {% endif %}
+</td>
+{% include "inventory/rows/_status.html" %}

@@ -1,0 +1,16 @@
+{% extends "sales/_list.html" %}
+{% block heading %}Invoices{% endblock %}
+{% block crumb %}Invoices{% endblock %}
+{% block heading2 %}Invoices{% endblock %}
+{% block heading3 %}Invoices{% endblock %}
+{% block about %}One invoice per delivery: exactly what was delivered, at the order's prices. Make it from the delivery's page.{% endblock %}
+{% block head %}<th>Number</th><th>Date</th><th>Customer</th><th>Due</th><th class="numeric">Total</th><th>Status</th>{% endblock %}
+{% block row %}
+    <td><a href="{% url 'sales:invoice_detail' row.pk %}"><strong>{{ row.number }}</strong></a></td>
+    <td>{{ row.invoice_date|date:"d M Y" }}</td>
+    <td>{{ row.customer.name }}</td>
+    <td>{{ row.due_date|date:"d M Y"|default:"—" }}</td>
+    <td class="numeric">{{ row.total|floatformat:2 }}</td>
+    <td>{% include "sales/_status.html" %}</td>
+    <td><a class="btn btn--ghost btn--sm" href="{% url 'sales:invoice_detail' row.pk %}">Open</a></td>
+{% endblock %}

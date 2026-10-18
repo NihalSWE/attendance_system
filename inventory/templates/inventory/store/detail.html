@@ -1,0 +1,83 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    {{ row.number }} · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:store_list' doc.key %}">{{ doc.title }}</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ row.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ row.number }} {% include "inventory/store/_status.html" %}</h1>
+            <p class="page__sub">{% include "inventory/store/_sub.html" %}</p>
+        </div>
+        <div class="page__actions">
+            {% if can_edit and line_form %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">{% if doc.key == "counts" %}Add stock found{% else %}Add line{% endif %}</button>
+            {% endif %}
+            {% if doc.key == "requisitions" and row.status == "approved" or doc.key == "requisitions" and row.status == "partly_issued" %}
+                <a class="btn btn--primary" href="{% url 'inventory:store_list' 'issues' %}?requisition={{ row.pk }}">Issue goods</a>
+            {% endif %}
+            {% if doc.key == "issues" and row.status == "posted" %}
+                <a class="btn btn--ghost" href="{% url 'inventory:store_list' 'returns' %}?issue={{ row.pk }}">Return goods</a>
+            {% endif %}
+            {% if doc.key == "transfers" and can_receive %}
+                <button class="btn btn--primary" type="button" data-open-dialog="receive-dialog">Receive</button>
+            {% endif %}
+            {% for b in buttons %}
+                {% if b.dialog %}
+                    <button class="btn btn--{{ b.style }}" type="button" data-open-dialog="{{ b.dialog }}-dialog"
+                            data-dialog-action="{% url 'inventory:store_action' doc.key row.pk b.action %}"
+                            data-dialog-subject="{{ b.label|lower }} {{ row.number }}">{{ b.label }}</button>
+                {% else %}
+                    <form method="post" action="{% url 'inventory:store_action' doc.key row.pk b.action %}"
+                          data-confirm="{{ b.confirm }}" data-confirm-title="{{ b.label }}: {{ row.number }}?"
+                          data-confirm-button="{{ b.label }}"{% if b.style == "danger" %} data-confirm-tone="danger"{% endif %}>
+                        {% csrf_token %}<button class="btn btn--{{ b.style }}" type="submit">{{ b.label }}</button>
+                    </form>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if can_scan %}
+        <div class="card" id="scan">
+            <form class="card__body" method="post" action="{% url 'inventory:store_scan' doc.key row.pk %}">
+                {% csrf_token %}
+                <label class="field__label" for="scan-code">Scan a package label</label>
+                <div class="scanbox__row">
+                    <input class="input scanbox__input" id="scan-code" name="code" autocomplete="off"
+                           autocapitalize="off" spellcheck="false" autofocus required
+                           placeholder="Point the scanner here and scan">
+                    <button class="btn btn--ghost" type="submit">Add</button>
+                </div>
+                <span class="field__help">{% if doc.key == "counts" %}Each package scanned adds its quantity to its line.{% else %}The package's item, batch and quantity are added; its label is marked used up when posted.{% endif %}</span>
+            </form>
+        </div>
+    {% endif %}
+
+    {% include "inventory/store/lines/"|add:doc.key|add:".html" %}
+
+    {% if line_form and can_edit %}
+        {% url 'inventory:store_line_add' doc.key row.pk as line_url %}
+        {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add" action=line_url form=line_form submit="Add" wide=True %}
+    {% endif %}
+    {% include "inventory/includes/action_dialog.html" with id="reason-dialog" form=reason_form submit="Reverse" danger=True note="Counter-moves dated today undo every stock move of this document." %}
+    {% include "inventory/includes/action_dialog.html" with id="note-dialog" form=note_form submit="Save" danger=True note="The reason is kept with the document." %}
+    {% if doc.key == "transfers" and can_receive %}
+        {% include "inventory/store/_receive.html" %}
+    {% endif %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

@@ -1,0 +1,25 @@
+<div class="card">
+    <div class="card__head"><h2>What is asked for</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
+    {% if lines %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Item</th><th class="numeric">Quantity</th><th class="numeric">In base unit</th><th class="numeric">Issued</th><th class="numeric">Open</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    {% for line in lines %}
+                        <tr>
+                            <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                            <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                            <td class="numeric">{{ line.qty_base.normalize }} {{ line.item.base_uom.code }}</td>
+                            <td class="numeric">{{ line.qty_issued_base.normalize }}</td>
+                            <td class="numeric">{{ line.qty_open_base.normalize }}</td>
+                            <td>{{ line.note }}</td>
+                            <td>{% include "inventory/store/_remove.html" %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty"><div class="empty__text">Add what the department needs.</div></div>
+    {% endif %}
+</div>

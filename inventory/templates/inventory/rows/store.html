@@ -1,0 +1,6 @@
+<td>{{ row.code }}</td>
+<td>{{ row.name }}</td>
+<td>{{ row.get_kind_display }}</td>
+<td>{{ row.branch.name }}</td>
+<td class="numeric">{{ row.bin_count }}</td>
+{% include "inventory/rows/_status.html" %}

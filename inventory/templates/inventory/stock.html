@@ -1,0 +1,143 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Stock on hand · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Inventory
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Stock on hand
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                Stock on hand
+            </h1>
+            <p class="page__sub">
+                Every item, batch, store and bin with stock now. Available is on hand less what sales orders reserved.
+            </p>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                Stock
+            </h2>
+            <span class="spacer">
+            </span>
+            <span class="t-muted">
+                <span class="amount">
+                    {{ server_table.page.paginator.count }}
+                </span>
+                rows
+            </span>
+        </div>
+        <form class="toolbar" method="get">
+            <label class="sr-only" for="store">
+                Store
+            </label>
+            <select class="input select js-select" id="store" name="store">
+                <option value="">
+                    All stores
+                </option>
+                {% for s in stores %}
+                    <option value="{{ s.pk }}" {% if s.pk|stringformat:"s" == store %}selected{% endif %}>
+                        {{ s }}
+                    </option>
+                {% endfor %}
+            </select>
+            <label class="sr-only" for="kind">
+                Item type
+            </label>
+            <select class="input select js-select" id="kind" name="kind">
+                <option value="">
+                    All item types
+                </option>
+                {% for value, label in kinds %}
+                    <option value="{{ value }}" {% if value == kind %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+            {% if store or kind %}
+                <a class="btn btn--quiet" href="{% url 'inventory:stock' %}">
+                    Clear
+                </a>
+            {% endif %}
+        </form>
+        {% if not stock_rows %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    No stock
+                </div>
+                <div class="empty__text">
+                    {% if store or kind %}
+                        Try clearing the filters.
+                    {% else %}
+                        Stock appears here once opening stock is posted.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or stock_rows %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Item</th>
+                            <th>Store</th>
+                            <th>Bin</th>
+                            <th>Batch</th>
+                            <th>Expiry</th>
+                            <th class="numeric">On hand</th>
+                            <th class="numeric">Reserved</th>
+                            <th class="numeric">Available</th>
+                            <th class="numeric">Average cost</th>
+                            <th class="numeric">Value</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in stock_rows %}
+                            <tr>
+                                <td><a href="{% url 'inventory:item_detail' row.item_id %}">{{ row.item.code }}</a></td>
+                                <td>{{ row.item.name }}</td>
+                                <td>{{ row.warehouse.code }}</td>
+                                <td>{{ row.location.code|default:"—" }}</td>
+                                <td>{{ row.batch.batch_no|default:"—" }}</td>
+                                <td>
+                                    {% if row.batch.expiry_date %}
+                                        {{ row.batch.expiry_date|date:"d M Y" }}
+                                        {% if row.batch.status != 'released' %}<span class="badge badge--warning">{{ row.batch.get_status_display }}</span>{% endif %}
+                                    {% else %}
+                                        —
+                                    {% endif %}
+                                </td>
+                                <td class="numeric">{{ row.qty_on_hand.normalize }} {{ row.item.base_uom.code }}</td>
+                                <td class="numeric">{{ row.qty_reserved.normalize }}</td>
+                                <td class="numeric">{{ row.qty_available.normalize }}</td>
+                                <td class="numeric">{% if row.shows_cost %}{{ row.avg_cost|floatformat:2 }}{% else %}<span class="t-faint">—</span>{% endif %}</td>
+                                <td class="numeric">{% if row.shows_cost %}{{ row.value|floatformat:2 }}{% else %}<span class="t-faint">—</span>{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+{% endblock %}

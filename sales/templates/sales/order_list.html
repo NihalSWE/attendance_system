@@ -1,0 +1,20 @@
+{% extends "sales/_list.html" %}
+{% block heading %}Sales orders{% endblock %}
+{% block crumb %}Sales orders{% endblock %}
+{% block heading2 %}Sales orders{% endblock %}
+{% block heading3 %}Sales orders{% endblock %}
+{% block about %}Orders from customers. Confirming reserves the stock (first expiry first); deliveries release it; each delivery is invoiced.{% endblock %}
+{% block new_label %}New sales order{% endblock %}
+{% block head %}<th>Number</th><th>Date</th><th>Customer</th><th>From</th><th>Deliver by</th><th>Status</th>{% endblock %}
+{% block row %}
+    <td><a href="{% url 'sales:order_detail' row.pk %}"><strong>{{ row.number }}</strong></a></td>
+    <td>{{ row.order_date|date:"d M Y" }}</td>
+    <td>{{ row.customer.name }}</td>
+    <td>{{ row.get_source_display }}</td>
+    <td>{{ row.delivery_date|date:"d M Y"|default:"—" }}</td>
+    <td>{% include "sales/_status.html" %}</td>
+    <td><a class="btn btn--ghost btn--sm" href="{% url 'sales:order_detail' row.pk %}">Open</a></td>
+{% endblock %}
+{% block dialogs %}
+    {% if new_form %}{% url 'sales:orders' as new_url %}{% include "organization/profile/modal_form.html" with id="new-dialog" title="New sales order" action=new_url form=new_form submit="Start" wide=True %}{% endif %}
+{% endblock %}

@@ -149,6 +149,8 @@ def person(actor, company_id, employee_id):
         code: {b.pk for b in columns if access.can(actor, company_id, code, b.pk)}
         for code in access.CODES
     }
+    # A module the company does not have (Store & Inventory) offers nothing.
+    offered = set(access.offered(company_id))
     rows = [
         {
             "code": code,
@@ -164,6 +166,7 @@ def person(actor, company_id, employee_id):
             ],
         }
         for code, label, *_ in access.BRANCH_PERMISSIONS
+        if code in offered
     ]
     return {
         "employee": employee,

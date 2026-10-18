@@ -1,0 +1,200 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ page_def.title }} · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">
+            Dashboard
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        <a href="{% url 'inventory:stock' %}">
+            Inventory
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        {{ page_def.title }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">
+                {{ page_def.title }}
+            </h1>
+            {% if page_def.about %}
+                <p class="page__sub">
+                    {{ page_def.about }}
+                </p>
+            {% endif %}
+        </div>
+        <div class="page__actions">
+            {% if can_manage %}
+                {% if page_def.key == "units" %}
+                    <form method="post" action="{% url 'inventory:standard_units' %}">
+                        {% csrf_token %}
+                        <button class="btn btn--ghost" type="submit" title="KG, G, L, ML, PCS, BOX, CARTON, BAG, DRUM, ROLL, M, SET, PAIR. Units you already have are kept.">
+                            Add standard units
+                        </button>
+                    </form>
+                {% endif %}
+                {% if page_def.import_kind %}
+                    <a class="btn btn--ghost" href="{% url 'inventory:import' page_def.import_kind %}">
+                        Import from Excel
+                    </a>
+                {% endif %}
+                <button class="btn btn--primary" type="button" data-open-dialog="new-dialog">
+                    Add {{ page_def.singular }}
+                </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>
+                {{ page_def.title }}
+            </h2>
+            <span class="spacer">
+            </span>
+            <span class="t-muted">
+                <span class="amount">
+                    {{ server_table.page.paginator.count }}
+                </span>
+                total
+            </span>
+        </div>
+        <form class="toolbar" method="get">
+            {% if kinds %}
+                <label class="sr-only" for="kind">
+                    Item type
+                </label>
+                <select class="input select js-select" id="kind" name="kind">
+                    <option value="">
+                        All item types
+                    </option>
+                    {% for value, label in kinds %}
+                        <option value="{{ value }}" {% if value == kind %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            <label class="sr-only" for="status">
+                Status
+            </label>
+            <select class="input select js-select" id="status" name="status">
+                <option value="">
+                    All statuses
+                </option>
+                {% for value, label in statuses %}
+                    <option value="{{ value }}" {% if value == status %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">
+                Apply
+            </button>
+            {% if status or kind %}
+                <a class="btn btn--quiet" href="{{ page_def.url }}">
+                    Clear
+                </a>
+            {% endif %}
+        </form>
+        {% if not rows.object_list %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">
+                    No {{ page_def.title|lower }} yet
+                </div>
+                <div class="empty__text">
+                    {% if status or kind %}
+                        Try clearing the filters.
+                    {% elif can_manage %}
+                        Add one{% if page_def.import_kind %}, or import the filled Excel template{% endif %}.
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+        {% if server_table or rows.object_list %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            {% for column in page_def.columns %}
+                                <th>
+                                    {{ column }}
+                                </th>
+                            {% endfor %}
+                            <th>
+                                <span class="sr-only">
+                                    Actions
+                                </span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                            <tr>
+                                {% include page_def.row_template %}
+                                <td>
+                                    <div class="inv-actions">
+                                        {% if can_print_labels and page_def.key == "bins" and row.status == 'active' %}
+                                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="print-dialog"
+                                                    data-dialog-action="{% url 'inventory:bin_labels_print' %}?location={{ row.pk }}"
+                                                    data-dialog-subject="the label of bin {{ row.code }}" data-dialog-reprint="1">Label</button>
+                                        {% elif can_print_labels and page_def.key == "stores" and row.bin_count %}
+                                            <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="print-dialog"
+                                                    data-dialog-action="{% url 'inventory:bin_labels_print' %}?store={{ row.pk }}"
+                                                    data-dialog-subject="every bin label of {{ row.code }}" data-dialog-reprint="1">Bin labels</button>
+                                        {% endif %}
+                                        {% if page_def.key == "items" %}
+                                            <a class="btn btn--ghost btn--sm" href="{% url 'inventory:item_detail' row.pk %}">
+                                                Open
+                                            </a>
+                                        {% endif %}
+                                        {% if can_manage %}
+                                            <a class="btn btn--ghost btn--sm" href="{{ page_def.url }}?edit={{ row.pk }}">
+                                                Edit
+                                            </a>
+                                            <form method="post" action="{% url status_view row.pk %}"
+                                                  data-confirm="{% if row.status == 'active' %}It can no longer be chosen for anything new. What it was used for is kept.{% else %}It can be chosen again.{% endif %}"
+                                                  data-confirm-title="{% if row.status == 'active' %}Deactivate {{ row }}?{% else %}Activate {{ row }}?{% endif %}"
+                                                  data-confirm-button="{% if row.status == 'active' %}Deactivate{% else %}Activate{% endif %}"
+                                                  {% if row.status == 'active' %}data-confirm-tone="danger"{% endif %}>
+                                                {% csrf_token %}
+                                                <input type="hidden" name="status" value="{% if row.status == 'active' %}inactive{% else %}active{% endif %}">
+                                                <button class="btn btn--quiet btn--sm" type="submit">
+                                                    {% if row.status == 'active' %}Deactivate{% else %}Activate{% endif %}
+                                                </button>
+                                            </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+
+    {% if can_print_labels and page_def.key == "bins" or can_print_labels and page_def.key == "stores" %}
+        {% include "inventory/includes/print_dialog.html" %}
+    {% endif %}
+    {% if can_manage %}
+        {% include "organization/profile/modal_form.html" with id="new-dialog" title="Add "|add:page_def.singular action=page_def.url form=new_form submit="Add" wide=True %}
+        {% if edit_form %}
+            {% url edit_view edit_row.pk as edit_url %}
+            {% include "organization/profile/modal_form.html" with id="edit-dialog" title="Edit "|add:edit_row.code action=edit_url form=edit_form submit="Save" wide=True %}
+        {% endif %}
+    {% endif %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

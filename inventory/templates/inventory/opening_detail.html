@@ -1,0 +1,134 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    {{ document.number }} · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:opening' %}">Opening stock</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ document.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">
+                {{ document.number }}
+                {% include "inventory/_document_status.html" with status=document.status label=document.get_status_display %}
+            </h1>
+            <p class="page__sub">
+                Opening day {{ document.work_date|date:"d M Y" }}{% if document.note %} · {{ document.note }}{% endif %}
+                {% if document.posted_at %} · posted {{ document.posted_at|date:"d M Y H:i" }}{% endif %}
+                {% if document.reversed_at %} · reversed {{ document.reversed_at|date:"d M Y H:i" }}: {{ document.reverse_reason }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_enter %}
+                <form method="post" action="{% url 'inventory:opening_cancel' document.pk %}"
+                      data-confirm="The draft is kept for the record but can no longer be posted."
+                      data-confirm-title="Cancel {{ document.number }}?" data-confirm-button="Cancel it" data-confirm-tone="danger">
+                    {% csrf_token %}
+                    <button class="btn btn--quiet" type="submit">Cancel draft</button>
+                </form>
+                <button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">Add line</button>
+            {% endif %}
+            {% if can_post %}
+                <form method="post" action="{% url 'inventory:opening_post' document.pk %}"
+                      data-confirm="{{ lines|length }} line{{ lines|length|pluralize }} go on hand, dated {{ document.work_date|date:'d M Y' }}. A posted document is never edited: a mistake is undone with Reverse."
+                      data-confirm-title="Post {{ document.number }}?" data-confirm-button="Post">
+                    {% csrf_token %}
+                    <button class="btn btn--primary" type="submit">Post</button>
+                </form>
+            {% endif %}
+            {% if can_label %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="print-dialog"
+                        data-dialog-action="{% url 'inventory:opening_labels' document.pk %}"
+                        data-dialog-subject="every batch's label (count day)"
+                        data-dialog-reprint="{% if labels_printed %}1{% else %}0{% endif %}">Print all labels</button>
+            {% endif %}
+            {% if can_reverse %}
+                <button class="btn btn--danger" type="button" data-open-dialog="reverse-dialog">Reverse</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head">
+            <h2>Counted stock</h2>
+            <span class="spacer"></span>
+            <span class="t-muted">
+                <span class="amount">{{ lines|length }}</span> line{{ lines|length|pluralize }}{% if sees_costs %} · value <span class="amount">{{ total|floatformat:2 }}</span>{% endif %}
+            </span>
+        </div>
+        {% if lines %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Store</th><th>Item</th><th>Batch</th><th>Made</th><th>Expiry</th>
+                            <th class="numeric">Quantity</th><th class="numeric">In base unit</th>
+                            {% if sees_costs %}<th class="numeric">Unit cost</th><th class="numeric">Value</th>{% endif %}
+                            <th><span class="sr-only">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in lines %}
+                            <tr>
+                                <td>{{ line.warehouse.code }}{% if line.location %} / {{ line.location.code }}{% endif %}</td>
+                                <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                                <td>{{ line.batch_no|default:"—" }}{% if line.supplier_batch_no %}<div class="t-muted">Supplier {{ line.supplier_batch_no }}</div>{% endif %}</td>
+                                <td>{{ line.mfg_date|date:"d M Y"|default:"—" }}</td>
+                                <td>{{ line.expiry_date|date:"d M Y"|default:"—" }}</td>
+                                <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                                <td class="numeric">{{ line.qty_base.normalize }} {{ line.item.base_uom.code }}</td>
+                                {% if sees_costs %}
+                                    <td class="numeric">{{ line.unit_cost|floatformat:2 }}</td>
+                                    <td class="numeric">{{ line.value|floatformat:2 }}</td>
+                                {% endif %}
+                                <td>
+                                    {% if can_enter %}
+                                        <form method="post" action="{% url 'inventory:opening_line_remove' document.pk line.pk %}"
+                                              data-confirm="The line is taken off the draft." data-confirm-title="Remove this line?"
+                                              data-confirm-button="Remove" data-confirm-tone="danger">
+                                            {% csrf_token %}
+                                            <button class="btn btn--quiet btn--sm" type="submit">Remove</button>
+                                        </form>
+                                    {% elif can_label %}
+                                        <a class="btn btn--ghost btn--sm"
+                                           href="{% url 'inventory:package_labels' line.item_id %}?warehouse={{ line.warehouse_id }}{% if line.location_id %}&amp;location={{ line.location_id }}{% endif %}{% if line.batch_pk %}&amp;batch={{ line.batch_pk }}{% endif %}&amp;uom={{ line.uom_id }}&amp;quantity={{ line.qty.normalize }}&amp;source_type=opening_stock_line&amp;source_id={{ line.pk }}">Labels</a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">No lines yet</div>
+                <div class="empty__text">Add the counted stock line by line, or import the opening stock template as a new draft.</div>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if can_enter %}
+        {% url 'inventory:opening_line_add' document.pk as line_url %}
+        {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add counted stock" action=line_url form=line_form submit="Add line" wide=True note="Quantity and cost in the unit you choose: the item's base unit or one of its packs." %}
+    {% endif %}
+    {% if can_label %}
+        {% include "inventory/includes/print_dialog.html" %}
+    {% endif %}
+    {% if can_reverse %}
+        {% url 'inventory:opening_reverse' document.pk as reverse_url %}
+        {% include "organization/profile/modal_form.html" with id="reverse-dialog" title="Reverse "|add:document.number action=reverse_url form=reason_form submit="Reverse" danger=True note="Counter-moves dated today take every line's stock back out. Refused if some of it was already used. Post a corrected opening stock afterwards." %}
+    {% endif %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}
