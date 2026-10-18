@@ -6249,3 +6249,32 @@ photos): 4,644 uploads, 195 MB, searched about ten times per view.
 - Deploy: pull, `migrate`, restart, then once
   `python manage.py rebuild_device_users` (about 2 s on the live data; without
   it each device is built on its first view). No `.env` change.
+
+### Lists load once and the page stops jumping (speed, phase 2) — 2026-10-18
+
+Measured in the browser on the live copy (Device users, Shed 1 Male): CLS
+1.15 from two jumps - the narrow-screen sidebar drawn full-width until
+`navigation.js` ran (0.82), and the table redrawn when its second request
+answered (0.33); every server table asked again for the first page the server
+had already drawn into the HTML.
+
+- `base.html`: a one-line script in `<head>` sets `navigation-ready` and
+  `tables-js` before the first paint (no CSP on the site; no inline-script
+  rule broken).
+- `table_pagination.html`: the no-script pager carries
+  `data-server-table-for`, `data-total` and `data-filtered`.
+- `tables.js`: `deferLoading` with those counts - the first page is the
+  server's HTML rows; paging, search and sort still ask the server, one page
+  at a time. An empty kept page says "No results for these filters." If
+  DataTables did not load, `tables-js` is removed and the counted HTML pager
+  shows again.
+- `vendor-controls.css`: with `tables-js`, the no-script pager and
+  `.server-table-empty` notes stay hidden; a table not yet started keeps 61px
+  above and below for DataTables' rows.
+- After: CLS 0.000 and no second request on Device users, Shifts (three named
+  lists) and Working days; page 2 starts at SL 26; search asks the server.
+- Not done, on purpose: the employee page's 27 membership lookups (about
+  10-20 ms of 0.45 s; most of the rest is building its edit forms) - caching
+  permission checks is not worth the risk for that.
+- Test: `base_template.tests_tables` (the counts on the page). No `.env`
+  change.

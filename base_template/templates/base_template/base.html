@@ -22,6 +22,10 @@
         <link rel="stylesheet" href="{% static 'base_template/css/timepicker.css' %}">
         {% block extra_css %}
         {% endblock %}
+        {# Before the first paint (2026-10-18): with scripts on, the narrow-screen #}
+        {# sidebar starts closed and server tables start in their scripted form, #}
+        {# instead of being drawn the no-script way and then jumping (CLS 1.15).  #}
+        <script>document.documentElement.classList.add("navigation-ready", "tables-js");</script>
     </head>
     <body>
         <div class="shell">
