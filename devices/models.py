@@ -562,6 +562,78 @@ class DeviceUserTemplate(TenantOwned):
         return f"{self.device_id}:{self.device_user_id} {self.bio_type}"
 
 
+class DeviceUser(TenantOwned):
+    """One user a device has reported, as the Device users page shows them
+    (2026-10-18). Worked out once, when the device's upload arrives
+    (``devices/services/device_users.py``), instead of from every stored
+    upload on every page: a busy device had re-sent its user table thousands
+    of times (195 MB), and the page took ten seconds twice over.
+
+    The uploads stay in ``DeviceMessage`` as evidence; these rows can always be
+    rebuilt from them (``manage.py rebuild_device_users``). Which employee a
+    number is stays with DeviceEnrollment.
+    """
+
+    device = models.ForeignKey(
+        BiometricDevice, on_delete=models.CASCADE, related_name="device_users"
+    )
+    pin = models.CharField(max_length=64)
+    # False while only templates or a photo have arrived for the number: it is
+    # not listed until its user row comes.
+    reported = models.BooleanField(default=False)
+    uid = models.CharField(max_length=32, blank=True)
+    name = models.CharField(max_length=255, blank=True)
+    card_number = models.CharField(max_length=64, blank=True)
+    has_password = models.BooleanField(default=False)
+    group = models.CharField(max_length=32, blank=True)
+    tz = models.CharField(max_length=64, blank=True)
+    privilege_code = models.CharField(max_length=16, blank=True)
+    disabled_on_device = models.BooleanField(default=False)
+    fingerprint_count = models.PositiveIntegerField(default=0)
+    face_count = models.PositiveIntegerField(default=0)
+    other_biometric_count = models.PositiveIntegerField(default=0)
+    has_photo = models.BooleanField(default=False)
+    # Each template counted once: (type, number, index) or the 2.x (kind, fid).
+    bio_markers = models.JSONField(default=list, blank=True)
+    # The upload the user fields came from: an older one never overwrites them.
+    user_message_id = models.BigIntegerField(null=True, blank=True)
+    # Latest upload with this number in a 3.x user list, and the "Refresh user
+    # list" answer (cmdid) it was last in - for "removed from the device".
+    last_seen_at = models.DateTimeField(null=True, blank=True)
+    listed_cmdid = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        db_table = "devices_device_user"
+        constraints = [
+            models.UniqueConstraint(fields=["device", "pin"], name="uniq_device_user_pin"),
+        ]
+        indexes = [models.Index(fields=["company", "device"])]
+
+    def __str__(self):
+        return f"{self.device_id}:{self.pin} {self.name}"
+
+
+class DeviceUserSync(TenantOwned):
+    """How far a device's ``DeviceUser`` rows are worked out, and its latest
+    complete user list. One row per device; locked while rows are updated."""
+
+    device = models.OneToOneField(
+        BiometricDevice, on_delete=models.CASCADE, related_name="user_sync"
+    )
+    # Every upload up to this id is applied (later ones are caught up on read).
+    through_message_id = models.BigIntegerField(default=0)
+    # The latest "Refresh user list" answer and when its first part arrived.
+    list_cmdid = models.CharField(max_length=64, blank=True)
+    list_at = models.DateTimeField(null=True, blank=True)
+    rebuilt_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "devices_device_user_sync"
+
+    def __str__(self):
+        return f"{self.device_id} through {self.through_message_id}"
+
+
 class DeviceOutboxCommand(TenantOwned):
     """One write waiting for, sent to or answered by a device.
 
