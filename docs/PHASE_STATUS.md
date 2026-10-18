@@ -6278,3 +6278,26 @@ had already drawn into the HTML.
   permission checks is not worth the risk for that.
 - Test: `base_template.tests_tables` (the counts on the page). No `.env`
   change.
+
+### Old device uploads pruned (phase 4) — 2026-10-18
+
+Built, not run on live: deleting stored uploads needs the senior's go-ahead.
+
+- `devices/services/message_prune.py`: an upload is kept while anything in
+  it is still the newest of its kind (each number's user row and latest 3.x
+  user line, each template, each photo, every part of the latest "Refresh user
+  list" answer), or it has punches, a line not understood, or no user lines
+  at all. The rest are full copies.
+- `manage.py prune_device_messages` - counts only; `--check` deletes inside a
+  transaction, rebuilds each device's user list from what is left, compares
+  with the list before, then undoes; `--apply` deletes (a device whose list
+  would change is left as it was). `--device ID` for one device.
+- Live copy (2026-10-18): 5,306 of 10,896 user uploads are copies, 288 MB of
+  the 310 MB of stored text; `--check` - all 6 devices' lists unchanged,
+  nothing deleted.
+- Deploy: needs phase 1 deployed first (`DeviceUser`). Then, with the
+  senior's OK: `python manage.py prune_device_messages --check`, then
+  `--apply`, then in a quiet hour `VACUUM FULL devices_devicemessage` (locks
+  the table while it runs) to give the space back to the disk; take a
+  database backup first. The Messages page will list fewer uploads.
+- Tests: `devices/tests_message_prune.py` (5). No migration, no `.env` change.
