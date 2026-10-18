@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from access_control.branch_access import grant_access
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from employees.models import Employee
 from inventory.models import BarcodeLabel, StockBalance
@@ -33,7 +34,7 @@ class PurchasePageTests(PurchaseFixture, TestCase):
         for name in ("requisitions", "orders", "receipts", "qc", "returns", "order_from_requisitions"):
             page = self.client.get(reverse(f"purchasing:{name}"))
             self.assertEqual(page.status_code, 200, name)
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="purchase")
 
     @override_settings(MAIL_CONFIGURED=True, DEFAULT_FROM_EMAIL="erp@inv.test",
                        EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
@@ -144,7 +145,7 @@ class PurchaseGateTests(PurchaseFixture, TestCase):
                      code="purchase.request", branch_ids=[self.branch.pk])
         self.client.force_login(user)
         page = self.client.get(reverse("purchasing:requisitions"))
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="purchase")
         self.assertNotContains(page, "Quality check")
         self.client.post(reverse("purchasing:requisitions"), {"branch": self.branch.pk,
                                                               "request_date": "2026-10-01"})

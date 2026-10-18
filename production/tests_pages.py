@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from access_control.branch_access import grant_access
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from employees.models import Employee
 from inventory.models import BarcodeLabel, StockBalance
@@ -23,7 +24,7 @@ class ProductionPageTests(ProductionFixture, TestCase):
         for name in ("boms", "orders", "report"):
             page = self.client.get(reverse(f"production:{name}"))
             self.assertEqual(page.status_code, 200, name)
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="production")
 
     def test_a_whole_run_through_the_pages(self):
         c = self.client
@@ -90,7 +91,7 @@ class ProductionGateTests(ProductionFixture, TestCase):
                      code="inventory.view", branch_ids=[self.branch.pk])
         self.client.force_login(user)
         page = self.client.get(reverse("production:order_detail", args=[order.pk]))
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="production")
         self.assertNotContains(page, "Use planned materials")
         self.assertNotContains(page, "16.5")
         self.assertEqual(self.client.post(reverse("production:order_action", args=[order.pk, "use"])).status_code, 403)

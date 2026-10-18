@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from access_control.branch_access import grant_access
 from auditlog.models import AuditLog
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from employees.models import Employee
 from inventory.models import Item, ItemUom, Location, Uom, Warehouse
@@ -139,7 +140,7 @@ class GateTests(InventoryFixture, TestCase):
 
     def test_owner_sees_the_menu(self):
         self.client.force_login(self.owner)
-        self.assertContains(self.client.get(reverse("inventory:stock")), MENU)
+        assert_inventory_menu(self, self.client.get(reverse("inventory:stock")), MENU)
 
     def test_permissions_are_offered_only_with_the_module(self):
         from access_control.branch_access import offered
@@ -161,7 +162,7 @@ class GateTests(InventoryFixture, TestCase):
                      code="inventory.view", branch_ids=[self.branch.pk])
         page = self.client.get(reverse("inventory:stock"))
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU)
         # Viewing is not setting up.
         response = self.client.post(reverse("inventory:items"), {"code": "Z", "name": "Z"})
         self.assertEqual(response.status_code, 403)
