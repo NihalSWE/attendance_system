@@ -86,6 +86,8 @@ COMPANY_MENUS = (
         item("Holidays", "scheduling:holiday_list", "scheduling:holiday_create",
              "scheduling:holiday_edit", "scheduling:holiday_cancel"),
         item("Holiday calendar", "scheduling:holiday_year", manage=True),
+        # Weekly-off dates worked as normal days (2026-10-17); seen like Holidays.
+        item("Working days", "scheduling:working_day_list", "scheduling:working_day_cancel"),
         item("Attendance settings", "scheduling:attendance_settings_edit", manage=True),
     )),
     ("reports", "Reports", (

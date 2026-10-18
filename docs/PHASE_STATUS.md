@@ -6212,7 +6212,7 @@ one employee working a day off waits.
 - **Screen** Shifts → Holidays → **Working days**
   (`/shifts/working-days/`): server-side list (year, branch, status,
   count), "Make a day a working day" modal, Cancel by confirm modal. Links
-  from the Holidays page and the Weekly off days card. Sidebar unchanged.
+  from the Holidays page and the Weekly off days card. Sidebar: Shifts → "Working days" (added 2026-10-18, `base_template/navigation.py`).
 - **API** `GET/POST /api/v1/working-days`, `GET /working-days/{id}`,
   `POST /working-days/{id}/cancel` (CHANGELOG).
 - Tests: `scheduling/tests_working_day.py` (22), `api.tests.test_shifts`.
