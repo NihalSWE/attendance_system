@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from access_control.branch_access import grant_access
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from employees.models import Employee
 from inventory import labels
@@ -26,7 +27,7 @@ class SalesPageTests(SalesFixture, TestCase):
         for name in ("orders", "deliveries", "invoices", "returns", "price_lists"):
             page = self.client.get(reverse(f"sales:{name}"))
             self.assertEqual(page.status_code, 200, name)
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="sales")
 
     def test_order_to_return_through_the_pages(self):
         c = self.client
@@ -131,6 +132,6 @@ class SalesGateTests(SalesFixture, TestCase):
                      code="sales.deliver", branch_ids=[self.branch.pk])
         self.client.force_login(user)
         page = self.client.get(reverse("sales:order_detail", args=[order.pk]))
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="sales")
         self.assertEqual(self.client.post(reverse("sales:order_action", args=[order.pk, "confirm"])).status_code, 403)
         self.assertEqual(StockBalance.all_objects.get(batch=self.j1).qty_reserved, D("0"))

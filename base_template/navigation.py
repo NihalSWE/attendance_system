@@ -41,6 +41,21 @@ def report_item(slug):
     return item(report.menu, report.url_name, group=report.group, report_kind=report.kind)
 
 
+# Which Store & Inventory links the sidebar shows (2026-10-18): the client
+# sees the module grow in the order it was built. Today: Phase 1 - the
+# lists, opening stock and stock on hand. Add a menu or a link name here to
+# show it; a menu not listed is hidden. None shows every link (for local
+# work - do not push None until the whole module is shown). The menu tests
+# follow this list. Hidden pages still open by their address.
+INVENTORY_LINKS_SHOWN = {
+    "inventory": (
+        "inventory:settings", "inventory:units", "inventory:categories",
+        "inventory:stores", "inventory:bins", "inventory:items",
+        "inventory:suppliers", "inventory:customers", "inventory:opening",
+        "inventory:stock",
+    ),
+}
+
 COMPANY_MENUS = (
     ("employees", "Employees", (
         item("All employees", "employee_list", "organization:employee_edit",
@@ -117,6 +132,9 @@ COMPANY_MENUS = (
         report_item("overtime"),
         report_item("entry-logs"),
     )),
+)
+
+INVENTORY_MENUS = (
     # Store & Inventory (docs/inventory/00-PLAN.md, Phase 1). Shown once the
     # platform owner enables the module, to those holding "View stock and items".
     ("inventory", "Inventory", (
@@ -214,6 +232,28 @@ COMPANY_MENUS = (
         item("AI assistant settings", "ai_assistant:settings", "ai_assistant:recipient_add",
              "ai_assistant:recipient_remove", manage=True, needs=("sales.order", "inventory.view")),
     )),
+)
+
+def inventory_menu_shown(key):
+    """Whether the Store & Inventory menu ``key`` shows (``INVENTORY_LINKS_SHOWN``)."""
+    return INVENTORY_LINKS_SHOWN is None or key in INVENTORY_LINKS_SHOWN
+
+
+def inventory_link_shown(key, view):
+    return INVENTORY_LINKS_SHOWN is None or view in INVENTORY_LINKS_SHOWN.get(key, ())
+
+
+def _inventory_menus():
+    """The Store & Inventory menus with only the links shown today."""
+    kept = []
+    for key, label, entries in INVENTORY_MENUS:
+        entries = tuple(entry for entry in entries if inventory_link_shown(key, entry["view"]))
+        if entries:
+            kept.append((key, label, entries))
+    return tuple(kept)
+
+
+COMPANY_MENUS += _inventory_menus() + (
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",
              "organization:branch_edit", "organization:branch_status"),
