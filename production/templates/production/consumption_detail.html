@@ -1,0 +1,80 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    {{ use.number }} · Production
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'production:order_detail' order.pk %}">{{ order.number }}</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ use.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ use.number }}
+                {% if use.status == "posted" %}<span class="badge badge--success">Posted</span>{% elif use.status == "draft" %}<span class="badge badge--info">Draft</span>{% else %}<span class="badge badge--neutral">{{ use.get_status_display }}</span>{% endif %}
+            </h1>
+            <p class="page__sub">{{ use.get_kind_display }} · {{ order.number }} ({{ order.item.code }}) · {{ order.material_warehouse }} · {{ use.work_date|date:"d M Y" }}</p>
+        </div>
+        <div class="page__actions">
+            {% if can_edit %}
+                <form method="post" action="{% url 'production:consumption_action' use.pk 'cancel' %}" data-confirm="The draft is dropped; nothing moved." data-confirm-title="Cancel {{ use.number }}?" data-confirm-button="Cancel it" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet" type="submit">Cancel draft</button></form>
+                <button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">Add line</button>
+                {% if lines %}
+                    <form method="post" action="{% url 'production:consumption_action' use.pk 'post' %}"
+                          data-confirm="{% if use.kind == 'issue' %}The materials leave {{ order.material_warehouse.code }} into the production of {{ order.number }}.{% else %}The unused material goes back into {{ order.material_warehouse.code }} at the cost it was used at.{% endif %}"
+                          data-confirm-title="Post {{ use.number }}?" data-confirm-button="Post">{% csrf_token %}<button class="btn btn--primary" type="submit">Post</button></form>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    {% if can_edit and use.kind == "issue" %}
+        <div class="card" id="scan">
+            <form class="card__body" method="post" action="{% url 'production:consumption_scan' use.pk %}">
+                {% csrf_token %}
+                <label class="field__label" for="scan-code">Scan a package label</label>
+                <div class="scanbox__row">
+                    <input class="input scanbox__input" id="scan-code" name="code" autocomplete="off" autocapitalize="off" spellcheck="false" autofocus required placeholder="Point the scanner here and scan">
+                    <button class="btn btn--ghost" type="submit">Add</button>
+                </div>
+                <span class="field__help">The bag's or drum's item, batch and quantity are added; its label is marked used up when posted.</span>
+            </form>
+        </div>
+    {% endif %}
+    <div class="card">
+        <div class="card__head"><h2>{% if use.kind == "issue" %}Materials{% else %}Going back{% endif %}</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
+        {% if lines %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Material</th><th>Batch</th><th>Expiry</th><th>Bin</th><th class="numeric">Quantity</th><th>Label</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody>
+                        {% for line in lines %}
+                            <tr>
+                                <td>{{ line.item.code }} {{ line.item.name }}{% if line.not_fefo_reason %}<div class="t-muted">Not first to expire: {{ line.not_fefo_reason }}</div>{% endif %}</td>
+                                <td>{{ line.batch.batch_no|default:"—" }}</td>
+                                <td>{{ line.batch.expiry_date|date:"d M Y"|default:"—" }}</td>
+                                <td>{{ line.location.code|default:"—" }}</td>
+                                <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                                <td>{{ line.label.code|default:"—" }}</td>
+                                <td>{% if can_edit %}<form method="post" action="{% url 'production:consumption_line_remove' use.pk line.pk %}" data-confirm="The line is taken off." data-confirm-title="Remove this line?" data-confirm-button="Remove" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button></form>{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="empty"><div class="empty__text">Scan the bags and drums, or add lines: without a batch, the first to expire is used.</div></div>
+        {% endif %}
+    </div>
+    {% if line_form %}
+        {% url 'production:consumption_line_add' use.pk as line_url %}
+        {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add a material" action=line_url form=line_form submit="Add" wide=True %}
+    {% endif %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

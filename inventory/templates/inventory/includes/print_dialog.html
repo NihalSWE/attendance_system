@@ -1,0 +1,27 @@
+{% comment %}
+    The print modal, shared by every Print / Reprint button on a page: the button
+    gives the action (data-dialog-action), what is printed (data-dialog-subject)
+    and whether it was printed before (data-dialog-reprint="1": the reason is asked).
+    The PDF opens in a new tab.
+{% endcomment %}
+<dialog class="modal" id="print-dialog" aria-labelledby="print-dialog-title">
+    <form class="modal__card" method="post" target="_blank" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+        <div class="modal__head">
+            <h2 id="print-dialog-title">Print <span data-dialog-subject></span></h2>
+            <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <div class="modal__body stack">
+            <p class="t-faint">The PDF opens in a new tab, one page per label, sized for the label printer.</p>
+            {% with field=print_form.copies %}{% include "leaves/includes/field.html" %}{% endwith %}
+            <div data-reprint-only hidden>
+                {% with field=print_form.reason %}{% include "leaves/includes/field.html" %}{% endwith %}
+            </div>
+        </div>
+        <div class="modal__foot">
+            <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+            <button class="btn btn--primary" type="submit">Print</button>
+        </div>
+    </form>
+</dialog>

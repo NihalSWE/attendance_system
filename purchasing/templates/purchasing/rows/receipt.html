@@ -1,0 +1,7 @@
+<td><a href="{% url 'purchasing:receipt_detail' doc.pk %}"><strong>{{ doc.number }}</strong></a></td>
+<td>{{ doc.received_date|date:"d M Y" }}</td>
+<td>{{ doc.supplier.name }}</td>
+<td>{{ doc.order.number|default:"Direct" }}</td>
+<td>{{ doc.warehouse.code }}</td>
+<td>{% include "purchasing/_status.html" %}</td>
+<td><a class="btn btn--ghost btn--sm" href="{% url 'purchasing:receipt_detail' doc.pk %}">Open</a></td>

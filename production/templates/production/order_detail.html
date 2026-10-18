@@ -1,0 +1,130 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    {{ order.number }} · Production
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'production:orders' %}">Production orders</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ order.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ order.number }} {% include "production/_status.html" %}</h1>
+            <p class="page__sub">
+                {{ order.planned_qty.normalize }} {{ order.uom.code }} of <a href="{% url 'inventory:item_detail' order.item_id %}">{{ order.item.code }}</a> {{ order.item.name }}
+                · <a href="{% url 'production:bom_detail' order.bom_id %}">BOM v{{ order.bom.version }}</a> · {{ order.planned_date|date:"d M Y" }}
+                {% if order.line_name %} · {{ order.line_name }}{% endif %}{% if order.shift_name %} · {{ order.shift_name }}{% endif %}
+                <br>Materials from {{ order.material_warehouse }} · finished goods into {{ order.output_warehouse }}
+                {% if order.released_at %}<br>Released by {{ order.released_by.get_full_name|default:order.released_by.email }} on {{ order.released_at|date:"d M Y H:i" }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if can_cancel %}
+                <form method="post" action="{% url 'production:order_action' order.pk 'cancel' %}" data-confirm="Possible only while no material was used." data-confirm-title="Cancel {{ order.number }}?" data-confirm-button="Cancel it" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet" type="submit">Cancel</button></form>
+            {% endif %}
+            {% if can_release %}
+                <form method="post" action="{% url 'production:order_action' order.pk 'release' %}" data-confirm="Materials can then be used for it. Someone other than the planner releases it." data-confirm-title="Release {{ order.number }}?" data-confirm-button="Release">{% csrf_token %}<button class="btn btn--primary" type="submit">Release</button></form>
+            {% endif %}
+            {% if can_run %}
+                {% if not has_draft_use %}
+                    <form method="post" action="{% url 'production:order_action' order.pk 'return' %}">{% csrf_token %}<button class="btn btn--ghost" type="submit">Return unused material</button></form>
+                    <form method="post" action="{% url 'production:order_action' order.pk 'use' %}">{% csrf_token %}<button class="btn btn--ghost" type="submit">Use planned materials</button></form>
+                {% endif %}
+                <button class="btn btn--primary" type="button" data-open-dialog="output-dialog">Post output</button>
+            {% endif %}
+            {% if can_qc %}
+                <button class="btn btn--primary" type="button" data-open-dialog="qc-dialog">QC of the batch</button>
+            {% endif %}
+            {% if can_print %}
+                <button class="btn btn--ghost" type="button" data-open-dialog="print-dialog"
+                        data-dialog-action="{% url 'production:order_labels' order.pk %}"
+                        data-dialog-subject="the {{ labels|length }} carton label{{ labels|length|pluralize }}" data-dialog-reprint="1">Print labels</button>
+            {% endif %}
+            {% if can_close %}
+                <form method="post" action="{% url 'production:order_action' order.pk 'close' %}" data-confirm="The order is locked." data-confirm-title="Close {{ order.number }}?" data-confirm-button="Close">{% csrf_token %}<button class="btn btn--ghost" type="submit">Close</button></form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if output %}
+        <div class="card">
+            <div class="card__head"><h2>Output</h2><span class="spacer"></span><span class="t-muted">{{ output.number }} · {{ output.output_date|date:"d M Y" }}</span></div>
+            <div class="card__body">
+                <dl class="inv-facts">
+                    <dt>Good</dt><dd><strong>{{ output.qty_good.normalize }} {{ output.uom.code }}</strong> into {{ order.output_warehouse.code }}{% if output.location %} / {{ output.location.code }}{% endif %}</dd>
+                    <dt>Rejected / wastage</dt><dd>{{ output.qty_rejected.normalize }} {{ output.uom.code }}</dd>
+                    <dt>Yield</dt><dd>{{ order.yield_pct|default:"—" }}% of planned</dd>
+                    <dt>Batch</dt><dd>{{ output.batch_no|default:"—" }}{% if output.batch and output.batch.status != "released" %} <span class="badge badge--warning">{{ output.batch.get_status_display }}</span>{% endif %}</dd>
+                    <dt>Made / expiry</dt><dd>{{ output.mfg_date|date:"d M Y" }} / {{ output.expiry_date|date:"d M Y"|default:"—" }}</dd>
+                    <dt>Labels</dt><dd>{{ labels|length }}</dd>
+                    {% if sees_costs %}
+                        <dt>Materials used</dt><dd>{{ order.material_cost|floatformat:2 }}</dd>
+                        <dt>Unit cost</dt><dd><strong>{{ order.unit_cost|floatformat:4 }}</strong> per {{ order.item.base_uom.code }} (materials ÷ good quantity)</dd>
+                    {% endif %}
+                </dl>
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head"><h2>Planned and used</h2><span class="spacer"></span>{% if sees_costs %}<span class="t-muted">Materials so far <span class="amount">{{ material_cost|floatformat:2 }}</span></span>{% endif %}</div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Material</th><th class="numeric">Planned</th><th class="numeric">Used</th><th class="numeric">Still to use</th><th class="numeric">Over / under</th>{% if sees_costs %}<th class="numeric">Cost</th>{% endif %}</tr></thead>
+                <tbody>
+                    {% for row in usage %}
+                        <tr>
+                            <td>{{ row.item.code }} {{ row.item.name }}{% if row.packaging %} <span class="t-muted">(packaging)</span>{% endif %}</td>
+                            <td class="numeric">{{ row.planned.normalize }} {{ row.item.base_uom.code }}</td>
+                            <td class="numeric">{{ row.used.normalize }}</td>
+                            <td class="numeric">{{ row.left.normalize }}</td>
+                            <td class="numeric">{% if row.variance > 0 %}<span class="badge badge--warning">+{{ row.variance.normalize }}</span>{% elif row.variance < 0 %}{{ row.variance.normalize }}{% else %}0{% endif %}</td>
+                            {% if sees_costs %}<td class="numeric">{{ row.cost|floatformat:2 }}</td>{% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if uses %}
+        <div class="card">
+            <div class="card__head"><h2>Material uses</h2></div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Number</th><th>Date</th><th>What</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for use in uses %}
+                            <tr><td><a href="{% url 'production:consumption_detail' use.pk %}">{{ use.number }}</a></td><td>{{ use.work_date|date:"d M Y" }}</td><td>{{ use.get_kind_display }}</td>
+                                <td>{% if use.status == "posted" %}<span class="badge badge--success">Posted</span>{% elif use.status == "draft" %}<span class="badge badge--info">Draft</span>{% else %}<span class="badge badge--neutral">{{ use.get_status_display }}</span>{% endif %}</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if output_form %}
+        {% url 'production:order_output' order.pk as output_url %}
+        {% include "organization/profile/modal_form.html" with id="output-dialog" title="Post the output of "|add:order.number action=output_url form=output_form submit="Post output" wide=True note="Once posted, the run is complete: no more material is used. The good quantity becomes a new batch at the cost of the materials used ÷ the good quantity; rejects are recorded as wastage." %}
+    {% endif %}
+    {% if can_qc %}
+        {% url 'production:order_action' order.pk 'qc' as qc_url %}
+        {% include "organization/profile/modal_form.html" with id="qc-dialog" title="QC of batch "|add:output.batch_no action=qc_url form=qc_form submit="Save" %}
+    {% endif %}
+    {% if can_print %}
+        {% include "inventory/includes/print_dialog.html" %}
+    {% endif %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+{% endblock %}

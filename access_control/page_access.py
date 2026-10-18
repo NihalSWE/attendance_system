@@ -13,6 +13,8 @@ page follow this list, so a page appears the moment it is added.
 """
 
 from access_control.branch_access import CODES, can
+from base_template.navigation import INVENTORY_REPORT_CODES as REPORT_CODES
+from inventory.reports import REPORTS as INVENTORY_REPORTS
 from reports.catalogue import REPORTS
 
 # view name -> the branch permission it needs, or a tuple: any one of them.
@@ -127,6 +129,93 @@ BRANCH_PAGES = {
     "organization:employee_overtime": ("employees.edit", "overtime.decide"),
     "organization:employee_reports": "employees.edit",
     "organization:employee_report_visibility": "employees.edit",
+    # Store & Inventory (docs/inventory/00-PLAN.md): a store keeper is usually
+    # an Employee login given access. Every page also needs the company to
+    # have the module; stock and stores show only the viewer's branches, and
+    # the services check each store's branch again. Settings are not listed.
+    **{f"inventory:{key}": "inventory.view"
+       for key in ("home", "stock", "item_detail", "units", "categories", "items", "stores",
+                   "bins", "suppliers", "customers", "opening", "opening_detail")},
+    **{f"inventory:{key}_{action}": "inventory.items"
+       for key in ("units", "categories", "items", "stores", "bins", "suppliers", "customers")
+       for action in ("edit", "status")},
+    "inventory:standard_units": "inventory.items",
+    "inventory:pack_unit_add": "inventory.items",
+    "inventory:pack_unit_remove": "inventory.items",
+    "inventory:import": ("inventory.items", "inventory.adjust"),
+    "inventory:import_confirm": ("inventory.items", "inventory.adjust"),
+    "inventory:import_template": ("inventory.items", "inventory.adjust"),
+    "inventory:opening_line_add": "inventory.adjust",
+    "inventory:opening_line_remove": "inventory.adjust",
+    "inventory:opening_cancel": "inventory.adjust",
+    "inventory:opening_post": "inventory.adjust_approve",
+    "inventory:opening_reverse": "inventory.adjust_approve",
+    # Phase 2: labels and scanning. The register and the Scan page to viewers;
+    # printing and voiding to "Print and reprint labels" (the services check
+    # the store's branch for bin and package labels).
+    "inventory:labels": "inventory.view",
+    "inventory:scan": "inventory.view",
+    "inventory:scan_lookup": "inventory.view",
+    **{f"inventory:{key}": "inventory.labels"
+       for key in ("label_print", "label_void", "bin_labels_print", "item_label_print",
+                   "package_labels", "batch_label_print")},
+    # Phase 6: sales. Every page opens to anyone who may view stock or take
+    # part; the services check the order's store branch and the exact
+    # permission (order, confirm, deliver, invoice).
+    **{f"sales:{name}": ("inventory.view", "sales.order", "sales.approve", "sales.deliver", "sales.invoice")
+       for name in ("price_lists", "price_list_detail", "price_remove", "orders", "order_detail",
+                    "order_line_add", "order_line_remove", "order_action", "deliveries", "delivery_detail",
+                    "delivery_line_add", "delivery_line_remove", "delivery_scan", "delivery_pdf",
+                    "delivery_action", "invoices", "invoice_detail", "invoice_pdf", "invoice_action",
+                    "returns", "return_detail", "return_line_add", "return_line_remove", "return_action")},
+    # Phase 5: production. Every page opens to anyone who may view stock or
+    # take part; the services check the finished-goods store's branch and the
+    # exact permission (BOMs, planning, running, QC).
+    **{f"production:{name}": ("inventory.view", "production.bom", "production.plan", "production.execute", "purchase.qc")
+       for name in ("boms", "bom_detail", "bom_line_add", "bom_line_remove", "bom_action", "orders",
+                    "order_detail", "order_output", "order_labels", "order_action", "consumption_detail",
+                    "consumption_line_add", "consumption_line_remove", "consumption_scan",
+                    "consumption_action", "report")},
+    # Phase 10: going live - the checklist to whoever enters or approves the
+    # count; count sheets to who enters it; the comparison to viewers; the
+    # opening stock's labels to "Print and reprint labels".
+    "inventory:golive": ("inventory.adjust", "inventory.adjust_approve"),
+    "inventory:golive_count_sheet": "inventory.adjust",
+    "inventory:golive_compare": ("inventory.view", "inventory.adjust", "inventory.adjust_approve"),
+    "inventory:opening_labels": "inventory.labels",
+    # Phase 8: the AI order inbox to whoever enters or confirms sales orders
+    # (the services check again; confirming needs "Confirm sales orders" in
+    # the order's branch). Its settings are the owner's and admin's: not listed.
+    **{f"ai_assistant:{name}": ("sales.order", "sales.approve") for name in ("inbox", "message", "message_action")},
+    # Phase 7: the dashboard to viewers; each report to the permissions it
+    # names (any one), month-end close to "Close a stock month".
+    "inventory:dashboard": "inventory.view",
+    "inventory:reports": ("inventory.view", "inventory.valuation", *REPORT_CODES),
+    **{report.url_name: report.code for report in INVENTORY_REPORTS},
+    "inventory:period_close": "inventory.period_close",
+    "inventory:period_reopen": "inventory.period_close",
+    # Phase 4: store operations. Every page opens to anyone who may view stock
+    # or take part; each service checks the document's store branch and the
+    # exact permission (issue, approve, transfer, adjust, approve adjustments).
+    **{f"inventory:{name}": ("inventory.view", "inventory.issue", "inventory.issue_approve", "inventory.transfer", "inventory.adjust", "inventory.adjust_approve")
+       for name in ("store_list", "store_detail", "store_line_add", "store_line_remove", "store_scan",
+                    "store_action", "transfer_receive", "count_save",
+                    *(f"store_{key}" for key in ("requisitions", "issues", "returns", "transfers",
+                                                 "adjustments", "counts")),
+                    *(f"store_{key}_detail" for key in ("requisitions", "issues", "returns", "transfers",
+                                                        "adjustments", "counts")))},
+    # Phase 3: purchase. Every page opens to anyone holding a purchase
+    # permission (or viewing stock); each service checks the document's
+    # branch and the exact permission again.
+    **{f"purchasing:{name}": ("inventory.view", "purchase.request", "purchase.approve", "purchase.order", "purchase.receive", "purchase.qc")
+       for name in ("requisitions", "requisition_detail", "requisition_line_add",
+                    "requisition_line_remove", "requisition_submit", "requisition_decide",
+                    "requisition_cancel", "orders", "order_from_requisitions", "order_detail",
+                    "order_line_add", "order_line_remove", "order_pdf", "order_email",
+                    "order_action", "receipts", "receipt_detail", "receipt_line_add",
+                    "receipt_line_remove", "receipt_labels", "receipt_action", "qc", "qc_record",
+                    "returns", "return_detail", "return_line_add", "return_line_remove",
+                    "return_action")},
 }
 
 

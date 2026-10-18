@@ -1,0 +1,7 @@
+<td><a href="{% url 'purchasing:return_detail' doc.pk %}"><strong>{{ doc.number }}</strong></a></td>
+<td>{{ doc.return_date|date:"d M Y" }}</td>
+<td>{{ doc.supplier.name }}</td>
+<td>{{ doc.receipt.number|default:"—" }}</td>
+<td>{{ doc.reason|truncatechars:60 }}</td>
+<td>{% include "purchasing/_status.html" %}</td>
+<td><a class="btn btn--ghost btn--sm" href="{% url 'purchasing:return_detail' doc.pk %}">Open</a></td>

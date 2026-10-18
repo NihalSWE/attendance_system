@@ -1,0 +1,67 @@
+{% extends "base_template/base.html" %}
+{% block title %}Month-end close · Inventory{% endblock %}
+{% block extra_css %}{% include "inventory/_head.html" %}{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:dashboard' %}">Inventory</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Month-end close
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">Month-end close</h1>
+            <p class="page__sub">A closed month takes no more stock entries dated in it: corrections go in the open month. Close each month by the 5th of the next.</p>
+        </div>
+        <div class="page__actions">
+            {% if form.fields.month.choices %}<button class="btn btn--primary" type="button" data-open-dialog="close-dialog">Close a month</button>{% endif %}
+        </div>
+    </div>
+
+    {% if checklist %}
+        <div class="card">
+            <div class="card__head"><h2>Before closing {{ checklist.month|date:"F Y" }}</h2></div>
+            <div class="card__body stack">
+                {% if checklist.waiting %}
+                    <div class="alert alert--warning">{{ checklist.waiting|length }} document{{ checklist.waiting|pluralize }} dated in {{ checklist.month|date:"F Y" }} {{ checklist.waiting|pluralize:"is,are" }} not posted yet. Post, cancel or re-date {{ checklist.waiting|pluralize:"it,them" }} first.</div>
+                    <div class="table-wrap"><table class="table">
+                        <thead><tr><th>Document</th><th>Number</th><th>Status</th></tr></thead>
+                        <tbody>{% for what, number, status in checklist.waiting %}<tr><td>{{ what }}</td><td>{{ number }}</td><td>{{ status }}</td></tr>{% endfor %}</tbody>
+                    </table></div>
+                {% else %}
+                    <div class="alert alert--success">Every document dated in {{ checklist.month|date:"F Y" }} is posted or cancelled.</div>
+                {% endif %}
+                {% if checklist.differences %}
+                    <div class="alert alert--danger">The stock check finds {{ checklist.differences }} difference{{ checklist.differences|pluralize }} between the ledger and the balances. Ask the developers to look before closing.</div>
+                {% else %}
+                    <div class="alert alert--success">The stock check finds the ledger and the balances in agreement.</div>
+                {% endif %}
+                {% if sees_valuation %}<p><a href="{% url 'inventory:report_valuation' %}?as_of={{ checklist.month|date:'Y-m' }}-{{ checklist.month|date:'t' }}">Stock valuation at the end of {{ checklist.month|date:"F Y" }}</a> - download it for accounts.</p>{% endif %}
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head"><h2>Closed months</h2><span class="spacer"></span><span class="t-muted">{{ locks|length }}</span></div>
+        {% if locks %}
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>Month</th><th>Closed by</th><th>On</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    {% for lock in locks %}
+                        <tr><td>{{ lock.month|date:"F Y" }}</td><td>{{ lock.locked_by.get_full_name|default:lock.locked_by.email|default:"—" }}</td>
+                            <td>{{ lock.created_at|date:"d M Y" }}</td><td>{{ lock.reason|default:"—" }}</td>
+                            <td><button class="btn btn--quiet btn--sm" type="button" data-open-dialog="reopen-dialog" data-dialog-action="{% url 'inventory:period_reopen' lock.pk %}" data-dialog-subject="Open {{ lock.month|date:'F Y' }} again">Open again</button></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table></div>
+        {% else %}
+            <div class="empty"><div class="empty__text">No month is closed yet.</div></div>
+        {% endif %}
+    </div>
+
+    {% url 'inventory:period_close' as close_url %}
+    {% include "organization/profile/modal_form.html" with id="close-dialog" title="Close a month" action=close_url form=form submit="Close the month" %}
+    {% include "inventory/includes/action_dialog.html" with id="reopen-dialog" form=reason_form submit="Open again" danger=True note="Entries dated in the month can be posted again until it is closed once more. The reason is recorded." %}
+{% endblock %}
+{% block extra_js %}{% include "inventory/_js.html" %}{% endblock %}

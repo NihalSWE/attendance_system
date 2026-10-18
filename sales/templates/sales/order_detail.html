@@ -1,0 +1,99 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}{{ order.number }} · Sales{% endblock %}
+{% block extra_css %}{% include "inventory/_head.html" %}{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'sales:orders' %}">Sales orders</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ order.number }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ order.number }} {% with row=order %}{% include "sales/_status.html" %}{% endwith %}</h1>
+            <p class="page__sub">
+                {{ order.customer.name }} · {{ order.order_date|date:"d M Y" }} · {{ order.get_source_display }}{% if order.customer_ref %} · their ref. {{ order.customer_ref }}{% endif %}
+                {% if order.delivery_date %} · deliver by {{ order.delivery_date|date:"d M Y" }}{% endif %} · from {{ order.warehouse }}{% if mixed %} and other stores (see each line){% endif %}
+                {% if order.confirmed_at %}<br>Confirmed by {{ order.confirmed_by.get_full_name|default:order.confirmed_by.email }} on {{ order.confirmed_at|date:"d M Y H:i" }}{% endif %}
+                {% if order.credit_note %}<br>Over the credit limit: {{ order.credit_note }}{% endif %}
+                {% if order.closed_note %}<br>{{ order.closed_note }}{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            {% if may_order and order.status == "draft" or may_order and order.status == "confirmed" %}
+                <button class="btn btn--quiet" type="button" data-open-dialog="cancel-dialog">Cancel order</button>
+            {% endif %}
+            {% if may_order and order.status == "partly_delivered" %}
+                <button class="btn btn--quiet" type="button" data-open-dialog="close-dialog">Close</button>
+            {% endif %}
+            {% if can_edit %}<button class="btn btn--ghost" type="button" data-open-dialog="line-dialog">Add line</button>{% endif %}
+            {% if can_confirm %}
+                {% if over_credit %}
+                    <button class="btn btn--primary" type="button" data-open-dialog="credit-dialog">Confirm</button>
+                {% else %}
+                    <form method="post" action="{% url 'sales:order_action' order.pk 'confirm' %}" data-confirm="Total {{ totals.total|floatformat:2 }}. The stock is reserved for it, first expiry first." data-confirm-title="Confirm {{ order.number }}?" data-confirm-button="Confirm">{% csrf_token %}<button class="btn btn--primary" type="submit">Confirm</button></form>
+                {% endif %}
+            {% endif %}
+            {% if may_order and order.deliverable %}
+                <form method="post" action="{% url 'sales:order_action' order.pk 'reserve' %}">{% csrf_token %}<button class="btn btn--ghost" type="submit">Reserve again</button></form>
+            {% endif %}
+            {% if can_deliver %}
+                <form method="post" action="{% url 'sales:order_action' order.pk 'deliver' %}">{% csrf_token %}<button class="btn btn--primary" type="submit">Deliver</button></form>
+            {% endif %}
+        </div>
+    </div>
+    {% if over_credit %}<div class="alert alert--warning">{{ credit_message }}</div>{% endif %}
+    <div class="card">
+        <div class="card__head"><h2>Ordered</h2><span class="spacer"></span>
+            <span class="t-muted">Amount <span class="amount">{{ totals.amount|floatformat:2 }}</span> · VAT <span class="amount">{{ totals.vat|floatformat:2 }}</span> · Total <strong class="amount">{{ totals.total|floatformat:2 }}</strong></span></div>
+        {% if lines %}
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>Item</th>{% if mixed %}<th>From</th>{% endif %}<th class="numeric">Quantity</th><th class="numeric">Price</th><th class="numeric">Disc %</th><th class="numeric">VAT %</th><th class="numeric">Amount</th>
+                    {% if order.status == "draft" %}<th class="numeric">Available now</th>{% else %}<th class="numeric">Reserved</th><th class="numeric">Delivered</th>{% endif %}<th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    {% for line in lines %}
+                        <tr>
+                            <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                            {% if mixed %}<td>{{ line.warehouse.code }}</td>{% endif %}
+                            <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                            <td class="numeric">{{ line.unit_price|floatformat:2 }}</td>
+                            <td class="numeric">{{ line.discount_pct.normalize }}</td>
+                            <td class="numeric">{{ line.vat_rate.normalize }}</td>
+                            <td class="numeric">{{ line.amount|floatformat:2 }}</td>
+                            {% if order.status == "draft" %}
+                                <td class="numeric">{% if line.available is not None %}{% if line.available < line.qty_base %}<span class="badge badge--warning">{{ line.available.normalize }}</span>{% else %}{{ line.available.normalize }}{% endif %} {{ line.item.base_uom.code }}{% endif %}</td>
+                            {% else %}
+                                <td class="numeric">{% if line.qty_reserved_base < line.qty_open_base %}<span class="badge badge--warning">{{ line.qty_reserved_base.normalize }}</span>{% else %}{{ line.qty_reserved_base.normalize }}{% endif %}</td>
+                                <td class="numeric">{{ line.qty_delivered_base.normalize }} {{ line.item.base_uom.code }}</td>
+                            {% endif %}
+                            <td>{% if can_edit %}<form method="post" action="{% url 'sales:order_line_remove' order.pk line.pk %}" data-confirm="The line is taken off." data-confirm-title="Remove this line?" data-confirm-button="Remove" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Remove</button></form>{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table></div>
+        {% else %}
+            <div class="empty"><div class="empty__text">Add what the customer orders. Prices come from their price list.</div></div>
+        {% endif %}
+    </div>
+    {% if deliveries %}
+        <div class="card"><div class="card__head"><h2>Deliveries</h2></div>
+            <div class="table-wrap"><table class="table"><thead><tr><th>Number</th><th>From</th><th>Date</th><th>Status</th></tr></thead><tbody>
+                {% for d in deliveries %}<tr><td><a href="{% url 'sales:delivery_detail' d.pk %}">{{ d.number }}</a></td><td>{{ d.warehouse.code }}</td><td>{{ d.delivery_date|date:"d M Y" }}</td><td>{% with row=d %}{% include "sales/_status.html" %}{% endwith %}</td></tr>{% endfor %}
+            </tbody></table></div></div>
+    {% endif %}
+    {% if line_form %}
+        {% url 'sales:order_line_add' order.pk as line_url %}
+        {% include "organization/profile/modal_form.html" with id="line-dialog" title="Add a line" action=line_url form=line_form submit="Add" wide=True %}
+    {% endif %}
+    {% url 'sales:order_action' order.pk 'confirm' as confirm_url %}
+    {% include "organization/profile/modal_form.html" with id="credit-dialog" title="Confirm over the credit limit" action=confirm_url form=credit_form submit="Confirm anyway" note=credit_message %}
+    {% url 'sales:order_action' order.pk 'cancel' as cancel_url %}
+    {% include "organization/profile/modal_form.html" with id="cancel-dialog" title="Cancel "|add:order.number action=cancel_url form=cancel_form submit="Cancel the order" danger=True note="Its reserved stock is freed." %}
+    {% url 'sales:order_action' order.pk 'close' as close_url %}
+    {% include "organization/profile/modal_form.html" with id="close-dialog" title="Close "|add:order.number action=close_url form=close_form submit="Close" danger=True note="What is not delivered will not go; its reservation is freed. Say why." %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}{% include "inventory/_js.html" %}{% endblock %}

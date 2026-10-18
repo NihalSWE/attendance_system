@@ -1,0 +1,85 @@
+/* Inventory pages: the few pieces the shared components do not cover. */
+.inv-facts {
+    display:grid;
+    grid-template-columns:160px minmax(0,1fr);
+    gap:var(--s2) var(--s4);
+    margin:0;
+}
+.inv-facts dt {
+    color:var(--muted);
+}
+.inv-facts dd {
+    margin:0;
+    overflow-wrap:anywhere;
+}
+.inv-problems {
+    margin:0;
+    padding-left:var(--s4);
+    color:var(--danger);
+}
+.inv-actions {
+    display:flex;
+    gap:var(--s2);
+    justify-content:flex-end;
+    flex-wrap:wrap;
+}
+.inv-actions form {
+    margin:0;
+}
+@media (max-width:640px) {
+    .inv-facts {
+        grid-template-columns:minmax(0,1fr);
+    }
+}
+.scanbox__row {
+    display:flex;
+    gap:var(--s2);
+}
+.scanbox__input {
+    flex:1;
+    font-size:1.05rem;
+}
+.scanbox__result {
+    display:flex;
+    flex-direction:column;
+    gap:var(--s3);
+    margin-top:var(--s4);
+}
+.scanbox__camera {
+    width:100%;
+    min-height:240px;
+    background:var(--surface-sunken);
+    border-radius:var(--radius, 8px);
+    overflow:hidden;
+}
+.scan-answer {
+    border:1px solid var(--border);
+    border-radius:var(--radius, 8px);
+    padding:var(--s3) var(--s4);
+    background:var(--surface);
+    display:flex;
+    flex-direction:column;
+    gap:var(--s2);
+}
+.scan-answer--missing {
+    border-color:var(--danger);
+}
+.scan-answer__head {
+    display:flex;
+    gap:var(--s2);
+    align-items:center;
+    flex-wrap:wrap;
+}
+.scan-answer__code {
+    font-weight:600;
+    overflow-wrap:anywhere;
+}
+.scan-answer__message {
+    margin:0;
+}
+.inv-actions--start {
+    justify-content:flex-start;
+}
+.scan-answer .btn {
+    align-self:flex-start;
+}

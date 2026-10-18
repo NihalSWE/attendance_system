@@ -1,0 +1,4 @@
+<td>{{ row.warehouse.code }} · {{ row.warehouse.name }}</td>
+<td>{{ row.code }}</td>
+<td>{{ row.description|default:"—" }}</td>
+{% include "inventory/rows/_status.html" %}

@@ -58,10 +58,66 @@ BRANCH_PERMISSIONS = (
     # day panel need view; Days to review, Fix a day and Withdraw need fix.
     ("attendance.view", "View attendance", "attendance", "view"),
     ("attendance.fix", "Fix attendance days", "attendance", "edit"),
+    # Store & Inventory (docs/inventory/00-PLAN.md §6). Offered only to a
+    # company the platform owner enabled the "inventory" feature for
+    # (``offered``). Items, units, categories, suppliers and customers are the
+    # company's: "Set up items" held in any branch opens them; stores, stock
+    # and documents follow the store's branch.
+    ("inventory.view", "View stock and items", "inventory", "view"),
+    ("inventory.items", "Set up items, stores, suppliers and customers", "inventory", "edit"),
+    ("inventory.labels", "Print and reprint labels", "inventory", "create"),
+    ("inventory.issue", "Store requisitions, issues and returns", "inventory", "create"),
+    # Phase 4: the department head's yes (Phase 0, approval chains) as a
+    # permission - heading a department gives nothing by itself (HEAD_ACCESS).
+    ("inventory.issue_approve", "Approve store requisitions", "inventory", "approve"),
+    ("inventory.transfer", "Transfer stock between stores", "inventory", "create"),
+    ("inventory.adjust", "Enter stock adjustments, counts and opening stock", "inventory", "create"),
+    ("inventory.adjust_approve", "Approve and post adjustments and opening stock", "inventory", "approve"),
+    ("inventory.valuation", "See stock costs and values", "inventory", "view"),
+    ("inventory.period_close", "Close a stock month", "inventory", "manage"),
+    # Purchase (Phase 3), part of the same module: requisition -> order ->
+    # goods receipt -> quality check -> return. Each follows the document's
+    # branch (the requisition's or order's branch, the receiving store's).
+    ("purchase.request", "Raise purchase requisitions", "inventory", "create"),
+    ("purchase.approve", "Approve purchase requisitions, orders and returns", "inventory", "approve"),
+    ("purchase.order", "Make purchase orders and send them to suppliers", "inventory", "create"),
+    ("purchase.receive", "Receive goods (GRN) and enter purchase returns", "inventory", "create"),
+    ("purchase.qc", "Quality check received goods", "inventory", "approve"),
+    # Production (Phase 5): BOMs are the company's (held in any branch);
+    # orders, consumption and output follow the finished-goods store's branch.
+    ("production.bom", "Set up BOMs (recipes)", "inventory", "edit"),
+    ("production.plan", "Plan and release production orders", "inventory", "create"),
+    ("production.execute", "Use materials and record production output", "inventory", "create"),
+    # Sales (Phase 6): orders, confirming them, delivering and invoicing,
+    # each in the branch of the store the order is delivered from.
+    ("sales.order", "Enter sales orders and price lists", "inventory", "create"),
+    ("sales.approve", "Confirm sales orders", "inventory", "approve"),
+    ("sales.deliver", "Deliver goods to customers", "inventory", "create"),
+    ("sales.invoice", "Invoice customers and record payments", "inventory", "create"),
     ("access.grant", "Give access to others", "access", "manage"),
 )
 CODES = tuple(code for code, *_ in BRANCH_PERMISSIONS)
 LABELS = {code: label for code, label, *_ in BRANCH_PERMISSIONS}
+#: Features a company has only once the platform owner enables them: their
+#: permissions are not offered (Access page, API) to a company without them.
+GATED_FEATURES = frozenset({"inventory"})
+FEATURE_OF = {code: feature for code, _label, feature, _action in BRANCH_PERMISSIONS}
+
+
+def feature_on(company_id, feature_code):
+    """Whether the company has this feature (always, for an ungated one)."""
+    if feature_code not in GATED_FEATURES:
+        return True
+    from access_control.services import is_feature_enabled
+
+    feature = Feature.objects.filter(code=feature_code, is_active=True).first()
+    return feature is not None and is_feature_enabled(company_id, feature)
+
+
+def offered(company_id):
+    """The permissions this company can give: every code whose feature it has."""
+    on = {feature: feature_on(company_id, feature) for feature in set(FEATURE_OF.values())}
+    return tuple(code for code in CODES if on[FEATURE_OF[code]])
 
 #: What the head of a department may do, for the people placed in the
 #: department(s) they head and nowhere else (Ajay, 2026-09-20). A department
@@ -304,6 +360,8 @@ def _checked(actor, company_id, employee_id, code, branch_ids):
         raise PermissionDenied("Authentication is required.")
     if code not in CODES:
         raise ValidationError({"code": "Unknown permission."})
+    if not feature_on(company_id, FEATURE_OF[code]):
+        raise ValidationError({"code": "This company does not have that module."})
     branch_ids = {int(branch_id) for branch_id in branch_ids}
     if not branch_ids:
         raise ValidationError({"branches": "Choose at least one branch."})

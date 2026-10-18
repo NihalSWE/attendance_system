@@ -39,6 +39,7 @@ def shell(request):
     unrestricted_admin = False
     branch_menus = []
     leave_approver = False
+    module_codes = _module_codes(user, company_id) if membership else frozenset()
     if membership and not self_service:
         unrestricted_admin = may_manage_devices(user, company_id)
         menus = company_menus(
@@ -51,13 +52,14 @@ def shell(request):
             people_codes=({code for code in ("employees.view", "employees.edit")
                            if branches_for(user, company_id, code)}
                           if membership.role == "hr" else None),
+            module_codes=module_codes,
         )
     elif membership and self_service:
         # A12: the company pages this branch manager / person given access may
         # open (access_control.page_access), under "Company" in their sidebar.
         branch_menus = company_menus(
             request, can_manage=False, can_manage_devices=False,
-            allowed=opener(user, company_id),
+            allowed=opener(user, company_id), module_codes=module_codes,
         )
         # The approval inbox: a branch manager, or someone given "Approve leave".
         leave_approver = membership.role == "manager" or can(user, company_id, "leave.approve")
@@ -96,6 +98,19 @@ def developer_api_on(company_id):
 
     feature = Feature.objects.filter(code="developer_api", is_active=True).first()
     return feature is not None and is_feature_enabled(company_id, feature)
+
+
+def _module_codes(user, company_id):
+    """The Store & Inventory permissions ``user`` holds somewhere - none when
+    the company does not have the module (its menu then stays hidden)."""
+    from inventory.access import inventory_on
+
+    if not inventory_on(company_id):
+        return frozenset()
+    from access_control.branch_access import FEATURE_OF
+
+    return frozenset(code for code, feature in FEATURE_OF.items()
+                     if feature == "inventory" and can(user, company_id, code))
 
 
 def _lfa_on(company_id):

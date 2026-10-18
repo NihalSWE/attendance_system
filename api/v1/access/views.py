@@ -77,7 +77,9 @@ class PermissionListView(ApiView):
     )
     def get(self, request):
         services.grant_branches(request.user, request.company_id)
-        rows = [{"code": code, "label": label} for code, label, *_ in access.BRANCH_PERMISSIONS]
+        offered = set(access.offered(request.company_id))
+        rows = [{"code": code, "label": label} for code, label, *_ in access.BRANCH_PERMISSIONS
+                if code in offered]
         return self.paginated(request, rows, s.PermissionSerializer)
 
 

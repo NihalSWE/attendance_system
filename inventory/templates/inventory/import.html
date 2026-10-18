@@ -1,0 +1,95 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Import {{ title|lower }} · Inventory
+{% endblock %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{{ back }}">{{ title }}</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Import
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Import {{ title|lower }}</h1>
+            <p class="page__sub">
+                Fill the template, upload it, check the preview, then confirm. Nothing is written until you confirm.
+                {% if kind == "opening" %}The rows become a new draft opening stock, posted separately.{% else %}A code already in the software is skipped, not changed.{% endif %}
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'inventory:import_template' kind %}">Download the template</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card__head"><h2>1. Upload</h2></div>
+        <form class="card__body stack" method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert--danger">{{ form.non_field_errors }}</div>{% endif %}
+            <div class="grid grid--2">
+                {% for field in form.visible_fields %}
+                    {% include "leaves/includes/field.html" %}
+                {% endfor %}
+            </div>
+            <div><button class="btn btn--primary" type="submit">Preview</button></div>
+        </form>
+    </div>
+
+    {% if preview %}
+        <div class="card">
+            <div class="card__head">
+                <h2>2. Preview</h2>
+                <span class="spacer"></span>
+                <span class="badge badge--success">{{ preview.summary.add }} to add</span>
+                {% if preview.summary.skip %}<span class="badge badge--neutral">{{ preview.summary.skip }} already here</span>{% endif %}
+                {% if preview.summary.error %}<span class="badge badge--danger">{{ preview.summary.error }} with problems</span>{% endif %}
+            </div>
+            {% if preview.categories %}
+                <div class="alert alert--info">
+                    New categories will be made:
+                    {% for c in preview.categories %}{{ c.name }} ({{ c.code }}){% if not forloop.last %}, {% endif %}{% endfor %}.
+                </div>
+            {% endif %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Sheet</th><th class="numeric">Line</th><th>Row</th><th>Result</th></tr></thead>
+                    <tbody>
+                        {% for row in preview.rows %}
+                            <tr>
+                                <td>{{ row.sheet }}</td>
+                                <td class="numeric">{{ row.line }}</td>
+                                <td>{{ row.label }}</td>
+                                <td>
+                                    {% if row.action == "add" %}
+                                        <span class="badge badge--success">Add</span>
+                                    {% elif row.action == "skip" %}
+                                        <span class="badge badge--neutral">{{ row.note }}</span>
+                                    {% else %}
+                                        <ul class="inv-problems">{% for p in row.problems %}<li>{{ p }}</li>{% endfor %}</ul>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="card__body">
+                {% if preview.summary.error %}
+                    <div class="alert alert--warning">Fix the rows with problems in the file and upload it again. Nothing has been written.</div>
+                {% elif preview.summary.add %}
+                    <form method="post" action="{% url 'inventory:import_confirm' kind %}">
+                        {% csrf_token %}
+                        <button class="btn btn--primary" type="submit">Confirm: import {{ preview.summary.add }} row{{ preview.summary.add|pluralize }}</button>
+                    </form>
+                {% else %}
+                    <div class="alert alert--info">Everything in the file is in the software already.</div>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+{% endblock %}

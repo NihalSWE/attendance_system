@@ -1,0 +1,7 @@
+<td><a href="{% url 'purchasing:order_detail' doc.pk %}"><strong>{{ doc.number }}</strong></a></td>
+<td>{{ doc.order_date|date:"d M Y" }}</td>
+<td>{{ doc.supplier.name }}</td>
+<td>{{ doc.branch.name }}</td>
+<td>{{ doc.expected_date|date:"d M Y"|default:"—" }}</td>
+<td>{% include "purchasing/_status.html" %}</td>
+<td><a class="btn btn--ghost btn--sm" href="{% url 'purchasing:order_detail' doc.pk %}">Open</a></td>

@@ -1,0 +1,21 @@
+{% comment %}
+    A dialog shared by the buttons of a page that need a reason: the button gives
+    the action (data-dialog-action) and what it is about (data-dialog-subject).
+{% endcomment %}
+<dialog class="modal" id="{{ id }}" aria-labelledby="{{ id }}-title">
+    <form class="modal__card" method="post" novalidate>
+        {% csrf_token %}
+        <div class="modal__head">
+            <h2 id="{{ id }}-title"><span data-dialog-subject></span></h2>
+            <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <div class="modal__body stack">
+            {% if note %}<p class="t-faint">{{ note }}</p>{% endif %}
+            {% for field in form.visible_fields %}{% include "leaves/includes/field.html" %}{% endfor %}
+        </div>
+        <div class="modal__foot">
+            <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+            <button class="btn {% if danger %}btn--danger{% else %}btn--primary{% endif %}" type="submit">{{ submit }}</button>
+        </div>
+    </form>
+</dialog>

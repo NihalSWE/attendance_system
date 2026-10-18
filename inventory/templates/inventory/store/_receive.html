@@ -1,0 +1,40 @@
+<dialog class="modal modal--wide" id="receive-dialog" aria-labelledby="receive-title">
+    <form class="modal__card" method="post" action="{% url 'inventory:transfer_receive' row.pk %}" novalidate>
+        {% csrf_token %}
+        <div class="modal__head">
+            <h2 id="receive-title">Receive {{ row.number }} into {{ row.to_warehouse.code }}</h2>
+            <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <div class="modal__body stack">
+            <p class="t-faint">Everything sent is taken as arrived. Where less came, write what arrived (in the base unit) and why the rest did not: the shortage is written off from transit.</p>
+            {% for field in receive_form.visible_fields %}{% include "leaves/includes/field.html" %}{% endfor %}
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Item</th><th>Batch</th><th class="numeric">Sent</th><th class="numeric">Arrived</th><th>If less: why</th></tr></thead>
+                    <tbody>
+                        {% for line in lines %}
+                            <tr>
+                                <td>{{ line.item.code }} {{ line.item.name }}</td>
+                                <td>{{ line.batch.batch_no|default:"—" }}</td>
+                                <td class="numeric">{{ line.qty_base.normalize }} {{ line.item.base_uom.code }}</td>
+                                <td class="numeric">
+                                    <label class="sr-only" for="got_{{ line.pk }}">Arrived {{ line.item.code }}</label>
+                                    <input class="input" id="got_{{ line.pk }}" name="got_{{ line.pk }}" inputmode="decimal" size="8"
+                                           value="{{ line.qty_base.normalize }}">
+                                </td>
+                                <td>
+                                    <label class="sr-only" for="why_{{ line.pk }}">Why less {{ line.item.code }}</label>
+                                    <input class="input" id="why_{{ line.pk }}" name="why_{{ line.pk }}" maxlength="255">
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="modal__foot">
+            <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+            <button class="btn btn--primary" type="submit">Receive</button>
+        </div>
+    </form>
+</dialog>

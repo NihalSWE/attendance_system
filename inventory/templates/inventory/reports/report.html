@@ -1,0 +1,149 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}{{ report.title }} · Inventory{% endblock %}
+{% block extra_css %}
+    {{ block.super }}
+    {% include "inventory/_head.html" %}
+    <link rel="stylesheet" href="{% static 'reports/css/report.css' %}">
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    {# Downloads carry the table's search and sort, as on the other lists. #}
+    <script defer src="{% static 'base_template/js/export_links.js' %}"></script>
+{% endblock %}
+{% block page %}
+<div class="report-page">
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:reports' %}">Inventory reports</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ report.title }}
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">{{ report.title }}</h1>
+            <p class="page__sub">{{ report.description }}</p>
+        </div>
+        <div class="page__actions">
+            {# The same view with ?format=: same permission, dates and filters. #}
+            <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=xlsx" data-export data-report-download>
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 13l6 6M15 13l-6 6"/></svg>
+                Download Excel
+            </a>
+            <a class="btn btn--ghost" href="?{% if query %}{{ query }}&amp;{% endif %}format=pdf" data-export data-report-download>
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 12v6M9 15l3 3 3-3"/></svg>
+                Download PDF
+            </a>
+        </div>
+    </div>
+
+    <div class="card report-card">
+        <div class="card__head report-card__head">
+            <div class="report-period">
+                <span class="report-period__eyebrow">Showing</span>
+                <h2 class="report-period__label">{{ f.label }}</h2>
+            </div>
+        </div>
+        <form method="get" class="toolbar toolbar--fit" data-report-filters>
+            {% if f.period == "as_of" %}
+                <label class="t-faint" for="report-as-of">At the close of</label>
+                <input class="input" type="date" data-datepicker id="report-as-of" name="as_of" value="{{ f.as_of|date:'Y-m-d' }}" max="{{ today|date:'Y-m-d' }}">
+            {% elif f.period == "range" %}
+                <label class="sr-only" for="report-from">From</label>
+                <input class="input" type="date" data-datepicker id="report-from" name="date_from" value="{{ f.date_from|date:'Y-m-d' }}">
+                <label class="sr-only" for="report-to">To</label>
+                <input class="input" type="date" data-datepicker id="report-to" name="date_to" value="{{ f.date_to|date:'Y-m-d' }}">
+            {% endif %}
+            {% if "store" in report.extras %}
+                <label class="sr-only" for="report-store">Store</label>
+                <select class="input select js-select" id="report-store" name="store">
+                    <option value="">All stores</option>
+                    {% for store in stores %}
+                        <option value="{{ store.pk }}" {% if f.store == store.pk|stringformat:"s" %}selected{% endif %}>{{ store.code }} · {{ store.name }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            {% if "item" in report.extras %}
+                <label class="sr-only" for="report-item">Item</label>
+                <select class="input select js-select2" id="report-item" name="item">
+                    <option value="">{% if report.slug == "item-card" %}Pick an item{% else %}All items{% endif %}</option>
+                    {% for item in items %}
+                        <option value="{{ item.pk }}" {% if f.item == item.pk|stringformat:"s" %}selected{% endif %}>{{ item.code }} · {{ item.name }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            {% if "category" in report.extras %}
+                <label class="sr-only" for="report-category">Category</label>
+                <select class="input select js-select" id="report-category" name="category">
+                    <option value="">All categories</option>
+                    {% for category in categories %}
+                        <option value="{{ category.pk }}" {% if f.category == category.pk|stringformat:"s" %}selected{% endif %}>{{ category.name }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            {% if "kind" in report.extras %}
+                <label class="sr-only" for="report-kind">Item type</label>
+                <select class="input select js-select" id="report-kind" name="kind">
+                    <option value="">All item types</option>
+                    {% for value, label in kinds %}
+                        <option value="{{ value }}" {% if f.kind == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            {% if "days" in report.extras %}
+                <label class="t-faint" for="report-days">{% if report.slug == "batch-expiry" %}Expiring within (days){% else %}Not used for (days){% endif %}</label>
+                <input class="input" type="number" min="0" max="3650" id="report-days" name="days" value="{% if f.days %}{{ f.days }}{% endif %}" style="max-width: 7rem">
+            {% endif %}
+            {% if "view" in report.extras %}
+                <label class="sr-only" for="report-view">Show</label>
+                <select class="input select js-select" id="report-view" name="view">
+                    <option value="">By item</option>
+                    <option value="store" {% if f.view == "store" %}selected{% endif %}>By item and store</option>
+                </select>
+            {% endif %}
+            <button class="btn btn--primary" type="submit">Show</button>
+            <a class="btn btn--quiet" href="{% url report.url_name %}">Clear</a>
+        </form>
+        {% if f.errors %}
+            <div class="alert alert--warning" role="alert">{% for error in f.errors %}{{ error }} {% endfor %}</div>
+        {% endif %}
+        {% if result.summary %}
+            <div class="report-kpis" data-report-summary>
+                {% for label, value in result.summary %}
+                    <div class="report-kpi{% if label == 'Expired' and value or label == 'Below minimum' and value %} report-kpi--danger{% elif label == 'Expiring soon' and value or label == 'To order' and value %} report-kpi--warning{% endif %}">
+                        <span class="report-kpi__value">{{ value }}</span>
+                        <span class="report-kpi__label">{{ label }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% if result.note %}
+            <p class="report-note">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+                <span>{{ result.note }}</span>
+            </p>
+        {% endif %}
+        {% if server_table.total %}
+            <div class="table-wrap report-table-wrap">
+                <table class="table report-table" data-server-table data-report-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                    <thead>
+                        <tr>{% for column in result.columns %}<th{% if column.numeric %} class="numeric"{% endif %}>{{ column.label }}</th>{% endfor %}</tr>
+                    </thead>
+                    <tbody>
+                        {% for row in cells %}
+                            <tr>{% for cell in row %}<td{% if cell.css %} class="{{ cell.css }}"{% endif %}>{{ cell.html }}</td>{% endfor %}</tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% else %}
+            <div class="empty">
+                <div class="empty__title">{{ result.empty }}</div>
+                <div class="empty__text">Try other dates, or clear the filters.</div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

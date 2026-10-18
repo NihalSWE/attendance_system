@@ -1,0 +1,25 @@
+<div class="card">
+    <div class="card__head"><h2>Coming back</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
+    {% if lines %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Item</th><th>Batch</th><th>Condition</th><th>Into</th><th class="numeric">Quantity</th><th>From issue</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                <tbody>
+                    {% for line in lines %}
+                        <tr>
+                            <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
+                            <td>{{ line.batch.batch_no|default:"—" }}</td>
+                            <td>{% if line.condition == "good" %}<span class="badge badge--success">Good</span>{% else %}<span class="badge badge--danger">Damaged</span>{% endif %}</td>
+                            <td>{{ line.warehouse.code }}{% if line.location %} / {{ line.location.code }}{% endif %}</td>
+                            <td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td>
+                            <td>{{ line.issue_line.issue.number|default:"—" }}</td>
+                            <td>{% include "inventory/store/_remove.html" %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="empty"><div class="empty__text">Pick the issued line each item came out on.</div></div>
+    {% endif %}
+</div>

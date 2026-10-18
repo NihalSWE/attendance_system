@@ -54,6 +54,7 @@ GUIDES = {
     "reports": ("Reports & dashboard", "110-reports.md"),
     "integrations": ("Integrations", "120-integrations.md"),
     "build-a-client": ("Build a client in 10 minutes", "120-build-a-client.md"),
+    "inventory": ("Store & inventory", "130-inventory.md"),
 }
 
 #: Each area's guide page, shown first in the area's menu section.
@@ -62,7 +63,8 @@ AREA_GUIDES = {"company": "company-and-branches", "employees": "employees",
                "device_flow": "devices-data-flow", "attendance": "attendance",
                "leave": "leave", "salary": "salary",
                "me": "employee-app", "reports": "reports",
-               "integrations": "integrations"}
+               "integrations": "integrations", "inventory": "inventory", "purchase": "inventory",
+               "production": "inventory", "sales": "inventory"}
 
 
 def _markdown(filename):

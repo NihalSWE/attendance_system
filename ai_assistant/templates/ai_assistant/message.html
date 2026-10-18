@@ -1,0 +1,89 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}Order message · Sales{% endblock %}
+{% block extra_css %}{% include "inventory/_head.html" %}{% endblock %}
+{% block page %}
+{% timezone active_company.timezone|default:"Asia/Dhaka" %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'ai_assistant:inbox' %}">AI order inbox</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        {{ message.subject|default:"Message"|truncatechars:40 }}
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">{{ message.subject|default:"Order message" }} <span class="badge{% if message.status == 'needs_review' %} badge--warning{% elif message.status == 'converted' %} badge--success{% elif message.status == 'failed' %} badge--danger{% endif %}">{{ message.get_status_display }}</span></h1>
+            <p class="page__sub">{{ message.get_channel_display }} from {{ message.sender|default:"—" }} · {{ message.received_at|date:"d M Y H:i" }}{% if message.note %}<br>{{ message.note }}{% endif %}</p>
+        </div>
+        <div class="page__actions">
+            {% if may_retry %}<form method="post" action="{% url 'ai_assistant:message_action' message.pk 'retry' %}">{% csrf_token %}<button class="btn btn--ghost" type="submit">Read again</button></form>{% endif %}
+            {% if may_edit %}<button class="btn btn--quiet" type="button" data-open-dialog="ignore-dialog" data-dialog-action="{% url 'ai_assistant:message_action' message.pk 'ignore' %}" data-dialog-subject="Ignore this message">Ignore</button>{% endif %}
+            {% if order %}<a class="btn btn--ghost" href="{% url 'sales:order_detail' order.pk %}">Edit the draft order</a>{% endif %}
+            {% if may_confirm %}<form method="post" action="{% url 'ai_assistant:message_action' message.pk 'confirm' %}" data-confirm="Stock is reserved for {{ order.number }} and the managers get the order summary." data-confirm-title="Confirm {{ order.number }}?" data-confirm-button="Confirm">{% csrf_token %}<button class="btn btn--primary" type="submit">Confirm order</button></form>{% endif %}
+        </div>
+    </div>
+
+    {% if message.problems %}
+        <div class="alert alert--warning"><strong>Check before confirming:</strong><ul>{% for problem in message.problems %}<li>{{ problem }}</li>{% endfor %}</ul></div>
+    {% endif %}
+
+    <div class="grid grid--2">
+        <div class="card">
+            <div class="card__head"><h2>As it arrived</h2></div>
+            <div class="card__body"><div style="white-space: pre-wrap; overflow-wrap: anywhere;">{{ message.body }}</div></div>
+        </div>
+        <div class="card">
+            <div class="card__head"><h2>Draft order</h2><span class="spacer"></span>{% if order %}<a href="{% url 'sales:order_detail' order.pk %}">{{ order.number }}</a> · {{ order.get_status_display }}{% endif %}</div>
+            <div class="card__body stack">
+                <p><strong>Customer:</strong> {% if message.customer %}{{ message.customer.name }} ({{ message.customer.code }}){% else %}<span class="badge badge--danger">not found</span>{% endif %}
+                    {% if may_edit and not order %} <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="customer-dialog">Choose the customer</button>{% endif %}</p>
+                {% if message.extraction %}
+                    {% with x=message.extraction %}
+                        {% if x.requested_delivery_date %}<p><strong>Deliver by:</strong> {{ x.requested_delivery_date }}</p>{% endif %}
+                        {% if x.customer_reference %}<p><strong>Customer's order no.:</strong> {{ x.customer_reference }}</p>{% endif %}
+                        {% if x.notes %}<p><strong>Notes:</strong> {{ x.notes }}</p>{% endif %}
+                        <p class="t-muted">The AI's confidence: {{ x.confidence }} · language: {{ x.language }}</p>
+                    {% endwith %}
+                {% endif %}
+            </div>
+            {% if lines %}
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>Item</th><th>From</th><th class="numeric">Quantity</th><th class="numeric">Price</th><th class="numeric">Amount</th></tr></thead>
+                    <tbody>{% for line in lines %}<tr><td>{{ line.item.code }} {{ line.item.name }}</td><td>{{ line.warehouse.code }}</td><td class="numeric">{{ line.qty.normalize }} {{ line.uom.code }}</td><td class="numeric">{{ line.unit_price|floatformat:2 }}</td><td class="numeric">{{ line.amount|floatformat:2 }}</td></tr>{% endfor %}</tbody>
+                </table></div>
+            {% endif %}
+            {% if message.unmatched %}
+                <div class="card__body stack">
+                    <h3>Not matched yet</h3>
+                    <div class="table-wrap"><table class="table">
+                        <thead><tr><th>As written</th><th class="numeric">Quantity</th><th>Why</th><th><span class="sr-only">Actions</span></th></tr></thead>
+                        <tbody>{% for line in message.unmatched %}
+                            <tr><td>{{ line.product_text }}</td><td class="numeric">{{ line.quantity }} {{ line.unit_text }}</td><td class="t-muted">{{ line.why }}</td>
+                                <td>{% if may_edit and order %}<button class="btn btn--ghost btn--sm" type="button" data-open-dialog="match-dialog" data-match-index="{{ line.index }}" data-match-qty="{{ line.quantity }}" onclick="document.getElementById('match_index').value=this.dataset.matchIndex;document.getElementById('match_qty').value=this.dataset.matchQty;">Match</button>
+                                    <form method="post" action="{% url 'ai_assistant:message_action' message.pk 'skip' %}" style="display:inline">{% csrf_token %}<input type="hidden" name="index" value="{{ line.index }}"><button class="btn btn--quiet btn--sm" type="submit">Leave out</button></form>{% endif %}</td></tr>
+                        {% endfor %}</tbody>
+                    </table></div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if calls %}
+        <div class="card">
+            <div class="card__head"><h2>AI calls</h2></div>
+            <div class="table-wrap"><table class="table">
+                <thead><tr><th>When</th><th>Model</th><th class="numeric">Tokens in / out</th><th class="numeric">Cost (US$)</th><th>Result</th></tr></thead>
+                <tbody>{% for call in calls %}<tr><td>{{ call.created_at|date:"d M Y H:i" }}</td><td>{{ call.served_by|default:call.model }}</td><td class="numeric">{{ call.input_tokens }}{% if call.cache_read_tokens %} (+{{ call.cache_read_tokens }} cached){% endif %} / {{ call.output_tokens }}</td><td class="numeric">{{ call.cost|floatformat:4 }}</td><td>{% if call.error %}<span class="badge badge--danger">{{ call.error }}</span>{% else %}<span class="badge badge--success">Read</span>{% endif %}</td></tr>{% endfor %}</tbody>
+            </table></div>
+        </div>
+    {% endif %}
+
+    {% url 'ai_assistant:message_action' message.pk 'customer' as customer_url %}
+    {% include "organization/profile/modal_form.html" with id="customer-dialog" title="Choose the customer" action=customer_url form=customer_form submit="Make the draft" %}
+    {% url 'ai_assistant:message_action' message.pk 'match' as match_url %}
+    {% include "organization/profile/modal_form.html" with id="match-dialog" title="Match this line" action=match_url form=match_form submit="Add to the draft" %}
+    {% include "inventory/includes/action_dialog.html" with id="ignore-dialog" form=reason_form submit="Ignore" danger=True note="A draft order made from it is cancelled." %}
+{% endtimezone %}
+{% endblock %}
+{% block extra_js %}{% include "inventory/_js.html" %}{% endblock %}

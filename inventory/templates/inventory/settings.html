@@ -1,0 +1,39 @@
+{% extends "base_template/base.html" %}
+{% block title %}
+    Inventory settings · Inventory
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'inventory:stock' %}">Inventory</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Settings
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">Inventory settings</h1>
+            <p class="page__sub">How stock is valued, when expiry warnings start, and who gets the daily stock alert.</p>
+        </div>
+    </div>
+    <div class="card">
+        <form class="card__body stack" method="post" novalidate>
+            {% csrf_token %}
+            {% if form.non_field_errors %}<div class="alert alert--danger">{{ form.non_field_errors }}</div>{% endif %}
+            {% if moved %}
+                <div class="alert alert--info">Stock has moved, so the average cost choice is fixed now.</div>
+            {% else %}
+                <div class="alert alert--info">
+                    Example of one average for the company: 100 kg sugar at 120 and 100 kg received at 130 average to 125;
+                    the next issue goes out at 125 from whichever store.
+                </div>
+            {% endif %}
+            <div class="grid grid--2">
+                {% for field in form.visible_fields %}
+                    {% include "leaves/includes/field.html" %}
+                {% endfor %}
+            </div>
+            <div><button class="btn btn--primary" type="submit">Save</button></div>
+        </form>
+    </div>
+{% endblock %}

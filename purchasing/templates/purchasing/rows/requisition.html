@@ -1,0 +1,7 @@
+<td><a href="{% url 'purchasing:requisition_detail' doc.pk %}"><strong>{{ doc.number }}</strong></a></td>
+<td>{{ doc.request_date|date:"d M Y" }}</td>
+<td>{{ doc.branch.name }}</td>
+<td>{{ doc.department.name|default:"—" }}</td>
+<td>{{ doc.needed_by|date:"d M Y"|default:"—" }}</td>
+<td>{% include "purchasing/_status.html" %}</td>
+<td><a class="btn btn--ghost btn--sm" href="{% url 'purchasing:requisition_detail' doc.pk %}">Open</a></td>

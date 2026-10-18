@@ -11,7 +11,7 @@ from django.conf import settings
 from django.test import SimpleTestCase
 
 BROWSER_BOX = re.compile(r"\b(?:window\.)?(?:confirm|alert|prompt)\s*\(")
-SKIP = {"venv", ".git", "node_modules", "staticfiles", ".kilo", "media"}
+SKIP = {"venv", ".venv", ".git", "node_modules", "staticfiles", ".kilo", "media"}
 
 
 class NoBrowserDialogTests(SimpleTestCase):
