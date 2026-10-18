@@ -6217,3 +6217,35 @@ one employee working a day off waits.
   `POST /working-days/{id}/cancel` (CHANGELOG).
 - Tests: `scheduling/tests_working_day.py` (22), `api.tests.test_shifts`.
 - Deploy: pull, `migrate`, restart. No recalculation needed.
+
+### Device user lists kept as rows (speed, phase 1) — 2026-10-18
+
+Measured on a copy of the live database (2026-10-17): the Device users page
+took 10.3 s, then 10.3 s again for its table, on Shed 1 (Male); the Employees
+list 2.3 s and an employee's page up to 4.7 s. Cause: `build_roster` and
+`_removed_pins` worked the user list out on every view from every upload the
+device ever sent. A device re-sends its whole user table (names, templates,
+photos): 4,644 uploads, 195 MB, searched about ten times per view.
+
+- **`devices.DeviceUser`** (one row per device and number: name, card,
+  privilege, group/tz, template counts, photo, last seen in a 3.x list, the
+  list it was in) and **`devices.DeviceUserSync`** (per device: last upload
+  applied, latest "Refresh user list" answer). Migration `devices.0011`.
+- **`devices/services/device_users.py`**: each upload is applied once, when
+  it arrives (`ingest` → `record_message`, best effort); readers call
+  `sync`, which applies anything after the last upload applied (so nothing is
+  lost if an upload was stored without it), and builds a device from all of
+  its uploads the first time. Same rules as before: newest fields win, each
+  template counted once, photo, removed = not in the latest complete list.
+- `build_roster` and `_removed_pins` read the rows; every caller (Device
+  users page, Employees list badges, employee page, mapping, API) is
+  unchanged. The old way stays as `roster_from_messages` for checking.
+- **`manage.py rebuild_device_users [--device ID] [--check]`**: rebuild from
+  the stored uploads; `--check` compares with the old way.
+- Live copy: all 6 devices "same as before"; Device users 0.2–0.5 s (was
+  10.3 + 10.3 s), Employees list 0.39 s (2.3 s), employee page 0.45 s (up to
+  4.7 s). Tests: `devices/tests_device_users.py` (10); devices + device API
+  461 OK.
+- Deploy: pull, `migrate`, restart, then once
+  `python manage.py rebuild_device_users` (about 2 s on the live data; without
+  it each device is built on its first view). No `.env` change.
