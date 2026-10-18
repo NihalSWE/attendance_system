@@ -37,8 +37,13 @@ function bindSortBox(table, api) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll("table[data-server-table]").forEach(function (table) {
-        if (!window.DataTable) return; // The counted HTML pager still works.
+    const tables = document.querySelectorAll("table[data-server-table]");
+    if (tables.length && !window.DataTable) {
+        // The table script did not load: show the counted HTML pager again.
+        document.documentElement.classList.remove("tables-js");
+        return;
+    }
+    tables.forEach(function (table) {
         const allowed = (table.dataset.orderable || "").split(",");
         const headers = Array.from(table.querySelectorAll("thead th"));
         // The SL header, and a cell for it on any row the server drew.
@@ -50,7 +55,14 @@ document.addEventListener("DOMContentLoaded", function () {
             row.prepend(document.createElement("td"));
         });
         const card = table.closest(".card");
-        const fallback = card && card.querySelector(".server-table-fallback");
+        const fallback = Array.from(document.querySelectorAll(".server-table-fallback"))
+            .find(element => element.dataset.serverTableFor === (table.dataset.serverTable || ""))
+            || (card && card.querySelector(".server-table-fallback"));
+        // The server already drew the first page into the table (2026-10-18):
+        // keep it instead of asking for the same rows again. Its counts come
+        // with the HTML pager; without them the table asks, as before.
+        const drawn = fallback && fallback.dataset.filtered !== undefined
+            ? [Number(fallback.dataset.filtered), Number(fallback.dataset.total)] : null;
         const notice = document.createElement("p");
         notice.className = "alert alert--warning";
         notice.hidden = true;
@@ -63,6 +75,7 @@ document.addEventListener("DOMContentLoaded", function () {
         // showing right now - its search box and sort (export_links.js).
         table.serverTableApi = new DataTable(table, {
             serverSide: true,
+            deferLoading: drawn,
             processing: true,
             searchDelay: 400,
             autoWidth: false,
@@ -87,7 +100,8 @@ document.addEventListener("DOMContentLoaded", function () {
             createdRow: function (row, data, dataIndex, cells) {
                 // ``cells`` holds every column's cell, hidden ones too; row.cells
                 // only the drawn ones, so a hidden column would shift the rest.
-                (data.DT_RowData.cellAttrs || []).forEach(function (attrs, index) {
+                // Rows the server drew into the page already carry their attributes.
+                ((data.DT_RowData && data.DT_RowData.cellAttrs) || []).forEach(function (attrs, index) {
                     const cell = cells[index + SL];
                     if (!cell) return;
                     Object.entries(attrs).forEach(function ([key, value]) {
@@ -159,6 +173,8 @@ document.addEventListener("DOMContentLoaded", function () {
                     });
             },
             language: {search: "Search all results:", lengthMenu: "Show _MENU_",
+                // A kept first page with no rows is already the answer.
+                loadingRecords: drawn && !drawn[0] ? "No results for these filters." : "Loading...",
                 info: "Showing _START_–_END_ of _TOTAL_", infoEmpty: "Showing 0–0 of 0",
                 emptyTable: "No results for these filters.", zeroRecords: "No matching results."}
         });

@@ -17,6 +17,18 @@ No stock vendor theme is loaded. Layout/visibility rules are included here. */
     display:block;
     overflow-x:auto;
 }
+/* With scripts on (base.html sets .tables-js before the first paint), a
+   server table starts in its scripted form (2026-10-18): the no-script pager
+   and empty notes stay hidden, and the table keeps room for the rows
+   DataTables adds above (length, search) and below (count, pages), so
+   nothing jumps when it starts. tables.js drops .tables-js if it cannot. */
+.tables-js .server-table-fallback,
+.tables-js .server-table-empty {
+    display:none;
+}
+.tables-js table[data-server-table]:not(.dataTable) {
+    margin-block:61px;
+}
 .dt-layout-full {
     width:100%;
 }

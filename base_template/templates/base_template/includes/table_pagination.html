@@ -1,5 +1,7 @@
 {% if server_table and not server_table.ajax %}
-    <div class="server-table-fallback">
+    {# The counts let tables.js keep the rows already on the page (deferLoading). #}
+    <div class="server-table-fallback" data-server-table-for="{{ server_table.name }}"
+         data-total="{{ server_table.total }}" data-filtered="{{ server_table.page.paginator.count }}">
         <form method="get" class="toolbar">
             {% for key, value in request.GET.items %}
                 {% if key != server_table.params.page and key != server_table.params.per_page and key != server_table.params.query and key != 'table' %}
