@@ -18,6 +18,7 @@ from django.utils import timezone
 
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from leaves.models import (
     EmployeeLeavePolicy,
@@ -74,7 +75,7 @@ def save_policy(*, actor, company_id, values, policy_id=None):
         else:
             policy = LeavePolicy.objects.filter(pk=policy_id).first()
             if policy is None:
-                raise PermissionDenied("Leave policy not found in this company.")
+                raise NotInThisCompany("Leave policy not found in this company.")
             before = _snapshot(policy)
         policy.code = (values.get("code") or "").strip().upper()
         policy.name = (values.get("name") or "").strip()
@@ -105,7 +106,7 @@ def set_policy_status(*, actor, company_id, policy_id, status):
     with use_company(company_id):
         policy = LeavePolicy.objects.filter(pk=policy_id).first()
         if policy is None:
-            raise PermissionDenied("Leave policy not found in this company.")
+            raise NotInThisCompany("Leave policy not found in this company.")
         if status not in ActiveStatus.values:
             raise ValidationError({"status": "Choose active or inactive."})
         if status != ActiveStatus.ACTIVE and policy.is_default:
@@ -162,7 +163,7 @@ def add_version(*, actor, company_id, policy_id, effective_from, note, rules, to
     with use_company(company_id):
         policy = LeavePolicy.objects.filter(pk=policy_id).first()
         if policy is None:
-            raise PermissionDenied("Leave policy not found in this company.")
+            raise NotInThisCompany("Leave policy not found in this company.")
         versions = LeavePolicyVersion.objects.filter(policy=policy)
         if versions.exists() and effective_from < today:
             raise ValidationError({"effective_from": (
@@ -188,7 +189,7 @@ def add_version(*, actor, company_id, policy_id, effective_from, note, rules, to
 def _unstarted(company_id, version_id, today):
     version = LeavePolicyVersion.objects.select_related("policy").filter(pk=version_id).first()
     if version is None:
-        raise PermissionDenied("Leave policy version not found in this company.")
+        raise NotInThisCompany("Leave policy version not found in this company.")
     if version.effective_from <= today:
         raise ValidationError("This version has started, so it stays as it is. Add a new "
                               "version from a later date instead.")

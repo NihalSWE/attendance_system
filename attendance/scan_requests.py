@@ -42,6 +42,7 @@ from attendance import access, correction_services
 from attendance.models import MissedScanRequest
 from attendance.services import _is_locked, locked_ranges
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from employees import inactive
 from employees.models import Employee
@@ -147,7 +148,7 @@ def enter_for(*, actor, company_id, employee_id, work_date, kind, at, at_out, re
     with use_company(company_id):
         employee = Employee.objects.filter(pk=employee_id).first()
     if employee is None:
-        raise PermissionDenied("Employee not found in this company.")
+        raise NotInThisCompany("Employee not found in this company.")
     if employee.user_id is not None and employee.user_id == actor.pk:
         raise PermissionDenied("For your own attendance, use Report a missed scan.")
     if employee.employment_status not in WORKING:
@@ -336,7 +337,7 @@ def decide(*, actor, company_id, request_id, approve, note=""):
             .filter(pk=request_id).first()
         )
         if request is None:
-            raise PermissionDenied("Request not found in this company.")
+            raise NotInThisCompany("Request not found in this company.")
         if request.employee.user_id is not None and request.employee.user_id == actor.pk:
             raise PermissionDenied("You cannot decide your own request.")
         if (entered_by_someone_else(request) and request.created_by_id == actor.pk

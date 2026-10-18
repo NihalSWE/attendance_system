@@ -34,6 +34,7 @@ from django.utils import timezone
 
 from attendance.models import AttendanceRecord
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.services import create_validated
 from common.tenant import use_company
 from organization.services import require_structure_manager
@@ -386,7 +387,7 @@ def get_rule_for_edit(*, actor, company_id, rule_id):
     with use_company(company_id):
         rule = Rule.objects.filter(pk=rule_id).first()
     if rule is None:
-        raise PermissionDenied("Penalty rule not found in this company.")
+        raise NotInThisCompany("Penalty rule not found in this company.")
     return membership, rule
 
 

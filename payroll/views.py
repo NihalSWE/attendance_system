@@ -22,6 +22,7 @@ from access_control.page_access import may_open
 from attendance.models import AttendanceRecord
 from attendance.services import month_bounds
 from attendance.views import month_context, read_month
+from common.exceptions import NotInThisCompany
 from common.forms import StyledFormMixin, apply_service_errors
 from common.tenant import use_company
 from organization.services import (
@@ -425,7 +426,7 @@ def component_edit(request, pk):
     with use_company(company_id):
         component = component_services.components(company_id).filter(pk=pk).first()
         if component is None:
-            raise PermissionDenied("Component not found in this company.")
+            raise NotInThisCompany("Component not found in this company.")
         form = SalaryComponentForm(request.POST or None, instance=component)
         if request.method == "POST" and form.is_valid():
             try:

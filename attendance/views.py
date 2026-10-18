@@ -29,6 +29,7 @@ from attendance.forms import (
 from attendance.models import AttendanceCorrection, AttendanceRecord
 from attendance.services import _is_locked, locked_ranges, month_bounds, refresh
 from base_template.tables import code_sort_key, paginate, render
+from common.exceptions import NotInThisCompany
 from common.forms import apply_service_errors
 from common.tenant import use_company
 from employees.models import Employee
@@ -535,7 +536,7 @@ def attendance_day_fix(request, employee_id, on):
     with use_company(company_id):
         employee = Employee.objects.filter(pk=employee_id).first()
     if employee is None:
-        raise PermissionDenied("Employee not found in this company.")
+        raise NotInThisCompany("Employee not found in this company.")
 
     forms = {
         "add_scan": AddScanForm(day=day, prefix="scan"),
@@ -628,7 +629,7 @@ def attendance_correction_withdraw(request, pk):
     with use_company(company_id):
         correction = AttendanceCorrection.objects.filter(pk=pk).first()
     if correction is None:
-        raise PermissionDenied("Correction not found in this company.")
+        raise NotInThisCompany("Correction not found in this company.")
     # The corrected day's branch; withdraw() checks again inside its lock.
     correction_services.require_corrector(
         request.user, company_id, correction.employee_id, correction.work_date

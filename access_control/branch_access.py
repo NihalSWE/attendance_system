@@ -31,6 +31,7 @@ from accounts.models import CompanyMembership
 from common.choices import ActiveStatus
 from accounts.services import get_active_memberships
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from employees.models import Employee
 from organization.models import Branch
@@ -307,10 +308,10 @@ def _checked(actor, company_id, employee_id, code, branch_ids):
     if not branch_ids:
         raise ValidationError({"branches": "Choose at least one branch."})
     if set(Branch.objects.filter(pk__in=branch_ids).values_list("pk", flat=True)) != branch_ids:
-        raise PermissionDenied("Branch not found in this company.")
+        raise NotInThisCompany("Branch not found in this company.")
     employee = Employee.objects.filter(pk=employee_id).first()
     if employee is None:
-        raise PermissionDenied("Employee not found in this company.")
+        raise NotInThisCompany("Employee not found in this company.")
     if employee.user_id and employee.user_id == actor.pk:
         raise PermissionDenied("You cannot change your own access.")
     for branch_id in branch_ids:

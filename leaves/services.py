@@ -25,6 +25,7 @@ from django.utils import timezone
 from accounts.models import CompanyMembership
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
+from common.exceptions import NotInThisCompany
 from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
@@ -198,7 +199,7 @@ def get_leave_type_for_edit(*, actor, company_id, leave_type_id):
     with use_company(company_id):
         leave_type = LeaveType.objects.filter(pk=leave_type_id).first()
     if leave_type is None:
-        raise PermissionDenied("Leave type not found in this company.")
+        raise NotInThisCompany("Leave type not found in this company.")
     return membership, leave_type
 
 
@@ -689,7 +690,7 @@ def get_leave_for_edit(*, actor, company_id, request_id):
             .filter(pk=request_id).first()
         )
         if request is None:
-            raise PermissionDenied("Leave not found in this company.")
+            raise NotInThisCompany("Leave not found in this company.")
         if not all(branch_id in branches for branch_id in leave_branch_ids(request)):
             raise PermissionDenied("This leave is outside your branches.")
     return membership, request

@@ -6278,3 +6278,31 @@ had already drawn into the HTML.
   permission checks is not worth the risk for that.
 - Test: `base_template.tests_tables` (the counts on the page). No `.env`
   change.
+
+### Safer page addresses (phase 3) — 2026-10-18
+
+The senior changed `/organization/employees/268/` to `269` and saw the next
+person. Checked on the live copy: only the company's own owner and
+administrator could (others: 403, other companies: 403), so access was
+enforced - but the plain number let anyone allowed in count the people and
+try the next one, and a 403 confirmed a number existed elsewhere.
+
+- **Random ids for employee pages**: the 23 `organization` employee routes
+  use `<employee:pk>` (`organization/converters.py`): the address carries
+  `Employee.public_id`, the view still gets the employee's id as `pk` (no
+  view changed). `/organization/employees/269/` is now 404. Links built from
+  `employee.pk` still work (one lookup each); lists pass `public_id` directly
+  (Employees list, Device users, employee page, leave balances, LFA claim).
+- **"Not found", not "refused"**: `common.exceptions.NotInThisCompany` (a
+  `PermissionDenied`) replaces the 41 "… not found in this company."
+  refusals; `common.middleware.NotFoundOutsideCompany` answers it 404 on the
+  panel. The API is unchanged (its handler still answers as before).
+- **Address sweep** `base_template/tests_address_sweep.py`: another
+  company's administrator opens every panel page whose address has an id
+  (264 tries; pages added later are included automatically) with the first
+  company's ids - its names never appear and nothing crashes. Plain number
+  404; another company's employee 404.
+- Not changed: API ids (documented integers, behind login, scopes and the
+  same checks); other pages' numeric ids (branches, departments, leave…) -
+  the sweep covers them, random ids for them can follow the same converter.
+- No migration, no `.env` change.
