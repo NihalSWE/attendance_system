@@ -58,12 +58,16 @@ class UomForm(CompanyForm):
 
 
 class CategoryForm(CompanyForm):
-    parent = forms.ModelChoiceField(queryset=ItemCategory.all_objects.none(), label="Inside category", required=False)
+    parent = forms.ModelChoiceField(
+        queryset=ItemCategory.all_objects.none(), label="Parent category", required=False,
+        empty_label="None (main category)",
+        help_text="Leave as None for a main category. Choose one to make this a "
+                  "sub-category of it. It must have the same item type.")
 
     class Meta:
         model = ItemCategory
         fields = ("code", "name", "kind", "parent")
-        labels = {"kind": "Item type", "parent": "Inside category"}
+        labels = {"kind": "Item type", "parent": "Parent category"}
 
     def limit_choices(self):
         rows = self._active(ItemCategory)
