@@ -26,6 +26,7 @@ from django.utils import timezone
 
 from accounts.models import CompanyMembership
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment
 from organization.services import assert_branch_in_scope, require_structure_manager
@@ -42,7 +43,7 @@ def _employee(membership, company_id, employee_id):
     with use_company(company_id):
         employee = Employee.objects.select_related("user").filter(pk=employee_id).first()
     if employee is None:
-        raise PermissionDenied("Employee not found in this company.")
+        raise NotInThisCompany("Employee not found in this company.")
     return employee
 
 

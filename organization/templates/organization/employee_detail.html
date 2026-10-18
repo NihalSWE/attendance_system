@@ -19,8 +19,8 @@
     {% endif %}
 {% endblock %}
 {% block page %}
-    {% url 'organization:employee_detail' employee.pk as profile_url %}
-    {% url 'organization:employee_profile_edit' employee.pk as save_url %}
+    {% url 'organization:employee_detail' employee.public_id as profile_url %}
+    {% url 'organization:employee_profile_edit' employee.public_id as save_url %}
     <div class="crumbs">
         <a href="{% url 'dashboard' %}">
             Dashboard
@@ -42,7 +42,7 @@
         <div class="profile-hero__top">
             <div class="profile-photo profile-photo--hero">
                 {% if employee.photo %}
-                    <img src="{% url 'organization:employee_photo' employee.pk %}?v={{ employee.updated_at|date:'U' }}" alt="{{ employee.full_name }}">
+                    <img src="{% url 'organization:employee_photo' employee.public_id %}?v={{ employee.updated_at|date:'U' }}" alt="{{ employee.full_name }}">
                 {% else %}
                     <span class="profile-photo__initials" aria-hidden="true">{{ employee.first_name|slice:":1"|upper }}{{ employee.last_name|slice:":1"|upper }}</span>
                 {% endif %}
@@ -81,7 +81,7 @@
             <div class="profile-hero__links">
                 {% if may.edit %}
                     {# Kept until the profile is complete and Ajay has seen it (2026-09-27). #}
-                    <a class="hero-btn" href="{% url 'organization:employee_edit' employee.pk %}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit employee page</a>
+                    <a class="hero-btn" href="{% url 'organization:employee_edit' employee.public_id %}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>Edit employee page</a>
                 {% endif %}
                 {% if calendar_url %}
                     <a class="hero-btn" href="{{ calendar_url }}"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/></svg>Calendar</a>
@@ -128,7 +128,7 @@
                     {% if may_enter_missing %}<button class="rail-action" type="button" data-open-dialog="missing-dialog"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 13v4M10 15h4"/></svg><span>Manual entry</span></button>{% endif %}
                     {% if overtime_form %}
                         {% if employee.no_overtime_from %}
-                            <form method="post" action="{% url 'organization:employee_overtime' employee.pk %}"
+                            <form method="post" action="{% url 'organization:employee_overtime' employee.public_id %}"
                                   data-confirm-title="Allow overtime for {{ employee.full_name }} again?"
                                   data-confirm="Their overtime from {{ employee.no_overtime_from|date:'j M Y' }} is worked out again, except in a finalised salary month."
                                   data-confirm-button="Allow overtime">
@@ -141,7 +141,7 @@
                         {% endif %}
                     {% endif %}
                     {% if may.edit %}
-                        <form method="post" action="{% url 'organization:employee_report_visibility' employee.pk %}"
+                        <form method="post" action="{% url 'organization:employee_report_visibility' employee.public_id %}"
                               data-confirm-title="{% if employee.hide_from_reports %}Show {{ employee.full_name }} in the reports again?{% else %}Leave {{ employee.full_name }} out of the reports?{% endif %}"
                               data-confirm="{% if employee.hide_from_reports %}They appear in every report and its downloads again.{% else %}They are left out of every report and its downloads. Their attendance still counts - their days, salary and the Daily list do not change. You can show them again here.{% endif %}"
                               data-confirm-button="{% if employee.hide_from_reports %}Show in reports{% else %}Leave out{% endif %}">
@@ -167,7 +167,7 @@
                     <div class="rail-group__label">Employment</div>
                     {% if inactive_form and not is_ended and employee.user_id != request.user.pk %}
                         {% if employee.employment_status == "suspended" or inactive_now %}
-                            <form method="post" action="{% url 'organization:employee_active' employee.pk %}"
+                            <form method="post" action="{% url 'organization:employee_active' employee.public_id %}"
                                   data-confirm-title="Make {{ employee.full_name }} active again?"
                                   data-confirm="Active from today: their scans from today count, their salary is paid from today, and they can request leave and report missed scans again.{% if inactive_now %} Days before today stay inactive.{% endif %}"
                                   data-confirm-button="Make active">
@@ -176,7 +176,7 @@
                                 <button class="rail-action" type="submit"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5v5M14.5 9.5v5"/></svg><span>Make employee status active</span></button>
                             </form>
                         {% elif inactive_next %}
-                            <form method="post" action="{% url 'organization:employee_active' employee.pk %}"
+                            <form method="post" action="{% url 'organization:employee_active' employee.public_id %}"
                                   data-confirm-title="Cancel the planned inactive period?"
                                   data-confirm="{{ employee.full_name }} was to be inactive from {{ inactive_next.start_date|date:'j M Y' }}{% if inactive_next.end_date %} to {{ inactive_next.end_date|date:'j M Y' }}{% endif %}. They stay active."
                                   data-confirm-button="Cancel it">
@@ -303,7 +303,7 @@
                     </dd>
                     <dt>Reports to them</dt>
                     <dd>
-                        {% for person in reports %}<a href="{% url 'organization:employee_detail' person.pk %}">{{ person.full_name }}</a>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
+                        {% for person in reports %}<a href="{% url 'organization:employee_detail' person.public_id %}">{{ person.full_name }}</a>{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}
                     </dd>
                     <dt>Overtime</dt>
                     <dd>{% if employee.no_overtime_from %}<span class="badge badge--warning">Not allowed from {{ employee.no_overtime_from|date:"j M Y" }}</span>{% else %}Allowed{% endif %}</dd>
@@ -577,7 +577,7 @@
                                         <td>
                                             <div class="row">
                                                 <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="education_{{ row.pk }}-dialog">Edit</button>
-                                                <form method="post" action="{% url 'organization:employee_education_remove' employee.pk row.pk %}"
+                                                <form method="post" action="{% url 'organization:employee_education_remove' employee.public_id row.pk %}"
                                                       data-confirm-title="Remove {{ row.qualification }}?"
                                                       data-confirm="It is taken off {{ employee.full_name }}&#39;s education history."
                                                       data-confirm-button="Remove">
@@ -609,14 +609,14 @@
                     {% for document in documents %}
                         <li class="emp-list__item">
                             <div class="emp-list__main">
-                                <strong><a href="{% url 'organization:employee_document' employee.pk document.pk %}">{{ document.title }}</a></strong>
+                                <strong><a href="{% url 'organization:employee_document' employee.public_id document.pk %}">{{ document.title }}</a></strong>
                                 <span class="t-muted">{{ document.get_kind_display }} · {{ document.file_name }}</span>
                                 <span class="t-faint emp-list__dates">
                                     Added {{ document.created_at|timezone:company_tz|date:"j M Y" }}{% if document.created_by %} by {{ document.created_by.email }}{% endif %}{% if document.note %} · {{ document.note }}{% endif %}
                                 </span>
                             </div>
                             {% if may.edit %}
-                                <form method="post" action="{% url 'organization:employee_document_remove' employee.pk document.pk %}"
+                                <form method="post" action="{% url 'organization:employee_document_remove' employee.public_id document.pk %}"
                                       data-confirm-title="Remove {{ document.title }}?"
                                       data-confirm="The file is deleted and cannot be opened again."
                                       data-confirm-button="Remove">
@@ -1156,7 +1156,7 @@
 
     {% if may.edit %}
         <dialog class="modal" id="photo-dialog" aria-labelledby="photo-dialog-title">
-            <form class="modal__card" method="post" enctype="multipart/form-data" action="{% url 'organization:employee_photo_change' employee.pk %}">
+            <form class="modal__card" method="post" enctype="multipart/form-data" action="{% url 'organization:employee_photo_change' employee.public_id %}">
                 {% csrf_token %}
                 <div class="modal__head">
                     <h2 id="photo-dialog-title">
@@ -1188,11 +1188,11 @@
             </form>
         </dialog>
 
-        {% url 'organization:employee_personal' employee.pk as personal_url %}
+        {% url 'organization:employee_personal' employee.public_id as personal_url %}
         {% include "organization/profile/modal_form.html" with id="personal-dialog" title="Personal & contact info" action=personal_url form=personal_form submit="Save" wide=True note="The name, work email, phone and joining date are under General information → Edit details." %}
 
         {% if line_manager_form %}
-            {% url 'organization:employee_line_manager' employee.pk as line_manager_url %}
+            {% url 'organization:employee_line_manager' employee.public_id as line_manager_url %}
             {% include "organization/profile/modal_form.html" with id="line_manager-dialog" title="Line manager" action=line_manager_url form=line_manager_form submit="Save" %}
         {% endif %}
     {% endif %}
@@ -1233,17 +1233,17 @@
         {% endif %}
     {% endif %}
     {% if may.edit %}
-        {% url 'organization:employee_education_add' employee.pk as education_add_url %}
+        {% url 'organization:employee_education_add' employee.public_id as education_add_url %}
         {% include "organization/profile/modal_form.html" with id="education_new-dialog" title="Add a qualification" action=education_add_url form=education_new_form submit="Save" wide=True %}
         {% for row, form in education %}
             {% with row_pk=row.pk|stringformat:"s" %}
                 {% with dialog_id="education_"|add:row_pk|add:"-dialog" %}
-                    {% url 'organization:employee_education_edit' employee.pk row.pk as education_edit_url %}
+                    {% url 'organization:employee_education_edit' employee.public_id row.pk as education_edit_url %}
                     {% include "organization/profile/modal_form.html" with id=dialog_id title="Edit "|add:row.qualification action=education_edit_url form=form submit="Save" wide=True %}
                 {% endwith %}
             {% endwith %}
         {% endfor %}
-        {% url 'organization:employee_document_add' employee.pk as document_add_url %}
+        {% url 'organization:employee_document_add' employee.public_id as document_add_url %}
         {% include "organization/profile/modal_form.html" with id="document-dialog" title="Add a document" action=document_add_url form=document_form submit="Add document" multipart=True wide=True note="Only people who may see this employee can open it." %}
         {% for device, enrolled in branch_devices %}
             {% if not enrolled and device_pin %}
@@ -1286,26 +1286,26 @@
         {% for row, form in device_rows %}
             {% with row_pk=row.pk|stringformat:"s" %}
                 {% with dialog_id="device_"|add:row_pk|add:"-dialog" %}
-                    {% url 'organization:employee_device_permission' employee.pk row.pk as device_url %}
+                    {% url 'organization:employee_device_permission' employee.public_id row.pk as device_url %}
                     {% include "organization/profile/modal_form.html" with id=dialog_id title=row.device.name action=device_url form=form submit="Save" wide=True note="The same as Devices → Enrollments → Edit. A new card or role is sent to the terminals they are on." %}
                 {% endwith %}
             {% endwith %}
         {% endfor %}
     {% endif %}
     {% if policy_form %}
-        {% url 'organization:employee_leave_policy' employee.pk as leave_policy_url %}
+        {% url 'organization:employee_leave_policy' employee.public_id as leave_policy_url %}
         {% include "organization/profile/modal_form.html" with id="leave_policy-dialog" title="Leave policy" action=leave_policy_url form=policy_form submit="Save" note="Their leave is given by this policy from the day you choose. Leave already taken still counts. Balances from that day are worked out again; days adjusted by hand stay." %}
     {% endif %}
     {% if adjust_form %}
-        {% url 'organization:employee_leave_adjust' employee.pk as adjust_url %}
+        {% url 'organization:employee_leave_adjust' employee.public_id as adjust_url %}
         {% include "organization/profile/modal_form.html" with id="adjust-dialog" title="Adjust leave balance" action=adjust_url form=adjust_form submit="Record adjustment" note="Adds days to their balance (or, with a minus, takes them away). It stays through any policy change and shows in how the balance adds up." %}
     {% endif %}
     {% if leave_form %}
-        {% url 'organization:employee_leave' employee.pk as leave_url %}
+        {% url 'organization:employee_leave' employee.public_id as leave_url %}
         {% include "organization/profile/modal_form.html" with id="leave-dialog" title="Apply for leave" action=leave_url form=leave_form submit="Record leave" multipart=True wide=True note="Recorded as approved leave. Weekly off days and holidays inside the dates are not counted as leave." %}
     {% endif %}
     {% if late_form %}
-        {% url 'organization:employee_late' employee.pk as late_url %}
+        {% url 'organization:employee_late' employee.public_id as late_url %}
         {% if late_form.fields.work_date.choices %}
             {% include "organization/profile/modal_form.html" with id="late-dialog" title="Apply for late approval" action=late_url form=late_form submit="Approve late arrival" wide=True note="The day keeps its scans and counts no late minutes: no late penalty, and it is not a Late entry. It can be withdrawn on the day's Fix page." %}
         {% else %}
@@ -1370,19 +1370,19 @@
         </dialog>
     {% endif %}
     {% if reports_form %}
-        {% url 'organization:employee_reports' employee.pk as reports_url %}
+        {% url 'organization:employee_reports' employee.public_id as reports_url %}
         {% include "organization/profile/modal_form.html" with id="reports-dialog" title="Set as line manager" action=reports_url form=reports_form submit="Save" wide=True note="Choose the people who report to them. Someone already reporting to another person moves to them." %}
     {% endif %}
     {% if overtime_form and not employee.no_overtime_from %}
-        {% url 'organization:employee_overtime' employee.pk as overtime_url %}
+        {% url 'organization:employee_overtime' employee.public_id as overtime_url %}
         {% include "organization/profile/modal_form.html" with id="overtime-dialog" title="Disallow overtime" action=overtime_url form=overtime_form submit="Disallow overtime" note="Their days from then are worked out again: no overtime approved or paid, and the Overtime page does not ask about them. Allow it again from the same menu." %}
     {% endif %}
     {% if inactive_form and employee.employment_status != "suspended" and not inactive_now and not inactive_next %}
-        {% url 'organization:employee_active' employee.pk as active_url %}
+        {% url 'organization:employee_active' employee.public_id as active_url %}
         {% include "organization/profile/modal_form.html" with id="inactive-dialog" title="Make employee status inactive" action=active_url form=inactive_form submit="Make inactive" danger=True note="On these days their scans are kept but blocked, the day is Inactive (not absent) and no salary is paid for it. They cannot request leave or report a missed scan while inactive. With a last day they are active again by themselves the next day; without one, until the owner, admin, HR or their branch manager makes them active." %}
     {% endif %}
     {% if resign_form %}
-        {% url 'organization:employee_end' employee.pk as end_url %}
+        {% url 'organization:employee_end' employee.public_id as end_url %}
         {% include "organization/profile/modal_form.html" with id="resign-dialog" title="Resign "|add:employee.full_name action=end_url row="resign" row_name="dialog" form=resign_form submit="Record resignation" danger=True wide=True note="Their placement and salary end after the last working day. Nothing is deleted — their history, attendance and payslips stay." %}
         {% include "organization/profile/modal_form.html" with id="delete-dialog" title="Delete "|add:employee.full_name action=end_url row="delete" row_name="dialog" form=delete_form submit="End employment" danger=True wide=True note="Deleting an employee ends their employment: their records stay, as salary and attendance already paid depend on them. They no longer count from the day after the last working day." %}
     {% endif %}

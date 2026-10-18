@@ -112,6 +112,8 @@ MIDDLEWARE = [
     'common.middleware.TenantMiddleware',
     # Employees and branch managers stay on their own pages (common/middleware.py).
     'common.middleware.SelfServiceGate',
+    # Another company's row is "not found" on the panel, not "refused".
+    'common.middleware.NotFoundOutsideCompany',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]

@@ -34,6 +34,7 @@ from django.utils import timezone
 from access_control.branch_access import ALL_BRANCHES, branches_for, can
 from attendance.services import month_bounds
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from organization.services import require_company_membership, require_structure_manager
@@ -425,7 +426,7 @@ def decide(*, actor, company_id, claim_id, approve, amount=None, pay_month=None,
             claim = LfaClaim.objects.select_for_update().select_related("employee").filter(
                 pk=claim_id).first()
             if claim is None:
-                raise PermissionDenied("Claim not found in this company.")
+                raise NotInThisCompany("Claim not found in this company.")
             if not _deciders(actor, company_id, claim.employee)[1]:
                 raise PermissionDenied("LFA is decided by the owner, the company administrator "
                                        "or whoever prepares salary in their branch.")
@@ -491,7 +492,7 @@ def cancel(*, actor, company_id, claim_id, note):
                 "employee", "payroll_adjustment__target_payroll_period").filter(
                 pk=claim_id).first()
             if claim is None:
-                raise PermissionDenied("Claim not found in this company.")
+                raise NotInThisCompany("Claim not found in this company.")
             if not _deciders(actor, company_id, claim.employee)[1]:
                 raise PermissionDenied("Only whoever decides LFA can cancel it.")
             sync_paid(company_id, [claim])
@@ -527,7 +528,7 @@ def mark_paid(*, actor, company_id, claim_id, paid_on, reference=""):
         claim = LfaClaim.objects.select_for_update().select_related("employee").filter(
             pk=claim_id).first()
         if claim is None:
-            raise PermissionDenied("Claim not found in this company.")
+            raise NotInThisCompany("Claim not found in this company.")
         if not _deciders(actor, company_id, claim.employee)[1]:
             raise PermissionDenied("Only whoever decides LFA can mark it paid.")
         if claim.status != Status.APPROVED or claim.payment != Payment.SEPARATELY:

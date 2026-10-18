@@ -22,6 +22,7 @@ from accounts.models import CompanyMembership
 from accounts.services import get_active_memberships
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
+from common.exceptions import NotInThisCompany
 from common.services import create_validated
 from common.tenant import use_company
 from organization.models import Branch
@@ -97,7 +98,7 @@ def get_branch_for_edit(*, actor, company_id, branch_id):
     with use_company(company_id):
         branch = Branch.objects.filter(pk=branch_id).first()
         if branch is None:
-            raise PermissionDenied("Branch not found in this company.")
+            raise NotInThisCompany("Branch not found in this company.")
         assert_branch_in_scope(membership, branch)
     return membership, branch
 

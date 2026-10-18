@@ -25,6 +25,7 @@ from django.db import transaction
 from django.db.models import Q
 
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.services import create_validated
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
@@ -69,7 +70,7 @@ def get_employee_for_edit(*, actor, company_id, employee_id, code=None):
     with use_company(company_id):
         employee = Employee.objects.filter(pk=employee_id).first()
         if employee is None:
-            raise PermissionDenied("Employee not found in this company.")
+            raise NotInThisCompany("Employee not found in this company.")
         assignment = _open_row(EmployeeAssignment, employee)
         compensation = _open_row(EmployeeCompensation, employee)
     if code is not None and not is_company_wide(membership):

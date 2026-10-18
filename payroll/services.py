@@ -32,6 +32,7 @@ from attendance.models import AttendanceRecord
 from attendance.services import calculate_attendance, month_bounds, recalculate
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from employees import inactive as inactive_periods
 from employees.models import EmployeeAssignment, EmployeeCompensation
@@ -624,7 +625,7 @@ def waive_penalty(*, actor, company_id, assessment_id):
             .filter(pk=assessment_id).first()
         )
         if assessment is None:
-            raise PermissionDenied("Penalty not found in this company.")
+            raise NotInThisCompany("Penalty not found in this company.")
         if assessment.status != PenaltyAssessment.Status.PROPOSED:
             raise ValidationError("Only a penalty on a draft salary can be waived.")
         assessment.status = PenaltyAssessment.Status.WAIVED
@@ -662,7 +663,7 @@ def unwaive_penalty(*, actor, company_id, assessment_id):
             .filter(pk=assessment_id).first()
         )
         if assessment is None:
-            raise PermissionDenied("Penalty not found in this company.")
+            raise NotInThisCompany("Penalty not found in this company.")
         if assessment.status != PenaltyAssessment.Status.WAIVED:
             raise ValidationError("That penalty is not waived.")
         period = assessment.payroll_period
@@ -1282,7 +1283,7 @@ def add_adjustment(*, actor, company_id, record_id, adjustment_type, amount, rea
             "payroll_run__payroll_period", "employee_assignment_at_period_end"
         ).filter(pk=record_id).first()
         if record is None:
-            raise PermissionDenied("Payslip not found in this company.")
+            raise NotInThisCompany("Payslip not found in this company.")
         membership, branch_ids = _preparer(actor, company_id, record)
         if record.payroll_run.status != PayrollRun.Status.DRAFT:
             raise ValidationError(
@@ -1356,7 +1357,7 @@ def correct_finalised_month(*, actor, company_id, record_id, adjustment_type, am
             "payroll_run__payroll_period", "employee_assignment_at_period_end", "employee"
         ).filter(pk=record_id).first()
         if record is None:
-            raise PermissionDenied("Payslip not found in this company.")
+            raise NotInThisCompany("Payslip not found in this company.")
         membership, branch_ids = _preparer(actor, company_id, record)
         if record.payroll_run.status != PayrollRun.Status.POSTED:
             raise ValidationError(
@@ -1409,7 +1410,7 @@ def remove_adjustment(*, actor, company_id, adjustment_id):
             "target_payroll_period"
         ).filter(pk=adjustment_id, status=PayrollAdjustment.Status.ACTIVE).first()
         if adjustment is None:
-            raise PermissionDenied("Line not found in this company.")
+            raise NotInThisCompany("Line not found in this company.")
         if adjustment.code == "LFA":
             # It belongs to an approved LFA claim: cancelling the claim takes
             # it off, so the claim and the payslip never disagree.
