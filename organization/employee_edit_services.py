@@ -239,6 +239,71 @@ def _rebuild_attendance(company_id, employee, starts, company):
         recalculate(company_id, employee_ids=[employee.pk], start=first, end=today)
 
 
+#: Someone whose employment was ended (End employment).
+LEFT = (Employee.EmploymentStatus.RESIGNED, Employee.EmploymentStatus.TERMINATED,
+        Employee.EmploymentStatus.RETIRED)
+
+
+def _rejoin(membership, employee, values, actor):
+    """Somebody who left comes back (2026-10-19): a new placement from a day
+    after their last one, and they are active again.
+
+    End employment closes the placement and salary and marks them left; there
+    was no way back, so a returning person (or a record ended by mistake and
+    reused) could not be placed again. Their earlier placements, salary and
+    device history stay as they were. Salary, login and devices are given
+    again the usual way (Salary card, Login card, Map).
+    """
+    from organization.employee_detail_services import _finalised_until
+
+    company = membership.company
+    zone = ZoneInfo(getattr(company, "timezone", None) or "UTC")
+    starts = values["effective_at"]
+    first_day = starts.astimezone(zone).date()
+    last_day = employee.leaving_date
+    if first_day <= last_day:
+        raise ValidationError({"effective_at": (
+            f"{employee.full_name} left on {last_day:%d %b %Y}. To bring them back, "
+            "the new placement must start after that day.")})
+    finalised = _finalised_until(company.pk)
+    if finalised is not None and first_day <= finalised:
+        raise ValidationError({"effective_at": (
+            f"Salary up to {finalised:%d %b %Y} is finalised; start the new placement "
+            "after that.")})
+    if not is_company_wide(membership) and not can(
+        actor, company.pk, "employees.edit", values["branch"].pk
+    ):
+        raise PermissionDenied("You can only place people in branches you look after.")
+    with use_company(company.pk):
+        assert_branch_in_scope(membership, values["branch"])
+        before = {"employment_status": employee.employment_status,
+                  "leaving_date": last_day.isoformat()}
+        assignment = create_validated(
+            EmployeeAssignment, company=company, employee=employee,
+            employee_code=values["employee_code"], branch=values["branch"],
+            department=values["department"], designation=values["designation"],
+            effective_from=starts, change_reason=values.get("reason", "") or "Re-joined",
+            created_by=actor,
+        )
+        employee.employment_status = Employee.EmploymentStatus.ACTIVE
+        employee.leaving_date = None
+        employee.updated_by = actor
+        employee.save(update_fields=["employment_status", "leaving_date", "updated_by",
+                                     "updated_at"])
+        record_company_event(
+            actor=actor, membership=membership, company=company,
+            action="employee.rejoined", obj=employee, before=before,
+            after={"employment_status": employee.employment_status,
+                   "branch_id": assignment.branch_id,
+                   "department_id": assignment.department_id,
+                   "designation_id": assignment.designation_id,
+                   "employee_code": assignment.employee_code,
+                   "effective_from": assignment.effective_from.isoformat()},
+        )
+    _rebuild_attendance(company.pk, employee, starts, company)
+    return assignment
+
+
 @transaction.atomic
 def change_placement(*, actor, company_id, employee_id, values):
     """New branch / department / designation / code from a date."""
@@ -246,6 +311,8 @@ def change_placement(*, actor, company_id, employee_id, values):
         actor=actor, company_id=company_id, employee_id=employee_id, code="employees.edit"
     )
     if current is None:
+        if employee.employment_status in LEFT and employee.leaving_date is not None:
+            return _rejoin(membership, employee, values, actor)
         raise ValidationError("This employee has no current placement to change.")
     if not is_company_wide(membership) and not can(
         actor, company_id, "employees.edit", values["branch"].pk
