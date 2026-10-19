@@ -1199,7 +1199,11 @@
 
     {% if edit %}
         {% include "organization/profile/modal_form.html" with id="details-dialog" title="Edit details" action=save_url section="details" form=edit.details submit="Save details" wide=True note="A new name is sent to the attendance devices they are on." %}
-        {% include "organization/profile/modal_form.html" with id="placement-dialog" title="Change placement" action=save_url section="placement" form=edit.placement submit="Save placement" wide=True dependent=True note="A later date keeps the current placement as history; the date it started corrects it." %}
+        {% if not assignment and employee.leaving_date %}
+            {% include "organization/profile/modal_form.html" with id="placement-dialog" title="Bring back" action=save_url section="placement" form=edit.placement submit="Save placement" wide=True dependent=True note="They have left. Save a placement from a day after their last working day to bring them back: they become active again. Then set their salary and map them on the devices again." %}
+        {% else %}
+            {% include "organization/profile/modal_form.html" with id="placement-dialog" title="Change placement" action=save_url section="placement" form=edit.placement submit="Save placement" wide=True dependent=True note="A later date keeps the current placement as history; the date it started corrects it." %}
+        {% endif %}
         {% if edit.may.salary %}
             {% include "organization/profile/modal_form.html" with id="salary-dialog" title=edit.compensation|yesno:"Change salary,Set salary" action=save_url section="salary" form=edit.salary submit="Save salary" wide=True note="Regenerate the month's salary to apply it." %}
             {% if edit.give_component_form.fields.component.queryset %}
