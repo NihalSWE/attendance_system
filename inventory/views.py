@@ -101,7 +101,7 @@ PAGES = {
     ),
     "categories": MasterPage(
         "categories", masters.CATEGORY, forms.CategoryForm, "Item categories", "category",
-        "inventory/rows/category.html", ("Code", "Category", "Item type", "Inside", "Status"),
+        "inventory/rows/category.html", ("Code", "Category", "Item type", "Parent", "Status"),
         ("code", "name", "kind", "parent__name"),
         ("code", "name", "kind", "parent__name", "status", None),
         lambda request, cid: ItemCategory.objects.select_related("parent"),

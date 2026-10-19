@@ -21,7 +21,7 @@ cannot be issued, used or transferred - only delivered. What could not be
 reserved is shown as short; "Reserve again" tries later (after production).
 Delivering releases what it delivers; cancelling or closing releases the rest.
 
-**Credit limit**: a customer with a limit (0 = cash only, not checked) whose
+**Credit limit**: a customer with a limit (0 = no limit: not checked) whose
 unpaid invoices plus open orders plus this order go over it is confirmed
 only with a reason - a warning, not a block.
 """

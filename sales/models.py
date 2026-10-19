@@ -37,7 +37,7 @@ class Customer(TenantOwned, ActorTracked):
     territory = models.CharField(max_length=64, blank=True)
     credit_limit = models.DecimalField(
         "Credit limit", max_digits=18, decimal_places=4, default=Decimal("0"),
-        validators=[MinValueValidator(Decimal("0"))], help_text="0 = cash only.",
+        validators=[MinValueValidator(Decimal("0"))], help_text="0 = no credit check (a customer who pays cash).",
     )
     payment_terms_days = models.PositiveSmallIntegerField(
         "Payment terms (days)", default=0, validators=[MaxValueValidator(365)],

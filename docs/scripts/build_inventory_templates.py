@@ -215,7 +215,7 @@ CUSTOMERS = Sheet(
         Col("Email", "", width=26),
         Col("Address", "", width=34),
         Col("Territory", "Area / route, e.g. Sylhet", width=14),
-        Col("Credit limit (BDT)", "0 = cash only", kind="decimal", width=15),
+        Col("Credit limit (BDT)", "0 = no credit check", kind="decimal", width=15),
         Col("Payment terms (days)", "", kind="number", width=12),
         Col("Price list", "Name of the price list (Distributor, Dealer…)", width=16),
         Col("Notes", "", width=24),
