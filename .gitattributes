@@ -1,0 +1,8 @@
+# Binary files: never convert their line endings (2026-10-19). With
+# core.autocrlf on, a PDF Git took for text could be changed on checkout.
+*.pdf binary
+*.xlsx binary
+*.xls binary
+*.png binary
+*.jpg binary
+*.gz binary
