@@ -179,6 +179,26 @@ def attendance_late(request):
     return _daily_page(request, late_only=True)
 
 
+def _quick_days(request, company, window):
+    """The Today and Yesterday buttons (2026-10-24): this page for that one day,
+    in the company's time, keeping the branch, department, employee and status
+    filters. The one being shown is marked."""
+    import datetime
+    from zoneinfo import ZoneInfo
+
+    today = timezone.now().astimezone(ZoneInfo(company.timezone or "UTC")).date()
+    links = []
+    for label, day in (("Today", today), ("Yesterday", today - datetime.timedelta(days=1))):
+        params = request.GET.copy()
+        for drop in ("on", "date_from", "date_to", "page", "per_page", "table", "draw",
+                     "start", "length", "format", "table_q"):
+            params.pop(drop, None)
+        params["on"], params["month"], params["year"] = day.isoformat(), day.month, day.year
+        links.append({"label": label, "day": day, "url": f"?{params.urlencode()}",
+                      "active": window == (day, day)})
+    return links
+
+
 def _daily_page(request, *, late_only):
     company_id, bail = _company_or_redirect(request)
     if bail:
@@ -200,6 +220,7 @@ def _daily_page(request, *, late_only):
     export_params = request.GET.copy()
     for drop in ("page", "per_page", "table", "draw", "start", "length", "format"):
         export_params.pop(drop, None)
+    quick_days = _quick_days(request, membership.company, daily["date_window"])
     branch_id, employee_id, status = daily["branch_id"], daily["employee_id"], daily["status"]
     department_id = daily["department_id"]
     return render(request, "attendance/attendance_list.html", {
@@ -225,6 +246,7 @@ def _daily_page(request, *, late_only):
         # Punch times are stored in UTC; people read them in company time.
         "company_tz": membership.company.timezone or "UTC",
         "late_only": late_only,
+        "quick_days": quick_days,
         "no_shift": no_shift,
         "no_shift_total": sum(count for _name, count in no_shift),
         "list_url": "attendance:attendance_late" if late_only else "attendance:attendance_list",
