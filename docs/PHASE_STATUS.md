@@ -6578,3 +6578,34 @@ senior took its defaults for every decision, 2026-10-24).
   that one day in the company's time, keeping the branch, department,
   employee and status filters; the one shown is marked.
 - Tests: `attendance/tests_quick_days.py` (4). No migration, no `.env` change.
+
+### Salary month from the settings, and weekly pay groups — 2026-10-24
+
+Items 3 and 4 of [payroll-periods/00-PLAN.md](payroll-periods/00-PLAN.md),
+branch `feature/salary-periods`. The plan's "How 3 and 4 were built" lists
+the code.
+
+- **Salary month** (Salary settings → Salary month): starts on day 1–28 from
+  a chosen month. Day 26: "October" is 26 Sep – 25 Oct, named after the month
+  it ends in. The first month after a change is a shorter changeover month
+  paid basic × its days ÷ its calendar month's days. A change only applies
+  from a month with no salary run and no bonus, deduction or LFA line. The
+  Salary page says what the month covers and marks a month not yet over as a
+  preview.
+- **Weekly pay groups** (Salary settings → Pay groups): add a group (e.g.
+  Weekly workers, weeks Saturday to Friday); put a department or one person
+  in it from the first day of a week (never inside a finalised salary). On
+  the Salary page choose **Paid** (Monthly staff or the group) and the
+  **Week**: Generate, Submit, Approve and Undo work as for a month. A week
+  pays the daily or hourly rate for the days in the group. Allowances and
+  recurring deductions come in the last week ending in the month. Somebody on
+  a monthly salary stays Monthly staff. A finalised week locks attendance
+  only for that week's people.
+- Not done: the API salary endpoints still show the Monthly staff's month
+  only.
+- Migrations: `payroll` 0013 (`SalaryCycle`), 0014 (`PayGroup`,
+  `PayGroupMember`, `PayrollRun.pay_group`). No `.env` change. A company with
+  no salary-month change and no pay group sees no difference.
+- Tests: `payroll/tests_salary_periods.py` (11), `payroll/tests_weekly.py` (10).
+
+**Deploy:** pull, migrate, collectstatic, restart.

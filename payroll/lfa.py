@@ -38,6 +38,7 @@ from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from employees.models import Employee, EmployeeAssignment, EmployeeCompensation
 from organization.services import require_company_membership, require_structure_manager
+from payroll import periods
 from payroll.models import (
     LfaClaim,
     LfaSettings,
@@ -388,10 +389,10 @@ def _pay_period(company_id, first_of_month):
     start = first_of_month
     with use_company(company_id):
         for _ in range(24):
-            first, last = month_bounds(start.year, start.month)
+            first, last = periods.bounds(company_id, start.year, start.month)
             period, _made = PayrollPeriod.objects.get_or_create(
                 company_id=company_id, start_date=first, end_date=last,
-                defaults={"name": first.strftime("%B %Y")})
+                defaults={"name": periods.name(start.year, start.month)})
             runs = PayrollRun.objects.filter(payroll_period=period)
             if runs.filter(status=PayrollRun.Status.SUBMITTED).exists():
                 raise ValidationError({"pay_month": (
@@ -414,8 +415,8 @@ def _refresh_payslip(actor, company_id, period, employee):
                   .filter(payroll_run=run, employee=employee).first() if run else None)
     if record is None:
         return
-    generate_payroll(actor=actor, company_id=company_id, year=period.start_date.year,
-                     month=period.start_date.month, branch_ids={record_branch_id(record)})
+    generate_payroll(actor=actor, company_id=company_id, year=period.end_date.year,
+                     month=period.end_date.month, branch_ids={record_branch_id(record)})
 
 
 def decide(*, actor, company_id, claim_id, approve, amount=None, pay_month=None, note=""):

@@ -22,7 +22,7 @@ from api.v1.payroll import serializers as s
 from attendance.services import month_bounds
 from common.tenant import use_company
 from organization.services import STRUCTURE_ROLES
-from payroll import overtime, services
+from payroll import overtime, periods, services
 from payroll.models import (
     OvertimeDecision, PayrollAdjustment, PayrollRecord, PayrollRun, PenaltyAssessment,
 )
@@ -88,7 +88,7 @@ def _scope(request):
 
 
 def _run(company_id, year, month):
-    first, last = month_bounds(year, month)
+    first, last = periods.bounds(company_id, year, month)
     with use_company(company_id):
         return (PayrollRun.objects.select_related("submitted_by", "posted_by")
                 .filter(payroll_period__start_date=first, payroll_period__end_date=last)
@@ -106,7 +106,7 @@ def _month_out(request, year, month):
     membership, view, prepare = _scope(request)
     company_id = request.company_id
     run = _run(company_id, year, month)
-    first, last = month_bounds(year, month)
+    first, last = periods.bounds(company_id, year, month)
     with use_company(company_id):
         shown = _shown(run, view)
         totals = shown.aggregate(employees=Count("pk"), gross=Sum("gross_earnings"),

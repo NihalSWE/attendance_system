@@ -245,6 +245,108 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
             raise ValidationError(errors)
 
 
+class SalaryCycle(TenantOwned, ActorTracked):
+    """The day a salary month starts on, from a salary month on (2026-10-24).
+
+    "October 2026" is the period that ends in October: with a start day of 26
+    it is 26 Sep - 25 Oct; with 1 it is the calendar month. Each period starts
+    the day after the previous one ended, so a change of start day makes one
+    shorter changeover period and never a gap or an overlap
+    (``payroll/periods.py``). No row: every month starts on the 1st.
+    """
+
+    start_day = models.PositiveSmallIntegerField(
+        help_text="1 to 28. 1 = the calendar month; 26 = from the 26th to the 25th.")
+    # The first salary month this start day applies to (stored as its 1st day).
+    first_month = models.DateField()
+
+    class Meta:
+        db_table = "payroll_salary_cycle"
+        ordering = ("first_month",)
+        constraints = [
+            models.UniqueConstraint(fields=["company", "first_month"],
+                                    name="uniq_salary_cycle_per_month"),
+            models.CheckConstraint(condition=models.Q(start_day__gte=1, start_day__lte=28),
+                                   name="chk_salary_cycle_start_day"),
+        ]
+
+    def __str__(self):
+        return f"Day {self.start_day} from {self.first_month:%B %Y}"
+
+
+class PayGroup(TenantOwned, ActorTracked):
+    """People paid every week instead of every month (2026-10-24).
+
+    Everybody not in a pay group is "Monthly staff", paid by salary month as
+    before. A weekly group is paid for each week (``week_start`` to the day
+    before the next one), with its own draft, approval and finalising
+    (docs/payroll-periods/00-PLAN.md item 4).
+    """
+
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, "Monday"
+        TUESDAY = 1, "Tuesday"
+        WEDNESDAY = 2, "Wednesday"
+        THURSDAY = 3, "Thursday"
+        FRIDAY = 4, "Friday"
+        SATURDAY = 5, "Saturday"
+        SUNDAY = 6, "Sunday"
+
+    name = models.CharField(max_length=120)
+    week_start = models.PositiveSmallIntegerField(choices=Weekday.choices,
+                                                  default=Weekday.SATURDAY)
+    status = models.CharField(max_length=16, choices=ActiveStatus.choices,
+                              default=ActiveStatus.ACTIVE)
+
+    class Meta:
+        db_table = "payroll_pay_group"
+        ordering = ("name",)
+        constraints = [
+            models.UniqueConstraint(fields=["company", "name"], name="uniq_pay_group_name"),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class PayGroupMember(TenantOwned, ActorTracked):
+    """Who is paid weekly, from a date: a whole department, or one person.
+
+    A person's own row wins over their department's; a person's row with no
+    pay group keeps them monthly although their department is weekly. Ended
+    by ``effective_to`` (the first day it no longer applies), never deleted.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        CANCELLED = "cancelled", "Cancelled"
+
+    pay_group = models.ForeignKey(PayGroup, null=True, blank=True, on_delete=models.PROTECT,
+                                  related_name="members")
+    department = models.ForeignKey("organization.Department", null=True, blank=True,
+                                   on_delete=models.PROTECT, related_name="+")
+    employee = models.ForeignKey("employees.Employee", null=True, blank=True,
+                                 on_delete=models.PROTECT, related_name="pay_group_rows")
+    effective_from = models.DateField()
+    effective_to = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+
+    class Meta:
+        db_table = "payroll_pay_group_member"
+        ordering = ("effective_from",)
+        constraints = [
+            models.CheckConstraint(
+                condition=(models.Q(department__isnull=False, employee__isnull=True,
+                                    pay_group__isnull=False)
+                           | models.Q(department__isnull=True, employee__isnull=False)),
+                name="chk_pay_group_member_one_target"),
+        ]
+
+    def __str__(self):
+        who = self.employee_id and f"employee {self.employee_id}" or f"department {self.department_id}"
+        return f"{who} -> {self.pay_group or 'Monthly staff'} from {self.effective_from}"
+
+
 class PayrollSettings(TenantOwned, ActorTracked):
     """One row of current salary settings per company (dictionary §54).
 
@@ -625,6 +727,11 @@ class PayrollRun(TenantOwned, ActorTracked):
 
     payroll_period = models.ForeignKey(
         PayrollPeriod, on_delete=models.PROTECT, related_name="runs"
+    )
+    # A weekly pay group's run for one week (2026-10-24); empty: the salary
+    # month of the Monthly staff, as every run before pay groups.
+    pay_group = models.ForeignKey(
+        PayGroup, null=True, blank=True, on_delete=models.PROTECT, related_name="runs"
     )
     # The rules this run was calculated with. Null means the standard rules,
     # used before a company saved its own salary settings; the values used

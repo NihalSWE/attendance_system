@@ -21,7 +21,7 @@ from access_control.branch_access import ALL_BRANCHES, branches_for_any
 from access_control.page_access import may_open
 from attendance.models import AttendanceRecord
 from attendance.services import month_bounds
-from attendance.views import month_context, read_month
+from attendance.views import MONTHS, month_context, read_month
 from common.exceptions import NotInThisCompany
 from common.forms import StyledFormMixin, apply_service_errors
 from common.tenant import use_company
@@ -29,11 +29,16 @@ from organization.services import (
     STRUCTURE_ROLES,
     require_structure_manager,
 )
-from organization.models import Branch
+from common.choices import ActiveStatus
+from employees.models import Employee
+from organization.models import Branch, Department
 from organization.views import _company_or_redirect
-from payroll import overtime, penalties, policy
+from payroll import overtime, paygroups, penalties, periods, policy
 from payroll.forms import (
     GeneralSettingsForm,
+    PayGroupForm,
+    PayGroupMemberForm,
+    SalaryMonthForm,
     OvertimeDecisionForm,
     PenaltyRuleForm,
     SalaryRulesForm,
@@ -42,6 +47,8 @@ from payroll.forms import (
 from payroll.models import (
     AttendancePenaltyRule,
     OvertimeDecision,
+    PayGroup,
+    PayGroupMember,
     PayrollAdjustment,
     PayrollPeriod,
     PayrollPolicyVersion,
@@ -75,12 +82,17 @@ def payroll_home(request):
         return bail
     membership, view_branches, prepare_branches, company_wide = _salary_scope(request.user, company_id)
     year, month = read_month(request.GET)
-    first, last = month_bounds(year, month)
+    pay = _pay_choice(company_id, request.GET, year, month)
+    group = pay["pay_group"]
+    if group is None:
+        first, last = periods.bounds(company_id, year, month)
+    else:
+        first, last = pay["week_first"], pay["week_last"]
 
     with use_company(company_id):
         period = PayrollPeriod.objects.filter(start_date=first, end_date=last).first()
         run = (
-            PayrollRun.objects.filter(payroll_period=period).order_by("-pk").first()
+            PayrollRun.objects.filter(payroll_period=period, pay_group=group).order_by("-pk").first()
             if period else None
         )
         shown = run.records.all() if run else PayrollRecord.objects.none()
@@ -110,13 +122,21 @@ def payroll_home(request):
         decides_overtime = bool(overtime_branches)
     return render(request, "payroll/payroll_home.html", {
         **month_context(year, month),
+        **pay,
+        "period_first": first,
+        "period_last": last,
+        "period_days": (last - first).days + 1,
+        "period_changeover": group is None and periods.is_changeover(company_id, year, month),
+        "period_preview": first <= timezone.localdate() < last and run is not None
+                          and run.status != PayrollRun.Status.POSTED,
         "run": run,
         "records": records,
         "totals": totals,
         "company_wide": company_wide,
         "can_manage": membership.role in STRUCTURE_ROLES,
-        # Owner/admin generate the whole month; a branch its own people.
-        "can_generate": bool(prepare_branches),
+        # Owner/admin generate the whole month; a branch its own people. A
+        # weekly group's week is the whole company's (owner/admin/payroll).
+        "can_generate": bool(prepare_branches) and (group is None or prepare_branches is ALL_BRANCHES),
         "decides_overtime": decides_overtime,
         "overtime_waiting": (
             overtime.undecided_count(company_id, first, last, overtime_branches)
@@ -143,6 +163,36 @@ def payroll_home(request):
             if run and run.status == PayrollRun.Status.DRAFT else 0
         ),
     })
+
+
+def _pay_choice(company_id, source, year, month):
+    """Which salary the Salary page and its buttons are about (2026-10-24):
+    the Monthly staff's month, or a weekly pay group's week (``group`` and
+    ``week``, the week's first day, in the GET/POST data)."""
+    with use_company(company_id):
+        groups = list(PayGroup.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"))
+    raw = str(source.get("group", ""))
+    group = next((g for g in groups if str(g.pk) == raw), None)
+    found = {"pay_groups": groups, "pay_group": group, "weeks": [], "week_first": None,
+             "week_last": None, "pay_query": "", "run_title": f"{dict(MONTHS)[month]} {year}",
+             "run_label": dict(MONTHS)[month]}
+    if group is None:
+        return found
+    weeks = paygroups.weeks_in_month(group, year, month)
+    try:
+        asked = paygroups.week_of(group, datetime.date.fromisoformat(str(source.get("week", ""))))
+    except ValueError:
+        asked = None
+    if asked not in weeks:
+        # This week if it ends in the month, else the month's last week begun.
+        today = timezone.localdate()
+        asked = next((w for w in reversed(weeks) if w[0] <= today), weeks[0])
+    found.update({
+        "weeks": weeks, "week_first": asked[0], "week_last": asked[1],
+        "pay_query": f"&group={group.pk}&week={asked[0].isoformat()}",
+        "run_title": f"{group.name}: {paygroups.week_name(*asked)}", "run_label": "the week",
+    })
+    return found
 
 
 def _salary_scope(user, company_id):
@@ -173,16 +223,29 @@ def payroll_generate(request):
         raise PermissionDenied("Generating salary needs owner or company administrator access, "
                                "or access to prepare salary in a branch.")
     branch_ids = None if prepare is ALL_BRANCHES else prepare
+    pay = _pay_choice(company_id, request.POST, year, month)
+    if pay["pay_group"] is not None and branch_ids is not None:
+        raise PermissionDenied("A weekly pay group's week is generated by the owner, company "
+                               "administrator or payroll manager.")
     try:
         run = generate_payroll(
             actor=request.user, company_id=company_id, year=year, month=month,
-            branch_ids=branch_ids,
+            branch_ids=branch_ids, pay_group=pay["pay_group"], week=pay["week_first"],
         )
     except ValidationError as exc:
         messages.error(request, " ".join(exc.messages))
     else:
         skipped = run.skipped_now
-        if branch_ids is None:
+        if pay["pay_group"] is not None:
+            message = (
+                f"{pay['run_title']} generated for {run.totals_snapshot['employees']} "
+                "employee(s). It is a draft and can be regenerated at any time."
+            )
+            monthly = run.totals_snapshot.get("on_monthly_salary")
+            if monthly:
+                message += (f" Left out, their salary is monthly (a weekly group pays a daily "
+                            f"or hourly rate): {', '.join(monthly)}.")
+        elif branch_ids is None:
             message = (
                 f"Salary generated for {run.totals_snapshot['employees']} employee(s). "
                 "It is a draft and can be regenerated at any time."
@@ -200,7 +263,7 @@ def payroll_generate(request):
         if skipped:
             message += f" Skipped, no salary set: {', '.join(skipped)}."
         messages.success(request, message)
-    return redirect(f"{reverse('payroll:payroll_home')}?month={month}&year={year}")
+    return redirect(f"{reverse('payroll:payroll_home')}?month={month}&year={year}{pay['pay_query']}")
 
 
 class ReopenForm(StyledFormMixin, forms.Form):
@@ -262,13 +325,16 @@ def _run_action(request, action):
     elif action == "submit" and not salary_branches(request.user, company_id, "salary.prepare")[1]:
         raise PermissionDenied("Submitting salary needs access to prepare it.")
     service, form_class, title, submit_label, tone, done = RUN_ACTIONS[action]
-    year, month = read_month(request.POST if request.method == "POST" else request.GET)
-    back = f"{reverse('payroll:payroll_home')}?month={month}&year={year}"
+    source = request.POST if request.method == "POST" else request.GET
+    year, month = read_month(source)
+    pay = _pay_choice(company_id, source, year, month)
+    back = f"{reverse('payroll:payroll_home')}?month={month}&year={year}{pay['pay_query']}"
     form = form_class(request.POST or None) if form_class else None
     if request.method == "POST" and (form is None or form.is_valid()):
         extra = {"reason": form.cleaned_data["reason"]} if form else {}
         try:
-            service(actor=request.user, company_id=company_id, year=year, month=month, **extra)
+            service(actor=request.user, company_id=company_id, year=year, month=month,
+                    pay_group=pay["pay_group"], week=pay["week_first"], **extra)
         except ValidationError as exc:
             if form is None:
                 messages.error(request, " ".join(exc.messages))
@@ -277,13 +343,18 @@ def _run_action(request, action):
         else:
             messages.success(request, done)
             return redirect(back)
-    first, last = month_bounds(year, month)
+    if pay["pay_group"] is None:
+        first, last = periods.bounds(company_id, year, month)
+    else:
+        first, last = pay["week_first"], pay["week_last"]
     with use_company(company_id):
         run = PayrollRun.objects.select_related("submitted_by").filter(
-            payroll_period__start_date=first, payroll_period__end_date=last
+            payroll_period__start_date=first, payroll_period__end_date=last,
+            pay_group=pay["pay_group"],
         ).order_by("-pk").first()
     return render(request, "payroll/run_action.html", {
         **month_context(year, month),
+        **pay,
         "run": run, "form": form, "action": action, "back": back,
         "title": title, "submit_label": submit_label, "tone": tone,
         # Said on the page rather than only after the click.
@@ -498,7 +569,54 @@ def salary_settings(request):
         },
     )
 
-    if section == "rules" and rules_form.is_valid():
+    month_page = _salary_month_page(company_id, today)
+    salary_month_form = SalaryMonthForm(
+        request.POST if section == "salary_month" else None,
+        years=month_page["years"], initial=month_page["initial"],
+    )
+
+    pay_groups_page = _pay_groups_page(company_id, today)
+    pay_group_form = PayGroupForm(request.POST if section == "pay_group" else None)
+    pay_member_form = PayGroupMemberForm(
+        request.POST if section == "pay_member" else None, **pay_groups_page.pop("choices"))
+
+    if section == "pay_group" and pay_group_form.is_valid():
+        try:
+            group = paygroups.create_group(actor=request.user, company_id=company_id,
+                                           **pay_group_form.cleaned_data)
+        except ValidationError as exc:
+            apply_service_errors(pay_group_form, exc)
+        else:
+            messages.success(request, (
+                f"Pay group {group.name} added: weeks start on {group.get_week_start_display()}. "
+                "Now put a department or people in it."))
+            return redirect(f"{reverse('payroll:salary_settings')}#pay-groups")
+    elif section == "pay_member" and pay_member_form.is_valid():
+        data = pay_member_form.cleaned_data
+        try:
+            paygroups.set_member(actor=request.user, company_id=company_id, **data)
+        except ValidationError as exc:
+            apply_service_errors(pay_member_form, exc)
+        else:
+            who = data["department"].name if data["department"] else data["employee"].full_name
+            paid = data["pay_group"].name if data["pay_group"] else "Monthly staff"
+            messages.success(request, f"{who}: {paid} from {data['effective_from']:%d %b %Y}.")
+            return redirect(f"{reverse('payroll:salary_settings')}#pay-groups")
+    elif section == "salary_month" and salary_month_form.is_valid():
+        data = salary_month_form.cleaned_data
+        try:
+            first, last = periods.set_start_day(
+                actor=request.user, company_id=company_id, start_day=data["start_day"],
+                year=data["from_year"], month=data["from_month"])
+        except ValidationError as exc:
+            apply_service_errors(salary_month_form, exc)
+        else:
+            messages.success(request, (
+                f"Salary months start on day {data['start_day']} from "
+                f"{periods.name(data['from_year'], data['from_month'])}: it covers "
+                f"{first:%d %b} - {last:%d %b %Y}."))
+            return redirect("payroll:salary_settings")
+    elif section == "rules" and rules_form.is_valid():
         values = rules_form.service_values()
         try:
             version = policy.change_salary_rules(
@@ -542,8 +660,71 @@ def salary_settings(request):
         "summary": rules_summary(page["rules"]),
         "rules_form": rules_form,
         "general_form": general_form,
+        "salary_month_form": salary_month_form,
+        **month_page,
+        "pay_group_form": pay_group_form,
+        "pay_member_form": pay_member_form,
+        **pay_groups_page,
         "penalty_rules": _penalty_rows(company_id, today, page["currency"], request=request),
     })
+
+
+def _pay_groups_page(company_id, today):
+    """The Pay groups card: the weekly groups, who is in them from when, and
+    the choices for the member form (payroll/paygroups.py)."""
+    with use_company(company_id):
+        groups = list(PayGroup.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"))
+        members = list(
+            PayGroupMember.objects.filter(status=PayGroupMember.Status.ACTIVE)
+            .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=today))
+            .select_related("pay_group", "department", "employee")
+            .order_by("department__name", "employee__first_name", "effective_from"))
+        choices = {
+            "departments": Department.objects.order_by("name"),
+            "employees": Employee.objects.exclude(employment_status__in=(
+                Employee.EmploymentStatus.RESIGNED, Employee.EmploymentStatus.TERMINATED,
+                Employee.EmploymentStatus.RETIRED)).order_by("first_name", "last_name"),
+            "groups": PayGroup.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
+        }
+    return {"pay_groups": groups, "pay_members": members, "choices": choices}
+
+
+def _salary_month_page(company_id, today):
+    """The Salary month card: the next salary months' dates, the start days
+    saved, and the first month a change can start from (one with no salary)."""
+    from payroll.models import PayrollAdjustment, SalaryCycle
+
+    cycles = periods._cycles(company_id)
+    year, month = periods.month_of(company_id, today, cycles)
+    ahead = []
+    for _ in range(4):
+        first, last = periods.bounds(company_id, year, month, cycles)
+        ahead.append({"name": periods.name(year, month), "first": first, "last": last,
+                      "days": (last - first).days + 1,
+                      "changeover": periods.is_changeover(company_id, year, month, cycles),
+                      "current": first <= today <= last})
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    with use_company(company_id):
+        ends = [PayrollRun.objects.filter(pay_group__isnull=True).order_by("-payroll_period__end_date")
+                .values_list("payroll_period__end_date", flat=True).first(),
+                PayrollAdjustment.objects.order_by("-target_payroll_period__end_date")
+                .values_list("target_payroll_period__end_date", flat=True).first()]
+        history = list(SalaryCycle.objects.select_related("created_by").order_by("-first_month"))
+    used = max((end for end in ends if end), default=None)
+    if used is None:
+        free = periods.month_of(company_id, today, cycles)
+    else:
+        y, m = periods.month_of(company_id, used, cycles)
+        free = (y + 1, 1) if m == 12 else (y, m + 1)
+    current = periods.start_day_of(company_id, *periods.month_of(company_id, today, cycles), cycles)
+    return {
+        "salary_months_ahead": ahead,
+        "salary_cycles": history,
+        "salary_start_day": current,
+        "salary_first_free": periods.name(*free),
+        "years": list(range(today.year - 1, today.year + 3)),
+        "initial": {"start_day": current, "from_month": free[1], "from_year": free[0]},
+    }
 
 
 def _penalty_rows(company_id, today, currency, *, request=None):
@@ -838,7 +1019,7 @@ OVERTIME_FILTERS = {
 
 
 def _draft_run_exists(company_id, day):
-    first, last = month_bounds(day.year, day.month)
+    first, last = periods.bounds(company_id, *periods.month_of(company_id, day))
     with use_company(company_id):
         return PayrollRun.objects.filter(
             payroll_period__start_date=first, payroll_period__end_date=last,

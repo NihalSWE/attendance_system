@@ -10,7 +10,8 @@ from django.utils import timezone
 from attendance.views import MONTHS
 from common.forms import StyledFormMixin, TIME_INPUT_FORMATS, date_widget, time_widget
 from payroll import penalties
-from payroll.models import AttendancePenaltyRule, PayrollPolicyVersion, SalaryComponent
+from payroll.models import (AttendancePenaltyRule, PayGroup, PayrollPolicyVersion,
+                            SalaryComponent)
 from payroll.policy import plain
 
 Version = PayrollPolicyVersion
@@ -305,6 +306,59 @@ class GeneralSettingsForm(StyledFormMixin, forms.Form):
         label="Pay day", required=False, min_value=1, max_value=31,
         help_text="Day of the month salary is usually paid. Optional.",
     )
+
+
+class SalaryMonthForm(StyledFormMixin, forms.Form):
+    """When a salary month starts (payroll/periods.py, 2026-10-24)."""
+
+    start_day = forms.IntegerField(
+        label="Salary month starts on day", min_value=1, max_value=28,
+        help_text="1 = the calendar month. 26 = from the 26th to the 25th: \"October\" is "
+                  "26 Sep - 25 Oct.",
+    )
+    from_month = forms.TypedChoiceField(label="From salary month", choices=MONTHS, coerce=int)
+    from_year = forms.TypedChoiceField(label="Year", choices=(), coerce=int)
+
+    def __init__(self, *args, years=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["from_year"].choices = [(y, y) for y in years]
+
+
+class PayGroupForm(StyledFormMixin, forms.Form):
+    """A weekly pay group (payroll/paygroups.py, 2026-10-24)."""
+
+    name = forms.CharField(label="Name", max_length=120,
+                           help_text="For example Weekly workers or Factory floor.")
+    week_start = forms.TypedChoiceField(label="Week starts on", choices=PayGroup.Weekday.choices,
+                                        coerce=int, initial=PayGroup.Weekday.SATURDAY,
+                                        help_text="Saturday: each week is Saturday to Friday.")
+
+
+class PayGroupMemberForm(StyledFormMixin, forms.Form):
+    """Put a department, or one person, in a pay group from a date."""
+
+    department = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), required=False,
+                                        label="Department", empty_label="Choose a department")
+    employee = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), required=False,
+                                      label="Or one person", empty_label="Choose a person",
+                                      help_text="A person's own choice wins over their department's.")
+    pay_group = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), required=False,
+                                       label="Paid", empty_label="Monthly (Monthly staff)")
+    effective_from = forms.DateField(label="From", widget=date_widget("Choose a date"),
+                                     help_text="The first day of one of the group's weeks.")
+
+    def __init__(self, *args, departments, employees, groups, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["department"].queryset = departments
+        self.fields["employee"].queryset = employees
+        self.fields["employee"].label_from_instance = lambda person: person.full_name
+        self.fields["pay_group"].queryset = groups
+
+    def clean(self):
+        data = super().clean()
+        if bool(data.get("department")) == bool(data.get("employee")):
+            raise forms.ValidationError("Choose a department or one person, not both.")
+        return data
 
 
 class SalaryComponentForm(StyledFormMixin, forms.ModelForm):
