@@ -10,7 +10,7 @@ from io import StringIO
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, override_settings
+from django.test import TestCase, TransactionTestCase, override_settings
 
 from accounts.models import CompanyMembership, User
 from common.tenant import use_company
@@ -119,3 +119,20 @@ class DatabaseCopyTests(TestCase):
             stream.write("[]")
         with self.assertRaisesRegex(CommandError, "jsonl"):
             call_command("load_database", plain, "--noinput")
+
+
+class DumpSnapshotTests(TransactionTestCase):
+    """The live server takes punches while it dumps: every table is read from
+    one snapshot, or a punch's allocation can point at a punch not in the
+    file (2026-10-24)."""
+
+    def test_the_dump_reads_one_snapshot(self):
+        from django.db import connection
+
+        from tenants.management.commands.dump_database import _snapshot
+
+        with _snapshot(), connection.cursor() as cursor:
+            cursor.execute("SHOW transaction_isolation")
+            self.assertEqual(cursor.fetchone()[0], "repeatable read")
+            cursor.execute("SHOW transaction_read_only")
+            self.assertEqual(cursor.fetchone()[0], "on")
