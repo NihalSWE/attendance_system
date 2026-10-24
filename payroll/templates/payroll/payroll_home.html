@@ -44,7 +44,7 @@
                     Salary settings
                 </a>
                 {% if run.status == 'posted' %}
-                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_reopen' %}?month={{ month }}&year={{ year }}">
+                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_reopen' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
                         Undo finalise
                     </a>
                 {% endif %}
@@ -52,18 +52,18 @@
             {# Approval (A11): whoever prepares submits; the owner/admin approves. #}
             {% if run.status == 'submitted' %}
                 {% if can_manage or is_submitter %}
-                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_return' %}?month={{ month }}&year={{ year }}">
+                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_return' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
                         {% if can_manage %}Send back{% else %}Take back{% endif %}
                     </a>
                 {% endif %}
                 {% if can_manage and not approval_blocked %}
-                    <a class="btn btn--primary" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}">
-                        Approve {{ month_name }}
+                    <a class="btn btn--primary" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
+                        Approve {{ run_label }}
                     </a>
                 {% endif %}
             {% elif run.status == 'draft' and can_generate %}
-                <a class="btn btn--ghost" href="{% url 'payroll:payroll_submit' %}?month={{ month }}&year={{ year }}">
-                    Submit {{ month_name }} for approval
+                <a class="btn btn--ghost" href="{% url 'payroll:payroll_submit' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
+                    Submit {{ run_label }} for approval
                 </a>
             {% endif %}
             {% if can_generate and run.status != 'posted' and run.status != 'submitted' %}
@@ -71,8 +71,12 @@
                     {% csrf_token %}
                     <input type="hidden" name="month" value="{{ month }}">
                     <input type="hidden" name="year" value="{{ year }}">
+                    {% if pay_group %}
+                        <input type="hidden" name="group" value="{{ pay_group.pk }}">
+                        <input type="hidden" name="week" value="{{ week_first|date:'Y-m-d' }}">
+                    {% endif %}
                     <button class="btn btn--primary" type="submit">
-                        {% if run %}Regenerate{% else %}Generate{% endif %} {{ month_name }} {{ year }}{% if not company_wide %} for your branches{% endif %}
+                        {% if run %}Regenerate{% else %}Generate{% endif %} {% if pay_group %}the week{% else %}{{ month_name }} {{ year }}{% if not company_wide %} for your branches{% endif %}{% endif %}
                     </button>
                 </form>
             {% endif %}
@@ -80,14 +84,24 @@
     </div>
 
     {# The dates this salary month covers (payroll/periods.py, 2026-10-24). #}
-    <p class="t-faint">
-        {{ month_name }} {{ year }} covers {{ period_first|date:"d M Y" }} - {{ period_last|date:"d M Y" }}
-        ({{ period_days }} days){% if period_changeover %}: a shorter changeover month, after
-        the salary month's start day changed{% endif %}.
-    </p>
+    {% if pay_group %}
+        {# A weekly pay group's week (payroll/paygroups.py, 2026-10-24). #}
+        <p class="t-faint">
+            {{ run_title }}. Its people are paid their daily or hourly rate for the days they
+            are in {{ pay_group.name }}; allowances and recurring deductions come in the last
+            week ending in the month. Monthly salaries are not paid here.
+        </p>
+    {% else %}
+        <p class="t-faint">
+            {{ month_name }} {{ year }} covers {{ period_first|date:"d M Y" }} - {{ period_last|date:"d M Y" }}
+            ({{ period_days }} days){% if period_changeover %}: a shorter changeover month, after
+            the salary month's start day changed{% endif %}.{% if pay_groups %} Weekly pay groups'
+            days are paid by their weeks, not here.{% endif %}
+        </p>
+    {% endif %}
     {% if period_preview %}
         <div class="alert alert--info">
-            Preview: {{ month_name }} ends on {{ period_last|date:"d M Y" }}. Days after today are
+            Preview: {{ run_title }} ends on {{ period_last|date:"d M Y" }}. Days after today are
             not counted yet, so these figures change until the month is over. Generate it again
             then.
         </div>
@@ -95,7 +109,7 @@
 
     {% if run.status == 'submitted' %}
         <div class="alert alert--info">
-            {{ month_name }} {{ year }} is waiting for approval — submitted by
+            {{ run_title }} is waiting for approval — submitted by
             {{ run.submitted_by.get_full_name|default:run.submitted_by.email|default:"someone" }}
             on {{ run.submitted_at|date:"d M Y, H:i" }}. It cannot be regenerated or have lines
             added until it is approved or sent back.
@@ -113,14 +127,14 @@
         <div class="alert alert--warning">
             Attendance changed for {{ attendance_since_run }}
             {{ attendance_since_run|pluralize:"person,people" }} since this salary was
-            generated. Generate {{ month_name }} again{% if run.status == 'submitted' %} — it
+            generated. Generate {{ run_label }} again{% if run.status == 'submitted' %} — it
             cannot be approved until you do{% endif %}.
         </div>
     {% endif %}
     {% if overtime_since_run %}
         <div class="alert alert--warning">
             Overtime was decided for {{ overtime_since_run }} day{{ overtime_since_run|pluralize }} after this
-            salary was generated. Generate {{ month_name }} again to include it.
+            salary was generated. Generate {{ run_label }} again to include it.
         </div>
     {% endif %}
     {% if run and overtime_waiting %}
@@ -134,7 +148,7 @@
     <div class="card">
         <div class="card__head">
             <h2>
-                {{ month_name }} {{ year }}
+                {{ run_title }}
             </h2>
             {% if run.status == 'posted' %}
                 <span class="badge badge--success">
@@ -179,6 +193,31 @@
                     </option>
                 {% endfor %}
             </select>
+            {% if pay_groups %}
+                <label class="sr-only" for="pay-group">
+                    Paid
+                </label>
+                <select class="input select" id="pay-group" name="group" onchange="this.form.submit()">
+                    <option value="">Monthly staff</option>
+                    {% for option in pay_groups %}
+                        <option value="{{ option.pk }}" {% if option == pay_group %}selected{% endif %}>
+                            {{ option.name }} (weekly)
+                        </option>
+                    {% endfor %}
+                </select>
+            {% endif %}
+            {% if pay_group %}
+                <label class="sr-only" for="pay-week">
+                    Week
+                </label>
+                <select class="input select" id="pay-week" name="week">
+                    {% for first, last in weeks %}
+                        <option value="{{ first|date:'Y-m-d' }}" {% if first == week_first %}selected{% endif %}>
+                            {{ first|date:"d M" }} - {{ last|date:"d M" }}
+                        </option>
+                    {% endfor %}
+                </select>
+            {% endif %}
             <button class="btn btn--ghost" type="submit">
                 Show
             </button>
@@ -187,7 +226,7 @@
         {% if not records %}
             <div class="empty server-table-empty">
                 <div class="empty__title">
-                    No salary generated for {{ month_name }} {{ year }}
+                    No salary generated for {{ run_title }}
                 </div>
                 <div class="empty__text">
                     Press Generate. Attendance for the month is calculated first, then
@@ -315,7 +354,7 @@
         {% else %}
             <div class="empty">
                 <div class="empty__title">
-                    No salary generated for {{ month_name }} {{ year }}
+                    No salary generated for {{ run_title }}
                 </div>
                 <div class="empty__text">
                     Press Generate. Attendance for the month is calculated first, then

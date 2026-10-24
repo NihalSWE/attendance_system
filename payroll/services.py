@@ -18,6 +18,7 @@ mid-month change is on the plan, step A11). Runs stay **draft** and can be
 regenerated at any time — finalising is not built yet.
 """
 
+import calendar
 import datetime
 from collections import Counter
 from decimal import ROUND_HALF_UP, Decimal
@@ -53,7 +54,7 @@ from payroll.models import (
     PayrollRun,
     PayrollSettings,
 )
-from payroll import periods
+from payroll import paygroups, periods
 from payroll.penalties import PayValue, assess, rules_in_force
 from payroll.policy import STANDARD_RULES, plain, rules_for
 
@@ -752,14 +753,25 @@ def _bring_branches_up_to_date(company_id, year, month, branch_ids):
 
 
 @transaction.atomic
-def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
+def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=None,
+                     pay_group=None, week=None):
     """Recalculate the month's attendance, then (re)build its draft salary run.
+
+    With ``pay_group`` and ``week`` (a day in it), the weekly pay group's run
+    for that week instead (2026-10-24, payroll/paygroups.py): the whole
+    company's members only, paid for the days they are in the group. The
+    Monthly staff's month leaves those days out.
 
     ``branch_ids`` (A12 part 6): a branch prepares its own salary. Only the
     people whose placement at the end of the month is in those branches are
     rebuilt; everybody else's draft payslip stays exactly as it was. The run
     stays one per month for the company, finalised once by the owner or admin.
     """
+    if pay_group is not None:
+        if branch_ids is not None:
+            raise ValidationError("A weekly pay group's week is generated for the whole company.")
+        first, last = paygroups.week_of(pay_group, week)
+        year, month = last.year, last.month
     if branch_ids is None:
         # The whole month: the owner/admin, or the payroll manager, who
         # prepares salary in every branch.
@@ -769,7 +781,8 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
                 "Generating the whole month needs owner, company administrator or "
                 "payroll manager access."
             )
-        first, last = periods.bounds(company_id, year, month)
+        if pay_group is None:
+            first, last = periods.bounds(company_id, year, month)
         calculate_attendance(actor=actor, company_id=company_id, year=year, month=month,
                              first=first, last=last)
     else:
@@ -782,8 +795,17 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
         _bring_branches_up_to_date(company_id, year, month, branch_ids)
     # The salary month's own dates: the calendar month, or e.g. 26 Sep - 25 Oct
     # for "October" (payroll/periods.py, 2026-10-24).
-    first, last = periods.bounds(company_id, year, month)
-    full_days = periods.full_days(company_id, year, month)
+    if pay_group is None:
+        first, last = periods.bounds(company_id, year, month)
+        full_days = periods.full_days(company_id, year, month)
+        period_name = periods.name(year, month)
+    else:
+        # Allowances and recurring deductions come once a month, in the last
+        # week that ends in it (the senior's choice).
+        full_days = calendar.monthrange(last.year, last.month)[1]
+        period_name = paygroups.week_name(first, last)
+    groups = paygroups.Groups(company_id, first, last)
+    group_id = pay_group.pk if pay_group is not None else None
     period_end = timezone.make_aware(
         datetime.datetime.combine(last, datetime.time.max)
     )
@@ -796,11 +818,12 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
         default_currency = settings.currency if settings else membership.company.currency
         period, _ = PayrollPeriod.objects.get_or_create(
             company=membership.company, start_date=first, end_date=last,
-            defaults={"name": periods.name(year, month), "created_by": actor, "updated_by": actor},
+            defaults={"name": period_name, "created_by": actor, "updated_by": actor},
         )
-        if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.POSTED).exists():
+        runs_here = PayrollRun.objects.filter(payroll_period=period, pay_group=pay_group)
+        if runs_here.filter(status=PayrollRun.Status.POSTED).exists():
             raise ValidationError("This month's salary is finalised and cannot be regenerated.")
-        if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.SUBMITTED).exists():
+        if runs_here.filter(status=PayrollRun.Status.SUBMITTED).exists():
             raise ValidationError(
                 "This month's salary is waiting for approval. Send it back before "
                 "generating it again."
@@ -817,10 +840,19 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
             records_by_employee.setdefault(record.employee, []).append(record)
         # Only days inside the employment count; a monthly salary is paid for
         # the employed calendar days of the month.
+        weekly_days = {}
         for employee, records in list(records_by_employee.items()):
             start = max(first, employee.joining_date or first)
             end = min(last, employee.leaving_date or last)
-            records_by_employee[employee] = [r for r in records if start <= r.work_date <= end]
+            records = [r for r in records if start <= r.work_date <= end]
+            if groups.any:
+                # Only the days they are in this run's pay group (Monthly
+                # staff: none); the others are paid by the other run.
+                mine = [r for r in records if groups.group_id(
+                    employee.pk, r.employee_assignment.department_id, r.work_date) == group_id]
+                weekly_days[employee.pk] = len(records) - len(mine)
+                records = mine
+            records_by_employee[employee] = records
         if branch_ids is not None:
             # A branch's own salary: the people placed there at the month's end.
             records_by_employee = {
@@ -829,11 +861,11 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
             }
         rebuilt = {employee.pk for employee in records_by_employee}
 
-        run = PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.DRAFT).first()
+        run = runs_here.filter(status=PayrollRun.Status.DRAFT).first()
         previous_skipped = {}
         if run is None:
             run = PayrollRun.objects.create(
-                company=membership.company, payroll_period=period,
+                company=membership.company, payroll_period=period, pay_group=pay_group,
                 created_by=actor, updated_by=actor,
             )
         else:
@@ -884,24 +916,40 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
             for employee in records_by_employee if employee.pk in found
         }
         # Allowances and recurring deductions in force this month, per person.
-        components_by_employee = employee_components(
-            company_id, first, last, [employee.pk for employee in records_by_employee],
-            inactive=inactive_by_employee)
+        if pay_group is None:
+            components_by_employee = employee_components(
+                company_id, first, last, [employee.pk for employee in records_by_employee],
+                inactive=inactive_by_employee)
+        elif paygroups.is_last_week_of_month(last):
+            components_by_employee = employee_components(
+                company_id, last.replace(day=1), last.replace(day=full_days),
+                [employee.pk for employee in records_by_employee])
+        else:
+            components_by_employee = {}
 
         skipped = dict(previous_skipped)
+        on_monthly = {}
         skipped_now = []
         for employee, records in records_by_employee.items():
             if not records:
                 continue
             start = max(first, employee.joining_date or first)
             end = min(last, employee.leaving_date or last)
-            employed_days = (end - start).days + 1
+            # Monthly staff: the days they were weekly are not paid here.
+            employed_days = (end - start).days + 1 - weekly_days.get(employee.pk, 0)
+            if pay_group is not None:
+                employed_days = full_days
             compensation = _compensation_at(employee, period_end) or _compensation_at(
                 employee, timezone.make_aware(datetime.datetime.combine(records[-1].work_date, datetime.time.max))
             )
             if compensation is None:
                 skipped[employee.pk] = employee.full_name
                 skipped_now.append(employee.full_name)
+                continue
+            if pay_group is not None and compensation.pay_basis == EmployeeCompensation.PayBasis.MONTHLY:
+                # A monthly salary is paid by the month, not the week: a whole
+                # month's basic would land in one week.
+                on_monthly[employee.pk] = employee.full_name
                 continue
             basic_segments = (
                 _monthly_segments(employee, start, end)
@@ -983,6 +1031,8 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
             "net": str(money(totals["net"] or 0)),
             "skipped_without_salary": list(skipped.values()),
             "skipped": {str(employee_id): name for employee_id, name in skipped.items()},
+            # Weekly runs: members on a monthly salary, left out (2026-10-24).
+            "on_monthly_salary": sorted(on_monthly.values()),
             "rules": rules.describe(),
             "penalties": penalty_totals["count"],
             "penalty_amount": str(money(penalty_totals["amount"] or 0)),
@@ -1054,10 +1104,16 @@ def attendance_changed_since(company_id, run):
     )
 
 
-def _run_for_month(company_id, year, month, status):
-    first, last = periods.bounds(company_id, year, month)
+def _run_for_month(company_id, year, month, status, pay_group=None, week=None):
+    """The Monthly staff's run for a salary month, or (``pay_group``, ``week``)
+    a weekly pay group's run for the week holding ``week``."""
+    if pay_group is not None:
+        first, last = paygroups.week_of(pay_group, week)
+    else:
+        first, last = periods.bounds(company_id, year, month)
     return PayrollRun.objects.select_for_update(of=("self",)).select_related("payroll_period").filter(
         payroll_period__start_date=first, payroll_period__end_date=last, status=status,
+        pay_group=pay_group,
     ).first()
 
 
@@ -1089,7 +1145,7 @@ def approval_blocker(actor, company_id, run):
 
 
 @transaction.atomic
-def submit_payroll(*, actor, company_id, year, month):
+def submit_payroll(*, actor, company_id, year=None, month=None, pay_group=None, week=None):
     """Send a month's draft salary for approval (A11: finalise with approval).
 
     Whoever may prepare salary submits: the owner/administrator, or a branch
@@ -1105,9 +1161,9 @@ def submit_payroll(*, actor, company_id, year, month):
     if not prepare:
         raise PermissionDenied("Submitting salary needs access to prepare it.")
     with use_company(company_id):
-        run = _run_for_month(company_id, year, month, PayrollRun.Status.DRAFT)
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.DRAFT, pay_group, week)
         if run is None:
-            if _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED):
+            if _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED, pay_group, week):
                 raise ValidationError("This month's salary is already waiting for approval.")
             raise ValidationError("Generate this month's salary before submitting it.")
         if overtime.decided_after(company_id, run):
@@ -1133,7 +1189,7 @@ def submit_payroll(*, actor, company_id, year, month):
 
 
 @transaction.atomic
-def approve_payroll(*, actor, company_id, year, month):
+def approve_payroll(*, actor, company_id, year=None, month=None, pay_group=None, week=None):
     """Approve a submitted month: it is finalised.
 
     Employees then see their payslips, and the month's attendance and overtime
@@ -1143,7 +1199,7 @@ def approve_payroll(*, actor, company_id, year, month):
 
     membership = require_structure_manager(actor, company_id)
     with use_company(company_id):
-        run = _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED)
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED, pay_group, week)
         refusal = approval_blocker(actor, company_id, run)
         if refusal:
             raise ValidationError(refusal)
@@ -1167,7 +1223,8 @@ def approve_payroll(*, actor, company_id, year, month):
         run.updated_by = actor
         run.save()
         PenaltyAssessment.objects.filter(
-            payroll_period=run.payroll_period, status=PenaltyAssessment.Status.PROPOSED
+            payroll_period=run.payroll_period, status=PenaltyAssessment.Status.PROPOSED,
+            employee_id__in=run.records.values("employee_id"),
         ).update(status=PenaltyAssessment.Status.POSTED)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,
@@ -1180,7 +1237,8 @@ def approve_payroll(*, actor, company_id, year, month):
 
 
 @transaction.atomic
-def return_payroll(*, actor, company_id, year, month, reason):
+def return_payroll(*, actor, company_id, year=None, month=None, reason="", pay_group=None,
+                   week=None):
     """Send a submitted month back to Draft, with a reason.
 
     The owner/administrator sends it back to have it corrected; whoever
@@ -1189,7 +1247,7 @@ def return_payroll(*, actor, company_id, year, month, reason):
     membership = require_company_membership(actor, company_id)
     reason = str(reason or "").strip()
     with use_company(company_id):
-        run = _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED)
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED, pay_group, week)
         if run is None:
             raise ValidationError("This month's salary is not waiting for approval.")
         if not (_is_approver(actor, company_id) or run.submitted_by_id == actor.pk):
@@ -1215,14 +1273,15 @@ def return_payroll(*, actor, company_id, year, month, reason):
 
 
 @transaction.atomic
-def reopen_payroll(*, actor, company_id, year, month, reason):
+def reopen_payroll(*, actor, company_id, year=None, month=None, reason="", pay_group=None,
+                   week=None):
     """Undo a finalise, for a mistake: the month becomes a draft again. Audited with the reason."""
     membership = require_structure_manager(actor, company_id)
     reason = str(reason or "").strip()
     if not reason:
         raise ValidationError({"reason": "Give a reason for undoing the finalise."})
     with use_company(company_id):
-        run = _run_for_month(company_id, year, month, PayrollRun.Status.POSTED)
+        run = _run_for_month(company_id, year, month, PayrollRun.Status.POSTED, pay_group, week)
         if run is None:
             raise ValidationError("This month's salary is not finalised.")
         before = {"status": run.status, "posted_by": run.posted_by_id,
@@ -1233,7 +1292,8 @@ def reopen_payroll(*, actor, company_id, year, month, reason):
         run.updated_by = actor
         run.save()
         PenaltyAssessment.objects.filter(
-            payroll_period=run.payroll_period, status=PenaltyAssessment.Status.POSTED
+            payroll_period=run.payroll_period, status=PenaltyAssessment.Status.POSTED,
+            employee_id__in=run.records.values("employee_id"),
         ).update(status=PenaltyAssessment.Status.PROPOSED)
         record_company_event(
             actor=actor, membership=membership, company=membership.company,

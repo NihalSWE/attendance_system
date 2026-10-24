@@ -123,7 +123,9 @@ def set_start_day(*, actor, company_id, start_day, year, month):
         raise ValidationError({"start_day": f"{name(year, month)} already starts on day {day}."})
     with transaction.atomic(), use_company(company_id):
         # Only months from the chosen one on change; none may have a salary.
-        run = (PayrollRun.objects.filter(payroll_period__end_date__gte=first_month)
+        # A weekly pay group's weeks do not follow the salary month.
+        run = (PayrollRun.objects.filter(payroll_period__end_date__gte=first_month,
+                                         pay_group__isnull=True)
                .select_related("payroll_period").order_by("payroll_period__end_date").first())
         line = (PayrollAdjustment.objects.filter(target_payroll_period__end_date__gte=first_month)
                 .select_related("target_payroll_period")

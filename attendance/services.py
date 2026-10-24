@@ -349,7 +349,10 @@ def _write_pairing(record, paired):
 
 
 def locked_ranges(company_id):
-    """The date ranges of every posted payroll run.
+    """The date ranges of every posted payroll run of the Monthly staff.
+
+    A weekly pay group's finalised week locks only its own people's days
+    (``weekly_locked_ranges``, 2026-10-24).
 
     A day inside one never changes again: salary has been paid against it.
     Read through the unscoped manager because this also runs from the
@@ -359,11 +362,26 @@ def locked_ranges(company_id):
 
     return list(
         PayrollRun.all_objects.filter(
-            company_id=company_id, status=PayrollRun.Status.POSTED
+            company_id=company_id, status=PayrollRun.Status.POSTED, pay_group__isnull=True,
         ).values_list(
             "payroll_period__start_date", "payroll_period__end_date"
         )
     )
+
+
+def weekly_locked_ranges(company_id):
+    """``{employee_id: [(first, last), ...]}``: the weeks finalised for each
+    person in a weekly pay group (payroll/paygroups.py)."""
+    from payroll.models import PayrollRecord, PayrollRun
+
+    found = defaultdict(list)
+    for employee_id, first, last in PayrollRecord.all_objects.filter(
+        company_id=company_id, payroll_run__status=PayrollRun.Status.POSTED,
+        payroll_run__pay_group__isnull=False,
+    ).values_list("employee_id", "payroll_run__payroll_period__start_date",
+                  "payroll_run__payroll_period__end_date"):
+        found[employee_id].append((first, last))
+    return found
 
 
 def _is_locked(day, ranges):
@@ -404,6 +422,25 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
         return {"days": 0, "skipped_locked": 0, "no_shift": True}
 
     posted = locked_ranges(company_id)
+    weekly_locked = weekly_locked_ranges(company_id)
+    from payroll.paygroups import Groups
+
+    groups = Groups(company_id, start - datetime.timedelta(days=1), end)
+
+    def locked_for(employee_id, assignments_of, day):
+        """A finalised week locks its people's days; a finalised month locks
+        the days someone was monthly (2026-10-24)."""
+        if _is_locked(day, weekly_locked.get(employee_id, ())):
+            return True
+        if not _is_locked(day, posted):
+            return False
+        if not groups.any:
+            return True
+        placement = _assignment_on(assignments_of, datetime.datetime.combine(
+            day, datetime.time(12), tzinfo=company_tz))
+        department_id = placement.department_id if placement else None
+        return groups.group_id(employee_id, department_id, day) is None
+
     written = defaultdict(int)
     touched_ids = []
     # When each day built here next changes with time alone (AttendanceDue).
@@ -520,7 +557,7 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                     window=window, punches=punches, settings=settings,
                     calendar=calendar, leave_by_key=leave_by_key,
                     company=company, company_tz=company_tz, now=now,
-                    locked=_is_locked(day, posted),
+                    locked=locked_for(employee_id, assignments, day),
                     overtime=overtime_by_key.get((employee_id, day)),
                     status_fix=fixes.statuses.get((employee_id, day)),
                     accepted_reason=fixes.accepted.get((employee_id, day)),
@@ -558,6 +595,10 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
             stale = stale.exclude(
                 work_date__gte=locked_start, work_date__lte=locked_end
             )
+        for locked_employee, weeks in weekly_locked.items():
+            for locked_start, locked_end in weeks:
+                stale = stale.exclude(employee_id=locked_employee,
+                                      work_date__gte=locked_start, work_date__lte=locked_end)
         AttendanceSession.objects.filter(attendance_record__in=stale).delete()
         PunchAllocation.objects.filter(attendance_record__in=stale).delete()
         stale.delete()

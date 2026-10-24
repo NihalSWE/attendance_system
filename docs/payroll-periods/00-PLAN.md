@@ -1,8 +1,30 @@
 # Salary periods, weekly pay, facilities and two attendance items — plan (2026-10-24)
 
-Status: **plan, for the senior's OK** (items 2, 3, 5 and 6 change pay). Nothing
-is built. Each item says what exists today, what we build, worked examples and
-the decisions it needs, with our suggested default in **bold**.
+Status (2026-10-24): the senior took the defaults for every decision. **Built:**
+item 1 (Today / Yesterday), item 3 (salary month from the settings) and item 4
+(weekly pay groups), branch `feature/salary-periods`. **Waiting:** item 2 until
+the live database is loaded here; items 5 and 6 later. Each item says what
+existed, what we build, worked examples and the decisions, with the default
+in **bold**.
+
+**How 3 and 4 were built** (for whoever changes them next):
+
+- `payroll/periods.py` is the one place that turns a salary month into dates
+  (`bounds`, `full_days`, `month_of`, `name`); the start day is dated by
+  `SalaryCycle.first_month` and changes only from a month with no salary run
+  and no bonus/deduction/LFA line (weekly runs do not count).
+- `payroll/paygroups.py`: `PayGroup` (name, week start) and `PayGroupMember`
+  (a department or one person, from a date; a person's row wins, and a
+  person's row with no group keeps them monthly). `Groups.group_id` says who
+  is in which group on a day; somebody on a monthly salary is always Monthly
+  staff. `generate_payroll(pay_group=, week=)` builds a week's run; the
+  monthly run leaves out the days people were weekly. A finalised week locks
+  attendance only for that week's people (`attendance.services.weekly_locked_ranges`).
+- Screens: Salary settings → **Pay groups** (add a group; put a department or
+  person in it from a date); Salary page → **Paid** (Monthly staff or a group)
+  and **Week**, with the same Generate → Submit → Approve → Undo buttons.
+- Not done yet: the mobile/API salary endpoints still show the Monthly staff's
+  month only.
 
 ## Order of work
 
@@ -144,7 +166,9 @@ Fri 23 Oct (Friday is the weekly off).
 
 1. Weekly groups pay by **daily rate × payable days** (the existing "daily"
    pay basis), or hourly. A person on a monthly salary cannot be put in a
-   weekly group (refused, with the reason). **Default: yes.**
+   weekly group (refused, with the reason). **Default: yes.** *Built as:* a
+   monthly salary keeps the person in Monthly staff even when their department
+   is weekly, so a department can be moved without checking each person.
 2. The week runs **Saturday to Friday**. **Default: yes.**
 3. Overtime, leave and penalties are counted in the week they happen.
    **Default: yes.**
