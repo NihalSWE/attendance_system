@@ -6566,3 +6566,15 @@ sheets in [inventory/training/](inventory/training/).
 
 **Deploy:** pull, collectstatic, restart. The go-live itself is on site with
 the client, following the runbook.
+
+### Daily list: Today and Yesterday — 2026-10-24
+
+Item 1 of [payroll-periods/00-PLAN.md](payroll-periods/00-PLAN.md) (the plan
+for salary periods, weekly pay, facilities and two attendance items; the
+senior took its defaults for every decision, 2026-10-24).
+
+- Attendance → Daily list and Late entries: **Today** and **Yesterday**
+  buttons next to the date filters (`attendance/views.py` `_quick_days`):
+  that one day in the company's time, keeping the branch, department,
+  employee and status filters; the one shown is marked.
+- Tests: `attendance/tests_quick_days.py` (4). No migration, no `.env` change.
