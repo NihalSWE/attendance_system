@@ -53,6 +53,7 @@ from payroll.models import (
     PayrollRun,
     PayrollSettings,
 )
+from payroll import periods
 from payroll.penalties import PayValue, assess, rules_in_force
 from payroll.policy import STANDARD_RULES, plain, rules_for
 
@@ -642,7 +643,7 @@ def waive_penalty(*, actor, company_id, assessment_id):
         employee_id = assessment.employee_id
     run = generate_payroll(
         actor=actor, company_id=company_id,
-        year=period.start_date.year, month=period.start_date.month,
+        year=period.end_date.year, month=period.end_date.month,
     )
     with use_company(company_id):
         return run.records.filter(employee_id=employee_id).first()
@@ -690,7 +691,7 @@ def unwaive_penalty(*, actor, company_id, assessment_id):
         return None
     run = generate_payroll(
         actor=actor, company_id=company_id,
-        year=period.start_date.year, month=period.start_date.month,
+        year=period.end_date.year, month=period.end_date.month,
     )
     with use_company(company_id):
         return run.records.filter(employee_id=employee_id).first()
@@ -729,7 +730,7 @@ def record_branch_id(record):
 def _bring_branches_up_to_date(company_id, year, month, branch_ids):
     """``calculate_attendance`` for the people placed in some branches, for a
     branch's own salary: the same checks, without recalculating the company."""
-    first, last = month_bounds(year, month)
+    first, last = periods.bounds(company_id, year, month)
     today = timezone.localdate()
     if first > today:
         raise ValidationError("That month has not started yet.")
@@ -768,7 +769,9 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
                 "Generating the whole month needs owner, company administrator or "
                 "payroll manager access."
             )
-        calculate_attendance(actor=actor, company_id=company_id, year=year, month=month)
+        first, last = periods.bounds(company_id, year, month)
+        calculate_attendance(actor=actor, company_id=company_id, year=year, month=month,
+                             first=first, last=last)
     else:
         membership = require_company_membership(actor, company_id)
         branch_ids = {int(branch_id) for branch_id in branch_ids}
@@ -777,7 +780,10 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
         ):
             raise PermissionDenied("You can generate salary only for branches where you may prepare it.")
         _bring_branches_up_to_date(company_id, year, month, branch_ids)
-    first, last = month_bounds(year, month)
+    # The salary month's own dates: the calendar month, or e.g. 26 Sep - 25 Oct
+    # for "October" (payroll/periods.py, 2026-10-24).
+    first, last = periods.bounds(company_id, year, month)
+    full_days = periods.full_days(company_id, year, month)
     period_end = timezone.make_aware(
         datetime.datetime.combine(last, datetime.time.max)
     )
@@ -790,7 +796,7 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
         default_currency = settings.currency if settings else membership.company.currency
         period, _ = PayrollPeriod.objects.get_or_create(
             company=membership.company, start_date=first, end_date=last,
-            defaults={"name": first.strftime("%B %Y"), "created_by": actor, "updated_by": actor},
+            defaults={"name": periods.name(year, month), "created_by": actor, "updated_by": actor},
         )
         if PayrollRun.objects.filter(payroll_period=period, status=PayrollRun.Status.POSTED).exists():
             raise ValidationError("This month's salary is finalised and cannot be regenerated.")
@@ -903,7 +909,7 @@ def generate_payroll(*, actor, company_id, year, month, branch_ids=None):
             )
             result = calculate_pay(
                 compensation.pay_basis, compensation.base_rate, records,
-                rules=rules, days_in_month=last.day,
+                rules=rules, days_in_month=full_days,
                 penalty_rules=penalty_rules, waived=waived, employee_key=f"{employee.pk}:",
                 adjustments=adjustments_by_employee.get(employee.pk, ()),
                 components=components_by_employee.get(employee.pk, ()),
@@ -1049,7 +1055,7 @@ def attendance_changed_since(company_id, run):
 
 
 def _run_for_month(company_id, year, month, status):
-    first, last = month_bounds(year, month)
+    first, last = periods.bounds(company_id, year, month)
     return PayrollRun.objects.select_for_update(of=("self",)).select_related("payroll_period").filter(
         payroll_period__start_date=first, payroll_period__end_date=last, status=status,
     ).first()
@@ -1256,7 +1262,7 @@ def _preparer(actor, company_id, record):
 def _regenerated_record(actor, company_id, period, employee_id, branch_ids=None):
     run = generate_payroll(
         actor=actor, company_id=company_id,
-        year=period.start_date.year, month=period.start_date.month, branch_ids=branch_ids,
+        year=period.end_date.year, month=period.end_date.month, branch_ids=branch_ids,
     )
     with use_company(company_id):
         return run.records.filter(employee_id=employee_id).first()
@@ -1317,10 +1323,11 @@ def open_period_after(company_id, period, months=12):
     first = period.end_date + datetime.timedelta(days=1)
     with use_company(company_id):
         for _ in range(months):
-            start, end = month_bounds(first.year, first.month)
+            year, month = periods.month_of(company_id, first)
+            start, end = periods.bounds(company_id, year, month)
             row, _made = PayrollPeriod.objects.get_or_create(
                 company_id=company_id, start_date=start, end_date=end,
-                defaults={"name": start.strftime("%B %Y")},
+                defaults={"name": periods.name(year, month)},
             )
             if not PayrollRun.objects.filter(
                 payroll_period=row, status=PayrollRun.Status.POSTED

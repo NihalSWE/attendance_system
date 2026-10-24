@@ -31,9 +31,10 @@ from organization.services import (
 )
 from organization.models import Branch
 from organization.views import _company_or_redirect
-from payroll import overtime, penalties, policy
+from payroll import overtime, penalties, periods, policy
 from payroll.forms import (
     GeneralSettingsForm,
+    SalaryMonthForm,
     OvertimeDecisionForm,
     PenaltyRuleForm,
     SalaryRulesForm,
@@ -75,7 +76,7 @@ def payroll_home(request):
         return bail
     membership, view_branches, prepare_branches, company_wide = _salary_scope(request.user, company_id)
     year, month = read_month(request.GET)
-    first, last = month_bounds(year, month)
+    first, last = periods.bounds(company_id, year, month)
 
     with use_company(company_id):
         period = PayrollPeriod.objects.filter(start_date=first, end_date=last).first()
@@ -110,6 +111,12 @@ def payroll_home(request):
         decides_overtime = bool(overtime_branches)
     return render(request, "payroll/payroll_home.html", {
         **month_context(year, month),
+        "period_first": first,
+        "period_last": last,
+        "period_days": (last - first).days + 1,
+        "period_changeover": periods.is_changeover(company_id, year, month),
+        "period_preview": first <= timezone.localdate() < last and run is not None
+                          and run.status != PayrollRun.Status.POSTED,
         "run": run,
         "records": records,
         "totals": totals,
@@ -277,7 +284,7 @@ def _run_action(request, action):
         else:
             messages.success(request, done)
             return redirect(back)
-    first, last = month_bounds(year, month)
+    first, last = periods.bounds(company_id, year, month)
     with use_company(company_id):
         run = PayrollRun.objects.select_related("submitted_by").filter(
             payroll_period__start_date=first, payroll_period__end_date=last
@@ -498,7 +505,27 @@ def salary_settings(request):
         },
     )
 
-    if section == "rules" and rules_form.is_valid():
+    month_page = _salary_month_page(company_id, today)
+    salary_month_form = SalaryMonthForm(
+        request.POST if section == "salary_month" else None,
+        years=month_page["years"], initial=month_page["initial"],
+    )
+
+    if section == "salary_month" and salary_month_form.is_valid():
+        data = salary_month_form.cleaned_data
+        try:
+            first, last = periods.set_start_day(
+                actor=request.user, company_id=company_id, start_day=data["start_day"],
+                year=data["from_year"], month=data["from_month"])
+        except ValidationError as exc:
+            apply_service_errors(salary_month_form, exc)
+        else:
+            messages.success(request, (
+                f"Salary months start on day {data['start_day']} from "
+                f"{periods.name(data['from_year'], data['from_month'])}: it covers "
+                f"{first:%d %b} - {last:%d %b %Y}."))
+            return redirect("payroll:salary_settings")
+    elif section == "rules" and rules_form.is_valid():
         values = rules_form.service_values()
         try:
             version = policy.change_salary_rules(
@@ -542,8 +569,48 @@ def salary_settings(request):
         "summary": rules_summary(page["rules"]),
         "rules_form": rules_form,
         "general_form": general_form,
+        "salary_month_form": salary_month_form,
+        **month_page,
         "penalty_rules": _penalty_rows(company_id, today, page["currency"], request=request),
     })
+
+
+def _salary_month_page(company_id, today):
+    """The Salary month card: the next salary months' dates, the start days
+    saved, and the first month a change can start from (one with no salary)."""
+    from payroll.models import PayrollAdjustment, SalaryCycle
+
+    cycles = periods._cycles(company_id)
+    year, month = periods.month_of(company_id, today, cycles)
+    ahead = []
+    for _ in range(4):
+        first, last = periods.bounds(company_id, year, month, cycles)
+        ahead.append({"name": periods.name(year, month), "first": first, "last": last,
+                      "days": (last - first).days + 1,
+                      "changeover": periods.is_changeover(company_id, year, month, cycles),
+                      "current": first <= today <= last})
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    with use_company(company_id):
+        ends = [PayrollRun.objects.order_by("-payroll_period__end_date")
+                .values_list("payroll_period__end_date", flat=True).first(),
+                PayrollAdjustment.objects.order_by("-target_payroll_period__end_date")
+                .values_list("target_payroll_period__end_date", flat=True).first()]
+        history = list(SalaryCycle.objects.select_related("created_by").order_by("-first_month"))
+    used = max((end for end in ends if end), default=None)
+    if used is None:
+        free = periods.month_of(company_id, today, cycles)
+    else:
+        y, m = periods.month_of(company_id, used, cycles)
+        free = (y + 1, 1) if m == 12 else (y, m + 1)
+    current = periods.start_day_of(company_id, *periods.month_of(company_id, today, cycles), cycles)
+    return {
+        "salary_months_ahead": ahead,
+        "salary_cycles": history,
+        "salary_start_day": current,
+        "salary_first_free": periods.name(*free),
+        "years": list(range(today.year - 1, today.year + 3)),
+        "initial": {"start_day": current, "from_month": free[1], "from_year": free[0]},
+    }
 
 
 def _penalty_rows(company_id, today, currency, *, request=None):
@@ -838,7 +905,7 @@ OVERTIME_FILTERS = {
 
 
 def _draft_run_exists(company_id, day):
-    first, last = month_bounds(day.year, day.month)
+    first, last = periods.bounds(company_id, *periods.month_of(company_id, day))
     with use_company(company_id):
         return PayrollRun.objects.filter(
             payroll_period__start_date=first, payroll_period__end_date=last,

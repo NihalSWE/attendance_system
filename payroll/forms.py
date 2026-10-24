@@ -307,6 +307,22 @@ class GeneralSettingsForm(StyledFormMixin, forms.Form):
     )
 
 
+class SalaryMonthForm(StyledFormMixin, forms.Form):
+    """When a salary month starts (payroll/periods.py, 2026-10-24)."""
+
+    start_day = forms.IntegerField(
+        label="Salary month starts on day", min_value=1, max_value=28,
+        help_text="1 = the calendar month. 26 = from the 26th to the 25th: \"October\" is "
+                  "26 Sep - 25 Oct.",
+    )
+    from_month = forms.TypedChoiceField(label="From salary month", choices=MONTHS, coerce=int)
+    from_year = forms.TypedChoiceField(label="Year", choices=(), coerce=int)
+
+    def __init__(self, *args, years=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["from_year"].choices = [(y, y) for y in years]
+
+
 class SalaryComponentForm(StyledFormMixin, forms.ModelForm):
     """One catalogue entry: an allowance or a recurring deduction."""
 

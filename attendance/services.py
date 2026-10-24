@@ -1239,7 +1239,7 @@ def recalculate_for_punches(company_id, employee_days):
 
 
 @transaction.atomic
-def calculate_attendance(*, actor, company_id, year, month):
+def calculate_attendance(*, actor, company_id, year, month, first=None, last=None):
     """(Re)calculate one month. Kept for payroll generation.
 
     Attendance is live now — ``recalculate`` runs on its own when punches
@@ -1258,7 +1258,10 @@ def calculate_attendance(*, actor, company_id, year, month):
             "Calculating a whole month needs owner, company administrator or "
             "payroll manager access."
         )
-    first, last = month_bounds(year, month)
+    if first is None or last is None:
+        # A salary month that is not the calendar month passes its own dates
+        # (payroll/periods.py, 2026-10-24).
+        first, last = month_bounds(year, month)
     today = timezone.localdate()
     if first > today:
         raise ValidationError("That month has not started yet.")

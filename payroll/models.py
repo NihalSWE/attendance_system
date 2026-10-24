@@ -245,6 +245,35 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
             raise ValidationError(errors)
 
 
+class SalaryCycle(TenantOwned, ActorTracked):
+    """The day a salary month starts on, from a salary month on (2026-10-24).
+
+    "October 2026" is the period that ends in October: with a start day of 26
+    it is 26 Sep - 25 Oct; with 1 it is the calendar month. Each period starts
+    the day after the previous one ended, so a change of start day makes one
+    shorter changeover period and never a gap or an overlap
+    (``payroll/periods.py``). No row: every month starts on the 1st.
+    """
+
+    start_day = models.PositiveSmallIntegerField(
+        help_text="1 to 28. 1 = the calendar month; 26 = from the 26th to the 25th.")
+    # The first salary month this start day applies to (stored as its 1st day).
+    first_month = models.DateField()
+
+    class Meta:
+        db_table = "payroll_salary_cycle"
+        ordering = ("first_month",)
+        constraints = [
+            models.UniqueConstraint(fields=["company", "first_month"],
+                                    name="uniq_salary_cycle_per_month"),
+            models.CheckConstraint(condition=models.Q(start_day__gte=1, start_day__lte=28),
+                                   name="chk_salary_cycle_start_day"),
+        ]
+
+    def __str__(self):
+        return f"Day {self.start_day} from {self.first_month:%B %Y}"
+
+
 class PayrollSettings(TenantOwned, ActorTracked):
     """One row of current salary settings per company (dictionary §54).
 

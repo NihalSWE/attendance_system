@@ -79,6 +79,20 @@
         </div>
     </div>
 
+    {# The dates this salary month covers (payroll/periods.py, 2026-10-24). #}
+    <p class="t-faint">
+        {{ month_name }} {{ year }} covers {{ period_first|date:"d M Y" }} - {{ period_last|date:"d M Y" }}
+        ({{ period_days }} days){% if period_changeover %}: a shorter changeover month, after
+        the salary month's start day changed{% endif %}.
+    </p>
+    {% if period_preview %}
+        <div class="alert alert--info">
+            Preview: {{ month_name }} ends on {{ period_last|date:"d M Y" }}. Days after today are
+            not counted yet, so these figures change until the month is over. Generate it again
+            then.
+        </div>
+    {% endif %}
+
     {% if run.status == 'submitted' %}
         <div class="alert alert--info">
             {{ month_name }} {{ year }} is waiting for approval — submitted by

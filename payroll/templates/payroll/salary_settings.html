@@ -256,6 +256,78 @@
             </form>
         </div>
 
+        <div class="card" id="salary-month">
+            <div class="card__head">
+                <h2>
+                    Salary month
+                </h2>
+                <span class="badge badge--neutral">
+                    {% if salary_start_day == 1 %}Calendar month{% else %}From day {{ salary_start_day }}{% endif %}
+                </span>
+            </div>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="salary_month">
+                <div class="card__body stack">
+                    <p class="t-faint">
+                        A salary month is named after the month it ends in. Starting on day 26,
+                        "October" covers 26 Sep - 25 Oct. A change applies from a month that has
+                        no salary yet (today: {{ salary_first_free }} or later), so a generated
+                        month never moves.
+                    </p>
+                    {% if salary_month_form.non_field_errors %}
+                        <div class="alert alert--danger">
+                            {% for error in salary_month_form.non_field_errors %}
+                                {{ error }}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="grid grid--3">
+                        {% for field in salary_month_form %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endfor %}
+                    </div>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Salary month</th>
+                                    <th>Covers</th>
+                                    <th class="numeric">Days</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in salary_months_ahead %}
+                                    <tr>
+                                        <td>
+                                            {{ row.name }}
+                                            {% if row.current %}<span class="badge badge--info">Now</span>{% endif %}
+                                            {% if row.changeover %}<span class="badge badge--warning">Changeover</span>{% endif %}
+                                        </td>
+                                        <td>{{ row.first|date:"d M Y" }} - {{ row.last|date:"d M Y" }}</td>
+                                        <td class="numeric">{{ row.days }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if salary_cycles %}
+                        <p class="t-faint">
+                            Saved:
+                            {% for cycle in salary_cycles %}
+                                day {{ cycle.start_day }} from {{ cycle.first_month|date:"F Y" }}{% if not forloop.last %}; {% endif %}
+                            {% endfor %}
+                        </p>
+                    {% endif %}
+                </div>
+                <div class="card__foot">
+                    <button class="btn btn--primary" type="submit">
+                        Save salary month
+                    </button>
+                </div>
+            </form>
+        </div>
+
         <div class="card">
             <div class="card__head">
                 <h2>
