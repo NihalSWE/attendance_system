@@ -43,6 +43,9 @@
                 <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}">
                     Salary settings
                 </a>
+                <a class="btn btn--ghost" href="{% url 'payroll:pay_groups' %}">
+                    Pay groups
+                </a>
                 {% if run.status == 'posted' %}
                     <a class="btn btn--ghost" href="{% url 'payroll:payroll_reopen' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
                         Undo finalise
