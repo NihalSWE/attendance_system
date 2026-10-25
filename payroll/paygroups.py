@@ -194,3 +194,89 @@ def set_member(*, actor, company_id, effective_from, pay_group=None, department=
                    "employee": employee.full_name if employee else None,
                    "from": effective_from.isoformat()})
     return row
+
+
+def start_days(group, company_id, today=None, *, before=4, after=8):
+    """The days someone can join or leave ``group`` from: the start of this
+    week, ``before`` weeks back and ``after`` ahead, leaving out any inside a
+    finalised salary. ``[(day, label)]``, this week's first (2026-10-25: a
+    list to choose from instead of a date the form then refuses)."""
+    today = today or timezone.localdate()
+    this_week = week_of(group, today)[0]
+    days = [this_week + datetime.timedelta(weeks=n) for n in range(-before, after + 1)]
+    with use_company(company_id):
+        days = [day for day in days if not _finalised_on(company_id, day, group.pk)]
+    # The one chosen first: this week, else the first open one after it.
+    chosen = next((day for day in days if day >= this_week), days[-1] if days else None)
+    labelled = []
+    for day in days:
+        label = f"{day:%a %d %b %Y}"
+        if day == this_week:
+            label += " (this week)"
+        elif day == chosen:
+            label += " (first open week)"
+        labelled.append((day, label))
+    labelled.sort(key=lambda pair: (pair[0] != chosen, pair[0]))
+    return labelled
+
+
+def update_group(*, actor, company_id, group, name, week_start):
+    """Rename a group; its week start changes only while nobody is in it and
+    it has no salary yet (a week's dates must never move under a person)."""
+    from payroll.models import PayGroup
+
+    membership = require_structure_manager(actor, company_id)
+    name = (name or "").strip()
+    if not name:
+        raise ValidationError({"name": "Give the group a name, e.g. Weekly workers."})
+    with transaction.atomic(), use_company(company_id):
+        group = PayGroup.objects.select_for_update().get(pk=group.pk)
+        if PayGroup.objects.filter(name__iexact=name).exclude(pk=group.pk).exists():
+            raise ValidationError({"name": f"There is already a pay group called {name}."})
+        week_start = int(week_start)
+        if week_start != group.week_start and (
+                group.members.filter(status="active").exists() or group.runs.exists()):
+            raise ValidationError({"week_start": (
+                f"{group.name} already has people or a salary, so its weeks cannot move. "
+                "Make a new group instead.")})
+        before = {"name": group.name, "week_start": group.week_start}
+        group.name, group.week_start, group.updated_by = name, week_start, actor
+        group.save(update_fields=["name", "week_start", "updated_by", "updated_at"])
+        record_company_event(actor=actor, membership=membership, company=membership.company,
+                             action="payroll.pay_group_changed", obj=group, before=before,
+                             after={"name": group.name, "week_start": group.week_start})
+    return group
+
+
+def end_member(*, actor, company_id, member, effective_to):
+    """Back to monthly from ``effective_to`` (the first monthly day): the row
+    ends that day, or is cancelled when that is on or before its start."""
+    from payroll.models import PayGroupMember
+
+    membership = require_structure_manager(actor, company_id)
+    with transaction.atomic(), use_company(company_id):
+        member = PayGroupMember.objects.select_for_update(of=("self",)).select_related(
+            "pay_group", "department", "employee").get(pk=member.pk)
+        group = member.pay_group
+        if group is not None and effective_to.weekday() != group.week_start:
+            raise ValidationError({"effective_to": (
+                f"{group.name}'s weeks start on {group.get_week_start_display()}: choose a "
+                f"{group.get_week_start_display()}.")})
+        finalised = _finalised_on(company_id, effective_to, group.pk if group else None)
+        if finalised:
+            raise ValidationError({"effective_to": (
+                f"{finalised} is finalised and holds that day: choose a later one.")})
+        if effective_to <= member.effective_from:
+            member.status = PayGroupMember.Status.CANCELLED
+        else:
+            member.effective_to = effective_to
+        member.updated_by = actor
+        member.save(update_fields=["status", "effective_to", "updated_by", "updated_at"])
+        record_company_event(
+            actor=actor, membership=membership, company=membership.company,
+            action="payroll.pay_group_member_ended", obj=member,
+            after={"pay_group": group.name if group else "Monthly staff",
+                   "department": member.department.name if member.department else None,
+                   "employee": member.employee.full_name if member.employee else None,
+                   "until": effective_to.isoformat(), "status": member.status})
+    return member

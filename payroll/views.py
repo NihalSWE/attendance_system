@@ -30,14 +30,11 @@ from organization.services import (
     require_structure_manager,
 )
 from common.choices import ActiveStatus
-from employees.models import Employee
-from organization.models import Branch, Department
+from organization.models import Branch
 from organization.views import _company_or_redirect
 from payroll import overtime, paygroups, penalties, periods, policy
 from payroll.forms import (
     GeneralSettingsForm,
-    PayGroupForm,
-    PayGroupMemberForm,
     SalaryMonthForm,
     OvertimeDecisionForm,
     PenaltyRuleForm,
@@ -48,7 +45,6 @@ from payroll.models import (
     AttendancePenaltyRule,
     OvertimeDecision,
     PayGroup,
-    PayGroupMember,
     PayrollAdjustment,
     PayrollPeriod,
     PayrollPolicyVersion,
@@ -575,34 +571,7 @@ def salary_settings(request):
         years=month_page["years"], initial=month_page["initial"],
     )
 
-    pay_groups_page = _pay_groups_page(company_id, today)
-    pay_group_form = PayGroupForm(request.POST if section == "pay_group" else None)
-    pay_member_form = PayGroupMemberForm(
-        request.POST if section == "pay_member" else None, **pay_groups_page.pop("choices"))
-
-    if section == "pay_group" and pay_group_form.is_valid():
-        try:
-            group = paygroups.create_group(actor=request.user, company_id=company_id,
-                                           **pay_group_form.cleaned_data)
-        except ValidationError as exc:
-            apply_service_errors(pay_group_form, exc)
-        else:
-            messages.success(request, (
-                f"Pay group {group.name} added: weeks start on {group.get_week_start_display()}. "
-                "Now put a department or people in it."))
-            return redirect(f"{reverse('payroll:salary_settings')}#pay-groups")
-    elif section == "pay_member" and pay_member_form.is_valid():
-        data = pay_member_form.cleaned_data
-        try:
-            paygroups.set_member(actor=request.user, company_id=company_id, **data)
-        except ValidationError as exc:
-            apply_service_errors(pay_member_form, exc)
-        else:
-            who = data["department"].name if data["department"] else data["employee"].full_name
-            paid = data["pay_group"].name if data["pay_group"] else "Monthly staff"
-            messages.success(request, f"{who}: {paid} from {data['effective_from']:%d %b %Y}.")
-            return redirect(f"{reverse('payroll:salary_settings')}#pay-groups")
-    elif section == "salary_month" and salary_month_form.is_valid():
+    if section == "salary_month" and salary_month_form.is_valid():
         data = salary_month_form.cleaned_data
         try:
             first, last = periods.set_start_day(
@@ -662,31 +631,8 @@ def salary_settings(request):
         "general_form": general_form,
         "salary_month_form": salary_month_form,
         **month_page,
-        "pay_group_form": pay_group_form,
-        "pay_member_form": pay_member_form,
-        **pay_groups_page,
         "penalty_rules": _penalty_rows(company_id, today, page["currency"], request=request),
     })
-
-
-def _pay_groups_page(company_id, today):
-    """The Pay groups card: the weekly groups, who is in them from when, and
-    the choices for the member form (payroll/paygroups.py)."""
-    with use_company(company_id):
-        groups = list(PayGroup.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"))
-        members = list(
-            PayGroupMember.objects.filter(status=PayGroupMember.Status.ACTIVE)
-            .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=today))
-            .select_related("pay_group", "department", "employee")
-            .order_by("department__name", "employee__first_name", "effective_from"))
-        choices = {
-            "departments": Department.objects.order_by("name"),
-            "employees": Employee.objects.exclude(employment_status__in=(
-                Employee.EmploymentStatus.RESIGNED, Employee.EmploymentStatus.TERMINATED,
-                Employee.EmploymentStatus.RETIRED)).order_by("first_name", "last_name"),
-            "groups": PayGroup.objects.filter(status=ActiveStatus.ACTIVE).order_by("name"),
-        }
-    return {"pay_groups": groups, "pay_members": members, "choices": choices}
 
 
 def _salary_month_page(company_id, today):

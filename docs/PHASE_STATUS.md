@@ -6609,3 +6609,29 @@ the code.
 - Tests: `payroll/tests_salary_periods.py` (11), `payroll/tests_weekly.py` (10).
 
 **Deploy:** pull, migrate, collectstatic, restart.
+
+### Pay groups get their own page — 2026-10-25
+
+The senior could not use the Pay groups card on Salary settings: both pickers
+could be filled, nothing listed what was saved, "From" was a blank date that
+was then refused, and a refused save reloaded at the top of a long page with
+the reason far below. Branch `feature/pay-groups-page`.
+
+- **Salary → Pay groups** (`payroll/paygroup_views.py`, sidebar item, a button
+  on the Salary page; Salary settings keeps a card that links to it). One card
+  per group: its week (e.g. "Weekly, Monday to Sunday", "This week: …") and a
+  table of who is in it, with an empty-state line.
+- Every change is a modal (the employee profile's pattern): **Add pay group**,
+  **Add people** (Whole department / One person, one picker shown; the server
+  reads only the chosen one), **Keep one person monthly**, **Edit** (rename;
+  the week start only while the group is unused), **Back to monthly** / **Weekly
+  again** per row (choosing the row's own start removes it). A refused save
+  opens its modal again with the reason.
+- Start days are a list (`paygroups.start_days`): the group's week starts from
+  4 weeks back to 8 ahead, this week chosen (or the first open week), weeks
+  inside a finalised salary left out.
+- Tests: `payroll/tests_weekly.py` (16). No migration, no `.env` change.
+- Other pages that stack several forms on one page, to check for the same
+  hidden-error problem: Salary settings (salary month, rules, general),
+  Edit employee (`employee_edit.html`), Webhooks settings, Access for a
+  person, Mail settings, AI assistant settings.

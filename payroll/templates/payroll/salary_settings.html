@@ -328,112 +328,23 @@
             </form>
         </div>
 
-        {# Weekly pay groups (payroll/paygroups.py, 2026-10-24). #}
+        {# Weekly pay groups have their own page (2026-10-25). #}
         <div class="card" id="pay-groups">
             <div class="card__head">
                 <h2>
                     Pay groups
                 </h2>
-                <span class="badge badge--neutral">
-                    {% if pay_groups %}{{ pay_groups|length }} weekly{% else %}Everyone monthly{% endif %}
-                </span>
+                <a class="btn btn--ghost btn--sm" href="{% url 'payroll:pay_groups' %}">
+                    Open Pay groups
+                </a>
             </div>
-            <div class="card__body stack">
+            <div class="card__body">
                 <p class="t-faint">
-                    Everyone is Monthly staff unless a weekly pay group pays them. A weekly group
-                    pays a daily or hourly rate for each week, with its own draft, approval and
-                    finalising on the Salary page; allowances and recurring deductions come in the
-                    last week ending in the month. Put a whole department in a group, or one
-                    person (a person's own choice wins over their department's). Changes start on
-                    the first day of a week, never inside a finalised salary.
+                    Who is paid every week instead of every month: the weekly groups and the
+                    departments and people in them are on the Pay groups page.
                 </p>
-                {% if pay_members %}
-                    <div class="table-wrap">
-                        <table class="table">
-                            <thead>
-                                <tr>
-                                    <th>Who</th>
-                                    <th>Paid</th>
-                                    <th>From</th>
-                                    <th>Until</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for row in pay_members %}
-                                    <tr>
-                                        <td>
-                                            {% if row.department %}{{ row.department.name }} <span class="t-faint">(department)</span>{% else %}{{ row.employee.full_name }}{% endif %}
-                                        </td>
-                                        <td>
-                                            {% if row.pay_group %}{{ row.pay_group.name }} <span class="t-faint">(weeks from {{ row.pay_group.get_week_start_display }})</span>{% else %}Monthly staff{% endif %}
-                                        </td>
-                                        <td>{{ row.effective_from|date:"d M Y" }}</td>
-                                        <td>{% if row.effective_to %}{{ row.effective_to|date:"d M Y" }}{% else %}<span class="t-faint">Open</span>{% endif %}</td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% endif %}
             </div>
-            {% if pay_groups %}
-                <form method="post" novalidate>
-                    {% csrf_token %}
-                    <input type="hidden" name="section" value="pay_member">
-                    <div class="card__body stack">
-                        <h3>
-                            Who is paid weekly
-                        </h3>
-                        {% if pay_member_form.non_field_errors %}
-                            <div class="alert alert--danger">
-                                {% for error in pay_member_form.non_field_errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                        <div class="grid grid--2">
-                            {% for field in pay_member_form %}
-                                {% include "leaves/includes/field.html" %}
-                            {% endfor %}
-                        </div>
-                    </div>
-                    <div class="card__foot">
-                        <button class="btn btn--primary" type="submit">
-                            Save
-                        </button>
-                    </div>
-                </form>
-            {% endif %}
-            <form method="post" novalidate>
-                {% csrf_token %}
-                <input type="hidden" name="section" value="pay_group">
-                <div class="card__body stack">
-                    <h3>
-                        Add a weekly pay group
-                    </h3>
-                    {% if pay_groups %}
-                        <p class="t-faint">
-                            Groups: {% for group in pay_groups %}{{ group.name }} (weeks from {{ group.get_week_start_display }}){% if not forloop.last %}; {% endif %}{% endfor %}.
-                        </p>
-                    {% endif %}
-                    {% if pay_group_form.non_field_errors %}
-                        <div class="alert alert--danger">
-                            {% for error in pay_group_form.non_field_errors %}
-                                {{ error }}
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                    <div class="grid grid--2">
-                        {% for field in pay_group_form %}
-                            {% include "leaves/includes/field.html" %}
-                        {% endfor %}
-                    </div>
-                </div>
-                <div class="card__foot">
-                    <button class="btn btn--ghost" type="submit">
-                        Add pay group
-                    </button>
-                </div>
+        </div>
             </form>
         </div>
 

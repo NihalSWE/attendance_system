@@ -331,34 +331,77 @@ class PayGroupForm(StyledFormMixin, forms.Form):
                            help_text="For example Weekly workers or Factory floor.")
     week_start = forms.TypedChoiceField(label="Week starts on", choices=PayGroup.Weekday.choices,
                                         coerce=int, initial=PayGroup.Weekday.SATURDAY,
-                                        help_text="Saturday: each week is Saturday to Friday.")
+                                        help_text="Saturday: each week is Saturday to Friday. It "
+                                                  "can change only while the group is unused.")
+
+
+def _day_field(label, days, help_text=""):
+    """A choice of the group's start days (paygroups.start_days), this week's
+    first and chosen: never a date the service would refuse."""
+    return forms.TypedChoiceField(
+        label=label, choices=[(day.isoformat(), text) for day, text in days],
+        coerce=datetime.date.fromisoformat, initial=days[0][0].isoformat() if days else None,
+        help_text=help_text)
 
 
 class PayGroupMemberForm(StyledFormMixin, forms.Form):
-    """Put a department, or one person, in a pay group from a date."""
+    """Put a whole department, or one person, in a pay group (2026-10-25:
+    one picker shown at a time, the start day chosen from a list)."""
 
+    WHO = (("department", "Whole department"), ("employee", "One person"))
+
+    who = forms.ChoiceField(label="Who", choices=WHO, initial="department", widget=forms.RadioSelect)
     department = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), required=False,
                                         label="Department", empty_label="Choose a department")
     employee = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), required=False,
-                                      label="Or one person", empty_label="Choose a person",
+                                      label="Person", empty_label="Choose a person",
                                       help_text="A person's own choice wins over their department's.")
-    pay_group = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), required=False,
-                                       label="Paid", empty_label="Monthly (Monthly staff)")
-    effective_from = forms.DateField(label="From", widget=date_widget("Choose a date"),
-                                     help_text="The first day of one of the group's weeks.")
 
-    def __init__(self, *args, departments, employees, groups, **kwargs):
+    def __init__(self, *args, departments, employees, days, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["department"].queryset = departments
         self.fields["employee"].queryset = employees
         self.fields["employee"].label_from_instance = lambda person: person.full_name
-        self.fields["pay_group"].queryset = groups
+        self.fields["effective_from"] = _day_field(
+            "Paid weekly from", days, "The first day of a week. Days before it stay monthly.")
+        # Shown only for the choice made (base_template/js/dependent.js).
+        self.fields["department"].widget.attrs["data-show-when"] = "who:department"
+        self.fields["employee"].widget.attrs["data-show-when"] = "who:employee"
 
     def clean(self):
         data = super().clean()
-        if bool(data.get("department")) == bool(data.get("employee")):
-            raise forms.ValidationError("Choose a department or one person, not both.")
+        # The hidden picker still posts; only the chosen one counts.
+        if data.get("who") == "employee":
+            data["department"] = None
+            if not data.get("employee"):
+                self.add_error("employee", "Choose the person.")
+        else:
+            data["employee"] = None
+            if not data.get("department"):
+                self.add_error("department", "Choose the department.")
         return data
+
+
+class KeepMonthlyForm(StyledFormMixin, forms.Form):
+    """One person stays monthly although their department is in the group."""
+
+    employee = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), label="Person",
+                                      empty_label="Choose a person")
+
+    def __init__(self, *args, employees, days, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["employee"].queryset = employees
+        self.fields["employee"].label_from_instance = lambda person: person.full_name
+        self.fields["effective_from"] = _day_field("Monthly from", days)
+
+
+class EndMemberForm(StyledFormMixin, forms.Form):
+    """Back to monthly from a start day of the group's weeks."""
+
+    def __init__(self, *args, days, label="Monthly again from", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["effective_to"] = _day_field(
+            label, days, "Choosing the day it started removes it, as if never saved.")
 
 
 class SalaryComponentForm(StyledFormMixin, forms.ModelForm):

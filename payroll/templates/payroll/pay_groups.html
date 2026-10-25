@@ -1,0 +1,147 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Pay groups · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    {# Modals; a refused form opens again with the reasons. #}
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'payroll:payroll_home' %}">
+            Salary
+        </a>
+        <span class="crumbs__sep" aria-hidden="true">
+            /
+        </span>
+        Pay groups
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">
+                Pay groups
+            </h1>
+            <p class="page__sub">
+                Everyone is paid monthly unless a weekly pay group pays them. Put a whole
+                department or one person in a group; the Salary page then pays them week by
+                week. A weekly group pays a daily or hourly rate: someone on a monthly salary
+                stays monthly.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{% url 'payroll:payroll_home' %}">
+                Salary page
+            </a>
+            <button class="btn btn--primary" type="button" data-open-dialog="group-add-dialog">
+                Add pay group
+            </button>
+        </div>
+    </div>
+
+    {% include "organization/profile/modal_form.html" with id="group-add-dialog" title="Add a weekly pay group" form=group_form section="group_add" submit="Add pay group" %}
+
+    {% for card in cards %}
+        <div class="card">
+            <div class="card__head">
+                <h2>
+                    {{ card.group.name }}
+                </h2>
+                <span class="badge badge--info">
+                    Weekly, {{ card.group.get_week_start_display }} to {{ card.this_week.1|date:"l" }}
+                </span>
+            </div>
+            <div class="card__body stack">
+                <div class="page__actions">
+                    <button class="btn btn--primary btn--sm" type="button" data-open-dialog="{{ card.add_dialog }}">
+                        Add people
+                    </button>
+                    {% if card.members %}
+                        <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="{{ card.keep_dialog }}">
+                            Keep one person monthly
+                        </button>
+                    {% endif %}
+                    <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="{{ card.edit_dialog }}">
+                        Edit
+                    </button>
+                </div>
+                <p class="t-faint">
+                    This week: {{ card.this_week.0|date:"D d M" }} - {{ card.this_week.1|date:"D d M Y" }}.
+                </p>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Who</th>
+                                <th>Paid</th>
+                                <th>From</th>
+                                <th>Until</th>
+                                <th class="no-sort"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in card.members %}
+                                <tr>
+                                    <td>
+                                        {% if row.department %}{{ row.department.name }} <span class="t-faint">(whole department)</span>{% else %}{{ row.employee.full_name }}{% endif %}
+                                    </td>
+                                    <td>Weekly</td>
+                                    <td>{{ row.effective_from|date:"D d M Y" }}</td>
+                                    <td>{% if row.effective_to %}{{ row.effective_to|date:"D d M Y" }}{% else %}<span class="t-faint">No end</span>{% endif %}</td>
+                                    <td>
+                                        <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="{{ row.dialog }}">
+                                            Back to monthly
+                                        </button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            {% for row in card.kept %}
+                                <tr>
+                                    <td>{{ row.employee.full_name }}</td>
+                                    <td>Monthly <span class="t-faint">(kept, although the department is weekly)</span></td>
+                                    <td>{{ row.effective_from|date:"D d M Y" }}</td>
+                                    <td>{% if row.effective_to %}{{ row.effective_to|date:"D d M Y" }}{% else %}<span class="t-faint">No end</span>{% endif %}</td>
+                                    <td>
+                                        <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="{{ row.dialog }}">
+                                            Weekly again
+                                        </button>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                            {% if not card.members and not card.kept %}
+                                <tr>
+                                    <td colspan="5" class="t-faint">
+                                        Nobody is in {{ card.group.name }} yet. Press Add people.
+                                    </td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {% include "organization/profile/modal_form.html" with id=card.add_dialog title="Add people to "|add:card.group.name form=card.add_form section="member_add" row=card.group.pk submit="Save" note="Days before the start stay on the monthly salary." %}
+        {% include "organization/profile/modal_form.html" with id=card.keep_dialog title="Keep one person monthly" form=card.keep_form section="keep_monthly" row=card.group.pk submit="Save" note="For someone in a weekly department who stays on the monthly salary." %}
+        {% include "organization/profile/modal_form.html" with id=card.edit_dialog title="Edit "|add:card.group.name form=card.edit_form section="group_edit" row=card.group.pk submit="Save" %}
+        {% for row in card.members %}
+            {% include "organization/profile/modal_form.html" with id=row.dialog title="Back to monthly" form=row.form section="member_end" row=row.pk submit="Save" %}
+        {% endfor %}
+        {% for row in card.kept %}
+            {% include "organization/profile/modal_form.html" with id=row.dialog title="Paid weekly again" form=row.form section="member_end" row=row.pk submit="Save" note="Ends the monthly exception: the department's weekly pay applies again." %}
+        {% endfor %}
+    {% empty %}
+        <div class="card">
+            <div class="empty">
+                <div class="empty__title">
+                    No weekly pay groups
+                </div>
+                <div class="empty__text">
+                    Everyone is paid monthly. Press Add pay group to pay some people every week.
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+{% endblock %}

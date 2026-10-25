@@ -5,6 +5,7 @@ Weeks run Saturday to Friday here; 1 Aug 2026 is a Saturday.
 
 import datetime
 from decimal import Decimal
+from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.urls import reverse
@@ -13,7 +14,7 @@ from attendance.services import recalculate
 from common.tenant import use_company
 from employees.models import EmployeeCompensation
 from payroll import paygroups
-from payroll.models import PayGroup, PayrollRun
+from payroll.models import PayGroup, PayGroupMember, PayrollRun
 from payroll.services import approve_payroll, generate_payroll, money, submit_payroll
 from payroll.tests_overtime import LATER, OvertimeBase
 
@@ -153,26 +154,92 @@ class WeekPageTests(WeeklyCase):
     def setUp(self):
         super().setUp()
         self.client.force_login(self.admin)
-        self.url = reverse("payroll:salary_settings")
+        self.url = reverse("payroll:pay_groups")
+        # "Today" is Wednesday 12 Aug 2026: this week is Sat 08 - Fri 14 Aug.
+        today = mock.patch("django.utils.timezone.localdate", return_value=D(2026, 8, 12))
+        today.start()
+        self.addCleanup(today.stop)
+        with use_company(self.company):
+            self.department = self.employee.assignments.first().department
 
-    def test_adding_a_group_and_a_person_on_salary_settings(self):
-        response = self.client.post(self.url, {"section": "pay_group", "name": "Night shift",
-                                               "week_start": "0"})
-        self.assertRedirects(response, f"{self.url}#pay-groups", fetch_redirect_response=False)
+    def post(self, **data):
+        return self.client.post(self.url, data)
+
+    def test_the_page_lists_each_group_and_says_when_it_is_empty(self):
         page = self.client.get(self.url)
-        self.assertContains(page, "Night shift (weeks from Monday)")
-        response = self.client.post(self.url, {
-            "section": "pay_member", "employee": self.employee.pk, "pay_group": self.group.pk,
-            "effective_from": "2026-08-15"})
-        self.assertRedirects(response, f"{self.url}#pay-groups", fetch_redirect_response=False)
-        self.assertContains(self.client.get(self.url), "15 Aug 2026")
+        self.assertContains(page, "Weekly, Saturday to Friday")
+        self.assertContains(page, "This week: Sat 08 Aug - Fri 14 Aug 2026.")
+        self.assertContains(page, "Nobody is in Weekly workers yet. Press Add people.")
+        # The start day is chosen from a list, this week's already chosen.
+        self.assertContains(page, '<option value="2026-08-08" selected>Sat 08 Aug 2026 (this week)</option>',
+                            html=True)
+        self.assertContains(self.client.get(reverse("payroll:salary_settings")), "Open Pay groups")
 
-    def test_a_wrong_start_day_is_said_on_the_form(self):
-        page = self.client.post(self.url, {
-            "section": "pay_member", "employee": self.employee.pk, "pay_group": self.group.pk,
-            "effective_from": "2026-08-17"})
+    def test_adding_a_group(self):
+        response = self.post(section="group_add", name="Night shift", week_start="0")
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+        page = self.client.get(self.url)
+        self.assertContains(page, "Pay group Night shift added: weeks start on Monday.")
+        self.assertContains(page, "Weekly, Monday to Sunday")
+
+    def test_adding_a_whole_department_ignores_the_hidden_person_picker(self):
+        response = self.post(section="member_add", row=self.group.pk, who="department",
+                             department=self.department.pk, employee=self.employee.pk,
+                             effective_from="2026-08-08")
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+        with use_company(self.company):
+            row = PayGroupMember.objects.get()
+        self.assertEqual((row.department, row.employee, row.pay_group), (self.department, None, self.group))
+        page = self.client.get(self.url)
+        self.assertContains(page, f"{self.department.name}: paid weekly in Weekly workers from Sat 08 Aug 2026.")
+        self.assertContains(page, "(whole department)")
+
+    def test_a_refused_form_opens_again_with_the_reason(self):
+        page = self.post(section="member_add", row=self.group.pk, who="employee",
+                         effective_from="2026-08-08")
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, "choose a Saturday")
+        self.assertContains(page, f'data-open-on-load="add-{self.group.pk}-dialog"')
+        self.assertContains(page, "Choose the person.")
+        # A day that is not one of the group's start days cannot be chosen.
+        page = self.post(section="member_add", row=self.group.pk, who="employee",
+                         employee=self.employee.pk, effective_from="2026-08-10")
+        self.assertContains(page, "Select a valid choice")
+        with use_company(self.company):
+            self.assertFalse(PayGroupMember.objects.exists())
+
+    def test_renaming_and_the_week_start_that_cannot_move_once_used(self):
+        response = self.post(section="group_edit", row=self.group.pk, name="Weekly staff",
+                             week_start=str(PayGroup.Weekday.SATURDAY))
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+        self.join(D(2026, 8, 8))
+        page = self.post(section="group_edit", row=self.group.pk, name="Weekly staff",
+                         week_start=str(PayGroup.Weekday.MONDAY))
+        self.assertContains(page, "already has people or a salary, so its weeks cannot move")
+        with use_company(self.company):
+            self.group.refresh_from_db()
+        self.assertEqual((self.group.name, self.group.week_start), ("Weekly staff", PayGroup.Weekday.SATURDAY))
+
+    def test_back_to_monthly_and_removing_a_mistake(self):
+        row = self.join(D(2026, 8, 8))
+        response = self.post(section="member_end", row=row.pk, effective_to="2026-08-15")
+        self.assertRedirects(response, self.url, fetch_redirect_response=False)
+        with use_company(self.company):
+            row.refresh_from_db()
+        self.assertEqual(row.effective_to, D(2026, 8, 15))
+        self.post(section="member_end", row=row.pk, effective_to="2026-08-08")
+        with use_company(self.company):
+            row.refresh_from_db()
+        self.assertEqual(row.status, "cancelled")
+        self.assertContains(self.client.get(self.url), "Nobody is in Weekly workers yet.")
+
+    def test_a_finalised_week_is_not_offered(self):
+        self.work(D(2026, 8, 10), (9, 0), (18, 0))
+        self.month()
+        submit_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        approve_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        days = [day for day, _ in paygroups.start_days(self.group, self.company.pk)]
+        self.assertNotIn(D(2026, 8, 8), days)
+        self.assertEqual(days[0], D(2026, 9, 5))
 
     def test_generating_and_submitting_a_week_from_the_salary_page(self):
         self.daily()

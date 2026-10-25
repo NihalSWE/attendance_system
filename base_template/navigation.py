@@ -91,6 +91,8 @@ COMPANY_MENUS = (
              "payroll:payroll_submit", "payroll:payroll_finalise", "payroll:payroll_return",
              "payroll:payroll_reopen", salary=True),
         item("Salary settings", "payroll:salary_settings", manage=True),
+        # Who is paid weekly (2026-10-25).
+        item("Pay groups", "payroll:pay_groups", manage=True),
         item("Penalty rules", "payroll:salary_settings", "payroll:penalty_rule_create",
              "payroll:penalty_rule_change", "payroll:penalty_rule_stop",
              fragment="penalty-rules", manage=True),
