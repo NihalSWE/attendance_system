@@ -26,6 +26,20 @@ class ProductionPageTests(ProductionFixture, TestCase):
             self.assertEqual(page.status_code, 200, name)
         assert_inventory_menu(self, page, MENU, menu="production")
 
+    def test_the_links_unlocked_on_2026_10_25_open(self):
+        # Scan and Labels (Phase 2) and BOMs show; Production orders stay hidden.
+        for name in ("inventory:scan", "inventory:labels", "production:boms"):
+            page = self.client.get(reverse(name))
+            self.assertEqual(page.status_code, 200, name)
+            for shown in ("inventory:scan", "inventory:labels", "production:boms"):
+                self.assertContains(page, f'href="{reverse(shown)}"', msg_prefix=name)
+            self.assertNotContains(page, f'href="{reverse("production:orders")}"', msg_prefix=name)
+        self.client.post(reverse("production:boms"), {"item": self.juice.pk, "batch_size": "1000",
+                                                      "batch_uom": self.pcs.pk})
+        with use_company(self.company):
+            bom = Bom.objects.get(item=self.juice, status="draft")
+        self.assertEqual(self.client.get(reverse("production:bom_detail", args=[bom.pk])).status_code, 200)
+
     def test_a_whole_run_through_the_pages(self):
         c = self.client
         c.post(reverse("production:boms"), {"item": self.juice.pk, "batch_size": "1000", "batch_uom": self.pcs.pk})

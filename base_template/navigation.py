@@ -42,18 +42,21 @@ def report_item(slug):
 
 
 # Which Store & Inventory links the sidebar shows (2026-10-18): the client
-# sees the module grow in the order it was built. Today: Phase 1 - the
-# lists, opening stock and stock on hand. Add a menu or a link name here to
-# show it; a menu not listed is hidden. None shows every link (for local
-# work - do not push None until the whole module is shown). The menu tests
-# follow this list. Hidden pages still open by their address.
+# sees the module grow in the order it was built. Phase 1 - the lists,
+# opening stock and stock on hand; 2026-10-25: Phase 2 (Scan, Labels) and,
+# ahead of its phase because finished goods need their recipe, BOMs. Add a
+# menu or a link name here to show it; a menu not listed is hidden. None
+# shows every link (for local work - do not push None until the whole module
+# is shown). The menu tests follow this list. Hidden pages still open by
+# their address.
 INVENTORY_LINKS_SHOWN = {
     "inventory": (
         "inventory:settings", "inventory:units", "inventory:categories",
         "inventory:stores", "inventory:bins", "inventory:items",
         "inventory:suppliers", "inventory:customers", "inventory:opening",
-        "inventory:stock",
+        "inventory:stock", "inventory:scan", "inventory:labels",
     ),
+    "production": ("production:boms",),
 }
 
 COMPANY_MENUS = (
