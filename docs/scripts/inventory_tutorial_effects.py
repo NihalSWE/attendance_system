@@ -153,4 +153,58 @@ EFFECTS = {
                      "&divide; pack factor) and the value of this stock.",
         "Note": "For reference only.",
     },
+
+    # 2026-10-25: Labels, Scan and BOMs (checked in inventory/labels.py,
+    # inventory/lookup.py and production/boms.py).
+    "print": {
+        "Copies of each": "Every label in the PDF is printed this many times (1 to 20). Each "
+                          "copy carries the same code, so any copy scans to the same record. At "
+                          "most 500 labels in one PDF.",
+        "Why print again": "Asked only when a label was printed before. Saved with the reprint "
+                           "in the audit trail; the label's <b>Printed</b> count goes up.",
+    },
+    "void": {
+        "Why it is void": "From now on a scan of this label is <b>refused with this reason</b>, "
+                          "and it can no longer be printed. It cannot be made active again: "
+                          "print a new label instead.",
+    },
+    "package_labels": {
+        "Batch": "Printed on every label. Scanning one then fills the item, the batch and its "
+                 "expiry at once. Required for an item that keeps batches.",
+        "Packages": "How many labels to make: one per bag, drum or carton (1 to 500). Each gets "
+                    "its own code (P...), so each package can be told apart.",
+        "In each package": "The quantity printed on each label. A scan fills this quantity in, "
+                           "so it must be what one package really holds.",
+        "Unit": "The unit of that quantity: the item's base unit or one of its pack units. "
+                "Shown on the label and converted to the base unit when scanned.",
+        "Store": "Recorded on the label as where the packages were put. Only stores of your "
+                 "branches are offered.",
+        "Bin": "The shelf inside that store, recorded on the label. Choosing a bin alone also "
+               "sets its store.",
+    },
+    "bom": {
+        "Finished product": "Only items of type <b>Finished goods</b> are offered. Each product "
+                            "has numbered versions of its recipe (v1, v2 ...); only one is "
+                            "active at a time.",
+        "Batch size": "How much one batch of this recipe makes. Every material quantity is for "
+                      "this amount; making more or less scales them up or down.",
+        "Batch unit": "The unit of the batch size: the product's base unit or one of its pack "
+                      "units. Stored in the base unit as well.",
+        "Effective from": "Kept with the version for your records. It does not switch the "
+                          "recipe on by itself: <b>Activate</b> does.",
+        "Note": "Shown on the recipe's page under its name.",
+    },
+    "bom_line": {
+        "Material": "Any active item except the product itself: raw material, packaging, even "
+                    "another finished good. Each material can be on a recipe once.",
+        "Quantity per batch": "How much of it one batch uses. Planning multiplies it by "
+                              "(quantity to make &divide; batch size).",
+        "Unit": "The material's base unit or one of its pack units (e.g. BAG); stored in the "
+                "base unit too.",
+        "Scrap %": "Normal wastage, added on top when production is planned: 2% on 120 kg plans "
+                   "122.4 kg.",
+        "Packaging": "Listed after the ingredients and marked <b>Packaging</b> on the recipe "
+                     "and in production. It changes no quantity.",
+        "Note": "Shown on the material's line.",
+    },
 }
