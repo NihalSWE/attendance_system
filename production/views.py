@@ -182,7 +182,9 @@ def order_list(request):
             except ValidationError as exc:
                 apply_service_errors(new_form, exc)
             else:
-                messages.success(request, f"{order.number} planned. Someone else releases it.")
+                messages.success(request, f"{order.number} planned. " + (
+                    "Release it when the materials can be used." if orders.may_release(request.user, order)
+                    else "Someone else with planning access releases it."))
                 return redirect("production:order_detail", pk=order.pk)
     with use_company(company_id):
         rows = access.scope_warehouses(
@@ -202,7 +204,8 @@ def order_list(request):
 
 def _order_page(request, pk, output_form=None, open_dialog=""):
     company_id = request.company_id
-    _, order = orders.get_order(actor=request.user, company_id=company_id, pk=pk, code="inventory.view")
+    membership, order = orders.get_order(actor=request.user, company_id=company_id, pk=pk,
+                                         code="inventory.view")
     branch = order.output_warehouse.branch_id
     with use_company(company_id):
         usage = orders.usage(order)
@@ -216,7 +219,8 @@ def _order_page(request, pk, output_form=None, open_dialog=""):
         "order": order, "usage": usage, "uses": uses, "output": output, "labels": made,
         "material_cost": orders.material_cost(order),
         "sees_costs": access.sees_costs(request.user, company_id),
-        "can_release": order.status == "planned" and may_plan,
+        "can_release": order.status == "planned" and may_plan and orders.may_release(request.user, order),
+        "waits_for_release": order.status == "planned" and not orders.may_release(request.user, order),
         "can_cancel": order.status in ("planned", "released") and may_plan,
         "can_close": order.status == "completed" and may_plan,
         "can_run": running and may_run,
@@ -225,7 +229,7 @@ def _order_page(request, pk, output_form=None, open_dialog=""):
                        and access.may(request.user, company_id, "purchase.qc", branch)),
         "can_print": bool(made) and may_run,
         "output_form": output_form or (forms.OutputForm(company_id=company_id, order=order, initial={
-            "uom": order.uom_id, "qty_good": order.planned_qty, "output_date": order.planned_date})
+            "qty_good": format(order.planned_qty.normalize(), "f"), "output_date": order.planned_date})
             if running and may_run else None),
         "qc_form": forms.QcForm(), "print_form": PrintForm(), "open_dialog": open_dialog,
     })

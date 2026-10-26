@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import F, OuterRef, Subquery
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from access_control.branch_access import ALL_BRANCHES, branches_for
@@ -82,7 +83,15 @@ def stock(request):
     })
 
 
-def _item_context(request, company_id, item, *, pack_form=None, open_dialog=""):
+#: Each item type's own page (inventory/views.py PAGES), for an item's page.
+TYPE_PAGES = {ItemKind.RAW: ("raw_materials", "Raw materials"),
+              ItemKind.PACKAGING: ("packaging", "Packaging"),
+              ItemKind.FINISHED: ("finished_goods", "Finished goods"),
+              ItemKind.SPARE: ("spare_parts", "Spare parts"),
+              ItemKind.GENERAL: ("general_items", "General items")}
+
+
+def _item_context(request, company_id, item, *, pack_form=None, material_form=None, open_dialog=""):
     costs_in = _valuation_branches(request.user, company_id)
     with use_company(company_id):
         balances = list(access.scope_warehouses(
@@ -101,8 +110,30 @@ def _item_context(request, company_id, item, *, pack_form=None, open_dialog=""):
         cost = ItemCost.objects.filter(item=item, warehouse__isnull=True).first()
     can_manage = access.may(request.user, company_id, masters.CODE)
     if can_manage and pack_form is None:
-        pack_form = forms.PackUnitForm(company_id=company_id)
+        pack_form = forms.PackUnitForm(company_id=company_id, item=item)
+    # The page of the item's own type (2026-10-26), for the crumbs and Edit.
+    type_page = TYPE_PAGES.get(item.kind, ("items", "Items"))
+    recipe = {}
+    if item.kind == ItemKind.FINISHED:
+        # A finished good's materials, on its own page (production.recipes).
+        from production import forms as production_forms
+        from production import recipes
+
+        recipe = {
+            "recipe": recipes.page(company_id, item),
+            "recipe_note": request.session.pop("recipe_note", None),
+            "can_edit_recipe": access.may(request.user, company_id, "production.bom"),
+            "batch_form": production_forms.RecipeBatchForm(),
+            # Someone who may set up items can add a new material right there.
+            "material_form": material_form or production_forms.RecipeMaterialForm(
+                company_id=company_id, product=item, can_create=can_manage),
+        }
     return {
+        **recipe,
+        "type_url": reverse(f"inventory:{type_page[0]}"), "type_label": type_page[1],
+        # Never moved: it can be deleted (masters.delete_item).
+        "delete_url": (reverse(f"inventory:{type_page[0]}_delete", args=[item.pk])
+                       if can_manage and not masters._item_has_moved(item) else ""),
         "item": item, "balances": balances, "moves": moves, "packs": packs,
         "on_hand": sum((b.qty_on_hand for b in balances), Decimal("0")),
         "cost": cost, "sees_costs": costs_in is ALL_BRANCHES,
@@ -128,6 +159,12 @@ def _printed(company_id, item, balances):
         }
 
 
+def item_page(request, company_id, item, **kwargs):
+    """The item's page; ``kwargs`` as ``_item_context`` (a refused form, its modal)."""
+    return render(request, "inventory/item_detail.html",
+                  _item_context(request, company_id, item, **kwargs))
+
+
 @login_required
 def item_detail(request, pk):
     company_id, bail = company_or_bail(request)
@@ -149,7 +186,7 @@ def pack_unit_add(request, pk):
     if bail:
         return bail
     _, item = masters.get_for_edit(masters.ITEM, actor=request.user, company_id=company_id, pk=pk)
-    form = forms.PackUnitForm(request.POST, company_id=company_id)
+    form = forms.PackUnitForm(request.POST, company_id=company_id, item=item)
     if form.is_valid():
         try:
             masters.add_pack_unit(actor=request.user, company_id=company_id, item_id=item.pk,

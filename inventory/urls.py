@@ -17,7 +17,9 @@ from inventory.reports import REPORTS
 
 app_name = "inventory"
 
-MASTERS = ("units", "categories", "items", "stores", "bins", "suppliers", "customers")
+MASTERS = ("units", "categories", "items", "stores", "bins", "suppliers", "customers",
+           # One page per item type (2026-10-26).
+           "raw_materials", "packaging", "finished_goods", "spare_parts", "general_items")
 
 urlpatterns = [
     path("", RedirectView.as_view(pattern_name="inventory:dashboard"), name="home"),
@@ -83,7 +85,13 @@ urlpatterns = [
 
 for key in MASTERS:
     urlpatterns += [
-        path(f"{key}/", views.master_list, {"key": key}, name=key),
-        path(f"{key}/<int:pk>/edit/", views.master_edit, {"key": key}, name=f"{key}_edit"),
-        path(f"{key}/<int:pk>/status/", views.master_status, {"key": key}, name=f"{key}_status"),
+        path(f"{key.replace('_', '-')}/", views.master_list, {"key": key}, name=key),
+        path(f"{key.replace('_', '-')}/<int:pk>/edit/", views.master_edit, {"key": key},
+             name=f"{key}_edit"),
+        path(f"{key.replace('_', '-')}/<int:pk>/status/", views.master_status, {"key": key},
+             name=f"{key}_status"),
     ]
+# Delete an item nothing uses yet (2026-10-26), from the item pages.
+for key in ("items", "raw_materials", "packaging", "finished_goods", "spare_parts", "general_items"):
+    urlpatterns.append(path(f"{key.replace('_', '-')}/<int:pk>/delete/", views.item_delete,
+                            {"key": key}, name=f"{key}_delete"))

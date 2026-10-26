@@ -53,10 +53,14 @@ INVENTORY_LINKS_SHOWN = {
     "inventory": (
         "inventory:settings", "inventory:units", "inventory:categories",
         "inventory:stores", "inventory:bins", "inventory:items",
+        "inventory:raw_materials", "inventory:packaging", "inventory:finished_goods",
+        "inventory:spare_parts", "inventory:general_items",
         "inventory:suppliers", "inventory:customers", "inventory:opening",
         "inventory:stock", "inventory:scan", "inventory:labels",
     ),
-    "production": ("production:boms",),
+    # 2026-10-26: Production orders shown; the recipe is on the finished
+    # good's own page now, so BOMs is not in the menu (its page still opens).
+    "production": ("production:orders",),
 }
 
 COMPANY_MENUS = (
@@ -149,7 +153,13 @@ INVENTORY_MENUS = (
         item("Month-end close", "inventory:period_close", needs="inventory.period_close"),
         item("Go-live", "inventory:golive", "inventory:golive_count_sheet", "inventory:golive_compare",
              needs=("inventory.adjust", "inventory.adjust_approve")),
-        item("Items", "inventory:items", "inventory:items_edit", "inventory:items_status",
+        # One page per item type (2026-10-26), then every item together.
+        *[item(label, f"inventory:{key}", f"inventory:{key}_edit", f"inventory:{key}_status",
+               needs="inventory.view")
+          for key, label in (("raw_materials", "Raw materials"), ("packaging", "Packaging"),
+                             ("finished_goods", "Finished goods"), ("spare_parts", "Spare parts"),
+                             ("general_items", "General items"))],
+        item("All items", "inventory:items", "inventory:items_edit", "inventory:items_status",
              "inventory:item_detail", "inventory:pack_unit_add", "inventory:pack_unit_remove",
              needs="inventory.view"),
         item("Scan", "inventory:scan", needs="inventory.view"),

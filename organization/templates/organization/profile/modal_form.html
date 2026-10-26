@@ -24,9 +24,25 @@
                 {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                 <div class="grid grid--2">
                     {% for field in form.visible_fields %}
-                        {% include "leaves/includes/field.html" %}
+                        {# A form without more_fields shows every field ("in" on a missing name is false). #}
+                        {% if not form.more_fields or field.name not in form.more_fields %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endif %}
                     {% endfor %}
                 </div>
+                {% if form.more_fields %}
+                    {# Rarely needed fields, folded (2026-10-26); open when one has an error. #}
+                    <details class="more-details"{% if form.more_has_errors %} open{% endif %}>
+                        <summary>More details (optional)</summary>
+                        <div class="grid grid--2">
+                            {% for field in form.visible_fields %}
+                                {% if field.name in form.more_fields %}
+                                    {% include "leaves/includes/field.html" %}
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </details>
+                {% endif %}
             {% endif %}
         </div>
         <div class="modal__foot">

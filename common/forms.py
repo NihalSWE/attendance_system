@@ -214,7 +214,14 @@ def employee_codes(queryset):
 class _EmployeeCodes:
     """A database select whose employee options carry their Employee ID
     (``data-code``), so the search finds a person by ID even where only the
-    name is shown (forms.js matcher, 2026-10-26)."""
+    name is shown (forms.js matcher, 2026-10-26).
+
+    ``option_attrs``, when set, is a function of the queryset returning
+    ``{pk: {attribute: value}}`` for each option - e.g. an item's units, so
+    the form's Unit list can follow the item chosen (forms.js, 2026-10-26).
+    """
+
+    option_attrs = None
 
     def _employees(self):
         queryset = getattr(self.choices, "queryset", None)
@@ -230,13 +237,17 @@ class _EmployeeCodes:
     def optgroups(self, name, value, attrs=None):
         queryset = self._employees()
         self._codes = employee_codes(queryset) if queryset is not None else {}
+        rows = getattr(self.choices, "queryset", None)
+        self._extra = self.option_attrs(rows) if self.option_attrs and rows is not None else {}
         return super().optgroups(name, value, attrs)
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         option = super().create_option(name, value, label, selected, index, subindex, attrs)
-        code = getattr(self, "_codes", {}).get(getattr(value, "value", value))
+        pk = getattr(value, "value", value)
+        code = getattr(self, "_codes", {}).get(pk)
         if code:
             option["attrs"]["data-code"] = code
+        option["attrs"].update(getattr(self, "_extra", {}).get(pk, {}))
         return option
 
 

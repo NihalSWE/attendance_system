@@ -161,6 +161,8 @@ class PaidForm(StyledFormMixin, forms.Form):
 
 
 class ReturnForm(ServiceForm):
+    EITHER = (("source", "Return", (("delivery", "From a delivery", ("delivery",)),
+                                    ("direct", "Without a delivery", ("customer", "warehouse")))),)
     delivery = _choice(Delivery, "From delivery", required=False)
     customer = _choice(Customer, "Customer", required=False)
     warehouse = _choice(Warehouse, "Back to store", required=False)
@@ -180,11 +182,13 @@ class ReturnForm(ServiceForm):
     def clean(self):
         data = super().clean()
         if not data.get("delivery") and not (data.get("customer") and data.get("warehouse")):
-            self.add_error("delivery", "Choose the delivery, or the customer and the store.")
+            self.add_error(None, "Choose the delivery, or the customer and the store.")
         return data
 
 
 class ReturnLineForm(ServiceForm):
+    EITHER = (("source", "What", (("line", "A line that was delivered", ("delivery_line",)),
+                                  ("item", "Another item", ("item", "batch")))),)
     delivery_line = _choice(DeliveryLine, "Delivered line", required=False)
     item = _choice(Item, "Item (not from a delivery)", required=False)
     batch = _choice(Batch, "Batch", required=False)
@@ -217,6 +221,6 @@ class ReturnLineForm(ServiceForm):
     def clean(self):
         data = super().clean()
         if not data.get("delivery_line") and not data.get("item"):
-            self.add_error("delivery_line", "Choose the delivered line, or the item and batch.")
+            self.add_error(None, "Choose the delivered line, or the item and batch.")
         return data
 

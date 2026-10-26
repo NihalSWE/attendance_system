@@ -50,7 +50,7 @@
         <div class="card__head"><h2>Going back</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
         {% if lines %}
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Item</th><th>Batch</th><th>From</th><th class="numeric">Quantity</th><th class="numeric">In base unit</th><th>Received on</th><th><span class="sr-only">Actions</span></th></tr></thead>
                     <tbody>
                         {% for line in lines %}

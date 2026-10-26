@@ -54,7 +54,7 @@
         <div class="card__head"><h2>What is needed</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
         {% if lines %}
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Item</th><th class="numeric">Quantity</th><th class="numeric">In base unit</th><th class="numeric">Ordered</th><th class="numeric">Open</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
                     <tbody>
                         {% for line in lines %}

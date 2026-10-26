@@ -89,9 +89,8 @@
         </script>
         {% block extra_js %}
         {% endblock %}
-        {% if server_tables %}
-            <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js"></script>
-            <script defer src="{% static 'base_template/js/tables.js' %}"></script>
-        {% endif %}
+        {# Every page (2026-10-26): server lists, and short lists marked data-local-table. #}
+        <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js"></script>
+        <script defer src="{% static 'base_template/js/tables.js' %}"></script>
     </body>
 </html>

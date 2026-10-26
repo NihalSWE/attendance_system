@@ -102,9 +102,14 @@ class MasterPageTests(InventoryFixture, TestCase):
         pack = ItemUom.all_objects.get(item=self.sugar)
         self.assertContains(self.client.get(reverse("inventory:item_detail", args=[self.sugar.pk])),
                             "1 BAG")
+        # The base unit is not offered as a pack (2026-10-26), and is refused if posted.
+        page = self.client.get(reverse("inventory:item_detail", args=[self.sugar.pk]))
+        form = page.context["pack_form"]
+        self.assertNotIn(self.kg, form.fields["uom"].queryset)
+        self.assertNotIn(self.bag, form.fields["uom"].queryset)
         refused = self.client.post(reverse("inventory:pack_unit_add", args=[self.sugar.pk]),
                                    {"uom": self.kg.pk, "factor": "1"})
-        self.assertContains(refused, "base unit already")
+        self.assertContains(refused, "Select a valid choice")
         self.client.post(reverse("inventory:pack_unit_remove", args=[self.sugar.pk, pack.pk]))
         self.assertFalse(ItemUom.all_objects.filter(item=self.sugar).exists())
 

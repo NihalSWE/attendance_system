@@ -230,6 +230,43 @@ def update_item(*, actor, company_id, pk, values):
 
 
 @transaction.atomic
+def delete_item(*, actor, company_id, pk):
+    """Delete an item nothing uses yet (2026-10-26). Its pack units go with it,
+    and so does a recipe no production order has used. Anything else that
+    points at it - stock, a document, a batch, a label, another product's
+    recipe - stops the delete (every such link PROTECTs the item); deactivate
+    it instead. Returns the deleted item's code."""
+    from production.models import Bom, BomLine, ProductionOrder
+
+    membership, item = get_for_edit(ITEM, actor=actor, company_id=company_id, pk=pk)
+    with use_company(company_id):
+        if _item_has_moved(item):
+            raise ValidationError(f"{item.code} has stock movements, so it cannot be deleted. "
+                                  "Deactivate it instead.")
+        used_in = (BomLine.all_objects.filter(item=item).select_related("bom__item")
+                   .values_list("bom__item__code", flat=True).distinct())
+        if used_in:
+            raise ValidationError(f"{item.code} is a material of {', '.join(used_in)}: remove it "
+                                  "from that recipe first, or deactivate it.")
+        recipes = Bom.all_objects.filter(item=item)
+        if ProductionOrder.all_objects.filter(item=item).exists():
+            raise ValidationError(f"{item.code} has production orders, so it cannot be deleted. "
+                                  "Deactivate it instead.")
+        code = item.code
+        record_company_event(actor=actor, membership=membership, company=membership.company,
+                             action="inventory.item.deleted", obj=item, before=ITEM.snapshot(item))
+        try:
+            with transaction.atomic():
+                BomLine.all_objects.filter(bom__in=recipes).delete()
+                recipes.delete()
+                item.delete()
+        except models.ProtectedError:
+            raise ValidationError(f"{code} is on a document, a batch or a label, so it cannot be "
+                                  "deleted. Deactivate it instead.") from None
+    return code
+
+
+@transaction.atomic
 def add_pack_unit(*, actor, company_id, item_id, values):
     """1 CARTON = 24 PCS: a pack the item can be entered in."""
     membership, item = get_for_edit(ITEM, actor=actor, company_id=company_id, pk=item_id)
