@@ -145,6 +145,8 @@ def correct_placement(*, actor, company, employees, branch, department, designat
     from devices.services import panel_access
     from employees.models import EmployeeAssignment
 
+    if department.code == mapping.UNASSIGNED_CODE:
+        raise ValidationError({"department": "Choose their real department, not Unassigned."})
     if department.branch_id != branch.pk:
         raise ValidationError({"department": "That department is not in this branch."})
     if designation.department_id != department.pk:
@@ -273,14 +275,17 @@ def _step(job_id):
         if actor is None or not actor.is_active:
             failures, rest = [["Everyone left", "the person who started this can no longer sign in"]], []
         elif job.kind == SetupFixJob.Kind.RECHECK:
-            done, note = _recheck(actor, job)
+            # A thread has no request, so no company: every step sets its own.
+            with use_company(job.company_id):
+                done, note = _recheck(actor, job)
         else:
             with use_company(job.company_id):
                 found = Employee.all_objects.in_bulk(batch)
             people = [found[pk] for pk in batch if pk in found]
             failures += [[f"Employee #{pk}", "no longer exists"] for pk in batch if pk not in found]
             if job.kind == SetupFixJob.Kind.SEND:
-                sent, failed = _send(actor, people)
+                with use_company(job.company_id):
+                    sent, failed = _send(actor, people)
                 done += sent
                 failures += failed
             else:
@@ -331,6 +336,8 @@ def _recheck(actor, job):
     result = recheck_punches(actor=actor, company_id=job.company_id, start=job.start,
                              end=today(job.company))
     still = sum(result.still_excluded.values())
+    if not result.checked:
+        return 1, f"No refused scans from {job.start:%d %b %Y}: nothing to check again."
     return 1, (f"{result.checked} refused scans checked again: {result.now_count} now count"
                + (f", {still} still do not (see Devices → Excluded punches)" if still else "")
                + (f", {result.skipped_locked} were in a posted salary month" if result.skipped_locked else "")
@@ -338,12 +345,14 @@ def _recheck(actor, job):
 
 
 def _finished(job):
+    # A failure is one person on one device: count the people.
+    people = len({name for name, _ in job.failures}) if job.failures else job.failed_count
     if job.kind == SetupFixJob.Kind.SEND:
         return (f"{job.done_count} people sent to their branch's devices"
-                + (f"; {job.failed_count} could not be." if job.failed_count else ".")
+                + (f"; {people} could not be (below)." if job.failed_count else ".")
                 + " Each device collects them when it next checks in.")
     return (f"Attendance of {job.done_count} people recalculated from {job.start:%d %b %Y}"
-            + (f"; {job.failed_count} could not be." if job.failed_count else "."))
+            + (f"; {people} could not be (below)." if job.failed_count else "."))
 
 
 def resume_if_stalled(company):

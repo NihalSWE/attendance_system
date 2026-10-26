@@ -114,3 +114,19 @@ class SetupFixTests(MappingCase):
     def test_a_branch_manager_cannot_open_it(self):
         self.client.force_login(self.manager)
         self.assertNotEqual(self.client.get(reverse("attendance:setup_fix")).status_code, 200)
+
+    def test_the_job_runs_outside_a_request_as_the_thread_does(self):
+        with override_settings(SETUP_FIX_IN_BACKGROUND=True), \
+                self.captureOnCommitCallbacks(execute=False):
+            job, _ = setup_fix.start(actor=self.admin, company=self.company,
+                                     kind=SetupFixJob.Kind.SEND, employee_ids=[self.loose.pk])
+        setup_fix.run_job(job.pk)      # no company context, as in the thread
+        job.refresh_from_db()
+        self.assertEqual((job.status, job.done_count, job.failures), ("done", 1, []))
+
+    def test_unassigned_is_not_a_department_to_fix_into(self):
+        page = self.client.post(reverse("attendance:setup_fix"), {
+            "section": "placement", "who": "all", "branch": self.hq.pk,
+            "department": self.loose_department.pk, "designation": self.loose_designation.pk,
+            "start": setup_fix.month_starts(self.company)[0][0]})
+        self.assertContains(page, "Choose their real department")

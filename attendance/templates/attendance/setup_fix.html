@@ -48,6 +48,17 @@
                     });
                 });
             });
+            // "Unassigned" is what is being fixed: never offered as the department.
+            const departments = document.querySelector("#placement-dialog #id_department");
+            if (departments) {
+                const drop = function () {
+                    Array.from(departments.options).forEach(function (option) {
+                        if (option.textContent.trim() === "Unassigned") option.remove();
+                    });
+                };
+                new MutationObserver(drop).observe(departments, {childList: true});
+                drop();
+            }
             count();
             {% if job.status == "running" %}
                 // A job is working in the background: look again until it is done.
@@ -99,11 +110,11 @@
                 {% endif %}
                 {% if job.failures %}
                     <div class="table-wrap">
-                        <table class="table">
-                            <thead><tr><th>SL</th><th>Who</th><th>Why not</th></tr></thead>
+                        <table class="table" data-local-table>
+                            <thead><tr><th>Who</th><th>Why not</th></tr></thead>
                             <tbody>
                                 {% for name, reason in job.failures %}
-                                    <tr><td>{{ forloop.counter }}</td><td>{{ name }}</td><td>{{ reason }}</td></tr>
+                                    <tr><td>{{ name }}</td><td>{{ reason }}</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>
