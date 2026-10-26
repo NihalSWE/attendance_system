@@ -34,6 +34,7 @@ from organization.models import Branch
 from organization.views import _company_or_redirect
 from payroll import overtime, paygroups, penalties, periods, policy
 from payroll.forms import (
+    _ordinal,
     GeneralSettingsForm,
     SalaryMonthForm,
     OvertimeDecisionForm,
@@ -568,23 +569,32 @@ def salary_settings(request):
     month_page = _salary_month_page(company_id, today)
     salary_month_form = SalaryMonthForm(
         request.POST if section == "salary_month" else None,
-        years=month_page["years"], initial=month_page["initial"],
+        initial={"start_day": month_page["salary_start_day"]},
     )
 
-    if section == "salary_month" and salary_month_form.is_valid():
-        data = salary_month_form.cleaned_data
+    if section == "salary_month":
+        # One box (2026-10-26). A change starts from the first salary month
+        # with no salary yet; what happened is said in the card itself, where
+        # the page lands (the message bar is out of sight that far down).
+        def back(tone, text):
+            request.session["salary_month_note"] = [tone, text]
+            return redirect(f"{reverse('payroll:salary_settings')}#salary-month")
+
+        if not salary_month_form.is_valid():
+            return back("danger", " ".join(
+                error for errors in salary_month_form.errors.values() for error in errors))
+        day = salary_month_form.cleaned_data["start_day"]
+        year, month = month_page["salary_free"]
+        if day == periods.start_day_of(company_id, year, month):
+            return back("info", f"Nothing changed: salary months already start on day {day}.")
         try:
-            first, last = periods.set_start_day(
-                actor=request.user, company_id=company_id, start_day=data["start_day"],
-                year=data["from_year"], month=data["from_month"])
+            first, last = periods.set_start_day(actor=request.user, company_id=company_id,
+                                                start_day=day, year=year, month=month)
         except ValidationError as exc:
-            apply_service_errors(salary_month_form, exc)
-        else:
-            messages.success(request, (
-                f"Salary months start on day {data['start_day']} from "
-                f"{periods.name(data['from_year'], data['from_month'])}: it covers "
-                f"{first:%d %b} - {last:%d %b %Y}."))
-            return redirect("payroll:salary_settings")
+            return back("danger", "Not changed: " + " ".join(exc.messages))
+        return back("success", (
+            f"Saved. From {periods.name(year, month)} ({first:%d %b} - {last:%d %b %Y}) every "
+            f"salary month starts on day {day}."))
     elif section == "rules" and rules_form.is_valid():
         values = rules_form.service_values()
         try:
@@ -630,6 +640,7 @@ def salary_settings(request):
         "rules_form": rules_form,
         "general_form": general_form,
         "salary_month_form": salary_month_form,
+        "salary_month_note": request.session.pop("salary_month_note", None),
         **month_page,
         "penalty_rules": _penalty_rows(company_id, today, page["currency"], request=request),
     })
@@ -668,8 +679,12 @@ def _salary_month_page(company_id, today):
         "salary_cycles": history,
         "salary_start_day": current,
         "salary_first_free": periods.name(*free),
-        "years": list(range(today.year - 1, today.year + 3)),
-        "initial": {"start_day": current, "from_month": free[1], "from_year": free[0]},
+        "salary_free": free,
+        "salary_start_words": (_ordinal(current), _ordinal(current - 1)),
+        # The saved start day in force now, and since which salary month.
+        "salary_since": next((periods.name(c.first_month.year, c.first_month.month) for c in history
+                              if (c.first_month.year, c.first_month.month)
+                              <= periods.month_of(company_id, today, cycles)), None),
     }
 
 

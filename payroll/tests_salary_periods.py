@@ -117,22 +117,24 @@ class PeriodPageTests(PeriodCase):
         self.client.force_login(self.admin)
 
     def test_saving_it_on_salary_settings(self):
+        # One box (2026-10-26): it applies from the first month with no salary.
         url = reverse("payroll:salary_settings")
         page = self.client.get(url)
-        self.assertContains(page, "Salary month starts on day")
-        response = self.client.post(url, {"section": "salary_month", "start_day": "26",
-                                          "from_month": "9", "from_year": "2026"})
-        self.assertRedirects(response, url, fetch_redirect_response=False)
-        self.assertEqual(periods.bounds(self.company.pk, 2026, 10), (D(2026, 9, 26), D(2026, 10, 25)))
+        self.assertContains(page, "Salary months are calendar months")
+        response = self.client.post(url, {"section": "salary_month", "start_day": "26"})
+        self.assertRedirects(response, f"{url}#salary-month", fetch_redirect_response=False)
         page = self.client.get(url)
-        self.assertContains(page, "From day 26")
+        self.assertContains(page, "alert alert--success\">Saved. From ")
+        self.assertContains(page, "Salary months run from the 26th to the 25th of the next month")
+        self.assertContains(page, '<option value="26" selected>26th - from the 26th to the 25th')
+        # Saving the same again changes nothing, and says so.
+        self.client.post(url, {"section": "salary_month", "start_day": "26"})
+        self.assertContains(self.client.get(url), "Nothing changed: salary months already start on day 26.")
 
-    def test_a_refused_change_says_why_on_the_form(self):
-        generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
-        page = self.client.post(reverse("payroll:salary_settings"), {
-            "section": "salary_month", "start_day": "26", "from_month": "8", "from_year": "2026"})
-        self.assertEqual(page.status_code, 200)
-        self.assertContains(page, "August 2026 already has a salary")
+    def test_a_wrong_day_is_said_at_the_top(self):
+        url = reverse("payroll:salary_settings")
+        self.client.post(url, {"section": "salary_month", "start_day": "31"})
+        self.assertContains(self.client.get(url), "alert alert--danger\">Select a valid choice.")
 
     def test_the_salary_page_says_what_the_month_covers(self):
         self.set_day(26)
