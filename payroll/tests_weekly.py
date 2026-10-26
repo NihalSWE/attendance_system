@@ -13,6 +13,7 @@ from django.urls import reverse
 from attendance.services import recalculate
 from common.tenant import use_company
 from employees.models import EmployeeCompensation
+from organization.models import Department
 from payroll import paygroups
 from payroll.models import PayGroup, PayGroupMember, PayrollRun
 from payroll.services import approve_payroll, generate_payroll, money, submit_payroll
@@ -182,28 +183,48 @@ class WeekPageTests(WeeklyCase):
         self.assertContains(page, "Pay group Night shift added: weeks start on Monday.")
         self.assertContains(page, "Weekly, Monday to Sunday")
 
-    def test_adding_a_whole_department_ignores_the_hidden_person_picker(self):
-        response = self.post(section="member_add", row=self.group.pk, who="department",
-                             department=self.department.pk, employee=self.employee.pk,
-                             effective_from="2026-08-08")
+    def test_adding_several_departments_and_people_at_once(self):
+        with use_company(self.company):
+            other = Department.objects.create(company=self.company, branch=self.department.branch,
+                                              code="OPS", name="Operations")
+        response = self.client.post(self.url, {
+            "section": "member_add", "row": self.group.pk, "effective_from": "2026-08-08",
+            "departments": [self.department.pk, other.pk], "employees": [self.employee.pk]})
         self.assertRedirects(response, self.url, fetch_redirect_response=False)
         with use_company(self.company):
-            row = PayGroupMember.objects.get()
-        self.assertEqual((row.department, row.employee, row.pay_group), (self.department, None, self.group))
+            rows = PayGroupMember.objects.filter(pay_group=self.group)
+            self.assertEqual(sorted(r.department_id for r in rows if r.department_id),
+                             sorted([self.department.pk, other.pk]))
+            self.assertEqual([r.employee_id for r in rows if r.employee_id], [self.employee.pk])
         page = self.client.get(self.url)
-        self.assertContains(page, f"{self.department.name}: paid weekly in Weekly workers from Sat 08 Aug 2026.")
+        self.assertContains(page, "Paid weekly in Weekly workers from Sat 08 Aug 2026:")
         self.assertContains(page, "(whole department)")
 
     def test_a_refused_form_opens_again_with_the_reason(self):
-        page = self.post(section="member_add", row=self.group.pk, who="employee",
-                         effective_from="2026-08-08")
+        page = self.post(section="member_add", row=self.group.pk, effective_from="2026-08-08")
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, f'data-open-on-load="add-{self.group.pk}-dialog"')
-        self.assertContains(page, "Choose the person.")
+        self.assertContains(page, "Choose at least one department or one person.")
         # A day that is not one of the group's start days cannot be chosen.
-        page = self.post(section="member_add", row=self.group.pk, who="employee",
-                         employee=self.employee.pk, effective_from="2026-08-10")
+        page = self.post(section="member_add", row=self.group.pk, employees=self.employee.pk,
+                         effective_from="2026-08-10")
         self.assertContains(page, "Select a valid choice")
+        with use_company(self.company):
+            self.assertFalse(PayGroupMember.objects.exists())
+
+    def test_one_refusal_saves_nothing(self):
+        # August is finalised for the Monthly staff: nobody can join inside it.
+        self.work(D(2026, 8, 10), (9, 0), (18, 0))
+        self.month()
+        submit_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        approve_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
+        with mock.patch("payroll.paygroups.start_days",
+                        return_value=[(D(2026, 8, 8), "Sat 08 Aug 2026 (this week)")]):
+            page = self.client.post(self.url, {
+                "section": "member_add", "row": self.group.pk, "effective_from": "2026-08-08",
+                "departments": [self.department.pk], "employees": [self.employee.pk]})
+        self.assertContains(page, "is finalised and holds that day")
+        self.assertContains(page, "Nothing was saved.")
         with use_company(self.company):
             self.assertFalse(PayGroupMember.objects.exists())
 
@@ -298,3 +319,17 @@ class PageFixesTests(WeeklyCase):
         draw = self.client.get(reverse("payroll:pay_groups"), {
             "table": "members", "draw": 1, "start": 0, "length": 10, "search[value]": code})
         self.assertEqual(draw.json()["recordsFiltered"], 1)
+
+    def test_keeping_several_people_monthly(self):
+        self.client.force_login(self.admin)
+        with use_company(self.company):
+            department = self.employee.assignments.first().department
+        paygroups.set_member(actor=self.admin, company_id=self.company.pk,
+                             effective_from=D(2026, 8, 1), department=department, pay_group=self.group)
+        with mock.patch("django.utils.timezone.localdate", return_value=D(2026, 8, 12)):
+            response = self.client.post(reverse("payroll:pay_groups"), {
+                "section": "keep_monthly", "row": self.group.pk, "effective_from": "2026-08-08",
+                "employees": [self.employee.pk]})
+        self.assertEqual(response.status_code, 302)
+        with use_company(self.company):
+            self.assertTrue(PayGroupMember.objects.filter(employee=self.employee, pay_group=None).exists())
