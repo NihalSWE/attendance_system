@@ -22,7 +22,7 @@ class ProductionPageTests(ProductionFixture, TestCase):
         self.client.force_login(self.owner)
 
     def test_lists_open_and_the_menu_shows(self):
-        for name in ("boms", "orders", "report"):
+        for name in ("orders", "report"):
             page = self.client.get(reverse(f"production:{name}"))
             self.assertEqual(page.status_code, 200, name)
         assert_inventory_menu(self, page, MENU, menu="production")
@@ -41,7 +41,13 @@ class ProductionPageTests(ProductionFixture, TestCase):
                                                       "batch_uom": self.pcs.pk})
         with use_company(self.company):
             bom = Bom.objects.get(item=self.juice, status="draft")
-        self.assertEqual(self.client.get(reverse("production:bom_detail", args=[bom.pk])).status_code, 200)
+        # The old BOM pages show no versions any more: they go to the product's page.
+        product = reverse("inventory:item_detail", args=[self.juice.pk]) + "#materials"
+        self.assertRedirects(self.client.get(reverse("production:bom_detail", args=[bom.pk])), product,
+                             fetch_redirect_response=False)
+        self.assertRedirects(self.client.get(reverse("production:boms")),
+                             reverse("inventory:finished_goods"), fetch_redirect_response=False)
+        self.assertNotContains(self.client.get(product), "version")
 
     def test_a_whole_run_through_the_pages(self):
         c = self.client
