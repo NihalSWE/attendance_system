@@ -1,6 +1,22 @@
 /* Shared controls follow field semantics, not the number of options. */
 document.addEventListener("DOMContentLoaded", function () {
     const $ = window.jQuery;
+    // Search by what is shown or by the option's data-code: an employee is
+    // found by their Employee ID even where only the name shows (2026-10-26).
+    function matches(params, data) {
+        const term = $.trim(params.term || "").toLowerCase();
+        if (!term) return data;
+        if (data.children && data.children.length) {
+            const kids = data.children.map(child => matches(params, child)).filter(Boolean);
+            if (!kids.length) return null;
+            const copy = $.extend({}, data, true);
+            copy.children = kids;
+            return copy;
+        }
+        const text = (data.text || "").toLowerCase();
+        const code = (data.element && data.element.getAttribute("data-code") || "").toLowerCase();
+        return text.indexOf(term) > -1 || (code && code.indexOf(term) > -1) ? data : null;
+    }
     if ($ && $.fn.select2) {
         $(".js-select2").each(function () {
             var $el = $(this);
@@ -15,6 +31,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 // database-backed one does.
                 // data-search="always": a search box however short the list.
                 minimumResultsForSearch: ($el.data("search") === "always" || count > 8) ? 0 : Infinity,
+                matcher: matches,
                 closeOnSelect: !$el.prop("multiple"),
                 placeholder: $el.data("placeholder") || null,
                 allowClear: !$el.prop("required") && !$el.prop("multiple")

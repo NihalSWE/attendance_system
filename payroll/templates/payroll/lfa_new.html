@@ -22,10 +22,10 @@
             <div class="card__body row">
                 <div class="field" style="flex:1">
                     <label class="field__label" for="choose-employee">Employee</label>
-                    <select class="input select js-select2" id="choose-employee" name="employee" onchange="this.form.submit()">
+                    <select class="input select js-select2" id="choose-employee" name="employee" data-search="always" onchange="this.form.submit()">
                         <option value="">Choose the employee</option>
-                        {% for person in form.fields.employee.queryset %}
-                            <option value="{{ person.pk }}"{% if employee and person.pk == employee.pk %} selected{% endif %}>{{ person.full_name }}</option>
+                        {% for person, code in form.employee_options %}
+                            <option value="{{ person.pk }}" data-code="{{ code }}"{% if employee and person.pk == employee.pk %} selected{% endif %}>{{ person.full_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
