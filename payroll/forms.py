@@ -347,53 +347,48 @@ def _day_field(label, days, help_text=""):
 
 
 class PayGroupMemberForm(StyledFormMixin, forms.Form):
-    """Put a whole department, or one person, in a pay group (2026-10-25:
-    one picker shown at a time, the start day chosen from a list)."""
+    """Put departments and people in a pay group (2026-10-26: several of each
+    at once; the start day chosen from a list)."""
 
-    WHO = (("department", "Whole department"), ("employee", "One person"))
-
-    who = forms.ChoiceField(label="Who", choices=WHO, initial="department", widget=forms.RadioSelect)
-    department = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), required=False,
-                                        label="Department", empty_label="Choose a department")
-    employee = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), required=False,
-                                      label="Person", empty_label="Choose a person",
-                                      help_text="A person's own choice wins over their department's.")
+    departments = forms.ModelMultipleChoiceField(
+        queryset=PayGroup.all_objects.none(), required=False, label="Departments",
+        help_text="Everyone in them, including people who join the department later.")
+    employees = forms.ModelMultipleChoiceField(
+        queryset=PayGroup.all_objects.none(), required=False, label="People",
+        help_text="Single people, from any department. A person's own choice wins over their "
+                  "department's.")
 
     def __init__(self, *args, departments, employees, days, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["department"].queryset = departments
-        self.fields["employee"].queryset = employees
-        self.fields["employee"].label_from_instance = lambda person: person.full_name
+        self.fields["departments"].queryset = departments.select_related("branch")
+        # Two branches can both have "Software": the branch tells them apart.
+        self.fields["departments"].label_from_instance = lambda d: f"{d.name} · {d.branch.name}"
+        self.fields["employees"].queryset = employees
+        self.fields["employees"].label_from_instance = lambda person: person.full_name
         self.fields["effective_from"] = _day_field(
             "Paid weekly from", days, "The first day of a week. Days before it stay monthly.")
-        # Shown only for the choice made (base_template/js/dependent.js).
-        self.fields["department"].widget.attrs["data-show-when"] = "who:department"
-        self.fields["employee"].widget.attrs["data-show-when"] = "who:employee"
+        for name, placeholder in (("departments", "Choose departments"), ("employees", "Choose people")):
+            self.fields[name].widget.attrs.update({"data-placeholder": placeholder,
+                                                   "data-search": "always"})
 
     def clean(self):
         data = super().clean()
-        # The hidden picker still posts; only the chosen one counts.
-        if data.get("who") == "employee":
-            data["department"] = None
-            if not data.get("employee"):
-                self.add_error("employee", "Choose the person.")
-        else:
-            data["employee"] = None
-            if not data.get("department"):
-                self.add_error("department", "Choose the department.")
+        if not data.get("departments") and not data.get("employees"):
+            raise forms.ValidationError("Choose at least one department or one person.")
         return data
 
 
 class KeepMonthlyForm(StyledFormMixin, forms.Form):
-    """One person stays monthly although their department is in the group."""
+    """People who stay monthly although their department is in the group."""
 
-    employee = forms.ModelChoiceField(queryset=PayGroup.all_objects.none(), label="Person",
-                                      empty_label="Choose a person")
+    employees = forms.ModelMultipleChoiceField(queryset=PayGroup.all_objects.none(), label="People")
 
     def __init__(self, *args, employees, days, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["employee"].queryset = employees
-        self.fields["employee"].label_from_instance = lambda person: person.full_name
+        self.fields["employees"].queryset = employees
+        self.fields["employees"].label_from_instance = lambda person: person.full_name
+        self.fields["employees"].widget.attrs.update({"data-placeholder": "Choose people",
+                                                      "data-search": "always"})
         self.fields["effective_from"] = _day_field("Monthly from", days)
 
 

@@ -10,6 +10,7 @@ would refuse cannot be picked.
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import redirect
 from django.utils import timezone
@@ -105,7 +106,7 @@ def pay_groups(request):
     with use_company(company_id):
         members = (PayGroupMember.objects.filter(status=PayGroupMember.Status.ACTIVE)
                    .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=today))
-                   .select_related("pay_group", "department", "employee"))
+                   .select_related("pay_group", "department__branch", "employee"))
         if shown_group is not None:
             ids = [r.pk for r in rows if owner_of(r) == shown_group.pk]
             members = members.filter(pk__in=ids)
@@ -173,15 +174,14 @@ def _save(request, company_id, section, row_id, groups, rows, days, departments,
         dialog = f"add-{group.pk}-dialog"
         if form.is_valid():
             data = form.cleaned_data
+            targets = ([{"department": d} for d in data["departments"]]
+                       + [{"employee": e} for e in data["employees"]])
             try:
-                paygroups.set_member(actor=actor, company_id=company_id, pay_group=group,
-                                     effective_from=data["effective_from"],
-                                     department=data["department"], employee=data["employee"])
+                names = _set_all(actor, company_id, group, data["effective_from"], targets)
             except ValidationError as exc:
                 return _refused(form, exc, dialog)
-            who = data["department"].name if data["department"] else data["employee"].full_name
-            messages.success(request, f"{who}: paid weekly in {group.name} from "
-                                      f"{data['effective_from']:%a %d %b %Y}.")
+            messages.success(request, f"Paid weekly in {group.name} from "
+                                      f"{data['effective_from']:%a %d %b %Y}: {', '.join(names)}.")
             return True
         return dialog, form
     if section == "keep_monthly":
@@ -191,12 +191,12 @@ def _save(request, company_id, section, row_id, groups, rows, days, departments,
         if form.is_valid():
             data = form.cleaned_data
             try:
-                paygroups.set_member(actor=actor, company_id=company_id, pay_group=None,
-                                     effective_from=data["effective_from"], employee=data["employee"])
+                names = _set_all(actor, company_id, None, data["effective_from"],
+                                 [{"employee": e} for e in data["employees"]])
             except ValidationError as exc:
                 return _refused(form, exc, dialog)
-            messages.success(request, f"{data['employee'].full_name}: kept on a monthly salary "
-                                      f"from {data['effective_from']:%a %d %b %Y}.")
+            messages.success(request, f"Kept on a monthly salary from "
+                                      f"{data['effective_from']:%a %d %b %Y}: {', '.join(names)}.")
             return True
         return dialog, form
     if section == "member_end":
@@ -225,6 +225,23 @@ def _save(request, company_id, section, row_id, groups, rows, days, departments,
             return True
         return dialog, form
     return None
+
+
+def _set_all(actor, company_id, group, day, targets):
+    """Every department and person in one go: all saved, or none (the first
+    refusal is said with whose it is). Returns their names."""
+    names = []
+    with transaction.atomic():
+        for target in targets:
+            name = (f"{target['department'].name} · {target['department'].branch.name}"
+                    if "department" in target else target["employee"].full_name)
+            try:
+                paygroups.set_member(actor=actor, company_id=company_id, pay_group=group,
+                                     effective_from=day, **target)
+            except ValidationError as exc:
+                raise ValidationError(f"{name}: {' '.join(exc.messages)} Nothing was saved.") from exc
+            names.append(name)
+    return names
 
 
 def _end_label(row):

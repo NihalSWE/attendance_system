@@ -376,8 +376,14 @@ def attendance_calendar(request):
         return export_calendar(request, membership, employee, calendar, year, month)
 
     previous, following = _month_steps(year, month)
+    try:
+        access.fix_scope(request.user, company_id)
+        can_edit_month = employee is not None
+    except PermissionDenied:
+        can_edit_month = False
     return render(request, "attendance/attendance_calendar.html", {
         **month_context(year, month),
+        "can_edit_month": can_edit_month,
         "calendar": calendar,
         "employee": employee,
         "employees": employees,

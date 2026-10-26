@@ -66,6 +66,7 @@ def _built(request, report):
     """``(membership, filters, result, described)`` - as the panel's report page."""
     from reports.builders import Context
     from reports.views import _choices, _described
+    from reports.views import allowed as _allowed
     from reports import filters as report_filters
 
     membership, scope = report_scope(request.user, request.company_id, report.kind)
@@ -83,10 +84,10 @@ def _built(request, report):
     # A filter outside the caller's reach is refused, not quietly widened.
     if f.branch and not any(str(b.pk) == f.branch for b in choices["branches"]):
         raise PermissionDenied("That branch is outside the ones you may report on.")
-    if f.department and not choices["departments"].filter(pk=int(f.department)).exists():
-        raise PermissionDenied("That department is outside the ones you may report on.")
-    if f.employee and not choices["employees"].filter(pk=int(f.employee)).exists():
-        raise PermissionDenied("That person is outside the ones you may report on.")
+    if len(_allowed(f.departments, choices["departments"])) != len(f.departments):
+        raise PermissionDenied("A department is outside the ones you may report on.")
+    if len(_allowed(f.employees, choices["employees"])) != len(f.employees):
+        raise PermissionDenied("A person is outside the ones you may report on.")
     company = membership.company
     result = report.build(Context(company_id=request.company_id, company=company,
                                   zone=zoneinfo.ZoneInfo(company.timezone or "UTC"),

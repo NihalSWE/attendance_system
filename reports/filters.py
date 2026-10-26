@@ -1,5 +1,10 @@
 """A report's filters: its period (a day, a week, a month or a range) and the
-branch, department and employee to narrow it to.
+branch, departments and employees to narrow it to.
+
+Departments and employees add together (2026-10-26): everyone in the chosen
+departments (of the chosen branch, if one is), plus each chosen person,
+wherever they work - picking someone by name means "include them". With
+neither, everyone (of the branch). See ``who``.
 
 One reader for every report, so each one reads its period and filters the same
 way - and what the page shows is exactly what its download holds.
@@ -10,6 +15,7 @@ import datetime
 from dataclasses import dataclass, field
 
 from django import forms
+from django.db.models import Q
 from django.utils import timezone
 
 from attendance.forms import _range_input
@@ -45,8 +51,8 @@ class Filters:
     month: int = 0
     year: int = 0
     branch: str = ""
-    department: str = ""
-    employee: str = ""
+    departments: list = field(default_factory=list)
+    employees: list = field(default_factory=list)
     extra: dict = field(default_factory=dict)
     errors: list = field(default_factory=list)
 
@@ -121,8 +127,8 @@ def read(source, period, *, max_days=92, extras=()):
     return Filters(
         period=period, first=first, last=last, label=label, dates=shown,
         month=month, year=year,
-        branch=_digits(source.get("branch")), department=_digits(source.get("department")),
-        employee=_digits(source.get("employee")),
+        branch=_digits(source.get("branch")),
+        departments=_id_list(source, "department"), employees=_id_list(source, "employee"),
         extra={name: (source.get(name) or "").strip() for name in extras},
         errors=errors,
     )
@@ -142,6 +148,33 @@ def neighbours(f):
         return ({"month": before.month, "year": before.year},
                 {"month": after.month, "year": after.year})
     return None, None
+
+
+def _id_list(source, name):
+    """Every id given for ``name`` (repeated, or comma separated), once each."""
+    values = source.getlist(name) if hasattr(source, "getlist") else [source.get(name)]
+    ids = []
+    for value in values:
+        for part in str(value or "").split(","):
+            part = part.strip()
+            if part.isdigit() and part not in ids:
+                ids.append(part)
+    return ids
+
+
+def who(f, *, branch, department, employee):
+    """The rows' people as a ``Q``: the chosen branch's chosen departments,
+    plus each chosen person wherever they work. ``branch``, ``department``
+    and ``employee`` name the fields (or paths) holding their ids."""
+    group = Q()
+    if f.branch:
+        group &= Q(**{branch: int(f.branch)})
+    if f.departments:
+        group &= Q(**{f"{department}__in": [int(d) for d in f.departments]})
+    if not f.employees:
+        return group
+    picked = Q(**{f"{employee}__in": [int(e) for e in f.employees]})
+    return group | picked if (f.branch or f.departments) else picked
 
 
 def _digits(value):
