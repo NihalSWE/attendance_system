@@ -59,7 +59,7 @@
     </div>
     {% if can_plan %}
         {% url 'production:orders' as new_url %}
-        {% include "organization/profile/modal_form.html" with id="new-dialog" title="Plan production" action=new_url form=new_form submit="Plan" wide=True note="Only products with an active BOM can be planned." %}
+        {% include "organization/profile/modal_form.html" with id="new-dialog" title="Plan production" action=new_url form=new_form submit="Plan" wide=True note="Only finished goods with materials can be planned: add them on the product's page (Finished goods)." %}
     {% endif %}
 {% endblock %}
 {% block extra_js %}

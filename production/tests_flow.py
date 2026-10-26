@@ -138,10 +138,18 @@ class DoneWhenTests(ProductionFixture, TestCase):
 class RuleTests(ProductionFixture, TestCase):
     def test_bom_versions(self):
         v1 = self.recipe()
+        line = {"item": self.bearing, "qty": D("1"), "uom": self.pcs, "scrap_pct": None,
+                "is_packaging": False, "note": ""}
+        # In use but no production order yet: it still changes in place (2026-10-26).
+        added = boms.add_line(**self.kw, bom_id=v1.pk, values=line)
+        boms.remove_line(**self.kw, bom_id=v1.pk, line_id=added.pk)
+        orders.create_order(**self.kw, values={
+            "item": self.juice, "bom": None, "planned_qty": D("1000"), "uom": self.pcs, "planned_date": DAY,
+            "material_warehouse": self.rms, "output_warehouse": self.fgw, "line_name": "",
+            "shift_name": "", "note": ""})
+        # Production has used it: a change is a new version.
         with self.assertRaisesMessage(ValidationError, "start a new version"):
-            boms.add_line(**self.kw, bom_id=v1.pk, values={"item": self.bearing, "qty": D("1"),
-                                                           "uom": self.pcs, "scrap_pct": None,
-                                                           "is_packaging": False, "note": ""})
+            boms.add_line(**self.kw, bom_id=v1.pk, values=line)
         v2 = boms.new_version(**self.kw, bom_id=v1.pk)
         with use_company(self.company):
             self.assertEqual((v2.version, v2.lines.count()), (2, 4))
@@ -152,7 +160,7 @@ class RuleTests(ProductionFixture, TestCase):
                                                "effective_from": None, "note": ""})
 
     def test_no_active_bom_no_order(self):
-        with self.assertRaisesMessage(ValidationError, "has no active BOM"):
+        with self.assertRaisesMessage(ValidationError, "has no materials yet"):
             orders.create_order(**self.kw, values={
                 "item": self.juice, "bom": None, "planned_qty": D("10"), "uom": self.pcs, "planned_date": DAY,
                 "material_warehouse": self.rms, "output_warehouse": self.fgw, "line_name": "", "shift_name": "",

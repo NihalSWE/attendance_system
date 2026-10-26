@@ -18,6 +18,9 @@ from inventory.reports import REPORTS as INVENTORY_REPORTS
 from reports.catalogue import REPORTS
 
 # view name -> the branch permission it needs, or a tuple: any one of them.
+#: Store & Inventory's page per item type (inventory/urls.py, 2026-10-26).
+ITEM_TYPE_PAGES = ("raw_materials", "packaging", "finished_goods", "spare_parts", "general_items")
+
 BRANCH_PAGES = {
     # A12 part 2: who has which access (itself limited to the viewer's branches).
     "organization:access": "access.grant",
@@ -135,9 +138,11 @@ BRANCH_PAGES = {
     # the services check each store's branch again. Settings are not listed.
     **{f"inventory:{key}": "inventory.view"
        for key in ("home", "stock", "item_detail", "units", "categories", "items", "stores",
-                   "bins", "suppliers", "customers", "opening", "opening_detail")},
+                   "bins", "suppliers", "customers", "opening", "opening_detail",
+                   *ITEM_TYPE_PAGES)},
     **{f"inventory:{key}_{action}": "inventory.items"
-       for key in ("units", "categories", "items", "stores", "bins", "suppliers", "customers")
+       for key in ("units", "categories", "items", "stores", "bins", "suppliers", "customers",
+                   *ITEM_TYPE_PAGES)
        for action in ("edit", "status")},
     "inventory:standard_units": "inventory.items",
     "inventory:pack_unit_add": "inventory.items",
@@ -168,6 +173,9 @@ BRANCH_PAGES = {
                     "delivery_line_add", "delivery_line_remove", "delivery_scan", "delivery_pdf",
                     "delivery_action", "invoices", "invoice_detail", "invoice_pdf", "invoice_action",
                     "returns", "return_detail", "return_line_add", "return_line_remove", "return_action")},
+    # A finished good's Materials card (2026-10-26): "Set up BOMs (recipes)".
+    **{f"production:{name}": "production.bom"
+       for name in ("recipe_batch", "recipe_add", "recipe_remove")},
     # Phase 5: production. Every page opens to anyone who may view stock or
     # take part; the services check the finished-goods store's branch and the
     # exact permission (BOMs, planning, running, QC).

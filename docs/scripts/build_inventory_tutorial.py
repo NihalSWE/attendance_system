@@ -3,7 +3,8 @@
     venv/Scripts/python docs/scripts/build_inventory_tutorial.py
 
 writes docs/inventory/INVENTORY-PART1-TUTORIAL.pdf: the Inventory pages shown in
-the sidebar today (2026-10-25: also Labels, Scan and Production -> BOMs), every field with what to write and what it does in the
+the sidebar today (2026-10-26: one page per item type, a finished good's
+materials on its page, Production orders), every field with what to write and what it does in the
 software (the "what it does" texts are in inventory_tutorial_effects.py, checked
 against the code). Rebuild it when those pages or their rules change.
 """
@@ -275,7 +276,7 @@ story = []
 story += [Spacer(1, 40 * mm),
           P("Store &amp; Inventory", "title"),
           P("Part 1: Setting up your lists, opening stock and stock on hand, labels and "
-            "scanning, and the recipe of each finished good", "subtitle"),
+            "scanning, the recipe of each finished good and production orders", "subtitle"),
           Spacer(1, 8 * mm),
           P("A step-by-step guide for store managers, store keepers, accounts and administrators. "
             "Read it from top to bottom the first time; after that, use each step as a "
@@ -287,17 +288,19 @@ story += [Spacer(1, 40 * mm),
               ("Item categories", "Folders to group items"),
               ("Stores", "The rooms where stock is kept"),
               ("Bins", "Shelves inside a store (optional)"),
-              ("Items", "Every single thing you keep"),
+              ("Raw materials ... General items", "Every single thing you keep: one page per "
+                                                  "type"),
               ("Suppliers", "Who you buy from"),
               ("Customers", "Who you sell to"),
               ("Opening stock", "The count on day one"),
               ("Stock on hand", "What you have, where, and its value"),
               ("Labels", "Barcode labels for items, batches, packages and bins"),
               ("Scan", "Scan any label to see what it is"),
-              ("BOMs (Production menu)", "The recipe of each finished good"),
+              ("Production orders (Production menu)", "Make finished goods from the materials"),
           ], (55, 115)),
           Spacer(1, 20 * mm),
-          P("Version: 25 October 2026 (adds Labels, Scan and BOMs). Example company in this "
+          P("Version: 26 October 2026 (one page per item type; a finished good's materials on its "
+            "own page; production orders). Example company in this "
             "guide: a juice factory (sugar, mango pulp, bottles, mango juice).", "small")]
 story.append(PageBreak())
 
@@ -313,7 +316,7 @@ toc = [
     "Step 3 &middot; Item categories",
     "Step 4 &middot; Stores",
     "Step 5 &middot; Bins",
-    "Step 6 &middot; Items (and pack units)",
+    "Step 6 &middot; Items: one page per type (and pack units)",
     "Step 7 &middot; Suppliers",
     "Step 8 &middot; Customers",
     "Faster: filling lists from Excel",
@@ -322,7 +325,8 @@ toc = [
     "Step 11 &middot; Labels",
     "Step 12 &middot; Scan",
     "The finished goods flow, from raw material to sale",
-    "Step 13 &middot; BOMs: the recipe of a finished good",
+    "Step 13 &middot; Materials (recipe) of a finished good",
+    "Step 14 &middot; Production orders: make it",
     "A full worked example from start to finish",
     "Messages you may see, and what to do",
     "Checklist",
@@ -360,14 +364,15 @@ story += [P("The big picture", "h1"),
               ("3", "Item categories", "Every item belongs to a category."),
               ("4", "Stores", "Stock always sits in a store."),
               ("5", "Bins", "Shelves belong to a store (optional)."),
-              ("6", "Items", "Uses units, categories and (optionally) a usual store."),
+              ("6", "Item pages", "Uses units, categories and (optionally) a usual store."),
               ("7", "Suppliers", "Needed later for buying; set them up now."),
               ("8", "Customers", "Needed later for selling; set them up now."),
               ("9", "Opening stock", "Uses stores, bins and items. Stock starts here."),
               ("10", "Stock on hand", "Shows the result of everything above."),
               ("11", "Labels", "Labels are printed for items, batches, packages and bins."),
               ("12", "Scan", "Reads those labels back; needs labels to exist."),
-              ("13", "BOMs", "The recipe of a finished good: uses its materials' items."),
+              ("13", "Materials (recipe)", "On the finished good's page: uses its materials."),
+              ("14", "Production orders", "Make the finished good from the materials in stock."),
           ], (14, 40, 116), bold_first=True)]
 story.append(PageBreak())
 
@@ -387,8 +392,8 @@ story += [P("Before you start", "h1"),
           P("Open <b>Organisation &rarr; Access</b>, choose each person, and tick what they need. "
             "The owner and company administrator can do everything already."),
           grid(("Permission (as written on the Access page)", "What it allows in this part"), [
-              ("View stock and items", "Open the Inventory pages, Labels, Scan and BOMs, and "
-                                       "look."),
+              ("View stock and items", "Open the Inventory pages, Labels, Scan and production "
+                                       "orders, and look."),
               ("Set up items, stores, suppliers and customers", "Add and edit steps 2 to 8."),
               ("Enter stock adjustments, counts and opening stock",
                "Create an opening stock draft, add or remove its lines, import it."),
@@ -397,8 +402,11 @@ story += [P("Before you start", "h1"),
               ("See stock costs and values", "See average cost and value on Stock on hand."),
               ("Print and reprint labels", "Print item, batch, package and bin labels; void a "
                                            "label."),
-              ("Set up BOMs (recipes)", "Start, change and activate the recipe of a finished "
-                                        "good."),
+              ("Set up BOMs (recipes)", "Set the materials on a finished good's page (Step 13)."),
+              ("Plan and release production orders", "Plan a run; release one someone else "
+                                                     "planned (Step 14)."),
+              ("Use materials and record production output", "Use the materials and post the "
+                                                             "output (Step 14)."),
           ], (75, 95)),
           box("Good practice: two people", [
               "Let one person <b>enter</b> the opening stock and a <b>different person post</b> "
@@ -431,7 +439,8 @@ story += [P("Buttons you will see on every page", "h1"),
                                         "correct. The software asks you to confirm first."),
               ("Search box, filters", "Find rows quickly. Lists show a count and page through "
                                       "long results."),
-              ("Import from Excel", "On Items, Stores, Suppliers, Customers and Opening stock: "
+              ("Import from Excel", "On the item pages, Stores, Suppliers, Customers and "
+                                    "Opening stock: "
                                     "fill a ready template and upload many rows at once (see "
                                     "\"Faster: filling lists from Excel\")."),
           ], (45, 125)),
@@ -553,61 +562,68 @@ story.append(fields("bins", [
 ]))
 
 # ---------------------------------------------------------------- step 6
-story += section(6, "Items (and pack units)", "Inventory &rarr; Items",
-                 "every single thing you buy, make, store or sell. This is the most "
-                 "important list: take your time with it.",
+story += section(6, "Items: one page per type", "Inventory &rarr; Raw materials, Packaging, "
+                 "Finished goods, Spare parts, General items",
+                 "every single thing you buy, make, store or sell. Each type has <b>its own page</b> "
+                 "and its own short <b>Add</b> form; <b>All items</b> lists every type together. "
+                 "This is the most important list: take your time with it.",
                  "units (Step 2) and categories (Step 3); stores (Step 4) if you want to set "
                  "a usual store.")
 story += steps([
-    "Click <b>Add item</b>.",
-    "Fill the form below and click <b>Add</b>.",
-    "If you also buy or count it in packs, open the item (click its row's open button) and "
-    "add its <b>pack units</b> (below).",
+    "Open the page of the type, e.g. <b>Inventory &rarr; Raw materials</b>, and click <b>Add raw "
+    "material</b>. The type is set by the page: there is no Item type box.",
+    "Fill the short form below and click <b>Add</b>. The rarely used fields are folded under "
+    "<b>More details (optional)</b>.",
+    "If you also buy or count it in packs, open the item (its code) and add its <b>pack "
+    "units</b> (below).",
 ])
-story.append(P("The item form", "h2"))
+story.append(P("The Add form", "h2"))
 story.append(fields("items", [
     ("Code", "Yes", "A short, unique code.", "RM-SUGAR"),
     ("Name", "Yes", "The item's name.", "Sugar"),
-    ("Name in Bangla", "No", "The Bangla name, if you want it shown.", "(Bangla name)"),
-    ("Item type", "Yes", "Raw material, Packaging, Finished goods, Spare part, General store.",
-     "Raw material"),
-    ("Category", "Yes", "Its folder from Step 3.", "Sugar"),
+    ("Category", "Yes", "Its folder from Step 3. Only categories of this type are offered.",
+     "Sugar"),
     ("Base unit", "Yes", "The unit stock is counted in. <b>Cannot change once stock has "
                          "moved.</b>", "KG"),
-    ("Barcode", "No", "Only a barcode <b>already printed</b> on the product (EAN-13).", "(empty)"),
     ("Keeps batches", "No (tick)", "Tick if each delivery has a batch or lot number you want to "
                                    "track (food, chemicals).", "Ticked"),
-    ("Has an expiry date", "No (tick)", "Tick if it can go bad.", "Ticked"),
-    ("Shelf life (days)", "No", "How long it lasts after it is made. Lets the software work "
-                                "out the expiry date from the manufacture date.", "365"),
-    ("QC before use", "No (tick)", "Tick if new stock must pass a quality check before "
-                                   "anyone may use it.", "Ticked"),
-    ("Min stock", "No", "Never let stock fall below this.", "500"),
-    ("Reorder point", "No", "When stock falls to this, buy more (shown in the morning "
-                            "email).", "1000"),
-    ("Reorder qty", "No", "How much to buy each time.", "2000"),
-    ("Max stock", "No", "Do not keep more than this.", "5000"),
+    ("Has an expiry date", "No (tick)", "Tick if it can go bad. <b>Keeps batches</b> is ticked "
+                                        "with it.", "Ticked"),
+    ("Shelf life (days)", "No", "Shown once expiry is ticked. How long it lasts after it is "
+                                "made.", "365"),
+    ("QC before use", "No (tick)", "Raw materials and packaging only. Tick if new stock must pass "
+                                   "a quality check before anyone may use it.", "Ticked"),
     ("Usual store", "No", "Where it is normally kept.", "RMS"),
-    ("Standard cost", "No", "The expected cost of <b>one base unit</b>. A guide for the "
-                            "count day.", "120"),
-    ("Sale price", "No", "Selling price, mainly for finished goods.", "(empty)"),
-    ("VAT rate", "No", "VAT percentage, if it applies.", "(empty)"),
-    ("HS code", "No", "Customs code, for imported items.", "(empty)"),
-    ("Notes", "No", "Anything extra.", "Supplier packs in 50 kg bags"),
+    ("Sale price", "No", "Finished goods only, on the main form. Elsewhere under More details.",
+     "(empty)"),
+    ("VAT rate", "No", "Finished goods only, on the main form. Elsewhere under More details.",
+     "(empty)"),
+    ("Name in Bangla", "No", "Under More details. The Bangla name, if you want it shown.",
+     "(Bangla name)"),
+    ("Barcode", "No", "Under More details. Only a barcode <b>already printed</b> on the product "
+                      "(EAN-13).", "(empty)"),
+    ("Min stock", "No", "Under More details. Never let stock fall below this.", "500"),
+    ("Reorder point", "No", "Under More details. When stock falls to this, buy more.", "1000"),
+    ("Reorder qty", "No", "Under More details. How much to buy each time.", "2000"),
+    ("Max stock", "No", "Under More details. Do not keep more than this.", "5000"),
+    ("Standard cost", "No", "Under More details. The expected cost of <b>one base unit</b>.",
+     "120"),
+    ("HS code", "No", "Under More details. Customs code, for imported items.", "(empty)"),
+    ("Notes", "No", "Under More details. Anything extra.", "Supplier packs in 50 kg bags"),
 ]))
 story.append(box("Rules the item form checks", [
-    "<b>Has an expiry date</b> needs <b>Keeps batches</b> ticked too (each batch has its own "
-    "expiry).",
-    "The <b>Category</b> must be of the same <b>Item type</b> as the item.",
+    "Ticking <b>Has an expiry date</b> ticks <b>Keeps batches</b> too (each batch has its own "
+    "expiry); clearing Keeps batches clears the expiry.",
+    "Only categories of the page's type are offered.",
     "<b>Min stock</b> and <b>Reorder point</b> cannot be above <b>Max stock</b>.",
     "<b>Base unit</b> and the batch / expiry ticks should be right from the start: once stock "
-    "has moved, the base unit is fixed."], "warn"))
+    "has moved, the base unit is fixed.",
+    "A form that will not save opens again with your values and the reason in red."], "warn"))
 story.append(box("Raw materials and finished goods", [
-    "Make <b>every material</b> an item first (Raw material or Packaging), then the "
-    "<b>finished good</b> (Item type <b>Finished goods</b>, with its <b>Sale price</b>).",
-    "The item form has no list of materials. The materials a finished good is made of are its "
-    "<b>recipe (BOM)</b>, set up in <b>Step 13</b>, because a recipe changes over time and "
-    "keeps its versions.",
+    "Make <b>every material</b> first (on Raw materials or Packaging), then the <b>finished "
+    "good</b> on Finished goods, with its <b>Sale price</b>.",
+    "The materials a finished good is made of are set <b>on its own page</b>, in the "
+    "<b>Materials (recipe)</b> card (Step 13).",
     "Raw materials can be sold too: a sales order takes any active item (Sales is a later "
     "part)."]))
 story.append(P("Pack units (on the item's own page)", "h2"))
@@ -625,6 +641,7 @@ story.append(box("Example", ["Sugar: base unit KG; pack unit BAG with factor 50.
 story.append(P("What the item page shows", "h3"))
 story += bullets(["<b>Details</b>: the values above.",
                   "<b>Pack units</b>: add or remove packs.",
+                  "<b>Materials (recipe)</b>: finished goods only (Step 13).",
                   "<b>Batches</b>: stock of this item in each store, by batch.",
                   "<b>Stock card</b>: every movement in and out, newest first."])
 
@@ -756,6 +773,13 @@ story += [P("It happens in three stages", "h2"),
                "6000 (one bag)"),
               ("Note", "No", "Anything extra.", ""),
           ]),
+          box("The line follows the item", [
+              "Once you choose the <b>Item</b>, the line asks only what that item needs: the "
+              "batch, supplier batch, manufacture and expiry boxes show only for an item that "
+              "keeps batches, and <b>Unit</b> offers only the item's base unit and its packs "
+              "(with one unit, it is chosen and hidden).",
+              "The manufacture date cannot be after the opening day: later days are greyed "
+              "out."]),
           box("How the software counts it", [
               "10 BAG at 6,000 a bag, with 1 BAG = 50 KG, becomes <b>500 kg at 120 a kg</b> "
               "(value 60,000). The line shows both: the quantity you wrote and the quantity "
@@ -909,25 +933,23 @@ story += [P("The finished goods flow, from raw material to sale", "h1"),
           fg_flow_diagram(),
           grid(("", "What you do", "Where", "Today"), [
               ("1", "Make every material an item: Raw material or Packaging.",
-               "Inventory &rarr; Items (Step 6)", "Shown"),
+               "Inventory &rarr; Raw materials, Packaging (Step 6)", "Shown"),
               ("2", "Make the finished good an item: type <b>Finished goods</b>, with its sale "
                     "price; tick batches / expiry if it expires.",
-               "Inventory &rarr; Items (Step 6)", "Shown"),
-              ("3", "Write its recipe: what one batch uses, then <b>Activate</b> it.",
-               "Production &rarr; BOMs (Step 13)", "Shown"),
+               "Inventory &rarr; Finished goods (Step 6)", "Shown"),
+              ("3", "Add its materials: what one batch uses. It is in use at once.",
+               "The finished good's page (Step 13)", "Shown"),
               ("4", "Make it: a <b>production order</b> takes the materials out of the raw "
                     "material store and puts the finished goods into the finished goods store "
                     "as a new batch, with its labels and its cost.",
-               "Production &rarr; Production orders", "A later part"),
+               "Production &rarr; Production orders (Step 14)", "Shown"),
               ("5", "Sell it (and raw materials too): sales order, delivery, invoice.",
                "Sales", "A later part"),
           ], (8, 92, 45, 25)),
-          box("Until production orders are switched on", [
-              "Finished goods stock can only come from <b>Opening stock</b> (Step 9): count the "
-              "finished goods in their store like any other item.",
-              "The recipe you write now is what production orders will use, so it is worth "
-              "getting right today."], "warn"),
-          P("How a production order will use the recipe (a later part)", "h2"),
+          box("Finished goods already on the shelf", [
+              "Count them on <b>Opening stock</b> (Step 9) like any other item. From then on "
+              "they come from production orders (Step 14)."]),
+          P("How a production order uses the recipe", "h2"),
           *bullets([
               "<b>Materials planned</b> = quantity per batch &times; (quantity to make &divide; "
               "batch size) &times; (1 + scrap %).",
@@ -939,72 +961,88 @@ story += [P("The finished goods flow, from raw material to sale", "h1"),
           ])]
 
 # ---------------------------------------------------------------- step 13
-story += section(13, "BOMs: the recipe of a finished good", "Production &rarr; BOMs",
-                 "the <b>bill of materials</b>: what one batch of a finished good uses. A "
-                 "product's recipe has versions (v1, v2 ...); <b>one version is active</b> and "
-                 "that is the one production uses.",
+story += section(13, "Materials (recipe) of a finished good", "Inventory &rarr; Finished goods "
+                 "&rarr; the product &rarr; <b>Materials (recipe)</b>",
+                 "what one batch of a finished good uses, on the product's own page. There is "
+                 "nothing to activate: the recipe is <b>in use as soon as it has a material</b>.",
                  "the finished good and all its materials as items (Step 6). Permission: "
                  "<b>Set up BOMs (recipes)</b>.")
-story += [P("Write the first recipe", "h2"),
+story += [P("Add the materials", "h2"),
           *steps([
-              "Click <b>New BOM</b>. Fill the form (below) and click <b>Start</b>. This makes "
-              "<b>version 1</b> as a <b>Draft</b> and opens it.",
-              "Click <b>Add material</b> once for every ingredient and packaging material. Each "
-              "line is for <b>one batch</b> (the batch size you gave).",
-              "Check the list under <b>Materials per batch</b>. A wrong line: <b>Remove</b> it "
-              "and add it again.",
-              "Click <b>Activate</b> and confirm. The recipe is now in use.",
+              "Open <b>Inventory &rarr; Finished goods</b> and click the product's code.",
+              "In <b>Materials (recipe)</b>, write how much <b>one batch makes</b> (in the "
+              "product's unit) and click <b>Save</b>.",
+              "Click <b>Add material</b> once for every ingredient and packaging item. The "
+              "material's unit shows beside the quantity as soon as you choose it.",
+              "A wrong line: <b>Remove</b> it and add it again. The page comes back to the card "
+              "and says what was saved.",
           ]),
-          P("The New BOM form", "h3"),
-          fields("bom", [
-              ("Finished product", "Yes", "The finished good this recipe makes.",
-               "FG-MJ500 Mango juice 500 ml"),
-              ("Batch size", "Yes", "How much one batch makes.", "1000"),
-              ("Batch unit", "Yes", "The unit of the batch size.", "PCS"),
-              ("Effective from", "No", "The day this recipe is meant to start.", "01 Nov 2026"),
-              ("Note", "No", "Anything extra.", "Standard recipe"),
+          P("One batch makes", "h3"),
+          fields("recipe", [
+              ("One batch makes", "Yes", "How much one batch makes, in the product's unit.",
+               "1000 (PCS)"),
           ]),
           P("The Add material form", "h3"),
-          fields("bom_line", [
-              ("Material", "Yes", "The ingredient or packaging item.", "RM-MANGO Mango pulp"),
-              ("Quantity per batch", "Yes", "How much one batch uses.", "120"),
-              ("Unit", "Yes", "The unit of that quantity.", "KG"),
-              ("Scrap %", "No", "Normal wastage of this material (0 to 100).", "2"),
-              ("Packaging", "No (tick)", "Tick for bottles, caps, labels, cartons.", "(not ticked)"),
+          fields("recipe_line", [
+              ("Material", "Yes", "The raw material or packaging item.", "RM-MANGO Mango pulp"),
+              ("How much one batch uses", "Yes", "In the material's own unit (shown beside the "
+                                                 "box).", "120 (KG)"),
+              ("Normal wastage %", "No", "Normal wastage of this material (0 to 100).", "2"),
+          ]),
+          P("Changing a recipe that production has used", "h2"),
+          P("Change it the same way. Once a production order has used the recipe, a change is "
+            "saved as a <b>new version</b> (v2, v3 ...) and the card says so; the orders already "
+            "made keep the version they used. Until then, changes are made in place."),
+          box("Rules the recipe checks", [
+              "Only a finished good has a recipe; only raw materials and packaging can be on it.",
+              "Each material is on a recipe once: the Add material list leaves out those already "
+              "on it.",
+              "A recipe in use keeps at least one material: add the new one first, then remove "
+              "the old one."], "warn")]
+
+# ---------------------------------------------------------------- step 14
+story += section(14, "Production orders: make it", "Production &rarr; Production orders",
+                 "a run that makes a quantity of a finished good: plan it, release it, use the "
+                 "materials, post the output.",
+                 "a finished good with materials (Step 13) and the materials in stock. "
+                 "Permissions: <b>Plan and release production orders</b>, <b>Use materials and "
+                 "record production output</b>.")
+story += [*steps([
+              "Click <b>Plan production</b>, fill the form below, click <b>Plan</b>. The order "
+              "opens with the planned materials worked out.",
+              "Click <b>Release</b>. Someone other than the planner releases it, unless the "
+              "planner is the owner or a company administrator; a planner who may not sees "
+              "\"someone else with planning access releases it\".",
+              "Click <b>Use planned materials</b>: a draft opens with each material taken first "
+              "expiry first (or scan the package labels). Check it and click <b>Post</b>.",
+              "Back on the order, click <b>Post output</b>: the good and rejected quantity. The "
+              "finished goods are in their store as a new batch, at the cost of the materials.",
+              "When nothing is left to do, click <b>Close</b>.",
+          ]),
+          P("The Plan production form", "h3"),
+          fields("order", [
+              ("Product", "Yes", "The finished good.", "FG-MJ500 Mango juice 500 ml"),
+              ("How many to make", "Yes", "In the product's unit.", "5000"),
+              ("Planned date", "Yes", "The day of the run.", "05 Nov 2026"),
+              ("Materials from store", "Yes", "Chosen already: your raw material store.", "RMS"),
+              ("Finished goods into store", "Yes", "Chosen already: your finished goods store.",
+               "FGW"),
               ("Note", "No", "Anything extra.", ""),
           ]),
-          P("The stages of a recipe", "h2"),
-          grid(("Stage", "What it means", "Buttons"), [
-              ("Draft", "Being written. Materials can be added and removed. Not used by "
-                        "production yet.", "Add material, Remove, Activate, Delete draft"),
-              ("Active", "<b>The recipe in use.</b> Cannot be changed. One per product.",
-               "New version"),
-              ("Archived", "An older version, replaced when a newer one was activated. Kept for "
-                           "history; production already done keeps the version it used.",
-               "New version"),
-          ], (24, 96, 50)),
-          P("Change a recipe", "h2"),
-          *steps([
-              "Open the active version and click <b>New version</b>. A draft copy with all its "
-              "materials opens (e.g. v2).",
-              "Change it: <b>Remove</b> lines and <b>Add material</b> again with the new "
-              "quantities.",
-              "Click <b>Activate</b>. The new version is in use; the old one becomes "
-              "<b>Archived</b>.",
-          ]),
-          box("Rules the recipe checks", [
-              "Only a <b>Finished goods</b> item can have a recipe.",
-              "A product is not its own material, and each material appears once on a recipe.",
-              "Units must be the item's base unit or one of its pack units.",
-              "A recipe cannot be activated without materials, or with an inactive material.",
-              "Only a draft changes. A product has at most one draft at a time: finish or "
-              "delete it before starting another."], "warn")]
+          P("The Post output form", "h3"),
+          fields("output", [
+              ("Output date", "Yes", "The day it was made.", "05 Nov 2026"),
+              ("Good quantity", "Yes", "What passed, in the product's unit (shown in the label).",
+               "4950"),
+              ("Rejected", "No", "What was thrown away.", "50"),
+              ("More details", "No", "Folded: batch no., expiry, bin, packages, note.", ""),
+          ])]
 
 # ---------------------------------------------------------------- worked example
 story.append(PageBreak())
 story += [P("A full worked example", "h1"),
           P("A juice factory sets up its items, enters its count of 1 November 2026, prints "
-            "labels and writes the recipe of its mango juice."),
+            "labels, adds the materials of its mango juice and makes the first run."),
           P("1. Settings and lists", "h2"),
           grid(("Page", "What they entered"), [
               ("Inventory settings", "Average cost: whole company. Warn before expiry: 30. "
@@ -1016,10 +1054,10 @@ story += [P("A full worked example", "h1"),
               ("Stores", "RMS Raw Material Store (Raw material) and PKS Packaging Store "
                          "(Packaging), both in HC Factory."),
               ("Bins", "RMS: R1-S1, R1-S2."),
-              ("Items", "RM-SUGAR Sugar: base KG, keeps batches, has expiry, shelf life 365, "
-                        "pack BAG = 50.<br/>RM-MANGO Mango pulp: base KG, keeps batches, has "
-                        "expiry, QC before use, pack DRUM = 220.<br/>PK-BTL500 PET bottle 500 ml: "
-                        "base PCS, no batches, pack CARTON = 200."),
+              ("Item pages", "RM-SUGAR Sugar (Raw materials): base KG, keeps batches, has expiry, shelf life 365, "
+                        "pack BAG = 50.<br/>RM-MANGO Mango pulp (Raw materials): base KG, keeps "
+                        "batches, has expiry, QC before use, pack DRUM = 220.<br/>PK-BTL500 PET "
+                        "bottle 500 ml (Packaging): base PCS, no batches, pack CARTON = 200."),
               ("Suppliers", "SUP-ABC ABC Sugar Mills, terms 30 days."),
               ("Customers", "CUS-SYL01 Sylhet Traders, Distributor, credit limit 200,000."),
           ], (40, 130)),
@@ -1046,7 +1084,7 @@ story += [P("A full worked example", "h1"),
               "(value 369,600), Bottles 2,400 pcs (value 19,200).",
               "They printed all labels from the posted opening stock and stuck them on.",
           ]),
-          P("4. Labels, scanning and the first recipe", "h2"),
+          P("4. Labels, scanning and the materials of the juice", "h2"),
           *steps([
               "Bins: they printed <b>Bin labels</b> for RMS from the Stores page and stuck one "
               "on each shelf.",
@@ -1055,20 +1093,30 @@ story += [P("A full worked example", "h1"),
               "P1-000010 came out, one per bag.",
               "On <b>Scan</b>, scanning a bag showed: RM-SUGAR Sugar &middot; batch SUG-2610 "
               "&middot; 1 BAG, expiry 01 Oct 2027, in RMS / R1-S1.",
-              "They added <b>FG-MJ500 Mango juice 500 ml</b>: Finished goods, base PCS, keeps "
-              "batches, has expiry, shelf life 180 days, pack CARTON = 24, sale price 45.",
-              "Production &rarr; BOMs &rarr; <b>New BOM</b>: FG-MJ500, batch size 1,000 PCS. They "
-              "added the materials below and clicked <b>Activate</b>.",
+              "On <b>Finished goods</b> they added <b>FG-MJ500 Mango juice 500 ml</b>: base "
+              "PCS, keeps batches, has expiry, shelf life 180 days, sale price 45; then pack "
+              "CARTON = 24 on its page.",
+              "On FG-MJ500's page, <b>Materials (recipe)</b>: one batch makes 1,000 PCS. They "
+              "added the materials below; the recipe was in use at once.",
           ]),
-          grid(("Material", "Quantity per batch", "Unit", "Scrap %", "Packaging",
-                "For 5,000 bottles"), [
-              ("RM-MANGO Mango pulp", "120", "KG", "2", "", "120 &times; 5 &times; 1.02 = 612 kg"),
-              ("RM-SUGAR Sugar", "40", "KG", "0", "", "40 &times; 5 = 200 kg"),
-              ("PK-BTL500 PET bottle 500 ml", "1,000", "PCS", "1", "Ticked",
+          grid(("Material", "One batch uses", "Wastage %", "Type", "For 5,000 bottles"), [
+              ("RM-MANGO Mango pulp", "120 KG", "2", "Raw material",
+               "120 &times; 5 &times; 1.02 = 612 kg"),
+              ("RM-SUGAR Sugar", "40 KG", "0", "Raw material", "40 &times; 5 = 200 kg"),
+              ("PK-BTL500 PET bottle 500 ml", "1,000 PCS", "1", "Packaging",
                "1,000 &times; 5 &times; 1.01 = 5,050 pcs"),
-          ], (44, 24, 13, 16, 21, 52)),
-          P("The last column is what a production order for 5,000 bottles will plan, once "
-            "production orders are switched on (a later part).", "small")]
+          ], (48, 26, 20, 26, 50)),
+          P("5. The first run", "h2"),
+          *steps([
+              "Production &rarr; Production orders &rarr; <b>Plan production</b>: FG-MJ500, 5,000, "
+              "05 Nov 2026 (stores RMS and FGW were chosen already). The order planned the last "
+              "column above.",
+              "The production manager clicked <b>Release</b>; the store keeper clicked <b>Use "
+              "planned materials</b>, checked the batches (first expiry first) and clicked "
+              "<b>Post</b>.",
+              "After the run: <b>Post output</b>, good 4,950, rejected 50. Stock on hand showed "
+              "4,950 PCS of FG-MJ500 in FGW as a new batch, at the materials' cost &divide; 4,950.",
+          ])]
 
 # ---------------------------------------------------------------- messages
 story.append(PageBreak())
@@ -1079,9 +1127,12 @@ story += [P("Messages you may see, and what to do", "h1"),
               ("... does not keep batches; leave it empty.", "A batch was written for an item "
                                                               "without batches.",
                "Clear the Batch no. field."),
-              ("... has an expiry date: give it.", "The item expires and no expiry (or shelf "
-                                                   "life) was given.",
-               "Write the expiry date, or the manufacture date if the item has a shelf life."),
+              ("... has an expiry date: give it, or the manufacture date.", "The item expires "
+               "and neither date was given.", "Write the expiry date, or the manufacture date "
+               "(the expiry is worked out from the shelf life)."),
+              ("... has an expiry date: give it (it has no shelf life ...).", "The item expires "
+               "and has no shelf life to work it out from.", "Write the expiry date, or set the "
+               "item's shelf life first."),
               ("The expiry date is before the manufacture date.", "Dates swapped or mistyped.",
                "Correct the dates."),
               ("Made after the opening day?", "Manufacture date is later than the opening day.",
@@ -1104,8 +1155,9 @@ story += [P("Messages you may see, and what to do", "h1"),
                "Add or import the lines first."),
               ("Say why it is being reversed.", "Reverse needs a reason.",
                "Write the reason."),
-              ("An item with an expiry date must also keep batches.", "Item form: expiry "
-               "ticked without batches.", "Tick Keeps batches as well."),
+              ("An item with an expiry date must also keep batches.", "Item import: expiry "
+               "without batches (the form ticks both by itself).", "Set Keeps batches as "
+               "well."),
               ("This category is for another item type.", "Item form: the category is of a "
                "different item type.", "Choose a category of the item's type, or change the "
                "item type."),
@@ -1124,20 +1176,22 @@ story += [P("Messages you may see, and what to do", "h1"),
               ("Say why the label is void.", "Void: the reason is empty.", "Write the reason."),
               ("Between 1 and 500 packages.", "Package labels: too many or none.",
                "Make them in two goes, or give at least 1."),
-              ("... is not a finished product.", "BOM: the item is not of type Finished goods.",
-               "Choose a finished good, or change the item's type on Items."),
-              ("A product is not its own material.", "BOM: the product was chosen as a material.",
-               "Choose the ingredient instead."),
-              ("... is on this recipe already.", "BOM: the material is on it once already.",
+              ("Say first how much one batch makes.", "Recipe: a material was added before the "
+               "batch size.", "Write One batch makes and click Save."),
+              ("Choose a raw material or a packaging item.", "Recipe: another type was chosen.",
+               "Choose a raw material or packaging item."),
+              ("... is on this recipe already.", "Recipe: the material is on it once already.",
                "Remove the old line and add it again with the right quantity."),
-              ("Add the materials before activating the recipe.", "BOM: Activate on an empty "
-               "draft.", "Add the materials first."),
-              ("Inactive materials: ...", "BOM: a material was deactivated.", "Activate it on "
-               "Items, or remove it from the recipe."),
-              ("... is active: start a new version to change it.", "BOM: only a draft changes.",
-               "Click New version, change the copy, then Activate it."),
-              ("... has a draft version already: finish that one.", "BOM: a second draft was "
-               "started.", "Open the draft, then activate or delete it."),
+              ("A recipe in use needs at least one material ...", "Recipe: the last material "
+               "was removed.", "Add the new material first, then remove the old one."),
+              ("... has no materials yet: add them on its page first.", "Production order: the "
+               "product has no recipe.", "Add its materials (Step 13)."),
+              ("No materials were used on this order ...", "Post output before any material "
+               "was used.", "Use the materials first, and post them."),
+              ("A draft material use is open on this order ...", "A material use was left as a "
+               "draft.", "Open it from the order: Post it or Cancel it."),
+              ("Materials were used: return them, then post the output ...", "Cancel on an "
+               "order that has used materials.", "Return unused material, or post the output."),
           ], (58, 52, 60))]
 
 # ---------------------------------------------------------------- checklist
@@ -1164,7 +1218,9 @@ check = [
     "Bin labels printed and stuck on each shelf (if you use bins).",
     "Package labels printed for stock that comes in bags, drums or cartons.",
     "A few labels scanned on Inventory &rarr; Scan to check they read back right.",
-    "Every finished good has its recipe on Production &rarr; BOMs, and it is <b>Active</b>.",
+    "Every finished good has its materials on its page, and the card says <b>In use</b>.",
+    "A first production order planned, released, materials used and output posted; Stock on hand "
+    "shows the new batch.",
 ]
 rows = [[Paragraph("&#9744;", ParagraphStyle("cb", fontSize=13, leading=14)), P(c, "cell")]
         for c in check]
@@ -1197,13 +1253,14 @@ story += [Spacer(1, 8 * mm), P("Words used in this guide", "h1"),
               ("Package label", "The label of one bag, drum or carton: item, batch and quantity "
                                 "in one scan."),
               ("Void", "A label taken out of use with a reason; it never scans again."),
-              ("BOM (recipe)", "Bill of materials: what one batch of a finished good uses."),
-              ("Version", "A numbered copy of a recipe (v1, v2 ...). One is active; older ones "
-                          "are archived."),
-              ("Scrap %", "The normal wastage of a material, added on top when production is "
-                          "planned."),
+              ("Recipe (BOM)", "The materials one batch of a finished good uses; on the "
+                               "product's page."),
+              ("Version", "A numbered copy of a recipe (v1, v2 ...). A change after production "
+                          "used it makes a new one; past runs keep theirs."),
+              ("Wastage %", "The normal wastage of a material, added on top when production is "
+                            "planned."),
               ("Production order", "An order to make a quantity of a finished good with its "
-                                   "active recipe (a later part)."),
+                                   "recipe in use."),
           ], (35, 135))]
 
 
@@ -1212,7 +1269,8 @@ def build():
                             topMargin=18 * mm, bottomMargin=18 * mm,
                             title="Store & Inventory - Part 1 tutorial",
                             author="IGL Web Ltd.",
-                            subject="Setting up, opening stock, labels, scanning and recipes")
+                            subject="Setting up, opening stock, labels, scanning, recipes and "
+                                    "production orders")
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
 
 

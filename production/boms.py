@@ -17,7 +17,7 @@ from common.choices import ActiveStatus
 from common.tenant import use_company
 from inventory.doc_common import _writable, audit, check_qty, now, plain, require, unit_factor
 from inventory.models import ItemKind
-from production.models import Bom, BomLine
+from production.models import Bom, BomLine, ProductionOrder
 
 CODE = "production.bom"
 FIELDS = ("item", "batch_size", "batch_uom", "effective_from", "note")
@@ -36,6 +36,15 @@ def get_bom(*, actor, company_id, pk, code=CODE):
 def _draft(bom):
     if bom.status != Bom.Status.DRAFT:
         raise ValidationError(f"{bom} is {bom.get_status_display().lower()}: start a new version to change it.")
+
+
+def _changeable(bom):
+    """A draft, or the version in use while no production order has used it
+    yet (2026-10-26: the recipe on the finished good's page changes in place
+    until production uses it; after that a change is a new version)."""
+    if bom.status == Bom.Status.ACTIVE and not ProductionOrder.all_objects.filter(bom=bom).exists():
+        return
+    _draft(bom)
 
 
 @transaction.atomic
@@ -80,7 +89,7 @@ def new_version(*, actor, company_id, bom_id):
 @transaction.atomic
 def add_line(*, actor, company_id, bom_id, values):
     membership, bom = get_bom(actor=actor, company_id=company_id, pk=bom_id)
-    _draft(bom)
+    _changeable(bom)
     values = _writable(values, LINE_FIELDS)
     item = values.get("item")
     if item is None:
@@ -102,7 +111,7 @@ def add_line(*, actor, company_id, bom_id, values):
 @transaction.atomic
 def remove_line(*, actor, company_id, bom_id, line_id):
     _, bom = get_bom(actor=actor, company_id=company_id, pk=bom_id)
-    _draft(bom)
+    _changeable(bom)
     with use_company(company_id):
         if not bom.lines.filter(pk=line_id).delete()[0]:
             raise ValidationError("That line is not on this recipe.")

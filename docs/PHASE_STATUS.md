@@ -6635,3 +6635,49 @@ the reason far below. Branch `feature/pay-groups-page`.
   hidden-error problem: Salary settings (salary month, rules, general),
   Edit employee (`employee_edit.html`), Webhooks settings, Access for a
   person, Mail settings, AI assistant settings.
+
+### Inventory: valid choices, a page per item type, the recipe on the product — 2026-10-26
+
+The senior found the inventory forms hard to use: Unit, Category and Batch
+lists offered choices that saving then refused; one Items page with a long
+form for every type; the recipe (BOM) on a page of its own with versions to
+activate; production orders with boxes nobody needed. Branch
+`feature/inventory-validation`.
+
+- **Lists follow the field they depend on** (`inventory/forms.py`
+  `CompanyForm.link_choices`, `base_template/js/forms.js` `follow`): Unit offers
+  only the item's base unit and packs (chosen and hidden when it is the only
+  one); Batch only the item's batches; Bin only the store's; Category only the
+  item type's. Batch, supplier batch, manufacture and expiry boxes show only
+  for an item that keeps batches (`BATCH_ENTRY`, `data-item-needs`). Ticking
+  "Has an expiry date" ticks "Keeps batches" (`data-ticks`).
+- **"This or that" forms ask first** (`CompanyForm.EITHER`): issues, receipts and
+  returns show a choice (e.g. From a requisition / Direct) and only that side's
+  fields; the hidden side is ignored and the "choose one" message is at the top.
+- **One page per item type** (`inventory/views.py`): Raw materials, Packaging,
+  Finished goods, Spare parts, General items (`/inventory/raw-materials/` ...),
+  plus All items. The page sets the type; the Add form shows the main fields and
+  folds the rest under "More details (optional)".
+- **Materials (recipe) on the finished good's page** (`production/recipes.py`,
+  `production/recipe_views.py`, `production/templates/production/recipe_card.html`):
+  one batch makes N; Add material offers raw materials and packaging not on it
+  yet, in the material's own unit. In use as soon as it has a material; a change
+  after a production order used it makes a new version (`production/boms.py`
+  `_changeable`). BOMs left the menu (the pages still open).
+- **Production orders in the menu, fewer boxes** (`production/forms.py`): no
+  Unit, line or shift; the stores are chosen already; the output form folds
+  batch, expiry, bin and packages. A planner who is not an owner does not see
+  Release on their own order (`orders.may_release`).
+- **Dates**: the date picker greys out days outside the input's `min`/`max`
+  (`datepicker.js`); the opening stock manufacture date stops at the opening day.
+- Wording: expiry help and errors say the manufacture date is needed for the
+  shelf life to work; "Recipe v1" instead of "BOM v1"; page anchors land below
+  the sticky top bar (`shell.css`).
+- Tests: `inventory/tests_follow.py`, `production/tests_recipes.py`, and updates
+  in `inventory/tests_pages.py`, `production/tests_flow.py`,
+  `production/tests_pages.py`. Tutorial rebuilt (Steps 6, 13, new 14).
+- Checked in the browser on a test copy: Add raw material, the recipe card,
+  opening stock (unit and batch boxes following the item, the date limit),
+  plan → release → use materials → post output → Stock on hand.
+
+**Deploy:** pull, collectstatic, restart. No migration.

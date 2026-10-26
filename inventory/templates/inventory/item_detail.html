@@ -11,7 +11,7 @@
     <div class="crumbs">
         <a href="{% url 'dashboard' %}">Dashboard</a>
         <span class="crumbs__sep" aria-hidden="true">/</span>
-        <a href="{% url 'inventory:items' %}">Items</a>
+        <a href="{{ type_url }}">{{ type_label }}</a>
         <span class="crumbs__sep" aria-hidden="true">/</span>
         {{ item.code }}
     </div>
@@ -33,7 +33,7 @@
                 <a class="btn btn--ghost" href="{% url 'inventory:package_labels' item.pk %}">Package labels</a>
             {% endif %}
             {% if can_manage %}
-                <a class="btn btn--ghost" href="{% url 'inventory:items' %}?edit={{ item.pk }}">
+                <a class="btn btn--ghost" href="{{ type_url }}?edit={{ item.pk }}">
                     Edit item
                 </a>
             {% endif %}
@@ -100,6 +100,10 @@
             {% endif %}
         </div>
     </div>
+
+    {% if recipe %}
+        {% include "production/recipe_card.html" %}
+    {% endif %}
 
     <div class="card">
         <div class="card__head">

@@ -78,6 +78,9 @@ class MasterPage:
     branch_scoped: bool = False
     filters: dict = field(default_factory=dict)
     import_kind: str = ""
+    #: An item type's own page (2026-10-26): its items only, its Add form
+    #: without an Item type box.
+    kind: str = ""
 
     @property
     def url(self):
@@ -115,6 +118,26 @@ PAGES = {
         lambda request, cid: _items(request),
         about="Everything the factory buys, makes, stores or sells.", import_kind="items",
     ),
+    **{key: MasterPage(
+        key, masters.ITEM, forms.ItemForm, title, singular, "inventory/rows/item.html",
+        ("Code", "Item", "Type", "Category", "Unit", "Batches", "Status"),
+        ("code", "name", "name_bn", "barcode", "category__name"),
+        ("code", "name", "kind", "category__name", "base_uom__code", "track_batch", "status", None),
+        (lambda k: lambda request, cid: Item.objects.select_related("category", "base_uom")
+         .filter(kind=k))(kind),
+        about=about, import_kind="items", kind=kind,
+    ) for key, kind, title, singular, about in (
+        ("raw_materials", ItemKind.RAW, "Raw materials", "raw material",
+         "What you buy to make your products: ingredients, components, parts."),
+        ("packaging", ItemKind.PACKAGING, "Packaging", "packaging item",
+         "Bottles, cartons, labels, boxes: what a product is packed in."),
+        ("finished_goods", ItemKind.FINISHED, "Finished goods", "finished good",
+         "What you make and sell. Open one to set the materials it is made from."),
+        ("spare_parts", ItemKind.SPARE, "Spare parts", "spare part",
+         "Parts kept for machines and maintenance."),
+        ("general_items", ItemKind.GENERAL, "General items", "general item",
+         "Office, cleaning and other general store items."),
+    )},
     "stores": MasterPage(
         "stores", masters.WAREHOUSE, forms.WarehouseForm, "Stores", "store",
         "inventory/rows/store.html", ("Code", "Store", "Type", "Branch", "Bins", "Status"),
@@ -170,6 +193,8 @@ def _stores(request, company_id):
 
 def _form(page, request, company_id, *, data=None, instance=None):
     kwargs = {"company_id": company_id, "instance": instance}
+    if page.kind:
+        kwargs["kind"] = page.kind
     if page.branch_scoped:
         kwargs["branch_ids"] = branch_ids(request.user, company_id, masters.CODE)
     return page.form(data, **kwargs)

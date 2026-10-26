@@ -15,6 +15,7 @@ from inventory.models import (
     InventorySettings,
     Item,
     ItemCategory,
+    ItemKind,
     ItemUom,
     Location,
     OpeningStock,
@@ -35,9 +36,83 @@ class CompanyForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.limit_choices()
         # StyledFormMixin ran before the querysets were set; nothing to redo.
+        self.link_choices()
+        self.setup_either()
+
+    #: "This one OR that one" (2026-10-26): ``(radio name, label, ((value,
+    #: label, (fields...)), ...))``. A choice comes first and shows only that
+    #: side's fields; the other side's values are dropped when the form is
+    #: read, so a hidden value never decides anything.
+    EITHER = ()
+
+    def setup_either(self):
+        self.either = []
+        for name, label, options in self.EITHER:
+            options = [(value, text, [f for f in fields if f in self.fields])
+                       for value, text, fields in options]
+            options = [option for option in options if option[2]]
+            if len(options) < 2:
+                continue
+            self.fields[name] = forms.ChoiceField(
+                label=label, choices=[(value, text) for value, text, _ in options],
+                required=False, widget=forms.RadioSelect(attrs={"class": "check__input"}),
+                initial=self._either_start(options))
+            for value, _, fields in options:
+                for field in fields:
+                    self.fields[field].widget.attrs["data-show-when"] = f"{self.add_prefix(name)}:{value}"
+            self.order_fields([name] + [f for f in self.fields if f != name])
+            self.either.append((name, options))
+
+    def _either_start(self, options):
+        """The side already filled (editing, or posted without the choice), else the first."""
+        values = self.data if self.is_bound else self.initial
+        for value, _, fields in options:
+            if any(values.get(self.add_prefix(f) if self.is_bound else f) for f in fields):
+                return value
+        return options[0][0]
+
+    def clean(self):
+        data = super().clean()
+        for name, options in getattr(self, "either", ()):
+            chosen = data.get(name) or self._either_start(options)
+            for value, _, fields in options:
+                if value != chosen:
+                    for field in fields:
+                        data[field] = None
+                        self.errors.pop(field, None)
+            data.pop(name, None)  # the choice is the form's, not a value to save
+        return data
 
     def limit_choices(self):
         pass
+
+    def link_choices(self):
+        """Lists that follow another field (2026-10-26): a Unit only the
+        chosen item's own units, a Batch only its batches, a Bin only the
+        chosen store's - so a list never offers what saving then refuses.
+        The services still check every one (base_template/js/forms.js)."""
+        item = self.fields.get("item")
+        if (item is not None and getattr(item, "queryset", None) is not None
+                and item.queryset.model is Item):
+            item.widget.option_attrs = item_choice_attrs
+            for unit in ("uom", "batch_uom"):
+                if unit in self.fields:
+                    self.fields[unit].widget.attrs["data-units-of"] = "item"
+            # Batch boxes only for an item that keeps batches or expires.
+            for name, needs in BATCH_ENTRY.items():
+                if name in self.fields:
+                    self.fields[name].widget.attrs["data-item-needs"] = needs
+            if "batch" in self.fields and hasattr(self.fields["batch"], "queryset"):
+                self.fields["batch"].widget.option_attrs = lambda rows: {
+                    pk: {"data-item": str(item_id)} for pk, item_id in rows.values_list("pk", "item_id")}
+                self.fields["batch"].widget.attrs.update({"data-follows": "item", "data-follow-by": "item"})
+        for store, bins in (("warehouse", "location"), ("from_warehouse", "from_location"),
+                            ("to_warehouse", "to_location")):
+            if store in self.fields and bins in self.fields and hasattr(self.fields[bins], "queryset"):
+                self.fields[bins].widget.option_attrs = lambda rows: {
+                    pk: {"data-store": str(store_id)}
+                    for pk, store_id in rows.values_list("pk", "warehouse_id")}
+                self.fields[bins].widget.attrs.update({"data-follows": store, "data-follow-by": "store"})
 
     def _active(self, model, **filters):
         rows = model.all_objects.filter(company_id=self.company_id, **filters)
@@ -48,6 +123,33 @@ class CompanyForm(StyledFormMixin, forms.ModelForm):
 
     def clean_code(self):
         return (self.cleaned_data.get("code") or "").strip().upper()
+
+
+def _follow_kind(field):
+    """A category list that shows only the categories of the chosen item type."""
+    field.widget.option_attrs = lambda rows: {
+        pk: {"data-kind": kind} for pk, kind in rows.values_list("pk", "kind")}
+    field.widget.attrs.update({"data-follows": "kind", "data-follow-by": "kind"})
+
+
+# A document line's batch boxes, and what the chosen item needs to show them.
+BATCH_ENTRY = {"batch_no": "batch", "supplier_batch_no": "batch", "mfg_date": "batch",
+               "expiry_date": "expiry"}
+
+
+def item_choice_attrs(items):
+    """``{item id: {data-units, data-base-unit, data-batch, data-expiry}}``:
+    each item's own units - its base unit and its pack units - for the Unit
+    list beside it, and whether it keeps batches and expires."""
+    units, flags = {}, {}
+    for pk, base, batch, expiry in items.values_list("pk", "base_uom_id", "track_batch", "track_expiry"):
+        units[pk] = [base]
+        flags[pk] = {"data-batch": "1" if batch or expiry else "", "data-expiry": "1" if expiry else ""}
+    for item_id, uom_id in ItemUom.all_objects.filter(item_id__in=list(units)).values_list(
+            "item_id", "uom_id"):
+        units[item_id].append(uom_id)
+    return {pk: {"data-units": ",".join(map(str, ids)), "data-base-unit": str(ids[0]), **flags[pk]}
+            for pk, ids in units.items()}
 
 
 class UomForm(CompanyForm):
@@ -74,6 +176,7 @@ class CategoryForm(CompanyForm):
         if self.instance.pk:
             rows = rows.exclude(pk=self.instance.pk)
         self.fields["parent"].queryset = rows.order_by("kind", "name")
+        _follow_kind(self.fields["parent"])
         self.fields["parent"].required = False
 
 
@@ -103,8 +206,40 @@ class ItemForm(CompanyForm):
             "base_uom": "Stock is counted in this unit. Fixed once stock has moved.",
         }
 
+    #: Shown on the Add form of each item type's page (2026-10-26); the rest
+    #: are under "More details". Shelf life only once "Has an expiry date".
+    MAIN = ("code", "name", "category", "base_uom", "track_batch", "track_expiry",
+            "shelf_life_days", "default_warehouse")
+    MAIN_FOR = {ItemKind.RAW: ("qc_required",), ItemKind.PACKAGING: ("qc_required",),
+                ItemKind.FINISHED: ("sale_price", "vat_rate")}
+
+    def __init__(self, *args, kind=None, **kwargs):
+        self.kind = kind
+        super().__init__(*args, **kwargs)
+        main = set(self.MAIN) | set(self.MAIN_FOR.get(kind, ())) | {"kind"}
+        self.more_fields = [name for name in self.fields if name not in main]
+        self.fields["shelf_life_days"].widget.attrs["data-show-when"] = "track_expiry:on"
+        self.fields["track_expiry"].widget.attrs["data-ticks"] = self.add_prefix("track_batch")
+        if kind:
+            # The page decides the type: no Item type box.
+            self.fields["kind"].widget = forms.HiddenInput()
+            self.fields["kind"].initial = kind
+            if self.data:
+                self.data = self.data.copy()
+                self.data[self.add_prefix("kind")] = kind
+
+    @property
+    def more_has_errors(self):
+        return any(name in self.errors for name in self.more_fields)
+
     def limit_choices(self):
-        self.fields["category"].queryset = self._active(ItemCategory).order_by("kind", "name")
+        categories = self._active(ItemCategory).order_by("kind", "name")
+        if getattr(self, "kind", None):
+            self.fields["category"].queryset = categories.filter(kind=self.kind)
+        else:
+            self.fields["category"].queryset = categories
+            # Only the chosen item type's categories (2026-10-26).
+            _follow_kind(self.fields["category"])
         self.fields["base_uom"].queryset = self._active(Uom).order_by("code")
         self.fields["default_warehouse"].queryset = self._active(Warehouse).order_by("name")
         self.fields["default_warehouse"].required = False
@@ -120,8 +255,17 @@ class PackUnitForm(CompanyForm):
         help_texts = {"factor": "How many base units in one pack, e.g. 24.",
                       "barcode": "Only if the pack has its own barcode printed."}
 
+    def __init__(self, *args, item=None, **kwargs):
+        self.item = item
+        super().__init__(*args, **kwargs)
+
     def limit_choices(self):
-        self.fields["uom"].queryset = self._active(Uom).order_by("code")
+        units = self._active(Uom).order_by("code")
+        if self.item is not None:
+            # Not its own base unit, nor a pack it has already (2026-10-26).
+            units = units.exclude(pk=self.item.base_uom_id).exclude(
+                pk__in=ItemUom.all_objects.filter(item=self.item).values("uom_id"))
+        self.fields["uom"].queryset = units
 
 
 class WarehouseForm(CompanyForm):
@@ -223,8 +367,8 @@ class OpeningLineForm(CompanyForm):
                   "supplier_batch_no": "Supplier batch no.", "uom": "Unit",
                   "mfg_date": "Manufacture date"}
         widgets = {"mfg_date": date_widget(), "expiry_date": date_widget()}
-        help_texts = {"unit_cost": "Cost of one unit written in Unit.",
-                      "expiry_date": "Left empty, it is worked out from the item's shelf life."}
+        help_texts = {"unit_cost": "Cost of 1 of the item's unit (e.g. 1 KG), or of 1 pack when a pack is chosen.",
+                      "expiry_date": "Or give the manufacture date: the expiry is worked out from the item's shelf life."}
 
     def __init__(self, *args, branch_ids=None, **kwargs):
         self.branch_ids = branch_ids
