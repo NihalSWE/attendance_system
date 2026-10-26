@@ -308,20 +308,21 @@ class GeneralSettingsForm(StyledFormMixin, forms.Form):
     )
 
 
+def _ordinal(day):
+    suffix = "th" if 10 <= day % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{day}{suffix}"
+
+
 class SalaryMonthForm(StyledFormMixin, forms.Form):
-    """When a salary month starts (payroll/periods.py, 2026-10-24)."""
+    """When a salary month starts (payroll/periods.py, 2026-10-24). One box
+    (2026-10-26): the month a change starts from is the first with no salary."""
 
-    start_day = forms.IntegerField(
-        label="Salary month starts on day", min_value=1, max_value=28,
-        help_text="1 = the calendar month. 26 = from the 26th to the 25th: \"October\" is "
-                  "26 Sep - 25 Oct.",
+    start_day = forms.TypedChoiceField(
+        label="Salary month starts on", coerce=int,
+        choices=[(1, "1st - the calendar month (1st to the last day)")] + [
+            (day, f"{_ordinal(day)} - from the {_ordinal(day)} to the {_ordinal(day - 1)} of the next month")
+            for day in range(2, 29)],
     )
-    from_month = forms.TypedChoiceField(label="From salary month", choices=MONTHS, coerce=int)
-    from_year = forms.TypedChoiceField(label="Year", choices=(), coerce=int)
-
-    def __init__(self, *args, years=(), **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["from_year"].choices = [(y, y) for y in years]
 
 
 class PayGroupForm(StyledFormMixin, forms.Form):
