@@ -106,6 +106,8 @@ class RequisitionLineForm(LineForm):
 
 
 class IssueForm(Scoped):
+    EITHER = (("source", "Issue", (("requisition", "Against a requisition", ("requisition",)),
+                                   ("direct", "Direct to a department", ("warehouse", "department")))),)
     requisition = _choice(StoreRequisition, "Against requisition", required=False)
     warehouse = _choice(Warehouse, "From store", required=False)
     department = _choice(Department, "To department", required=False)
@@ -129,11 +131,13 @@ class IssueForm(Scoped):
     def clean(self):
         data = super().clean()
         if not data.get("requisition") and not (data.get("warehouse") and data.get("department")):
-            self.add_error("requisition", "Choose the requisition, or the store and the department.")
+            self.add_error(None, "Choose the requisition, or the store and the department.")
         return data
 
 
 class IssueLineForm(LineForm):
+    EITHER = (("source", "What", (("line", "A line of the requisition", ("requisition_line",)),
+                                  ("item", "Another item", ("item",)))),)
     requisition_line = _choice(StoreRequisitionLine, "Requisition line", required=False)
     item = _choice(Item, "Item", required=False)
     batch = _choice(Batch, "Batch (empty = first to expire)", required=False)
@@ -163,6 +167,8 @@ class IssueLineForm(LineForm):
 
 
 class ReturnForm(Scoped):
+    EITHER = (("source", "Return", (("issue", "From an issue", ("issue",)),
+                                    ("direct", "Without an issue", ("department", "warehouse")))),)
     issue = _choice(StoreIssue, "From issue", required=False)
     department = _choice(Department, "From department", required=False)
     warehouse = _choice(Warehouse, "Back to store", required=False)
@@ -186,11 +192,13 @@ class ReturnForm(Scoped):
     def clean(self):
         data = super().clean()
         if not data.get("issue") and not (data.get("department") and data.get("warehouse")):
-            self.add_error("issue", "Choose the issue, or the department and the store.")
+            self.add_error(None, "Choose the issue, or the department and the store.")
         return data
 
 
 class ReturnLineForm(LineForm):
+    EITHER = (("source", "What", (("line", "A line that was issued", ("issue_line",)),
+                                  ("item", "Another item", ("item",)))),)
     issue_line = _choice(StoreIssueLine, "Issued line", required=False)
     item = _choice(Item, "Item (not from an issue)", required=False)
     batch = _choice(Batch, "Batch", required=False)

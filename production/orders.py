@@ -26,11 +26,13 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum
 
+from accounts.models import CompanyMembership
 from common.choices import ActiveStatus
 from common.tenant import use_company
 from inventory import fefo, posting
 from inventory import labels as label_service
 from inventory.doc_common import (
+    OWNER_ROLES,
     _writable,
     audit,
     check_own_approval,
@@ -71,7 +73,7 @@ def create_order(*, actor, company_id, values):
         if bom is None:
             bom = values["bom"] = Bom.objects.filter(item=item, status=Bom.Status.ACTIVE).first()
     if bom is None:
-        raise ValidationError({"item": f"{item.code} has no active BOM: activate its recipe first."})
+        raise ValidationError({"item": f"{item.code} has no materials yet: add them on its page first."})
     if bom.item_id != item.pk or bom.status != Bom.Status.ACTIVE:
         raise ValidationError({"bom": "Choose the product's active BOM version."})
     factor = unit_factor(item, values.get("uom"))
@@ -95,6 +97,15 @@ def create_order(*, actor, company_id, values):
               after={"number": order.number, "item": item.code, "qty": plain(order.planned_base),
                      "bom": bom.version})
     return order
+
+
+def may_release(actor, order):
+    """The planner releases their own order only as an owner (check_own_approval)."""
+    if order.created_by_id != actor.pk:
+        return True
+    membership = CompanyMembership.all_objects.filter(user=actor, company_id=order.company_id,
+                                                      status="active").first()
+    return bool(membership and membership.role in OWNER_ROLES)
 
 
 @transaction.atomic

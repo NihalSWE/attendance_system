@@ -257,6 +257,15 @@
 .dp__day--muted {
     color: var(--faint);
 }
+.dp__day--off {
+    color: var(--faint);
+    opacity: .4;
+    cursor: not-allowed;
+    text-decoration: line-through;
+}
+.dp__day--off:hover {
+    background: transparent;
+}
 .dp__day--today {
     box-shadow: inset 0 0 0 1px var(--field);
 }

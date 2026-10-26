@@ -141,7 +141,8 @@ EFFECTS = {
         "Store": "The stock goes into this store.",
         "Bin": "The stock goes onto this shelf; Stock on hand shows it there.",
         "Item": "The item whose stock this is.",
-        "Batch no.": "Creates the batch with this number. Stock on hand and labels show it.",
+        "Batch no.": "Creates the batch with this number. Stock on hand and labels show it. "
+                     "Shown only for an item that keeps batches.",
         "Supplier batch no.": "Kept on the batch, to trace it back to the supplier.",
         "Manufacture date": "Kept on the batch; with the item's shelf life it sets the expiry.",
         "Expiry date": "Kept on the batch: drives the expiry warnings, and blocks the batch "
@@ -182,29 +183,42 @@ EFFECTS = {
         "Bin": "The shelf inside that store, recorded on the label. Choosing a bin alone also "
                "sets its store.",
     },
-    "bom": {
-        "Finished product": "Only items of type <b>Finished goods</b> are offered. Each product "
-                            "has numbered versions of its recipe (v1, v2 ...); only one is "
-                            "active at a time.",
-        "Batch size": "How much one batch of this recipe makes. Every material quantity is for "
-                      "this amount; making more or less scales them up or down.",
-        "Batch unit": "The unit of the batch size: the product's base unit or one of its pack "
-                      "units. Stored in the base unit as well.",
-        "Effective from": "Kept with the version for your records. It does not switch the "
-                          "recipe on by itself: <b>Activate</b> does.",
-        "Note": "Shown on the recipe's page under its name.",
+    # 2026-10-26: the recipe on the finished good's own page and the short
+    # production forms (production/recipes.py, production/orders.py).
+    "recipe": {
+        "One batch makes": "How much one batch of the recipe makes, in the product's own unit. "
+                           "Every material quantity is for this amount; a production order for "
+                           "more or less scales them up or down.",
     },
-    "bom_line": {
-        "Material": "Any active item except the product itself: raw material, packaging, even "
-                    "another finished good. Each material can be on a recipe once.",
-        "Quantity per batch": "How much of it one batch uses. Planning multiplies it by "
-                              "(quantity to make &divide; batch size).",
-        "Unit": "The material's base unit or one of its pack units (e.g. BAG); stored in the "
-                "base unit too.",
-        "Scrap %": "Normal wastage, added on top when production is planned: 2% on 120 kg plans "
-                   "122.4 kg.",
-        "Packaging": "Listed after the ingredients and marked <b>Packaging</b> on the recipe "
-                     "and in production. It changes no quantity.",
-        "Note": "Shown on the material's line.",
+    "recipe_line": {
+        "Material": "Only active <b>raw materials and packaging</b> are offered, and not those "
+                    "on the recipe already. A new one is made as an item of its type, then put "
+                    "on the recipe. Packaging items are marked <b>Packaging</b> by themselves.",
+        "How much one batch uses": "In the material's own unit, shown beside the box when you "
+                                   "choose it. Planning multiplies it by (quantity to make "
+                                   "&divide; batch size).",
+        "Normal wastage %": "Added on top when production is planned: 2% on 120 kg plans "
+                            "122.4 kg.",
+    },
+    "order": {
+        "Product": "Only finished goods whose recipe has materials are offered. The recipe in "
+                   "use is followed.",
+        "How many to make": "In the product's own unit. The planned materials are worked out "
+                            "from it at once.",
+        "Planned date": "The day the run is planned for; the output date starts from it.",
+        "Materials from store": "The materials are taken from this store. Your raw material "
+                                "store is chosen already.",
+        "Finished goods into store": "The good quantity goes into this store. Your finished "
+                                     "goods store is chosen already.",
+        "Note": "For reference only.",
+    },
+    "output": {
+        "Output date": "The new batch is made on this day; its expiry is worked out from the "
+                       "product's shelf life.",
+        "Good quantity": "Goes into the finished goods store as a <b>new batch</b>, at unit cost "
+                         "= materials used &divide; good quantity.",
+        "Rejected": "Recorded as wastage. It is not in stock.",
+        "More details": "Batch no. (made by itself when empty), expiry date, bin, how many "
+                        "packages (one label each) and a note.",
     },
 }

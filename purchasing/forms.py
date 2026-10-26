@@ -148,6 +148,8 @@ class EmailForm(StyledFormMixin, forms.Form):
 
 
 class ReceiptForm(BranchScoped):
+    EITHER = (("source", "Receipt", (("order", "Against a purchase order", ("order",)),
+                                     ("direct", "Direct from a supplier", ("supplier",)))),)
     order = _choice(PurchaseOrder, "Against order", required=False)
     supplier = _choice(Supplier, "Supplier (direct receipt)", required=False)
     warehouse = _choice(Warehouse, "Received at store")
@@ -171,11 +173,13 @@ class ReceiptForm(BranchScoped):
     def clean(self):
         data = super().clean()
         if not data.get("order") and not data.get("supplier"):
-            self.add_error("supplier", "Choose the order, or the supplier for a direct receipt.")
+            self.add_error(None, "Choose the order, or the supplier for a direct receipt.")
         return data
 
 
 class ReceiptLineForm(ItemLineMixin, CompanyForm):
+    EITHER = (("source", "What", (("line", "A line of the order", ("order_line",)),
+                                  ("item", "Another item", ("item",)))),)
     order_line = _choice(PurchaseOrderLine, "Order line", required=False)
     item = _choice(Item, "Item", required=False)
     location = _choice(Location, "Bin", required=False)
@@ -186,7 +190,7 @@ class ReceiptLineForm(ItemLineMixin, CompanyForm):
         fields = ("order_line", "item", "location", "qty_received", "qty_rejected", "uom", "unit_cost",
                   "batch_no", "supplier_batch_no", "mfg_date", "expiry_date", "packages", "note")
         widgets = {"mfg_date": date_widget(), "expiry_date": date_widget()}
-        help_texts = {"expiry_date": "Left empty, worked out from the manufacture date and shelf life."}
+        help_texts = {"expiry_date": "Or give the manufacture date: the expiry is worked out from the item's shelf life."}
 
     def __init__(self, *args, receipt=None, **kwargs):
         self.receipt = receipt
@@ -210,7 +214,7 @@ class ReceiptLineForm(ItemLineMixin, CompanyForm):
     def clean(self):
         data = super().clean()
         if not data.get("order_line") and not data.get("item"):
-            self.add_error("item", "Choose the order line or the item.")
+            self.add_error(None, "Choose the order line or the item.")
         if data.get("qty_rejected") is None:
             data["qty_rejected"] = Decimal("0")
         return data
@@ -223,6 +227,8 @@ class QcForm(StyledFormMixin, forms.Form):
 
 
 class ReturnForm(CompanyForm):
+    EITHER = (("source", "Return", (("receipt", "From a goods receipt", ("receipt",)),
+                                    ("direct", "Direct to a supplier", ("supplier",)))),)
     supplier = _choice(Supplier, "Supplier", required=False)
     receipt = _choice(GoodsReceipt, "From goods receipt", required=False)
 
@@ -242,11 +248,13 @@ class ReturnForm(CompanyForm):
     def clean(self):
         data = super().clean()
         if not data.get("receipt") and not data.get("supplier"):
-            self.add_error("supplier", "Choose the goods receipt, or the supplier.")
+            self.add_error(None, "Choose the goods receipt, or the supplier.")
         return data
 
 
 class ReturnLineForm(ItemLineMixin, CompanyForm):
+    EITHER = (("source", "What", (("line", "A line that was received", ("receipt_line",)),
+                                  ("item", "Another item", ("item", "batch", "warehouse", "location")))),)
     receipt_line = _choice(GoodsReceiptLine, "Received line", required=False)
     item = _choice(Item, "Item (not from a receipt)", required=False)
     batch = _choice(Batch, "Batch", required=False)
@@ -280,5 +288,5 @@ class ReturnLineForm(ItemLineMixin, CompanyForm):
     def clean(self):
         data = super().clean()
         if not data.get("receipt_line") and not data.get("item"):
-            self.add_error("receipt_line", "Choose the received line, or the item, batch and store.")
+            self.add_error(None, "Choose the received line, or the item, batch and store.")
         return data

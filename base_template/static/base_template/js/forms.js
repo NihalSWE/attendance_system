@@ -38,6 +38,89 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         });
     }
+    // Lists that follow another field (2026-10-26; inventory/forms.py
+    // CompanyForm.link_choices). A Unit list offers only the chosen item's
+    // units (its own unit chosen, the list hidden when that is the only one);
+    // a Batch or Bin list only the chosen item's batches or store's bins.
+    function follow(child, parentName, allowed, preferred) {
+        const form = child.form || child.closest("form");
+        const parent = form && form.querySelector('[name="' + parentName + '"]');
+        if (!parent) return;
+        const all = Array.from(child.options).map(option => option.cloneNode(true));
+        const field = child.closest(".field");
+        const update = function (keepValue) {
+            const chosen = parent.options[parent.selectedIndex];
+            const keep = allowed(chosen);
+            const current = child.value;
+            child.innerHTML = "";
+            all.forEach(function (option) {
+                if (!option.value || keep === null || keep(option)) child.appendChild(option.cloneNode(true));
+            });
+            const values = Array.from(child.options).map(option => option.value).filter(Boolean);
+            const wanted = keepValue && values.includes(current) ? current : preferred(chosen, values);
+            child.value = wanted || "";
+            if (field && child.dataset.unitsOf) field.hidden = Boolean(chosen && chosen.value) && values.length <= 1;
+            if ($ && $.fn.select2 && $(child).data("select2")) $(child).trigger("change.select2");
+            child.dispatchEvent(new Event("change", {bubbles: true}));
+        };
+        parent.addEventListener("change", () => update(false));
+        if ($) $(parent).on("select2:select select2:clear", () => update(false));
+        update(true);
+    }
+    document.querySelectorAll("select[data-units-of]").forEach(function (unit) {
+        follow(unit, unit.dataset.unitsOf,
+               chosen => chosen && chosen.dataset.units
+                   ? (allowed => option => allowed.includes(option.value))(chosen.dataset.units.split(","))
+                   : null,
+               (chosen, values) => chosen && chosen.dataset.baseUnit && values.includes(chosen.dataset.baseUnit)
+                   ? chosen.dataset.baseUnit : (values.length === 1 ? values[0] : ""));
+    });
+    document.querySelectorAll("select[data-follows]").forEach(function (child) {
+        const by = child.dataset.followBy;
+        follow(child, child.dataset.follows,
+               chosen => chosen && chosen.value ? option => option.dataset[by] === chosen.value : null,
+               () => "");
+    });
+    // Batch boxes only for an item that keeps batches or expires (2026-10-26;
+    // inventory/forms.py BATCH_ENTRY): hidden and emptied for one that does not.
+    document.querySelectorAll("[data-item-needs]").forEach(function (input) {
+        const form = input.form || input.closest("form");
+        const item = form && form.querySelector('select[name="item"]');
+        const field = input.closest(".field");
+        if (!item || !field) return;
+        const update = function () {
+            const chosen = item.options[item.selectedIndex];
+            const needed = !chosen || !chosen.value || chosen.dataset[input.dataset.itemNeeds] === "1";
+            field.hidden = !needed;
+            if (!needed && input.value) {
+                input.value = "";
+                input.dispatchEvent(new Event("change", {bubbles: true}));
+            }
+        };
+        item.addEventListener("change", update);
+        if ($) $(item).on("select2:select select2:clear", update);
+        update();
+    });
+    // A tick that needs another tick (2026-10-26): "Has an expiry date" ticks
+    // "Keeps batches", and that one cannot be cleared while the first stays.
+    document.querySelectorAll("input[type=checkbox][data-ticks]").forEach(function (box) {
+        const other = box.form && box.form.querySelector('[name="' + box.dataset.ticks + '"]');
+        if (!other) return;
+        const sync = function () {
+            if (box.checked && !other.checked) {
+                other.checked = true;
+                other.dispatchEvent(new Event("change", {bubbles: true}));
+            }
+        };
+        box.addEventListener("change", sync);
+        other.addEventListener("change", function () {
+            if (!other.checked && box.checked) {
+                box.checked = false;
+                box.dispatchEvent(new Event("change", {bubbles: true}));
+            }
+        });
+        sync();
+    });
     document.querySelectorAll("input[data-phone-prefix]").forEach(function (input) {
         function normalize() {
             let digits = input.value.replace(/[^0-9]/g, "");

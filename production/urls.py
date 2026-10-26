@@ -2,11 +2,16 @@
 
 from django.urls import path
 
-from production import views
+from production import recipe_views, views
 
 app_name = "production"
 
 urlpatterns = [
+    # The Materials card on a finished good's page (2026-10-26).
+    path("recipes/<int:pk>/batch/", recipe_views.recipe_batch, name="recipe_batch"),
+    path("recipes/<int:pk>/materials/", recipe_views.recipe_add, name="recipe_add"),
+    path("recipes/<int:pk>/materials/<int:material_pk>/remove/", recipe_views.recipe_remove,
+         name="recipe_remove"),
     path("boms/", views.bom_list, name="boms"),
     path("boms/<int:pk>/", views.bom_detail, name="bom_detail"),
     path("boms/<int:pk>/lines/", views.bom_line_add, name="bom_line_add"),

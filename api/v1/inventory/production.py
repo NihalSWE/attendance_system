@@ -114,12 +114,12 @@ CONSUMPTIONS = DocSpec(
     ],
 )
 
-OutputInput = input_serializer(f.OutputForm, "ProductionOutputSerializer")
+OutputInput = input_serializer(f.ApiOutputForm, "ProductionOutputSerializer")
 
 
 def _post_output(r, c, pk, d):
     _m, order = orders.get_order(actor=r.user, company_id=c, pk=pk, code="production.execute")
-    form = checked(f.OutputForm, to_form(d, OutputInput.form_names), OutputInput.form_names, company_id=c,
+    form = checked(f.ApiOutputForm, to_form(d, OutputInput.form_names), OutputInput.form_names, company_id=c,
                    order=order)
     return orders.post_output(actor=r.user, company_id=c, order_id=pk, values=form.cleaned_data)
 
@@ -152,7 +152,7 @@ ORDERS = DocSpec(
     date_field="planned_date", store_field="material_warehouse", other_store_field="output_warehouse",
     party_field="item", reference_field="bom", search=("number", "item__code", "item__name", "line_name"),
     lines_of=_usage, example_number="MO-2026-00011",
-    create_form=f.OrderForm,
+    create_form=f.ApiOrderForm,
     create_form_kwargs=lambda request, company_id: {"branch_ids": branch_ids(request.user, company_id,
                                                                              "production.plan")},
     create_call=lambda actor, cid, values: orders.create_order(actor=actor, company_id=cid, values=values),

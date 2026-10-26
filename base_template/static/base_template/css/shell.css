@@ -155,7 +155,7 @@ Sidebar — the active item is a solid ink block. Never soften it to a tint.
     display: none;
 }
 .page [id] {
-    scroll-margin-top: var(--s5);
+    scroll-margin-top: calc(var(--topbar-h) + var(--s5)); /* below the sticky topbar */
 }
 .nav-button {
     border:0;

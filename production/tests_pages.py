@@ -9,6 +9,7 @@ from common.tenant import use_company
 from employees.models import Employee
 from inventory.models import BarcodeLabel, StockBalance
 from inventory.testing import D
+from production import orders
 from production.models import Bom, Consumption, ProductionOrder
 from production.tests_flow import ProductionFixture
 
@@ -26,14 +27,16 @@ class ProductionPageTests(ProductionFixture, TestCase):
             self.assertEqual(page.status_code, 200, name)
         assert_inventory_menu(self, page, MENU, menu="production")
 
-    def test_the_links_unlocked_on_2026_10_25_open(self):
-        # Scan and Labels (Phase 2) and BOMs show; Production orders stay hidden.
-        for name in ("inventory:scan", "inventory:labels", "production:boms"):
+    def test_the_links_shown_open(self):
+        # Scan and Labels (2026-10-25) and Production orders (2026-10-26) show;
+        # BOMs is not in the menu - the recipe is on the finished good's page.
+        shown = ("inventory:scan", "inventory:labels", "production:orders", "inventory:finished_goods")
+        for name in shown:
             page = self.client.get(reverse(name))
             self.assertEqual(page.status_code, 200, name)
-            for shown in ("inventory:scan", "inventory:labels", "production:boms"):
-                self.assertContains(page, f'href="{reverse(shown)}"', msg_prefix=name)
-            self.assertNotContains(page, f'href="{reverse("production:orders")}"', msg_prefix=name)
+            for link in shown:
+                self.assertContains(page, f'href="{reverse(link)}"', msg_prefix=name)
+            self.assertNotContains(page, f'href="{reverse("production:boms")}"', msg_prefix=name)
         self.client.post(reverse("production:boms"), {"item": self.juice.pk, "batch_size": "1000",
                                                       "batch_uom": self.pcs.pk})
         with use_company(self.company):
@@ -95,6 +98,24 @@ class ProductionGateTests(ProductionFixture, TestCase):
         self.enable_module(False)
         self.client.force_login(self.owner)
         self.assertEqual(self.client.get(reverse("production:orders")).status_code, 404)
+
+    def test_a_planner_does_not_release_their_own_order(self):
+        order = self.released()
+        user = self.member("planner@inv.test", "employee")
+        with use_company(self.company):
+            employee = Employee.objects.create(company=self.company, user=user, first_name="P")
+        for code in ("inventory.view", "production.plan"):
+            grant_access(actor=self.owner, company_id=self.company.pk, employee_id=employee.pk,
+                         code=code, branch_ids=[self.branch.pk])
+        ProductionOrder.all_objects.filter(pk=order.pk).update(status="planned", created_by=user)
+        self.client.force_login(user)
+        page = self.client.get(reverse("production:order_detail", args=[order.pk]))
+        self.assertContains(page, "someone else with planning access releases it")
+        self.assertNotContains(page, reverse("production:order_action", args=[order.pk, "release"]))
+        # The owner may release an order they planned themselves.
+        order.refresh_from_db()
+        order.created_by = self.owner
+        self.assertTrue(orders.may_release(self.owner, order))
 
     def test_a_viewer_sees_but_does_not_run(self):
         order = self.released()

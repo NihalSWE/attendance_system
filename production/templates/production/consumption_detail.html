@@ -49,7 +49,7 @@
         <div class="card__head"><h2>{% if use.kind == "issue" %}Materials{% else %}Going back{% endif %}</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
         {% if lines %}
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Material</th><th>Batch</th><th>Expiry</th><th>Bin</th><th class="numeric">Quantity</th><th>Label</th><th><span class="sr-only">Actions</span></th></tr></thead>
                     <tbody>
                         {% for line in lines %}
