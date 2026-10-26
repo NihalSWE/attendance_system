@@ -6694,3 +6694,31 @@ Same day, after the senior's review:
   inventory, production, purchasing and sales. DataTables now loads on every page.
 
 **Deploy:** pull, collectstatic, restart. No migration.
+
+### Attendance → Fix setup: the one-time fix for people added from a device — 2026-10-26
+
+People added with "Add as employees" landed in their branch's Unassigned
+department and designation (no shift, so attendance wrote no days), some were
+never put on the branch's other devices, and their scans from before the link
+stayed refused as "unknown employee". Branch `fix/attendance-setup`.
+
+- **Attendance → Fix setup** (owner / company admin; `attendance/setup_fix_views.py`,
+  `devices/services/setup_fix.py`): one data table of everyone with a problem
+  (Unassigned department, No shift, Not on every device), filters by branch and
+  problem with counts, tick boxes.
+- **1. Set department**: branch → department → designation for the ticked people
+  or everyone in the list. It *corrects* the current placement (attendance reads
+  the placement of each day, so a transfer from today would not fix past days),
+  audited as `employee.placement_corrected`, then recalculates them from the
+  chosen salary month's first day. Unassigned is not offered.
+- **2. Send to devices**: every device of their branch (`mapping.send_employees`).
+- **3. Re-check refused scans**: `recheck_punches` from a salary month's first
+  day; the days of scans that now count are recalculated.
+- The three slow steps run in the background (`SetupFixJob`, like
+  `DeviceLoadJob`); the page shows the job and refreshes until it is done, with
+  a table of who could not be done and why. Only salary months not yet posted
+  are offered.
+- Tests: `devices/tests_setup_fix.py` (10). Checked in the browser on a test copy
+  with the jobs in the background.
+
+**Deploy:** pull, migrate (devices 0012), collectstatic, restart.

@@ -1,6 +1,6 @@
 from django.urls import path
 
-from attendance import month_edit, scan_request_views, views
+from attendance import month_edit, scan_request_views, setup_fix_views, views
 
 app_name = "attendance"
 
@@ -17,6 +17,7 @@ urlpatterns = [
     path("calendar/<int:employee_id>/<int:year>/<int:month>/edit/",
          month_edit.attendance_month_edit, name="attendance_month_edit"),
     path("review/", views.attendance_review, name="attendance_review"),
+    path("fix-setup/", setup_fix_views.setup_fix_page, name="setup_fix"),
     path("missing/", scan_request_views.missed_scan_pick, name="missed_scan_pick"),
     path("missing/<int:employee_pk>/", scan_request_views.missed_scan_enter,
          name="missed_scan_enter"),
