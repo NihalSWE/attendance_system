@@ -91,3 +91,7 @@ for key in MASTERS:
         path(f"{key.replace('_', '-')}/<int:pk>/status/", views.master_status, {"key": key},
              name=f"{key}_status"),
     ]
+# Delete an item nothing uses yet (2026-10-26), from the item pages.
+for key in ("items", "raw_materials", "packaging", "finished_goods", "spare_parts", "general_items"):
+    urlpatterns.append(path(f"{key.replace('_', '-')}/<int:pk>/delete/", views.item_delete,
+                            {"key": key}, name=f"{key}_delete"))

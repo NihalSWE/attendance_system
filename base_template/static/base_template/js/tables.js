@@ -180,3 +180,52 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     });
 });
+
+/* Short lists drawn whole into the page - a document's lines, a recipe's
+   materials (2026-10-26) - get the same look as the server lists: SL, Show N,
+   search, numbered pages, sortable headers, worked out in the browser.
+   <table data-local-table>; a header with class "no-sort" (or only screen-
+   reader text, an actions column) does not sort; a row with a colspan cell is
+   the empty message. */
+document.addEventListener("DOMContentLoaded", function () {
+    if (!window.DataTable) return;
+    document.querySelectorAll("table[data-local-table]").forEach(function (table) {
+        const empty = table.querySelector("tbody td[colspan]");
+        const emptyText = empty ? empty.textContent.trim() : "Nothing here yet.";
+        if (empty) empty.closest("tr").remove();
+        const headers = Array.from(table.querySelectorAll("thead th"));
+        const fixed = [0];
+        headers.forEach(function (header, index) {
+            if (header.classList.contains("no-sort") || !header.textContent.trim()
+                || header.querySelector(".sr-only") && !header.textContent.replace(
+                    header.querySelector(".sr-only").textContent, "").trim()) {
+                fixed.push(index + SL);
+            }
+        });
+        const slHeader = document.createElement("th");
+        slHeader.className = "numeric table-sl";
+        slHeader.textContent = "SL";
+        headers[0].before(slHeader);
+        table.querySelectorAll("tbody tr").forEach(function (row) {
+            row.prepend(document.createElement("td"));
+        });
+        const api = new DataTable(table, {
+            order: [], autoWidth: false, pageLength: 25, lengthMenu: [10, 25, 50, 100],
+            pagingType: "full_numbers",
+            columnDefs: [{targets: 0, searchable: false, className: "numeric table-sl"},
+                         {targets: fixed, orderable: false}],
+            language: {search: "Search:", lengthMenu: "Show _MENU_",
+                info: "Showing _START_–_END_ of _TOTAL_", infoEmpty: "Showing 0–0 of 0",
+                infoFiltered: "", emptyTable: emptyText, zeroRecords: "No matching rows."},
+        });
+        // SL: the row's number as shown, across pages (26 on the second page of 25).
+        const number = function () {
+            const start = api.page.info().start;
+            api.column(0, {page: "current"}).nodes().each(function (cell, index) {
+                cell.textContent = start + index + 1;
+            });
+        };
+        api.on("draw", number);
+        number();
+    });
+});

@@ -38,7 +38,7 @@
         <div class="card__head"><h2>Materials per batch</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} material{{ lines|length|pluralize }}</span></div>
         {% if lines %}
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Material</th><th class="numeric">Per batch</th><th class="numeric">Scrap %</th><th>Kind</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
                     <tbody>
                         {% for line in lines %}
@@ -61,7 +61,7 @@
     {% if versions|length > 1 %}
         <div class="card">
             <div class="card__head"><h2>Versions</h2></div>
-            <div class="table-wrap"><table class="table"><thead><tr><th>Version</th><th>Status</th><th>Batch</th></tr></thead><tbody>
+            <div class="table-wrap"><table class="table" data-local-table><thead><tr><th>Version</th><th>Status</th><th>Batch</th></tr></thead><tbody>
                 {% for v in versions %}<tr><td><a href="{% url 'production:bom_detail' v.pk %}">v{{ v.version }}</a></td><td>{{ v.get_status_display }}</td><td>{{ v.batch_size.normalize }}</td></tr>{% endfor %}
             </tbody></table></div>
         </div>

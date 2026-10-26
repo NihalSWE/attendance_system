@@ -30,6 +30,7 @@ from inventory.models import (
     ItemCategory,
     ItemKind,
     Location,
+    StockMove,
     Uom,
     Warehouse,
 )
@@ -123,8 +124,8 @@ PAGES = {
         ("Code", "Item", "Type", "Category", "Unit", "Batches", "Status"),
         ("code", "name", "name_bn", "barcode", "category__name"),
         ("code", "name", "kind", "category__name", "base_uom__code", "track_batch", "status", None),
-        (lambda k: lambda request, cid: Item.objects.select_related("category", "base_uom")
-         .filter(kind=k))(kind),
+        (lambda k: lambda request, cid: _with_moved(Item.objects.select_related("category", "base_uom")
+         .filter(kind=k)))(kind),
         about=about, import_kind="items", kind=kind,
     ) for key, kind, title, singular, about in (
         ("raw_materials", ItemKind.RAW, "Raw materials", "raw material",
@@ -176,8 +177,16 @@ PAGES = {
 }
 
 
+def _with_moved(rows):
+    """Items marked ``moved`` when stock of them ever moved: only the others
+    show Delete (masters.delete_item, 2026-10-26)."""
+    from django.db.models import Exists, OuterRef
+
+    return rows.annotate(moved=Exists(StockMove.objects.filter(item=OuterRef("pk"))))
+
+
 def _items(request):
-    rows = Item.objects.select_related("category", "base_uom")
+    rows = _with_moved(Item.objects.select_related("category", "base_uom"))
     kind = request.GET.get("kind", "").strip()
     if kind in ItemKind.values:
         rows = rows.filter(kind=kind)
@@ -227,6 +236,7 @@ def _list(request, page, *, new_form=None, edit_form=None, edit_row=None, open_d
         "can_manage": can_manage, "new_form": new_form, "edit_form": edit_form,
         "edit_row": edit_row, "open_dialog": open_dialog,
         "edit_view": f"inventory:{page.key}_edit", "status_view": f"inventory:{page.key}_status",
+        "delete_view": f"inventory:{page.key}_delete" if page.master is masters.ITEM else "",
         "sees_costs": access.sees_costs(request.user, company_id),
         "can_print_labels": access.may(request.user, company_id, "inventory.labels"),
         "print_form": forms.PrintForm(),
@@ -300,9 +310,25 @@ def master_status(request, key, pk):
     return redirect(request.POST.get("next") or page.url)
 
 
+@require_POST
+def item_delete(request, key, pk):
+    page = PAGES[key]
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    try:
+        code = masters.delete_item(actor=request.user, company_id=company_id, pk=pk)
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+        return redirect(request.POST.get("next") or page.url)
+    messages.success(request, f"{code} is deleted.")
+    return redirect(page.url)
+
+
 master_list = login_required(master_list)
 master_edit = login_required(master_edit)
 master_status = login_required(master_status)
+item_delete = login_required(item_delete)
 
 
 @login_required

@@ -25,7 +25,7 @@
             <div class="card__body stack">
                 {% if checklist.waiting %}
                     <div class="alert alert--warning">{{ checklist.waiting|length }} document{{ checklist.waiting|pluralize }} dated in {{ checklist.month|date:"F Y" }} {{ checklist.waiting|pluralize:"is,are" }} not posted yet. Post, cancel or re-date {{ checklist.waiting|pluralize:"it,them" }} first.</div>
-                    <div class="table-wrap"><table class="table">
+                    <div class="table-wrap"><table class="table" data-local-table>
                         <thead><tr><th>Document</th><th>Number</th><th>Status</th></tr></thead>
                         <tbody>{% for what, number, status in checklist.waiting %}<tr><td>{{ what }}</td><td>{{ number }}</td><td>{{ status }}</td></tr>{% endfor %}</tbody>
                     </table></div>
@@ -45,7 +45,7 @@
     <div class="card">
         <div class="card__head"><h2>Closed months</h2><span class="spacer"></span><span class="t-muted">{{ locks|length }}</span></div>
         {% if locks %}
-            <div class="table-wrap"><table class="table">
+            <div class="table-wrap"><table class="table" data-local-table>
                 <thead><tr><th>Month</th><th>Closed by</th><th>On</th><th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                     {% for lock in locks %}

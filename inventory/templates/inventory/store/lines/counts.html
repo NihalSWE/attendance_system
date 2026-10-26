@@ -4,7 +4,7 @@
         <form method="post" action="{% url 'inventory:count_save' row.pk %}">
             {% csrf_token %}
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Item</th><th>Batch</th><th>Bin</th><th class="numeric">System</th><th class="numeric">Counted</th><th class="numeric">Difference</th><th>Note</th></tr></thead>
                     <tbody>
                         {% for line in lines %}

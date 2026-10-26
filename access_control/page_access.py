@@ -144,6 +144,7 @@ BRANCH_PAGES = {
        for key in ("units", "categories", "items", "stores", "bins", "suppliers", "customers",
                    *ITEM_TYPE_PAGES)
        for action in ("edit", "status")},
+    **{f"inventory:{key}_delete": "inventory.items" for key in ("items", *ITEM_TYPE_PAGES)},
     "inventory:standard_units": "inventory.items",
     "inventory:pack_unit_add": "inventory.items",
     "inventory:pack_unit_remove": "inventory.items",

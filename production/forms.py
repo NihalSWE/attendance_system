@@ -6,7 +6,7 @@ from django import forms
 
 from common.forms import StyledFormMixin, date_widget
 from inventory.forms import CompanyForm
-from inventory.models import Batch, Item, ItemKind, Location, Uom, Warehouse
+from inventory.models import Batch, Item, ItemCategory, ItemKind, Location, Uom, Warehouse
 from production import recipes
 from production.models import Bom, BomLine, ConsumptionLine, Output, ProductionOrder
 
@@ -219,10 +219,29 @@ class RecipeBatchForm(StyledFormMixin, forms.Form):
 
 
 class RecipeMaterialForm(StyledFormMixin, forms.Form):
-    """A material on a finished good's recipe, in the material's own unit."""
+    """A material on a finished good's recipe, in the material's own unit:
+    one already added, or (2026-10-26, for someone who may set up items) a new
+    raw material or packaging item made right here."""
 
+    NEW = ("new_kind", "new_code", "new_name", "new_category", "new_uom", "new_track_batch",
+           "new_track_expiry")
+
+    source = forms.ChoiceField(label="Material", initial="existing", widget=forms.RadioSelect,
+                               choices=(("existing", "One already added"),
+                                        ("new", "A new raw material or packaging item")))
     material = forms.ModelChoiceField(queryset=Item.all_objects.none(), label="Material",
-                                      empty_label="Choose a raw material or packaging")
+                                      required=False, empty_label="Choose a raw material or packaging")
+    new_kind = forms.ChoiceField(label="Type", required=False,
+                                 choices=((ItemKind.RAW, "Raw material"), (ItemKind.PACKAGING, "Packaging")))
+    new_code = forms.CharField(label="Code", required=False, max_length=50,
+                               help_text="Short and unique, e.g. RM-0004.")
+    new_name = forms.CharField(label="Name", required=False, max_length=200)
+    new_category = forms.ModelChoiceField(queryset=ItemCategory.all_objects.none(), label="Category",
+                                          required=False)
+    new_uom = forms.ModelChoiceField(queryset=Uom.all_objects.none(), label="Unit", required=False,
+                                     help_text="Stock is counted in this unit.")
+    new_track_batch = forms.BooleanField(label="Keeps batches", required=False)
+    new_track_expiry = forms.BooleanField(label="Has an expiry date", required=False)
     qty = forms.DecimalField(label="How much one batch uses", min_value=Decimal("0.0001"),
                              max_digits=18, decimal_places=4,
                              help_text="In the material's own unit, shown when you choose it.")
@@ -230,8 +249,9 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
                                    max_value=100, max_digits=5, decimal_places=2,
                                    help_text="Optional: added on top when production is planned.")
 
-    def __init__(self, *args, company_id, product, **kwargs):
+    def __init__(self, *args, company_id, product, can_create=False, **kwargs):
         super().__init__(*args, **kwargs)
+        self.can_create = can_create
         self.fields["material"].queryset = (
             Item.all_objects.filter(company_id=company_id, status="active",
                                     kind__in=(ItemKind.RAW, ItemKind.PACKAGING))
@@ -241,6 +261,53 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
         # The material's unit beside the quantity (production/recipe_card.html).
         self.fields["material"].widget.option_attrs = lambda rows: {
             pk: {"data-unit": code} for pk, code in rows.values_list("pk", "base_uom__code")}
+        if not can_create:
+            for name in ("source", *self.NEW):
+                del self.fields[name]
+            self.fields["material"].required = True
+            return
+        self.fields["material"].label = "Which one"
+        self.fields["material"].widget.attrs["data-show-when"] = "source:existing"
+        for name in self.NEW:
+            self.fields[name].widget.attrs["data-show-when"] = "source:new"
+        # Only the chosen type's categories (base_template/js/forms.js follow).
+        category = self.fields["new_category"]
+        category.queryset = (ItemCategory.all_objects.filter(
+            company_id=company_id, status="active", kind__in=(ItemKind.RAW, ItemKind.PACKAGING))
+            .order_by("name"))
+        category.widget.option_attrs = lambda rows: {
+            pk: {"data-kind": kind} for pk, kind in rows.values_list("pk", "kind")}
+        category.widget.attrs.update({"data-follows": "new_kind", "data-follow-by": "kind"})
+        self.fields["new_uom"].queryset = Uom.all_objects.filter(
+            company_id=company_id, status="active").order_by("code")
+        self.fields["new_track_expiry"].widget.attrs["data-ticks"] = "new_track_batch"
+
+    def clean(self):
+        data = super().clean()
+        if self.can_create and data.get("source") == "new":
+            data.pop("material", None)
+            self.errors.pop("material", None)
+            for name in ("new_code", "new_name", "new_category", "new_uom"):
+                if not data.get(name) and name not in self.errors:
+                    self.add_error(name, "Give this for the new material.")
+            if data.get("new_track_expiry"):
+                data["new_track_batch"] = True
+        else:
+            for name in self.NEW:
+                data.pop(name, None)
+                self.errors.pop(name, None)
+            if data.get("material") is None and "material" not in self.errors:
+                self.add_error("material", "Choose the material.")
+        data.pop("source", None)
+        return data
+
+    def new_item_values(self):
+        """The new material's values for ``inventory.masters.create``."""
+        data = self.cleaned_data
+        return {"kind": data["new_kind"], "code": data["new_code"].strip().upper(),
+                "name": data["new_name"].strip(), "category": data["new_category"],
+                "base_uom": data["new_uom"], "track_batch": data["new_track_batch"],
+                "track_expiry": data["new_track_expiry"]}
 
     @staticmethod
     def _on_recipe(company_id, product):

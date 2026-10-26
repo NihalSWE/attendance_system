@@ -30,7 +30,7 @@
             {% for title, checks in sections %}
                 <div class="card">
                     <div class="card__head"><h2>{{ forloop.counter }}. {{ title }}</h2></div>
-                    <div class="table-wrap"><table class="table">
+                    <div class="table-wrap"><table class="table" data-local-table>
                         <tbody>
                             {% for check in checks %}
                                 <tr>
@@ -73,7 +73,7 @@
             {% if comparison.problems %}
                 <div class="card__body"><div class="alert alert--warning"><strong>Rows not compared:</strong><ul>{% for p in comparison.problems|slice:":20" %}<li>{{ p }}</li>{% endfor %}</ul>{% if comparison.problems|length > 20 %}… and {{ comparison.problems|length|add:"-20" }} more.{% endif %}</div></div>
             {% endif %}
-            <div class="table-wrap"><table class="table">
+            <div class="table-wrap"><table class="table" data-local-table>
                 <thead><tr><th>Item</th><th>Store</th><th class="numeric">Old system</th><th class="numeric">Software</th><th class="numeric">Difference</th><th>Status</th></tr></thead>
                 <tbody>
                     {% for row in comparison.rows %}

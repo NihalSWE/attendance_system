@@ -37,6 +37,15 @@
                     Edit item
                 </a>
             {% endif %}
+            {% if delete_url %}
+                <form method="post" action="{{ delete_url }}"
+                      data-confirm="{{ item.code }} {{ item.name }} is deleted for good, with its pack units{% if item.kind == 'finished' %} and its materials{% endif %}."
+                      data-confirm-title="Delete {{ item.code }}?" data-confirm-button="Delete" data-confirm-tone="danger">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.path }}">
+                    <button class="btn btn--quiet" type="submit">Delete</button>
+                </form>
+            {% endif %}
         </div>
     </div>
 
@@ -72,7 +81,7 @@
             </div>
             {% if packs %}
                 <div class="table-wrap">
-                    <table class="table">
+                    <table class="table" data-local-table>
                         <thead><tr><th>Pack</th><th>Equals</th><th>Barcode</th><th><span class="sr-only">Actions</span></th></tr></thead>
                         <tbody>
                             {% for pack in packs %}
@@ -113,7 +122,7 @@
         </div>
         {% if balances %}
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Store</th><th>Bin</th><th>Batch</th><th>Expiry</th><th class="numeric">On hand</th><th class="numeric">Reserved</th>{% if can_print %}<th><span class="sr-only">Labels</span></th>{% endif %}</tr></thead>
                     <tbody>
                         {% for b in balances %}

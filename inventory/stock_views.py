@@ -91,7 +91,7 @@ TYPE_PAGES = {ItemKind.RAW: ("raw_materials", "Raw materials"),
               ItemKind.GENERAL: ("general_items", "General items")}
 
 
-def _item_context(request, company_id, item, *, pack_form=None, open_dialog=""):
+def _item_context(request, company_id, item, *, pack_form=None, material_form=None, open_dialog=""):
     costs_in = _valuation_branches(request.user, company_id)
     with use_company(company_id):
         balances = list(access.scope_warehouses(
@@ -124,11 +124,16 @@ def _item_context(request, company_id, item, *, pack_form=None, open_dialog=""):
             "recipe_note": request.session.pop("recipe_note", None),
             "can_edit_recipe": access.may(request.user, company_id, "production.bom"),
             "batch_form": production_forms.RecipeBatchForm(),
-            "material_form": production_forms.RecipeMaterialForm(company_id=company_id, product=item),
+            # Someone who may set up items can add a new material right there.
+            "material_form": material_form or production_forms.RecipeMaterialForm(
+                company_id=company_id, product=item, can_create=can_manage),
         }
     return {
         **recipe,
         "type_url": reverse(f"inventory:{type_page[0]}"), "type_label": type_page[1],
+        # Never moved: it can be deleted (masters.delete_item).
+        "delete_url": (reverse(f"inventory:{type_page[0]}_delete", args=[item.pk])
+                       if can_manage and not masters._item_has_moved(item) else ""),
         "item": item, "balances": balances, "moves": moves, "packs": packs,
         "on_hand": sum((b.qty_on_hand for b in balances), Decimal("0")),
         "cost": cost, "sees_costs": costs_in is ALL_BRANCHES,
@@ -152,6 +157,12 @@ def _printed(company_id, item, balances):
                 kind=BarcodeLabel.Kind.BATCH,
                 batch__in=[b.batch_id for b in balances if b.batch_id]).values_list("batch_id", flat=True)),
         }
+
+
+def item_page(request, company_id, item, **kwargs):
+    """The item's page; ``kwargs`` as ``_item_context`` (a refused form, its modal)."""
+    return render(request, "inventory/item_detail.html",
+                  _item_context(request, company_id, item, **kwargs))
 
 
 @login_required
