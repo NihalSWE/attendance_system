@@ -169,7 +169,7 @@ class WeekPageTests(WeeklyCase):
         page = self.client.get(self.url)
         self.assertContains(page, "Weekly, Saturday to Friday")
         self.assertContains(page, "This week: Sat 08 Aug - Fri 14 Aug 2026.")
-        self.assertContains(page, "Nobody is in Weekly workers yet. Press Add people.")
+        self.assertContains(page, "Nobody is paid weekly yet")
         # The start day is chosen from a list, this week's already chosen.
         self.assertContains(page, '<option value="2026-08-08" selected>Sat 08 Aug 2026 (this week)</option>',
                             html=True)
@@ -230,7 +230,7 @@ class WeekPageTests(WeeklyCase):
         with use_company(self.company):
             row.refresh_from_db()
         self.assertEqual(row.status, "cancelled")
-        self.assertContains(self.client.get(self.url), "Nobody is in Weekly workers yet.")
+        self.assertContains(self.client.get(self.url), "Nobody is paid weekly yet")
 
     def test_a_finalised_week_is_not_offered(self):
         self.work(D(2026, 8, 10), (9, 0), (18, 0))
@@ -264,3 +264,37 @@ class WeekPageTests(WeeklyCase):
         # The Monthly staff's August is a different salary, still not generated.
         self.assertContains(self.client.get(home, {"month": 8, "year": 2026}),
                             "No salary generated for August 2026")
+
+
+class PageFixesTests(WeeklyCase):
+    """2026-10-26: Salary settings' tags balance; the start-day list is our
+    styled select; an employee option carries the Employee ID it is searched by."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.admin)
+
+    def test_salary_settings_tags_balance(self):
+        page = self.client.get(reverse("payroll:salary_settings")).content.decode()
+        self.assertEqual(page.count("<form"), page.count("</form>"))
+        self.assertEqual(page.count("<div"), page.count("</div>"))
+
+    def test_the_start_day_list_is_styled_and_employees_carry_their_id(self):
+        page = self.client.get(reverse("payroll:pay_groups")).content.decode()
+        self.assertRegex(page, r'<select name="effective_from" class="input select js-select"')
+        with use_company(self.company):
+            code = self.employee.assignments.first().employee_code
+        self.assertIn(f'data-code="{code}"', page)
+
+    def test_who_is_paid_weekly_is_a_server_table(self):
+        self.client.force_login(self.admin)
+        self.join(D(2026, 8, 1))
+        page = self.client.get(reverse("payroll:pay_groups"))
+        self.assertContains(page, 'data-server-table="members"')
+        self.assertContains(page, f'data-end-dialog="end-{self.group.pk}-dialog"')
+        # A DataTables draw: the rows as JSON, searchable by the Employee ID.
+        with use_company(self.company):
+            code = self.employee.assignments.first().employee_code
+        draw = self.client.get(reverse("payroll:pay_groups"), {
+            "table": "members", "draw": 1, "start": 0, "length": 10, "search[value]": code})
+        self.assertEqual(draw.json()["recordsFiltered"], 1)

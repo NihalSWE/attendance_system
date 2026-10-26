@@ -338,10 +338,11 @@ class PayGroupForm(StyledFormMixin, forms.Form):
 def _day_field(label, days, help_text=""):
     """A choice of the group's start days (paygroups.start_days), this week's
     first and chosen: never a date the service would refuse."""
+    # Added after StyledFormMixin styled the declared fields: styled here.
     return forms.TypedChoiceField(
         label=label, choices=[(day.isoformat(), text) for day, text in days],
         coerce=datetime.date.fromisoformat, initial=days[0][0].isoformat() if days else None,
-        help_text=help_text)
+        help_text=help_text, widget=forms.Select(attrs={"class": "input select js-select"}))
 
 
 class PayGroupMemberForm(StyledFormMixin, forms.Form):

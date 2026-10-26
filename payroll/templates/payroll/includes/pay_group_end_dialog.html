@@ -1,0 +1,29 @@
+{% comment %}
+    A group's "Back to monthly" / "Paid weekly again" modal, shared by every row of
+    the Who is paid weekly table: the row's button fills in the row and the name
+    (pay_groups.html). A refused save opens it again for the same row.
+{% endcomment %}
+<dialog class="modal" id="{{ id }}" aria-labelledby="{{ id }}-title">
+    <form class="modal__card" method="post" novalidate>
+        {% csrf_token %}
+        <input type="hidden" name="section" value="member_end">
+        <input type="hidden" name="row" value="{% if open_dialog == id %}{{ bound_row }}{% endif %}" data-row-input>
+        <div class="modal__head">
+            <h2 id="{{ id }}-title">{{ title }}: <span data-row-who>{% if open_dialog == id %}{{ who_of_row }}{% endif %}</span></h2>
+            <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <div class="modal__body stack">
+            <p class="t-faint">{{ note }}</p>
+            {% if form.non_field_errors %}
+                <div class="alert alert--danger">{{ form.non_field_errors }}</div>
+            {% endif %}
+            {% for field in form.visible_fields %}
+                {% include "leaves/includes/field.html" %}
+            {% endfor %}
+        </div>
+        <div class="modal__foot">
+            <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+            <button class="btn btn--primary" type="submit">Save</button>
+        </div>
+    </form>
+</dialog>

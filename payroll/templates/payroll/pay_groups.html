@@ -8,6 +8,19 @@
     {# Modals; a refused form opens again with the reasons. #}
     <script defer src="{% static 'organization/js/employee_profile.js' %}">
     </script>
+    <script>
+        // "Back to monthly" / "Weekly again" on any row, also rows the table
+        // draws later: the group's modal, told which row it is about.
+        document.addEventListener("click", function (event) {
+            const button = event.target.closest("[data-end-row]");
+            if (!button) return;
+            const dialog = document.getElementById(button.dataset.endDialog);
+            if (!dialog) return;
+            dialog.querySelector("[data-row-input]").value = button.dataset.endRow;
+            dialog.querySelector("[data-row-who]").textContent = button.dataset.endWho;
+            dialog.showModal();
+        });
+    </script>
 {% endblock %}
 {% block page %}
     <div class="crumbs">
@@ -54,11 +67,17 @@
                 </span>
             </div>
             <div class="card__body stack">
+                <p class="t-faint">
+                    This week: {{ card.this_week.0|date:"D d M" }} - {{ card.this_week.1|date:"D d M Y" }}.
+                    In it: {{ card.departments }} department{{ card.departments|pluralize }},
+                    {{ card.people }} {{ card.people|pluralize:"person,people" }}{% if card.kept %};
+                    {{ card.kept }} kept monthly{% endif %}.
+                </p>
                 <div class="page__actions">
                     <button class="btn btn--primary btn--sm" type="button" data-open-dialog="{{ card.add_dialog }}">
                         Add people
                     </button>
-                    {% if card.members %}
+                    {% if card.departments %}
                         <button class="btn btn--ghost btn--sm" type="button" data-open-dialog="{{ card.keep_dialog }}">
                             Keep one person monthly
                         </button>
@@ -67,71 +86,14 @@
                         Edit
                     </button>
                 </div>
-                <p class="t-faint">
-                    This week: {{ card.this_week.0|date:"D d M" }} - {{ card.this_week.1|date:"D d M Y" }}.
-                </p>
-                <div class="table-wrap">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Who</th>
-                                <th>Paid</th>
-                                <th>From</th>
-                                <th>Until</th>
-                                <th class="no-sort"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in card.members %}
-                                <tr>
-                                    <td>
-                                        {% if row.department %}{{ row.department.name }} <span class="t-faint">(whole department)</span>{% else %}{{ row.employee.full_name }}{% endif %}
-                                    </td>
-                                    <td>Weekly</td>
-                                    <td>{{ row.effective_from|date:"D d M Y" }}</td>
-                                    <td>{% if row.effective_to %}{{ row.effective_to|date:"D d M Y" }}{% else %}<span class="t-faint">No end</span>{% endif %}</td>
-                                    <td>
-                                        <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="{{ row.dialog }}">
-                                            Back to monthly
-                                        </button>
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                            {% for row in card.kept %}
-                                <tr>
-                                    <td>{{ row.employee.full_name }}</td>
-                                    <td>Monthly <span class="t-faint">(kept, although the department is weekly)</span></td>
-                                    <td>{{ row.effective_from|date:"D d M Y" }}</td>
-                                    <td>{% if row.effective_to %}{{ row.effective_to|date:"D d M Y" }}{% else %}<span class="t-faint">No end</span>{% endif %}</td>
-                                    <td>
-                                        <button class="btn btn--quiet btn--sm" type="button" data-open-dialog="{{ row.dialog }}">
-                                            Weekly again
-                                        </button>
-                                    </td>
-                                </tr>
-                            {% endfor %}
-                            {% if not card.members and not card.kept %}
-                                <tr>
-                                    <td colspan="5" class="t-faint">
-                                        Nobody is in {{ card.group.name }} yet. Press Add people.
-                                    </td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
-                    </table>
-                </div>
             </div>
         </div>
 
         {% include "organization/profile/modal_form.html" with id=card.add_dialog title="Add people to "|add:card.group.name form=card.add_form section="member_add" row=card.group.pk submit="Save" note="Days before the start stay on the monthly salary." %}
         {% include "organization/profile/modal_form.html" with id=card.keep_dialog title="Keep one person monthly" form=card.keep_form section="keep_monthly" row=card.group.pk submit="Save" note="For someone in a weekly department who stays on the monthly salary." %}
         {% include "organization/profile/modal_form.html" with id=card.edit_dialog title="Edit "|add:card.group.name form=card.edit_form section="group_edit" row=card.group.pk submit="Save" %}
-        {% for row in card.members %}
-            {% include "organization/profile/modal_form.html" with id=row.dialog title="Back to monthly" form=row.form section="member_end" row=row.pk submit="Save" %}
-        {% endfor %}
-        {% for row in card.kept %}
-            {% include "organization/profile/modal_form.html" with id=row.dialog title="Paid weekly again" form=row.form section="member_end" row=row.pk submit="Save" note="Ends the monthly exception: the department's weekly pay applies again." %}
-        {% endfor %}
+        {% include "payroll/includes/pay_group_end_dialog.html" with id=card.end_dialog form=card.end_form title="Back to monthly" note="From this day the monthly salary pays them again." %}
+        {% include "payroll/includes/pay_group_end_dialog.html" with id=card.again_dialog form=card.again_form title="Paid weekly again" note="Ends the monthly exception: the department's weekly pay applies again." %}
     {% empty %}
         <div class="card">
             <div class="empty">
@@ -144,4 +106,86 @@
             </div>
         </div>
     {% endfor %}
+
+    {% if cards %}
+        <div class="card">
+            {% with server_table=server_tables.members %}
+                <div class="card__head">
+                    <h2>
+                        Who is paid weekly
+                    </h2>
+                    <span class="badge badge--neutral">
+                        {{ server_table.total }}
+                    </span>
+                </div>
+                <form method="get" class="toolbar">
+                    <label class="sr-only" for="members-group">
+                        Group
+                    </label>
+                    <select class="input select js-select" id="members-group" name="group">
+                        <option value="">All groups</option>
+                        {% for option in groups %}
+                            <option value="{{ option.pk }}" {% if option == shown_group %}selected{% endif %}>{{ option.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn--ghost" type="submit">
+                        Apply
+                    </button>
+                    {% if shown_group %}
+                        <a class="btn btn--quiet" href="{% url 'payroll:pay_groups' %}">
+                            Clear
+                        </a>
+                    {% endif %}
+                </form>
+                {% if server_table.total %}
+                    <div class="table-wrap">
+                        <table data-server-table="members" data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                            <thead>
+                                <tr>
+                                    <th>Who</th>
+                                    <th>Group</th>
+                                    <th class="no-sort">Paid</th>
+                                    <th>From</th>
+                                    <th>Until</th>
+                                    <th class="no-sort">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in members %}
+                                    <tr>
+                                        <td>
+                                            {% if row.department %}{{ row.department.name }} <span class="t-faint">(whole department)</span>{% else %}{{ row.employee.full_name }}{% endif %}
+                                        </td>
+                                        <td>{{ row.owner.name|default:"—" }}</td>
+                                        <td>
+                                            {% if row.pay_group %}Weekly{% else %}Monthly <span class="t-faint">(kept)</span>{% endif %}
+                                        </td>
+                                        <td>{{ row.effective_from|date:"D d M Y" }}</td>
+                                        <td>{% if row.effective_to %}{{ row.effective_to|date:"D d M Y" }}{% else %}<span class="t-faint">No end</span>{% endif %}</td>
+                                        <td>
+                                            {% if row.dialog %}
+                                                <button class="btn btn--quiet btn--sm" type="button" data-end-dialog="{{ row.dialog }}" data-end-row="{{ row.pk }}" data-end-who="{% if row.department %}{{ row.department.name }}{% else %}{{ row.employee.full_name }}{% endif %}">
+                                                    {% if row.pay_group %}Back to monthly{% else %}Weekly again{% endif %}
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% include "base_template/includes/table_pagination.html" %}
+                {% else %}
+                    <div class="empty">
+                        <div class="empty__title">
+                            Nobody is paid weekly{% if shown_group %} in {{ shown_group.name }}{% endif %} yet
+                        </div>
+                        <div class="empty__text">
+                            Press Add people on a group to put a department or a person in it.
+                        </div>
+                    </div>
+                {% endif %}
+            {% endwith %}
+        </div>
+    {% endif %}
 {% endblock %}

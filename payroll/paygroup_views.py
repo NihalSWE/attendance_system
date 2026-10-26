@@ -15,7 +15,7 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from base_template.tables import render
+from base_template.tables import paginate, render
 from common.choices import ActiveStatus
 from common.forms import apply_service_errors
 from common.tenant import use_company
@@ -70,24 +70,22 @@ def pay_groups(request):
             open_dialog, form = result
             bound[open_dialog] = form
 
+    def owner_of(row):
+        """The group whose weeks a row starts and ends on: its own, or (kept
+        monthly) the group of the person's department."""
+        return row.pay_group_id or group_of_department.get(department_of.get(row.employee_id))
+
     cards = []
     for group in groups:
         first, last = paygroups.week_of(group, today)
-        members, kept = [], []
-        for row in rows:
-            if row.pay_group_id == group.pk:
-                members.append(row)
-            elif (row.pay_group_id is None
-                  and group_of_department.get(department_of.get(row.employee_id)) == group.pk):
-                kept.append(row)
-        for row in members + kept:
-            row.dialog = f"end-{row.pk}-dialog"
-            row.form = bound.get(row.dialog) or EndMemberForm(
-                days=days[group.pk], label=_end_label(row), auto_id=f"end{row.pk}_%s")
         cards.append({
-            "group": group, "this_week": (first, last), "members": members, "kept": kept,
+            "group": group, "this_week": (first, last),
+            "departments": sum(1 for r in rows if r.pay_group_id == group.pk and r.department_id),
+            "people": sum(1 for r in rows if r.pay_group_id == group.pk and r.employee_id),
+            "kept": sum(1 for r in rows if r.pay_group_id is None and owner_of(r) == group.pk),
             "add_dialog": f"add-{group.pk}-dialog", "keep_dialog": f"keep-{group.pk}-dialog",
-            "edit_dialog": f"edit-{group.pk}-dialog",
+            "edit_dialog": f"edit-{group.pk}-dialog", "end_dialog": f"end-{group.pk}-dialog",
+            "again_dialog": f"again-{group.pk}-dialog",
             "add_form": bound.get(f"add-{group.pk}-dialog") or PayGroupMemberForm(
                 departments=departments, employees=employees, days=days[group.pk],
                 auto_id=f"add{group.pk}_%s"),
@@ -96,12 +94,43 @@ def pay_groups(request):
             "edit_form": bound.get(f"edit-{group.pk}-dialog") or PayGroupForm(
                 initial={"name": group.name, "week_start": group.week_start},
                 auto_id=f"edit{group.pk}_%s"),
+            "end_form": bound.get(f"end-{group.pk}-dialog") or EndMemberForm(
+                days=days[group.pk], auto_id=f"end{group.pk}_%s"),
+            "again_form": bound.get(f"again-{group.pk}-dialog") or EndMemberForm(
+                days=days[group.pk], label="Weekly again from", auto_id=f"again{group.pk}_%s"),
         })
+
+    # Everyone in a group, as one server-side table (SL, pages, search, sort).
+    shown_group = next((g for g in groups if str(g.pk) == request.GET.get("group", "")), None)
+    with use_company(company_id):
+        members = (PayGroupMember.objects.filter(status=PayGroupMember.Status.ACTIVE)
+                   .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=today))
+                   .select_related("pay_group", "department", "employee"))
+        if shown_group is not None:
+            ids = [r.pk for r in rows if owner_of(r) == shown_group.pk]
+            members = members.filter(pk__in=ids)
+        table = paginate(
+            request, members.order_by("department__name", "employee__first_name"), name="members",
+            search=("department__name", "employee__first_name", "employee__last_name",
+                    "employee__assignments__employee_code", "pay_group__name"),
+            order=(("department__name", "employee__first_name"), "pay_group__name", None,
+                   "effective_from", "effective_to", None))
+        table.object_list = list(table.object_list)
+    names = {g.pk: g for g in groups}
+    for row in table.object_list:
+        row.owner = names.get(owner_of(row))
+        row.dialog = (f"end-{row.owner.pk}-dialog" if row.pay_group_id else
+                      f"again-{row.owner.pk}-dialog") if row.owner else ""
     return render(request, "payroll/pay_groups.html", {
-        "cards": cards,
+        "cards": cards, "members": table, "groups": groups, "shown_group": shown_group,
         "group_form": bound.get("group-add-dialog") or PayGroupForm(auto_id="group_%s"),
-        "open_dialog": open_dialog,
+        "open_dialog": open_dialog, "bound_row": row_id if open_dialog.startswith(("end-", "again-")) else "",
+        "who_of_row": next((_who(r) for r in rows if str(r.pk) == row_id), ""),
     })
+
+
+def _who(row):
+    return row.department.name if row.department_id else row.employee.full_name
 
 
 def _save(request, company_id, section, row_id, groups, rows, days, departments, employees):
@@ -175,9 +204,12 @@ def _save(request, company_id, section, row_id, groups, rows, days, departments,
         if row is None:
             return None
         owner = row.pay_group or _department_group(company_id, row, rows, groups)
-        form = EndMemberForm(post, days=days[owner.pk] if owner else [], label=_end_label(row),
-                             auto_id=f"end{row.pk}_%s")
-        dialog = f"end-{row.pk}-dialog"
+        if owner is None:
+            return None
+        kind = "end" if row.pay_group_id else "again"
+        form = EndMemberForm(post, days=days[owner.pk], label=_end_label(row),
+                             auto_id=f"{kind}{owner.pk}_%s")
+        dialog = f"{kind}-{owner.pk}-dialog"
         if form.is_valid():
             try:
                 ended = paygroups.end_member(actor=actor, company_id=company_id, member=row,

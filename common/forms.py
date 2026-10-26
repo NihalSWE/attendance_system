@@ -199,11 +199,68 @@ class CompanyDateTimeField(forms.MultiValueField):
         )
 
 
+def employee_codes(queryset):
+    """``{employee_id: current Employee ID}`` for the employees in ``queryset``."""
+    from employees.models import EmployeeAssignment
+
+    rows = (EmployeeAssignment.all_objects
+            .filter(employee__in=queryset.values("pk"), effective_to__isnull=True)
+            .exclude(status__in=["cancelled", "draft"])
+            .order_by("employee_id", "effective_from", "pk")
+            .values_list("employee_id", "employee_code"))
+    return dict(rows)  # the latest placement wins
+
+
+class _EmployeeCodes:
+    """A database select whose employee options carry their Employee ID
+    (``data-code``), so the search finds a person by ID even where only the
+    name is shown (forms.js matcher, 2026-10-26)."""
+
+    def _employees(self):
+        queryset = getattr(self.choices, "queryset", None)
+        return queryset if queryset is not None and queryset.model._meta.label == "employees.Employee" else None
+
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        if self._employees() is not None:
+            # A search box however few people: an ID is typed, not scrolled to.
+            context["widget"]["attrs"]["data-search"] = "always"
+        return context
+
+    def optgroups(self, name, value, attrs=None):
+        queryset = self._employees()
+        self._codes = employee_codes(queryset) if queryset is not None else {}
+        return super().optgroups(name, value, attrs)
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        code = getattr(self, "_codes", {}).get(getattr(value, "value", value))
+        if code:
+            option["attrs"]["data-code"] = code
+        return option
+
+
+class ModelSelect(_EmployeeCodes, forms.Select):
+    pass
+
+
+class ModelSelectMultiple(_EmployeeCodes, forms.SelectMultiple):
+    pass
+
+
 class StyledFormMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
             widget = field.widget
+            # Database selects that carry each employee's ID for the search.
+            if type(widget) in (forms.Select, forms.SelectMultiple) and isinstance(
+                    field, (forms.ModelChoiceField, forms.ModelMultipleChoiceField)):
+                swapped = (ModelSelectMultiple if isinstance(widget, forms.SelectMultiple)
+                           else ModelSelect)(attrs=widget.attrs)
+                swapped.choices = widget.choices
+                swapped.is_required = widget.is_required
+                field.widget = widget = swapped
             # A checkbox is not a text field. Giving it class="input" made it
             # inherit `width: 100%`, which inside the flex row that renders it
             # collapsed the control to zero width — a 13px sliver with no box
