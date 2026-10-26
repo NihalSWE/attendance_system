@@ -192,8 +192,8 @@ EFFECTS = {
     },
     "recipe_line": {
         "Material": "Only active <b>raw materials and packaging</b> are offered, and not those "
-                    "on the recipe already. Packaging items are marked <b>Packaging</b> by "
-                    "themselves.",
+                    "on the recipe already. A new one is made as an item of its type, then put "
+                    "on the recipe. Packaging items are marked <b>Packaging</b> by themselves.",
         "How much one batch uses": "In the material's own unit, shown beside the box when you "
                                    "choose it. Planning multiplies it by (quantity to make "
                                    "&divide; batch size).",

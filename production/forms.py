@@ -226,7 +226,9 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
     NEW = ("new_kind", "new_code", "new_name", "new_category", "new_uom", "new_track_batch",
            "new_track_expiry")
 
+    # Not said: one already added.
     source = forms.ChoiceField(label="Material", initial="existing", widget=forms.RadioSelect,
+                               required=False,
                                choices=(("existing", "One already added"),
                                         ("new", "A new raw material or packaging item")))
     material = forms.ModelChoiceField(queryset=Item.all_objects.none(), label="Material",
@@ -270,6 +272,8 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
         self.fields["material"].widget.attrs["data-show-when"] = "source:existing"
         for name in self.NEW:
             self.fields[name].widget.attrs["data-show-when"] = "source:new"
+        for name in ("new_code", "new_name", "new_category", "new_uom"):
+            self.fields[name].show_required = True    # needed for a new one (clean)
         # Only the chosen type's categories (base_template/js/forms.js follow).
         category = self.fields["new_category"]
         category.queryset = (ItemCategory.all_objects.filter(

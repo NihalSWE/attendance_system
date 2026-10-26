@@ -435,8 +435,11 @@ story += [P("Buttons you will see on every page", "h1"),
               ("Edit", "On each row. Opens the same form with the row's values; change and "
                        "click <b>Save</b>."),
               ("Activate / Deactivate", "Switches a row off when you no longer use it, or on "
-                                        "again. Nothing is ever deleted, so old records stay "
-                                        "correct. The software asks you to confirm first."),
+                                        "again. What it was used for stays correct. The "
+                                        "software asks you to confirm first."),
+              ("Delete", "On the item pages, for an item whose stock never moved (a mistake, a "
+                         "test): it is gone for good, with its pack units. An item that has been "
+                         "used is deactivated instead."),
               ("Search box, filters", "Find rows quickly. Lists show a count and page through "
                                       "long results."),
               ("Import from Excel", "On the item pages, Stores, Suppliers, Customers and "
@@ -974,6 +977,9 @@ story += [P("Add the materials", "h2"),
               "product's unit) and click <b>Save</b>.",
               "Click <b>Add material</b> once for every ingredient and packaging item. The "
               "material's unit shows beside the quantity as soon as you choose it.",
+              "Not added yet? In Add material choose <b>A new raw material or packaging "
+              "item</b>: give its type, code, name, category and unit, and it is made and put "
+              "on the recipe in one go.",
               "A wrong line: <b>Remove</b> it and add it again. The page comes back to the card "
               "and says what was saved.",
           ]),
@@ -984,15 +990,16 @@ story += [P("Add the materials", "h2"),
           ]),
           P("The Add material form", "h3"),
           fields("recipe_line", [
-              ("Material", "Yes", "The raw material or packaging item.", "RM-MANGO Mango pulp"),
+              ("Material", "Yes", "One already added, or a new one (type, code, name, category, "
+                                  "unit).", "RM-MANGO Mango pulp"),
               ("How much one batch uses", "Yes", "In the material's own unit (shown beside the "
                                                  "box).", "120 (KG)"),
               ("Normal wastage %", "No", "Normal wastage of this material (0 to 100).", "2"),
           ]),
-          P("Changing a recipe that production has used", "h2"),
-          P("Change it the same way. Once a production order has used the recipe, a change is "
-            "saved as a <b>new version</b> (v2, v3 ...) and the card says so; the orders already "
-            "made keep the version they used. Until then, changes are made in place."),
+          P("Changing a recipe", "h2"),
+          P("Remove the line and add it again with the new quantity. Production orders already "
+            "made keep the materials they were planned with; new orders use the recipe as it "
+            "is now."),
           box("Rules the recipe checks", [
               "Only a finished good has a recipe; only raw materials and packaging can be on it.",
               "Each material is on a recipe once: the Add material list leaves out those already "
@@ -1176,6 +1183,13 @@ story += [P("Messages you may see, and what to do", "h1"),
               ("Say why the label is void.", "Void: the reason is empty.", "Write the reason."),
               ("Between 1 and 500 packages.", "Package labels: too many or none.",
                "Make them in two goes, or give at least 1."),
+              ("... has stock movements, so it cannot be deleted.", "Delete on an item that was "
+               "used.", "Deactivate it instead: its history stays correct."),
+              ("... is a material of ...: remove it from that recipe first.", "Delete on a raw "
+               "material that is on a recipe.", "Remove it from that product's Materials, or "
+               "deactivate it."),
+              ("Give this for the new material.", "Add material, new one: a box was left "
+               "empty.", "Fill code, name, category and unit."),
               ("Say first how much one batch makes.", "Recipe: a material was added before the "
                "batch size.", "Write One batch makes and click Save."),
               ("Choose a raw material or a packaging item.", "Recipe: another type was chosen.",
@@ -1255,8 +1269,6 @@ story += [Spacer(1, 8 * mm), P("Words used in this guide", "h1"),
               ("Void", "A label taken out of use with a reason; it never scans again."),
               ("Recipe (BOM)", "The materials one batch of a finished good uses; on the "
                                "product's page."),
-              ("Version", "A numbered copy of a recipe (v1, v2 ...). A change after production "
-                          "used it makes a new one; past runs keep theirs."),
               ("Wastage %", "The normal wastage of a material, added on top when production is "
                             "planned."),
               ("Production order", "An order to make a quantity of a finished good with its "

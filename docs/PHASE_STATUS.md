@@ -6680,4 +6680,17 @@ activate; production orders with boxes nobody needed. Branch
   opening stock (unit and batch boxes following the item, the date limit),
   plan → release → use materials → post output → Stock on hand.
 
+Same day, after the senior's review:
+- **Delete** on item rows and the item page for an item whose stock never moved
+  (`masters.delete_item`); stock, a recipe it is on, production orders or any
+  document stop it with the reason. Pack units and an unused recipe go with it.
+- **Add material → "A new raw material or packaging item"** makes the item and
+  puts it on the recipe in one step; a refused form opens again with what was
+  written (`production/recipe_views.py`).
+- **No version on screen**: the recipe card and the order header no longer show
+  one (still kept underneath, so past orders keep what they were planned with).
+- **Data tables**: `tables.js` `data-local-table` gives short lists SL, Show N,
+  search, sortable headers and pages; on the 32 document and detail tables of
+  inventory, production, purchasing and sales. DataTables now loads on every page.
+
 **Deploy:** pull, collectstatic, restart. No migration.

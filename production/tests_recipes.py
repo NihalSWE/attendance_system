@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from common.tenant import use_company
+from inventory.models import Item
 from production import orders, recipes
 from production.models import Bom
 from production.tests_flow import DAY, ProductionFixture
@@ -74,3 +75,32 @@ class RecipeTests(ProductionFixture, TestCase):
         # A raw material has no Materials card.
         self.assertNotContains(self.client.get(reverse("inventory:item_detail", args=[self.pulp.pk])),
                                "Materials (recipe)")
+
+    def test_a_new_raw_material_made_from_add_material(self):
+        self.client.force_login(self.owner)
+        self.client.post(reverse("production:recipe_batch", args=[self.juice.pk]), {"batch_size": "1000"})
+        response = self.client.post(reverse("production:recipe_add", args=[self.juice.pk]), {
+            "source": "new", "new_kind": "raw", "new_code": "rm-0009", "new_name": "Citric acid",
+            "new_category": self.pulp.category_id, "new_uom": self.kg.pk, "qty": "2"})
+        self.assertRedirects(response, reverse("inventory:item_detail", args=[self.juice.pk]) + "#materials",
+                             fetch_redirect_response=False)
+        with use_company(self.company):
+            acid = Item.objects.get(code="RM-0009")
+            self.assertEqual((acid.kind, acid.base_uom), ("raw", self.kg))
+            self.assertTrue(recipes.current(self.company.pk, self.juice).lines.filter(item=acid).exists())
+
+    def test_a_refused_new_material_opens_again_with_what_was_written(self):
+        self.client.force_login(self.owner)
+        self.client.post(reverse("production:recipe_batch", args=[self.juice.pk]), {"batch_size": "1000"})
+        page = self.client.post(reverse("production:recipe_add", args=[self.juice.pk]), {
+            "source": "new", "new_kind": "raw", "new_name": "Citric acid", "qty": "2"})
+        self.assertContains(page, 'data-open-on-load="material-dialog"')
+        self.assertContains(page, 'value="Citric acid"')
+        self.assertContains(page, "Give this for the new material.")
+        self.assertFalse(Item.all_objects.filter(name="Citric acid").exists())
+
+    def test_no_version_on_the_screens(self):
+        self.client.force_login(self.owner)
+        self.recipe()
+        page = self.client.get(reverse("inventory:item_detail", args=[self.juice.pk]))
+        self.assertNotContains(page, "version")

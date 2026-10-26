@@ -2,6 +2,8 @@
 item's own units, a Batch list its item, a Category list its item type, so the
 browser (base_template/js/forms.js) offers only what saving will accept."""
 
+import datetime
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -92,3 +94,37 @@ class EitherTests(InventoryFixture, TestCase):
         # The stale hidden requisition is no error; what is missing is said at the top.
         self.assertNotIn("requisition", posted.errors)
         self.assertIn("Choose the requisition, or the store and the department.", posted.non_field_errors())
+
+
+class DeleteItemTests(InventoryFixture, TestCase):
+    """Delete an item nothing uses yet (2026-10-26)."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.owner)
+
+    def test_an_unused_item_is_deleted_with_its_pack_units(self):
+        with self.tenant():
+            salt = Item.objects.create(company=self.company, code="RM-0009", name="Salt",
+                                       kind=ItemKind.RAW, category=self.raw, base_uom=self.kg)
+            ItemUom.objects.create(company=self.company, item=salt, uom=self.bag, factor=50)
+        page = self.client.get(reverse("inventory:raw_materials"))
+        self.assertContains(page, reverse("inventory:raw_materials_delete", args=[salt.pk]))
+        self.client.post(reverse("inventory:raw_materials_delete", args=[salt.pk]))
+        self.assertFalse(Item.all_objects.filter(pk=salt.pk).exists())
+
+    def test_an_item_with_stock_is_not_deleted(self):
+        from inventory import posting
+        from inventory.models import MoveType
+        from inventory.testing import D
+
+        spares = self.store("SPS", "Spares store", "general")
+        posting.post(company_id=self.company.pk, actor=self.owner, document_type="opening",
+                     document_id=1, move_type=MoveType.OPENING, work_date=datetime.date(2026, 10, 1),
+                     lines=[posting.Line(item=self.bearing, warehouse=spares, qty=D("10"),
+                                         unit_cost=D("100"))])
+        url = reverse("inventory:spare_parts_delete", args=[self.bearing.pk])
+        self.assertNotContains(self.client.get(reverse("inventory:spare_parts")), url)
+        response = self.client.post(url, follow=True)
+        self.assertContains(response, "has stock movements")
+        self.assertTrue(Item.all_objects.filter(pk=self.bearing.pk).exists())
