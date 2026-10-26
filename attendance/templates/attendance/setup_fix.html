@@ -1,0 +1,187 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Fix setup · Attendance
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    {# Modals; a refused form opens again with the reasons. Branch -> department -> designation. #}
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
+    <script defer src="{% static 'organization/js/employee_form.js' %}">
+    </script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const ticked = () => Array.from(document.querySelectorAll('input[name="pick"]:checked'));
+            // "The people ticked in the list (N ticked)", kept up to date.
+            const count = function () {
+                const n = ticked().length;
+                document.querySelectorAll('input[name="who"][value="ticked"]').forEach(function (radio) {
+                    const words = radio.closest("label").querySelector("span");
+                    words.textContent = "The people ticked in the list (" + n + " ticked)";
+                });
+            };
+            document.addEventListener("change", function (event) {
+                if (event.target.matches('[data-tick-page]')) {
+                    document.querySelectorAll('input[name="pick"]').forEach(function (box) {
+                        box.checked = event.target.checked;
+                    });
+                }
+                if (event.target.matches('input[name="pick"], [data-tick-page]')) count();
+            });
+            // The list redraws a page: nothing on it is ticked any more.
+            document.addEventListener("draw.dt", function () {
+                const all = document.querySelector("[data-tick-page]");
+                if (all) all.checked = false;
+                count();
+            });
+            // An action takes the ticked people with it.
+            document.querySelectorAll("[data-takes-ticks] form").forEach(function (form) {
+                form.addEventListener("submit", function () {
+                    form.querySelectorAll('input[name="ids"]').forEach(input => input.remove());
+                    ticked().forEach(function (box) {
+                        const input = document.createElement("input");
+                        input.type = "hidden";
+                        input.name = "ids";
+                        input.value = box.value;
+                        form.appendChild(input);
+                    });
+                });
+            });
+            count();
+            {% if job.status == "running" %}
+                // A job is working in the background: look again until it is done.
+                setTimeout(function () {
+                    if (!document.querySelector("dialog[open]")) window.location.reload();
+                }, 5000);
+            {% endif %}
+        });
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="crumbs">
+        <a href="{% url 'dashboard' %}">Dashboard</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{% url 'attendance:attendance_list' %}">Attendance</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Fix setup
+    </div>
+    <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
+        <div>
+            <h1 class="page__title">Fix setup</h1>
+            <p class="page__sub">Everyone whose setup stops their attendance: in the Unassigned department, in a department with no shift, or not on every device of their branch. Tick people (or use everyone in the list), then fix them in the order of the buttons.</p>
+        </div>
+        <div class="page__actions row">
+            <button class="btn btn--primary" type="button" data-open-dialog="placement-dialog">1. Set department</button>
+            <button class="btn btn--ghost" type="button" data-open-dialog="send-dialog">2. Send to devices</button>
+            <button class="btn btn--ghost" type="button" data-open-dialog="recheck-dialog">3. Re-check refused scans</button>
+            <button class="btn btn--ghost" type="button" data-open-dialog="recalculate-dialog">Recalculate</button>
+        </div>
+    </div>
+
+    {% if job %}
+        <div class="card">
+            <div class="card__head">
+                <h2>{{ job.get_kind_display }}</h2>
+                {% if job.status == "running" %}
+                    <span class="badge badge--warning">Working · {{ job.done_count|add:job.failed_count }} of {{ job.total }}</span>
+                {% elif job.status == "done" %}
+                    <span class="badge badge--success">Done</span>
+                {% else %}
+                    <span class="badge badge--danger">{{ job.get_status_display }}</span>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                {% if job.status == "running" %}
+                    <p>Working in the background. This page looks again every few seconds; you may leave it.</p>
+                {% else %}
+                    <p>{{ job.message }}</p>
+                {% endif %}
+                {% if job.failures %}
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead><tr><th>SL</th><th>Who</th><th>Why not</th></tr></thead>
+                            <tbody>
+                                {% for name, reason in job.failures %}
+                                    <tr><td>{{ forloop.counter }}</td><td>{{ name }}</td><td>{{ reason }}</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card__head">
+            <h2>People to fix</h2>
+            <span class="badge badge--neutral">{{ listed }}</span>
+        </div>
+        <form class="card__body row" method="get">
+            <select class="input select js-select" name="branch_filter" aria-label="Branch">
+                <option value="">All branches</option>
+                {% for option in branches %}
+                    <option value="{{ option.pk }}"{% if option.pk == branch %} selected{% endif %}>{{ option.name }}</option>
+                {% endfor %}
+            </select>
+            <select class="input select js-select" name="problem" aria-label="Problem">
+                <option value="">Any problem</option>
+                {% for name in problems %}
+                    <option value="{{ name }}"{% if name == problem %} selected{% endif %}>{% for key, value in counts.items %}{% if key == name %}{{ name }} ({{ value }}){% endif %}{% endfor %}</option>
+                {% endfor %}
+            </select>
+            <button class="btn btn--ghost" type="submit">Apply</button>
+        </form>
+        {% if not page %}
+            <div class="empty server-table-empty">
+                <div class="empty__title">Nobody to fix</div>
+                <div class="empty__text">Everyone {% if branch or problem %}matching these filters {% endif %}has a department with a shift and is on every device of their branch.</div>
+            </div>
+        {% endif %}
+        {% if server_table or page %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="1,2,3,4,5,6,7" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" data-tick-page aria-label="Tick everyone on this page"></th>
+                            <th>Employee ID</th>
+                            <th>Name</th>
+                            <th>Branch</th>
+                            <th>Department</th>
+                            <th>Designation</th>
+                            <th>On devices</th>
+                            <th>Problem</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in page %}
+                            <tr>
+                                <td><input type="checkbox" name="pick" value="{{ row.8 }}" aria-label="Tick {{ row.2 }}"></td>
+                                <td>{{ row.1 }}</td>
+                                <td><a href="{% url 'organization:employee_detail' row.10 %}">{{ row.2 }}</a></td>
+                                <td>{{ row.3 }}</td>
+                                <td>{{ row.4 }}</td>
+                                <td>{{ row.5 }}</td>
+                                <td>{{ row.6 }}{% if row.9 %}<br><span class="t-faint">Not on: {{ row.9 }}</span>{% endif %}</td>
+                                <td>{{ row.7 }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        {% endif %}
+    </div>
+
+    <div data-takes-ticks>
+        {% with action="?"|add:request.GET.urlencode %}
+            {% include "organization/profile/modal_form.html" with id="placement-dialog" title="1. Set department" action=action form=forms.placement section="placement" submit="Save and recalculate" dependent=True wide=True note="Corrects their current placement, so the new department counts for their past days too. Choose a department that has a shift." %}
+            {% include "organization/profile/modal_form.html" with id="send-dialog" title="2. Send to devices" action=action form=forms.send section="send" submit="Send" note="Puts each person on every device of their branch they are not on yet. They enrol their finger or face at the device if it has none." %}
+            {% include "organization/profile/modal_form.html" with id="recalculate-dialog" title="Recalculate attendance" action=action form=forms.recalculate section="recalculate" submit="Recalculate" note="Builds their days again from their scans, shifts, leave and holidays. Set department does this by itself." %}
+        {% endwith %}
+    </div>
+    {% with action="?"|add:request.GET.urlencode %}
+        {% include "organization/profile/modal_form.html" with id="recheck-dialog" title="3. Re-check refused scans" action=action form=forms.recheck section="recheck" submit="Re-check" note="Scans refused before a person was linked (\"unknown employee\") or for another rule are judged again under today's setup. The days of every scan that now counts are recalculated." %}
+    {% endwith %}
+{% endblock %}

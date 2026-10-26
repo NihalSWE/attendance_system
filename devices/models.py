@@ -718,6 +718,46 @@ class DeviceLoadJob(TenantOwned):
         return f"load {self.device_id}: {self.done_count + self.failed_count}/{self.total}"
 
 
+class SetupFixJob(TenantOwned):
+    """One step of the one-time "Fix setup" page (2026-10-26), done in the
+    background: send people to their branch's devices, recalculate their
+    attendance, or re-check the scans that were refused before they were
+    linked. Like ``DeviceLoadJob``, the button only writes this row and a
+    thread works through ``remaining`` (``devices.services.setup_fix``)."""
+
+    class Kind(models.TextChoices):
+        SEND = "send", "Send to devices"
+        RECALCULATE = "recalculate", "Recalculate attendance"
+        RECHECK = "recheck", "Re-check refused scans"
+
+    class Status(models.TextChoices):
+        RUNNING = "running", "Working"
+        DONE = "done", "Done"
+        FAILED = "failed", "Stopped by an error"
+
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name="+")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.RUNNING)
+    start = models.DateField(null=True, blank=True)     # recalculate / re-check from this day
+    total = models.PositiveIntegerField(default=0)
+    done_count = models.PositiveIntegerField(default=0)
+    failed_count = models.PositiveIntegerField(default=0)
+    remaining = models.JSONField(default=list)        # employee ids still to do
+    failures = models.JSONField(default=list)         # [name, reason], the first 50
+    message = models.TextField(blank=True)            # what the finished job did, in words
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "devices_setup_fix_job"
+        indexes = [models.Index(fields=["company", "status"])]
+
+    def __str__(self):
+        return f"{self.kind}: {self.done_count + self.failed_count}/{self.total}"
+
+
 class DeviceSyncState(TenantOwned):
     """Current, mutable operational state for one device (not historical evidence).
 

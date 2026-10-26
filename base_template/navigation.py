@@ -74,6 +74,8 @@ COMPANY_MENUS = (
         item("Days to review", "attendance:attendance_review", "attendance:attendance_day_fix",
              "attendance:attendance_correction_withdraw"),
         item("Missed scans", "attendance:missed_scan_list", "attendance:missed_scan_decide"),
+        # The one-time fix for people added from a device (2026-10-26).
+        item("Fix setup", "attendance:setup_fix", manage=True),
     )),
     ("leave", "Leave", (
         item("Leave list", "leaves:leave_list", "leaves:leave_cancel"),
