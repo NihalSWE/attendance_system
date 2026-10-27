@@ -189,9 +189,11 @@ def product(request, pk):
     buys = item.sourcing != Item.Sourcing.MAKE or not context["production"]
     recipe = hub.recipe(company_id, request.user, item) if makes else None
     sold, per_day = hub.sold(company_id, item)
+    parts = _item_parts(request, company_id, item)
+    making = _making(request, company_id, item, recipe, parts["packs"]) if makes else {}
     if makes and recipe is None:
         next_step = ("Write its recipe: what one batch makes and the materials it uses.",
-                     reverse("inventory:item_detail", args=[item.pk]) + "#materials", "Add recipe")
+                     reverse("inventory:product", args=[item.pk]) + "#recipe", "Write the recipe")
     elif line.tone != "ok" and makes:
         next_step = ("Stock is below what you keep: plan a production.", reverse("production:orders"), "Make")
     elif line.tone != "ok":
@@ -200,7 +202,7 @@ def product(request, pk):
     else:
         next_step = ("Sell it: deliver to a customer from stock.", reverse("sales:deliveries"), "Sell")
     return render(request, "inventory/hub/product.html", {
-        **context, **_item_parts(request, company_id, item), "line": line, "makes": makes,
+        **context, **parts, **making, "line": line, "makes": makes,
         "buys": buys, "recipe": recipe, "sold": sold, "per_day": per_day,
         "batches": hub.stock_by_batch(company_id, request.user, item),
         "productions": hub.productions(company_id, item) if makes else [],
@@ -209,6 +211,35 @@ def product(request, pk):
         "can_plan": access.may(request.user, company_id, "production.plan"),
         "next_step": next_step,
     })
+
+
+def _making(request, company_id, item, recipe, packs):
+    """The recipe's and the cost sheet's forms and numbers (plan §7.3, §7.4)."""
+    from production import costing
+    from production import forms as production_forms
+
+    can_edit = access.may(request.user, company_id, "production.bom")
+    sheet = costing.sheet(company_id, item)
+    if recipe is not None and sheet is not None:
+        amounts = {row.line.pk: row for row in sheet.materials}
+        for line in recipe["lines"]:
+            line.cost_row = amounts.get(line.pk)
+    found = {"sheet": sheet, "per_pack": sheet.per_pack(packs) if sheet else [], "can_edit_recipe": can_edit}
+    if can_edit:
+        material_form = production_forms.RecipeMaterialForm(
+            company_id=company_id, product=item, can_create=access.may(request.user, company_id, masters.CODE))
+        material_form.fields["qty"].unit_from = "material new_uom"
+        material_form.fields["scrap_pct"].unit_text = "%"
+        material_form.fields["scrap_pct"].label = "Normal wastage"
+        if "new_uom" in material_form.fields:
+            material_form.fields["new_uom"].widget.option_attrs = lambda rows: {
+                pk: {"data-unit": code} for pk, code in rows.values_list("pk", "code")}
+        batch_form = production_forms.RecipeBatchForm(
+            initial={"batch_size": recipe["bom"].batch_size.normalize() if recipe else None})
+        batch_form.fields["batch_size"].unit_text = item.base_uom.code
+        found.update({"material_form": material_form, "batch_form": batch_form,
+                      "cost_form": production_forms.CostLineForm(company_id=company_id)})
+    return found
 
 
 # --- shared ---------------------------------------------------------------------

@@ -65,7 +65,7 @@ def bom_list(request):
 
 
 def _to_product(bom):
-    return redirect(reverse("inventory:item_detail", args=[bom.item_id]) + "#materials")
+    return redirect(reverse("inventory:product", args=[bom.item_id]) + "#recipe")
 
 
 def _bom_page(request, pk, line_form=None, open_dialog=""):

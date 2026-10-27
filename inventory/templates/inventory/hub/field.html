@@ -11,7 +11,7 @@
             {{ box }}
         </label>
     {% else %}
-        <label class="field__label" for="{{ box.id_for_label }}">{{ box.label }}{% if box.field.required %} <span class="field__req">*</span>{% endif %}</label>
+        <label class="field__label" for="{{ box.id_for_label }}">{{ box.label }}{% if box.field.required or box.field.show_required %} <span class="field__req">*</span>{% endif %}</label>
         {% if box.field.widget.input_type == "radio" %}
             <div class="check-list">
                 {% for option in box %}<label class="check" for="{{ option.id_for_label }}">{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}

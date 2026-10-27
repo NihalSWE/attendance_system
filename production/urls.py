@@ -2,11 +2,18 @@
 
 from django.urls import path
 
-from production import recipe_views, views
+from production import cost_views, recipe_views, views
 
 app_name = "production"
 
 urlpatterns = [
+    # Cost rates and a product's costs of one batch (2026-10-27, plan §7.4).
+    path("cost-rates/", cost_views.cost_rates, name="cost_rates"),
+    path("cost-rates/<int:pk>/", cost_views.cost_rate_save, name="cost_rate_save"),
+    path("cost-rates/<int:pk>/status/", cost_views.cost_rate_status, name="cost_rate_status"),
+    path("products/<int:pk>/costs/", cost_views.cost_line_add, name="cost_line_add"),
+    path("products/<int:pk>/costs/<int:line_pk>/remove/", cost_views.cost_line_remove,
+         name="cost_line_remove"),
     # The Materials card on a finished good's page (2026-10-26).
     path("recipes/<int:pk>/batch/", recipe_views.recipe_batch, name="recipe_batch"),
     path("recipes/<int:pk>/materials/", recipe_views.recipe_add, name="recipe_add"),

@@ -110,8 +110,13 @@
         </div>
     </div>
 
-    {% if recipe %}
-        {% include "production/recipe_card.html" %}
+    {% if makes_here %}
+        {# The recipe and the cost of one batch are on the product's page (2026-10-27). #}
+        <div class="card" id="materials">
+            <div class="card__head"><h2>Recipe and cost</h2></div>
+            <p class="card__body">The recipe and what one batch costs are on the product's page.
+                <a href="{% url 'inventory:product' item.pk %}#recipe">Open {{ item.name }}</a></p>
+        </div>
     {% endif %}
 
     <div class="card">

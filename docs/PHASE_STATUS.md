@@ -6783,3 +6783,31 @@ The screens approved on sample data are now real pages:
 - Tests: `inventory/tests_phase4.py` (17) and the apps touched. Full suite: after all phases.
 
 **Deploy:** pull, collectstatic, restart (no migration).
+
+### Inventory redesign, phase 5: recipe and cost — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §7.3, §7.4, §15 phase 5.
+
+- **The recipe is on the product's page** (`inventory/hub/_recipe.html`): one batch makes N;
+  Add material (one already added, a new one made right there, or a product made here);
+  Batch size; Remove - all save with fetch (`production/recipe_views.py` answers fetch and
+  goes back to the product). Each line shows its cost, what is in stock and how many batches
+  it is enough for; a switched-off material is marked "Switched off: replace it". The old
+  card on the item page is gone (it points to the product); `recipe_card.html` removed.
+- **Cost rates** `/production/cost-rates/` (`production.CostRate`, migration production 0002):
+  people or machine, Tk per hour; add, edit, switch off with fetch. A rate a product uses
+  keeps its kind. A new rate counts from then on.
+- **Cost of one batch** (`production.CostLine`, `production/costing.py`): people × hours ×
+  rate, machine hours × rate, a fixed amount, or a % of the materials; only the boxes the
+  chosen way needs are shown and kept. Materials = recipe × average cost, wastage included;
+  a material with no cost yet is named. Total, per unit, per pack, margin.
+- **Expected cost** is the product's cost per unit on its page and on the Products list (made
+  products with a full sheet); otherwise the stock's average.
+- **Semi-finished**: a product made here can go into another's recipe; a loop is refused;
+  with none in stock it costs what making it costs.
+- Branch access: Start here, Materials, Products and their pages open to "View stock"; item
+  saving to "Set up items"; cost rates and costs to "Set up BOMs (recipes)" - a store keeper
+  given access now finds the new pages (`access_control/page_access.py`).
+- Tests: `inventory/tests_phase5.py` (14) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (production 0002), collectstatic, restart.

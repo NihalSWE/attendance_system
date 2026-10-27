@@ -153,7 +153,8 @@ class ProductsTests(HubFixture, TestCase):
         self.assertEqual((pack.factor, pack.sale_price), (D("24"), D("450")))
         page = self.client.get(reverse("inventory:product", args=[biscuit.pk]))
         self.assertContains(page, "450")
-        self.assertContains(page, "No recipe yet")
+        # No recipe yet: the page asks first what one batch makes (phase 5).
+        self.assertContains(page, "how much <strong>one batch</strong> (one mix) makes")
 
     def test_a_product_needs_its_price_and_a_price_needs_its_unit(self):
         body = self.post("products", self.product(sale_price="", pack_price="450")).json()

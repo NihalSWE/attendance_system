@@ -45,6 +45,27 @@ def page(company_id, item):
     return {"bom": bom, "lines": lines, "versions": versions, "used": used}
 
 
+def uses(company_id, product, wanted, seen=None):
+    """Whether ``product``'s recipe takes ``wanted``, at any depth."""
+    seen = set() if seen is None else seen
+    if product.pk in seen:
+        return False
+    seen.add(product.pk)
+    bom = current(company_id, product)
+    if bom is None:
+        return False
+    with use_company(company_id):
+        parts = list(bom.lines.select_related("item").values_list("item_id", "item__kind"))
+    for item_id, kind in parts:
+        if item_id == wanted.pk:
+            return True
+        if kind == ItemKind.FINISHED:
+            part = type(product).all_objects.get(pk=item_id)
+            if uses(company_id, part, wanted, seen):
+                return True
+    return False
+
+
 def _editable(*, actor, company_id, item):
     """The version a change goes into: the one being written, the one in use
     while production has not used it, or else a new version copied from it."""
@@ -84,9 +105,18 @@ def set_batch(*, actor, company_id, item, batch_size):
 
 @transaction.atomic
 def add_material(*, actor, company_id, item, material, qty, scrap_pct=None):
-    """A material and how much one batch uses, in the material's own unit."""
-    if material.kind not in MATERIAL_KINDS:
-        raise ValidationError({"material": "Choose a raw material or a packaging item."})
+    """A material and how much one batch uses, in the material's own unit. A
+    product made here can go in too (semi-finished: cream in cream biscuits,
+    2026-10-27), unless it is made with this product: that is a loop."""
+    if material.kind == ItemKind.FINISHED:
+        if material.sourcing == material.Sourcing.BUY:
+            raise ValidationError({"material": f"{material.code} is bought ready, not made here: "
+                                               "choose a material, or a product you make."})
+        if material.pk == item.pk or uses(company_id, material, item):
+            raise ValidationError({"material": f"{material.code} is made with {item.code}, so it "
+                                               f"cannot go into {item.code}'s recipe: that is a loop."})
+    elif material.kind not in MATERIAL_KINDS:
+        raise ValidationError({"material": "Choose a raw material, a packaging item or a product you make."})
     bom = _editable(actor=actor, company_id=company_id, item=item)
     boms.add_line(actor=actor, company_id=company_id, bom_id=bom.pk, values={
         "item": material, "qty": qty, "uom": material.base_uom, "scrap_pct": scrap_pct,

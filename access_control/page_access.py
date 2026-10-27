@@ -145,6 +145,15 @@ BRANCH_PAGES = {
                    *ITEM_TYPE_PAGES)
        for action in ("edit", "status")},
     **{f"inventory:{key}_delete": "inventory.items" for key in ("items", *ITEM_TYPE_PAGES)},
+    # The redesigned pages (2026-10-27, plan §15 phases 4-5): Start here,
+    # Materials, Products and their pages to viewers; saving an item to
+    # "Set up items"; the cost rates to "Set up BOMs (recipes)".
+    **{f"inventory:{key}": "inventory.view"
+       for key in ("start", "materials", "material", "products", "product")},
+    "inventory:item_save": "inventory.items",
+    **{f"production:{name}": "production.bom"
+       for name in ("cost_rates", "cost_rate_save", "cost_rate_status", "cost_line_add",
+                    "cost_line_remove")},
     "inventory:standard_units": "inventory.items",
     "inventory:pack_unit_add": "inventory.items",
     "inventory:pack_unit_remove": "inventory.items",
