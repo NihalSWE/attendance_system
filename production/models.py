@@ -267,3 +267,85 @@ class Output(TenantOwned, ActorTracked):
     @property
     def rejected_base(self):
         return (self.qty_rejected * self.factor).quantize(FOUR)
+
+
+# --- Cost of making a product (2026-10-27, docs/inventory/PRODUCTION_PLAN.md §7.4) ---
+
+MONEY = {"max_digits": 18, "decimal_places": 2}
+
+
+class CostRate(TenantOwned, ActorTracked):
+    """What an hour costs: Line worker 75, Supervisor 150, Oven 300. Used by
+    the products' cost sheets; a change counts for productions after it."""
+
+    class Kind(models.TextChoices):
+        LABOUR = "labour", "People"
+        MACHINE = "machine", "Machine"
+
+    name = models.CharField(max_length=64)
+    kind = models.CharField("For", max_length=16, choices=Kind.choices)
+    rate = models.DecimalField("Tk per hour", **MONEY, validators=[MinValueValidator(ZERO)])
+    status = models.CharField(max_length=16, default="active",
+                              choices=(("active", "Active"), ("inactive", "Inactive")))
+
+    class Meta:
+        db_table = "production_cost_rate"
+        ordering = ("kind", "name")
+        constraints = [models.UniqueConstraint(fields=["company", "name"], name="uniq_cost_rate_name")]
+
+    def __str__(self):
+        return self.name
+
+
+class CostLine(TenantOwned, ActorTracked):
+    """One cost of making one batch of a product, besides its materials."""
+
+    class How(models.TextChoices):
+        LABOUR = "labour", "People × hours × rate"
+        MACHINE = "machine", "Machine hours × rate"
+        FIXED = "fixed", "An amount per batch"
+        PERCENT = "percent", "A % of the materials"
+
+    item = models.ForeignKey("inventory.Item", on_delete=models.CASCADE, related_name="cost_lines",
+                             verbose_name="Product")
+    how = models.CharField("How it is worked out", max_length=16, choices=How.choices)
+    label = models.CharField("Name", max_length=64, blank=True)
+    rate = models.ForeignKey(CostRate, null=True, blank=True, on_delete=models.PROTECT,
+                             related_name="lines")
+    people = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(FOUR)])
+    hours = models.DecimalField("Hours per batch", **QTY, null=True, blank=True,
+                                validators=[MinValueValidator(FOUR)])
+    amount = models.DecimalField("Tk per batch", **MONEY, null=True, blank=True,
+                                 validators=[MinValueValidator(ZERO)])
+    percent = models.DecimalField("% of materials", max_digits=6, decimal_places=2, null=True, blank=True,
+                                  validators=[MinValueValidator(ZERO), MaxValueValidator(Decimal("1000"))])
+
+    class Meta:
+        db_table = "production_cost_line"
+        ordering = ("item", "pk")
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def name(self):
+        if self.label:
+            return self.label
+        if self.rate_id:
+            return self.rate.name
+        return self.get_how_display()
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        needs = {self.How.LABOUR: ("rate", "people", "hours"), self.How.MACHINE: ("rate", "hours"),
+                 self.How.FIXED: ("amount",), self.How.PERCENT: ("percent",)}.get(self.how, ())
+        errors = {name: "Fill this in." for name in needs if getattr(self, name) in (None, "")}
+        if self.rate_id and self.how in (self.How.LABOUR, self.How.MACHINE) and self.rate.kind != self.how:
+            errors["rate"] = f"Choose a {'people' if self.how == self.How.LABOUR else 'machine'} rate."
+        if errors:
+            raise ValidationError(errors)
+        # Only what this way of working out uses is kept.
+        for name in ("rate", "people", "hours", "amount", "percent"):
+            if name not in needs:
+                setattr(self, name, None)

@@ -11,9 +11,9 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
+from base_template import fetch
 from inventory import access, masters
 from inventory.models import Item
-from inventory.stock_views import item_page
 from production import forms, recipes
 from production.gate import company_or_bail
 
@@ -26,12 +26,14 @@ def _item(company_id, pk):
 
 
 def _back(request, item, tone, text):
-    if item.sourcing == item.Sourcing.BUY:
-        # No Materials card on a bought product: say it at the top of the page.
-        getattr(messages, "error" if tone == "danger" else "success")(request, text)
-        return redirect("inventory:item_detail", pk=item.pk)
-    request.session["recipe_note"] = [tone, text]
-    return redirect(reverse("inventory:item_detail", args=[item.pk]) + "#materials")
+    """The answer: in place for the product page's forms (fetch), else as a
+    message on the product page, at its recipe (2026-10-27)."""
+    if fetch.wants_json(request):
+        if tone == "danger":
+            return fetch.refused(message=text)
+        return fetch.saved(text, reverse("inventory:product", args=[item.pk]) + "#recipe")
+    getattr(messages, "error" if tone == "danger" else "success")(request, text)
+    return redirect(reverse("inventory:product", args=[item.pk]) + "#recipe")
 
 
 def _errors(form):
@@ -47,6 +49,8 @@ def recipe_batch(request, pk):
     item = _item(company_id, pk)
     form = forms.RecipeBatchForm(request.POST)
     if not form.is_valid():
+        if fetch.wants_json(request):
+            return fetch.refused(form)
         return _back(request, item, "danger", _errors(form))
     try:
         recipes.set_batch(actor=request.user, company_id=company_id, item=item,
@@ -86,8 +90,10 @@ def recipe_add(request, pk):
             return _back(request, item, "success",
                          f"Added {material.code} {material.name}: {data['qty'].normalize():f} "
                          f"{material.base_uom.code} per batch. The recipe is in use.")
-    # Refused: the modal opens again with what was written and why.
-    return item_page(request, company_id, item, material_form=form, open_dialog="material-dialog")
+    # Refused: the modal stays open with what was written and why.
+    if fetch.wants_json(request):
+        return fetch.refused(form)
+    return _back(request, item, "danger", _errors(form))
 
 
 def _service_errors(form, exc):

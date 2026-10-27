@@ -92,7 +92,7 @@ TYPE_PAGES = {ItemKind.RAW: ("raw_materials", "Raw materials"),
               ItemKind.GENERAL: ("general_items", "General items")}
 
 
-def _item_context(request, company_id, item, *, pack_form=None, material_form=None, open_dialog=""):
+def _item_context(request, company_id, item, *, pack_form=None, open_dialog=""):
     costs_in = _valuation_branches(request.user, company_id)
     with use_company(company_id):
         balances = list(access.scope_warehouses(
@@ -114,25 +114,11 @@ def _item_context(request, company_id, item, *, pack_form=None, material_form=No
         pack_form = forms.PackUnitForm(company_id=company_id, item=item)
     # The page of the item's own type (2026-10-26), for the crumbs and Edit.
     type_page = TYPE_PAGES.get(item.kind, ("items", "Items"))
-    recipe = {}
-    # Its recipe: a product made here, with Production on (2026-10-27).
-    if (item.kind == ItemKind.FINISHED and item.sourcing != Item.Sourcing.BUY
-            and access.production_on(company_id)):
-        # A finished good's materials, on its own page (production.recipes).
-        from production import forms as production_forms
-        from production import recipes
-
-        recipe = {
-            "recipe": recipes.page(company_id, item),
-            "recipe_note": request.session.pop("recipe_note", None),
-            "can_edit_recipe": access.may(request.user, company_id, "production.bom"),
-            "batch_form": production_forms.RecipeBatchForm(),
-            # Someone who may set up items can add a new material right there.
-            "material_form": material_form or production_forms.RecipeMaterialForm(
-                company_id=company_id, product=item, can_create=can_manage),
-        }
+    # Made here, with Production on: the recipe is on the product's page (2026-10-27).
+    makes_here = (item.kind == ItemKind.FINISHED and item.sourcing != Item.Sourcing.BUY
+                  and access.production_on(company_id))
     return {
-        **recipe,
+        "makes_here": makes_here,
         "type_url": reverse(f"inventory:{type_page[0]}"), "type_label": type_page[1],
         # Never moved: it can be deleted (masters.delete_item).
         "delete_url": (reverse(f"inventory:{type_page[0]}_delete", args=[item.pk])

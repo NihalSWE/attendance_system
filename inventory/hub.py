@@ -130,6 +130,7 @@ class Line:
     words: str
     packs: list = field(default_factory=list)
     cost: Decimal = None
+    expected: Decimal = None
     margin: Decimal = None
     margin_pct: Decimal = None
 
@@ -158,6 +159,7 @@ def lines(company_id, actor, kinds, *, category="", store="", state="", today=No
     kept = keep.stock_to_keep(company_id, items, today)
     packs = packs_of(company_id, ids)
     cost = _costs(company_id)
+    production = access.production_on(company_id)
     found = []
     for item in items:
         have = qty.get(item.pk, ZERO)
@@ -167,7 +169,15 @@ def lines(company_id, actor, kinds, *, category="", store="", state="", today=No
         line = Line(item, have, kept.get(item.pk) or ZERO, value.get(item.pk, ZERO), tone, words,
                     packs.get(item.pk, []))
         if item.kind == ItemKind.FINISHED:
-            line.cost = _unit_cost(item, have, value.get(item.pk), cost)
+            # Made here: what making one is expected to cost (plan §7.4); else
+            # what the stock is worth per unit.
+            line.expected = None
+            if production and item.sourcing != Item.Sourcing.BUY:
+                from production.costing import expected_unit_cost
+
+                line.expected = expected_unit_cost(company_id, item)
+            line.cost = (line.expected.quantize(Decimal("0.01")) if line.expected is not None
+                         else _unit_cost(item, have, value.get(item.pk), cost))
             if item.sale_price and line.cost:
                 line.margin = (item.sale_price - line.cost).quantize(Decimal("0.01"))
                 line.margin_pct = (line.margin / item.sale_price * 100).quantize(Decimal("0.1"))

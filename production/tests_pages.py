@@ -42,7 +42,7 @@ class ProductionPageTests(ProductionFixture, TestCase):
         with use_company(self.company):
             bom = Bom.objects.get(item=self.juice, status="draft")
         # The old BOM pages show no versions any more: they go to the product's page.
-        product = reverse("inventory:item_detail", args=[self.juice.pk]) + "#materials"
+        product = reverse("inventory:product", args=[self.juice.pk]) + "#recipe"
         self.assertRedirects(self.client.get(reverse("production:bom_detail", args=[bom.pk])), product,
                              fetch_redirect_response=False)
         self.assertRedirects(self.client.get(reverse("production:boms")),

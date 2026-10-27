@@ -19,7 +19,7 @@
 
     <div class="ui-tiles">
         {% if sees_costs %}
-            <div class="ui-tile"><p class="ui-tile__label">Cost per {{ item.base_uom.code }}</p><p class="ui-tile__value">{% if line.cost %}{{ line.cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">{% if line.on_hand %}average of what is in stock{% else %}none in stock yet{% endif %}</p></div>
+            <div class="ui-tile"><p class="ui-tile__label">Cost per {{ item.base_uom.code }}</p><p class="ui-tile__value">{% if line.cost %}{{ line.cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">{% if line.expected is not None %}expected: one batch ÷ {{ sheet.makes|floatformat:"-2g" }}{% elif makes and sheet.missing %}a material has no cost yet{% elif line.on_hand %}average of what is in stock{% else %}none in stock yet{% endif %}</p></div>
         {% endif %}
         <div class="ui-tile"><p class="ui-tile__label">Sale price</p><p class="ui-tile__value">{% if item.sale_price %}{{ item.sale_price|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">per {{ item.base_uom.code }}{% for pack in packs %}{% if pack.price %} · {{ pack.uom.code }} {{ pack.price|floatformat:"2g" }}{% endif %}{% endfor %}</p></div>
         {% if sees_costs %}
@@ -30,33 +30,8 @@
     </div>
 
     {% if makes %}
-        <div class="ui-card" id="recipe">
-            <div class="ui-card__head">
-                <h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} {% if recipe %}Recipe: one batch makes {{ recipe.bom.batch_size|floatformat:"-4g" }} {{ recipe.bom.batch_uom.code }}{% else %}Recipe{% endif %}</h2>
-                <a class="ui-btn ui-btn--sm" href="{% url 'inventory:item_detail' item.pk %}#materials">{% include "ui/icon.html" with name="edit" small=True %} {% if recipe %}Change recipe{% else %}Write the recipe{% endif %}</a>
-            </div>
-            {% if recipe %}
-                <div class="table-wrap">
-                    <table class="table" data-local-table>
-                        <thead><tr><th>Material</th><th class="numeric">One batch uses</th><th class="numeric">Wastage</th><th class="numeric">In stock</th><th>Enough for</th></tr></thead>
-                        <tbody>
-                            {% for row in recipe.lines %}
-                                <tr>
-                                    <td><a href="{% url 'inventory:material' row.item_id %}">{{ row.item.name }}</a></td>
-                                    <td class="numeric">{{ row.qty|floatformat:"-4g" }} {{ row.uom.code }}</td>
-                                    <td class="numeric">{{ row.scrap_pct|floatformat:"-2" }} %</td>
-                                    <td class="numeric">{{ row.in_stock|floatformat:"-2g" }} {{ row.item.base_uom.code }}</td>
-                                    <td><span class="ui-chip ui-chip--{% if row.enough < 1 %}bad{% elif row.enough < 3 %}wait{% else %}ok{% endif %}">{{ row.enough }} batch{{ row.enough|pluralize:"es" }}</span></td>
-                                </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-                <div class="ui-card__foot"><span class="ui-muted">The materials in stock are enough for</span> <strong>{{ recipe.enough }} batch{{ recipe.enough|pluralize:"es" }}</strong>.</div>
-            {% else %}
-                <div class="ui-card__body"><p>No recipe yet. Say what one batch makes and the materials it uses; then it can be made.</p></div>
-            {% endif %}
-        </div>
+        {% include "inventory/hub/_recipe.html" %}
+        {% if sees_costs %}{% include "inventory/hub/_cost_sheet.html" %}{% endif %}
     {% endif %}
 
     <div class="ui-card">

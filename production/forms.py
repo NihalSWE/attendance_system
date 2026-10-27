@@ -3,12 +3,13 @@
 from decimal import Decimal
 
 from django import forms
+from django.db.models import Q
 
 from common.forms import StyledFormMixin, date_widget
 from inventory.forms import CompanyForm
 from inventory.models import Batch, Item, ItemCategory, ItemKind, Location, Uom, Warehouse
 from production import recipes
-from production.models import Bom, BomLine, ConsumptionLine, Output, ProductionOrder
+from production.models import Bom, BomLine, ConsumptionLine, CostLine, CostRate, Output, ProductionOrder
 
 
 def _choice(model, label, required=True):
@@ -233,7 +234,7 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
                                choices=(("existing", "One already added"),
                                         ("new", "A new raw material or packaging item")))
     material = forms.ModelChoiceField(queryset=Item.all_objects.none(), label="Material",
-                                      required=False, empty_label="Choose a raw material or packaging")
+                                      required=False, empty_label="Choose a material")
     new_kind = forms.ChoiceField(label="Type", required=False,
                                  choices=((ItemKind.RAW, "Raw material"), (ItemKind.PACKAGING, "Packaging")))
     new_code = forms.CharField(label="Code", required=False, max_length=50,
@@ -256,12 +257,15 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
         super().__init__(*args, **kwargs)
         self.can_create = can_create
         self.fields["material"].queryset = (
-            Item.all_objects.filter(company_id=company_id, status="active",
-                                    kind__in=(ItemKind.RAW, ItemKind.PACKAGING))
+            Item.all_objects.filter(company_id=company_id, status="active")
+            .filter(Q(kind__in=(ItemKind.RAW, ItemKind.PACKAGING))
+                    # A product made here (semi-finished, 2026-10-27); a loop is refused on save.
+                    | Q(kind=ItemKind.FINISHED, sourcing__in=(Item.Sourcing.MAKE, Item.Sourcing.BOTH)))
             .exclude(pk=product.pk).exclude(pk__in=self._on_recipe(company_id, product))
-            .select_related("base_uom").order_by("code"))
-        self.fields["material"].label_from_instance = lambda item: f"{item.code} · {item.name}"
-        # The material's unit beside the quantity (production/recipe_card.html).
+            .select_related("base_uom").order_by("kind", "code"))
+        self.fields["material"].label_from_instance = lambda item: f"{item.code} · {item.name}" + (
+            " (made here)" if item.kind == ItemKind.FINISHED else "")
+        # The material's unit beside the quantity (inventory/hub/_recipe.html).
         self.fields["material"].widget.option_attrs = lambda rows: {
             pk: {"data-unit": code} for pk, code in rows.values_list("pk", "base_uom__code")}
         if not can_create:
@@ -319,3 +323,58 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
         """Materials already on the recipe are not offered again."""
         bom = recipes.current(company_id, product)
         return BomLine.all_objects.filter(bom=bom).values("item_id") if bom else []
+
+
+# --- Cost rates and a product's costs (2026-10-27, plan §7.4) -----------------
+
+class CostRateForm(CompanyForm):
+    class Meta:
+        model = CostRate
+        fields = ("name", "kind", "rate")
+        labels = {"name": "Name", "kind": "For", "rate": "Tk per hour"}
+        help_texts = {"name": "e.g. Line worker, Supervisor, Oven.",
+                      "rate": "A change counts for productions after it."}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["rate"].unit_text = "Tk / hour"
+
+
+class CostLineForm(CompanyForm):
+    """One cost of a batch besides its materials: only the boxes its way of
+    working out needs are shown (and kept)."""
+
+    rate = forms.ModelChoiceField(queryset=CostRate.all_objects.none(), required=False, label="Rate",
+                                  empty_label="Choose a rate")
+
+    class Meta:
+        model = CostLine
+        fields = ("how", "rate", "people", "hours", "amount", "percent", "label")
+        labels = {"how": "How it is worked out", "people": "People", "hours": "Hours per batch",
+                  "amount": "Amount per batch", "percent": "Share of the materials",
+                  "label": "Name (optional)"}
+        help_texts = {"label": "Left empty: the rate's name.",
+                      "hours": "For one batch."}
+
+    SHOW = {"rate": "how:labour,machine", "people": "how:labour", "hours": "how:labour,machine",
+            "amount": "how:fixed", "percent": "how:percent"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, when in self.SHOW.items():
+            self.fields[name].widget.attrs["data-show-when"] = when
+            self.fields[name].show_required = True   # needed when shown (CostLine.clean)
+        self.fields["how"].widget.attrs["class"] = "input select js-select"
+        self.fields["amount"].unit_text = "Tk"
+        self.fields["percent"].unit_text = "%"
+        self.fields["hours"].unit_text = "h"
+        self.fields["people"].unit_text = "people"
+
+    def limit_choices(self):
+        rates = CostRate.all_objects.filter(company_id=self.company_id, status="active").order_by("kind", "name")
+        self.fields["rate"].queryset = rates
+        self.fields["rate"].label_from_instance = lambda rate: f"{rate.name} · {rate.rate.normalize():f} / h"
+        # People rates for people, machine rates for machines (forms.js follow).
+        self.fields["rate"].widget.option_attrs = lambda rows: {
+            pk: {"data-how": kind} for pk, kind in rows.values_list("pk", "kind")}
+        self.fields["rate"].widget.attrs.update({"data-follows": "how", "data-follow-by": "how"})

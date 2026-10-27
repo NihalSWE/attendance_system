@@ -19,7 +19,7 @@
         <div>
             <h1 class="page__title">{{ order.number }} {% include "production/_status.html" %}</h1>
             <p class="page__sub">
-                {{ order.planned_qty.normalize }} {{ order.uom.code }} of <a href="{% url 'inventory:item_detail' order.item_id %}">{{ order.item.code }}</a> {{ order.item.name }}
+                {{ order.planned_qty.normalize }} {{ order.uom.code }} of <a href="{% url 'inventory:product' order.item_id %}">{{ order.item.code }}</a> {{ order.item.name }}
                 · {{ order.planned_date|date:"d M Y" }}
                 {% if order.line_name %} · {{ order.line_name }}{% endif %}{% if order.shift_name %} · {{ order.shift_name }}{% endif %}
                 <br>Materials from {{ order.material_warehouse }} · finished goods into {{ order.output_warehouse }}

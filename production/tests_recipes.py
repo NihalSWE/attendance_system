@@ -57,14 +57,15 @@ class RecipeTests(ProductionFixture, TestCase):
         with self.assertRaises(ValidationError):
             recipes.remove_material(**self.kw, item=self.juice, material_id=self.pulp.pk)
 
-    def test_the_card_on_the_finished_goods_page(self):
+    def test_the_card_on_the_product_page(self):
+        # On the product's own page since 2026-10-27 (plan §15 phase 5).
         self.client.force_login(self.owner)
-        url = reverse("inventory:item_detail", args=[self.juice.pk])
-        self.assertContains(self.client.get(url), "First say how much one batch makes")
+        url = reverse("inventory:product", args=[self.juice.pk])
+        self.assertContains(self.client.get(url), "how much <strong>one batch</strong> (one mix) makes")
         self.client.post(reverse("production:recipe_batch", args=[self.juice.pk]), {"batch_size": "1000"})
         response = self.client.post(reverse("production:recipe_add", args=[self.juice.pk]),
                                     {"material": self.pulp.pk, "qty": "120", "scrap_pct": ""})
-        self.assertRedirects(response, url + "#materials", fetch_redirect_response=False)
+        self.assertRedirects(response, url + "#recipe", fetch_redirect_response=False)
         page = self.client.get(url)
         self.assertContains(page, "per batch. The recipe is in use.")
         self.assertContains(page, "120 KG")
@@ -82,25 +83,25 @@ class RecipeTests(ProductionFixture, TestCase):
         response = self.client.post(reverse("production:recipe_add", args=[self.juice.pk]), {
             "source": "new", "new_kind": "raw", "new_code": "rm-0009", "new_name": "Citric acid",
             "new_category": self.pulp.category_id, "new_uom": self.kg.pk, "qty": "2"})
-        self.assertRedirects(response, reverse("inventory:item_detail", args=[self.juice.pk]) + "#materials",
+        self.assertRedirects(response, reverse("inventory:product", args=[self.juice.pk]) + "#recipe",
                              fetch_redirect_response=False)
         with use_company(self.company):
             acid = Item.objects.get(code="RM-0009")
             self.assertEqual((acid.kind, acid.base_uom), ("raw", self.kg))
             self.assertTrue(recipes.current(self.company.pk, self.juice).lines.filter(item=acid).exists())
 
-    def test_a_refused_new_material_opens_again_with_what_was_written(self):
+    def test_a_refused_new_material_names_each_box(self):
         self.client.force_login(self.owner)
         self.client.post(reverse("production:recipe_batch", args=[self.juice.pk]), {"batch_size": "1000"})
-        page = self.client.post(reverse("production:recipe_add", args=[self.juice.pk]), {
-            "source": "new", "new_kind": "raw", "new_name": "Citric acid", "qty": "2"})
-        self.assertContains(page, 'data-open-on-load="material-dialog"')
-        self.assertContains(page, 'value="Citric acid"')
-        self.assertContains(page, "Give this for the new material.")
+        reply = self.client.post(reverse("production:recipe_add", args=[self.juice.pk]), {
+            "source": "new", "new_kind": "raw", "new_name": "Citric acid", "qty": "2"},
+            HTTP_X_REQUESTED_WITH="fetch")
+        self.assertEqual(reply.status_code, 400)
+        self.assertEqual(reply.json()["errors"]["new_code"], ["Give this for the new material."])
         self.assertFalse(Item.all_objects.filter(name="Citric acid").exists())
 
     def test_no_version_on_the_screens(self):
         self.client.force_login(self.owner)
         self.recipe()
-        page = self.client.get(reverse("inventory:item_detail", args=[self.juice.pk]))
+        page = self.client.get(reverse("inventory:product", args=[self.juice.pk]))
         self.assertNotContains(page, "version")
