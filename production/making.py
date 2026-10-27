@@ -350,6 +350,10 @@ def finish(*, actor, company_id, order_id, values):
         output.save(update_fields=["posted_at"])
         order.status, order.unit_cost = Status.COMPLETED, unit_cost
         order.save()
+    # A serial number for each unit, when the item takes them (plan §10).
+    from inventory.warranty import made_at_finish
+
+    made_at_finish(actor=actor, company_id=company_id, item=item, lines=batches, source_id=output.pk)
     audit(actor, membership, "production.order.finished", order,
           after={"good": plain(good), "damaged": plain(damaged), "material_cost": plain(material),
                  "other_cost": plain(other), "unit_cost": plain(unit_cost),
@@ -398,6 +402,10 @@ def reverse(*, actor, company_id, order_id, reason, work_date):
     with use_company(company_id):
         output = Output.objects.filter(order=order).first()
         if output is not None:
+            from inventory.models import SerialNumber
+
+            # Its serial numbers go too: none left the store (untouched).
+            SerialNumber.objects.filter(source="production", source_id=output.pk).delete()
             posting.reverse(company_id=company_id, actor=actor, document_type=Output.DOC_TYPE,
                             document_id=output.pk, work_date=work_date, note=note)
         uses = list(order.consumptions.filter(status=Consumption.Status.POSTED).order_by("-pk"))

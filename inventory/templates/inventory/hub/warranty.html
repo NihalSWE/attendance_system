@@ -1,0 +1,188 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Warranty{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / Warranty</p>
+            <h1 class="ui-head__title">Warranty</h1>
+            <p class="ui-head__sub">Items with a warranty, their serial numbers, and claims: find the unit, see if it is still covered, decide.</p>
+        </div>
+        {% if can_record %}
+            <div class="ui-head__actions">
+                <button class="ui-btn" type="button" data-open-dialog="serials-dialog">{% include "ui/icon.html" with name="plus" %} Serial numbers in</button>
+                <button class="ui-btn" type="button" data-open-dialog="delivery-dialog">{% include "ui/icon.html" with name="arrow-right" %} Serial numbers out</button>
+                <button class="ui-btn ui-btn--main" type="button" data-open-dialog="claim-dialog">{% include "ui/icon.html" with name="plus" %} New claim</button>
+            </div>
+        {% endif %}
+    </div>
+
+    {% if off %}
+        <div class="ui-card"><div class="ui-card__body">
+            <p><strong>Warranty is off.</strong> Switched on, any item can carry a warranty in months and serial numbers, and claims are recorded here. A company that sells food usually leaves it off.</p>
+            {% if can_switch %}<p><a class="ui-btn ui-btn--main" href="{% url 'inventory:settings' %}">{% include "ui/icon.html" with name="settings" %} Inventory settings</a></p>{% endif %}
+        </div></div>
+    {% else %}
+        <div class="ui-tiles">
+            <div class="ui-tile"><p class="ui-tile__label">Items with a warranty</p><p class="ui-tile__value">{{ items|length }}</p><p class="ui-tile__hint">set on each item (Edit)</p></div>
+            <div class="ui-tile"><p class="ui-tile__label">Units with customers</p><p class="ui-tile__value">{{ tiles.out }}</p><p class="ui-tile__hint">by serial number</p></div>
+            <div class="ui-tile{% if tiles.claims %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Claims this year</p><p class="ui-tile__value">{{ tiles.claims }}</p><p class="ui-tile__hint">{% if sees_costs %}Tk {{ tiles.cost|floatformat:"0g" }} in repairs and refunds{% endif %}</p></div>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Claims</h2></div>
+            <div class="table-wrap">
+                <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                    <thead><tr><th>Claim</th><th>Date</th><th>Item</th><th>Serial</th><th>Customer</th><th>Cover</th><th>Outcome</th><th class="numeric">Cost</th></tr></thead>
+                    <tbody>
+                        {% for claim in rows %}
+                            <tr>
+                                <td>{{ claim.number }}</td>
+                                <td>{{ claim.claim_date|date:"j M Y" }}</td>
+                                <td>{{ claim.item.name }}<div class="ui-muted">{{ claim.problem }}</div></td>
+                                <td>{{ claim.serial.serial|default:"—" }}</td>
+                                <td>{{ claim.customer.name|default:"—" }}</td>
+                                <td>{% if claim.covered %}<span class="ui-chip ui-chip--ok">Covered{% if claim.covered_until %} to {{ claim.covered_until|date:"j M Y" }}{% endif %}</span>{% else %}<span class="ui-chip ui-chip--bad">Out of warranty</span>{% endif %}</td>
+                                <td>{{ claim.get_outcome_display }}{% if claim.reason %}<div class="ui-muted">{{ claim.reason }}</div>{% endif %}</td>
+                                <td class="numeric">{% if sees_costs %}{{ claim.cost|floatformat:"2g" }}{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="8">No claims yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% include "base_template/includes/table_pagination.html" %}
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Claims this year, by item</h2>{% if problems %}<span class="ui-card__note">Commonest: {% for problem, count in problems %}{{ problem }} ({{ count }}){% if not forloop.last %} · {% endif %}{% endfor %}</span>{% endif %}</div>
+            <div class="table-wrap">
+                <table class="table" data-local-table>
+                    <thead><tr><th>Item</th><th class="numeric">Claims</th><th class="numeric">Covered</th><th class="numeric">Refused</th>{% if sees_costs %}<th class="numeric">Cost</th>{% endif %}</tr></thead>
+                    <tbody>
+                        {% for row in per_item %}
+                            <tr><td>{{ row.item__code }} · {{ row.item__name }}</td><td class="numeric">{{ row.claims }}</td><td class="numeric">{{ row.covered }}</td><td class="numeric">{{ row.refused }}</td>{% if sees_costs %}<td class="numeric">{{ row.cost|floatformat:"2g" }}</td>{% endif %}</tr>
+                        {% empty %}
+                            <tr><td colspan="5">No claims this year.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Items with a warranty</h2><span class="ui-card__note">Set it on the item: Edit → Warranty (months), A serial number for each unit</span></div>
+            <div class="table-wrap">
+                <table class="table" data-local-table>
+                    <thead><tr><th>Item</th><th>Warranty</th><th>Serial numbers</th><th class="numeric">In stock</th><th class="numeric">With customers</th><th class="no-sort"><span class="sr-only">Labels</span></th></tr></thead>
+                    <tbody>
+                        {% for item in items %}
+                            <tr>
+                                <td><a href="{% if item.kind == 'finished' %}{% url 'inventory:product' item.pk %}{% elif item.kind == 'raw' or item.kind == 'packaging' %}{% url 'inventory:material' item.pk %}{% else %}{% url 'inventory:item_detail' item.pk %}{% endif %}">{{ item.name }}</a></td>
+                                <td>{% if item.warranty_months %}{{ item.warranty_months }} month{{ item.warranty_months|pluralize }} from {% if item.kind == 'finished' %}delivery{% else %}receipt{% endif %}{% else %}<span class="ui-muted">none</span>{% endif %}</td>
+                                <td>{% if item.serial_numbers %}<span class="ui-chip ui-chip--info">Each unit</span>{% else %}<span class="ui-muted">—</span>{% endif %}</td>
+                                <td class="numeric">{{ item.kept }}</td>
+                                <td class="numeric">{{ item.out }}</td>
+                                <td>{% if item.kept %}<a class="ui-btn ui-btn--sm" href="{% url 'inventory:serial_labels' %}?item={{ item.pk }}">Print labels</a>{% endif %}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="6">No item has a warranty yet. Open a product or material, press Edit, and give it a warranty in months.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% url 'inventory:products' as products_url %}
+        {% include "ui/next_step.html" with what="Give your products a warranty (Edit on the product), then scan serial numbers out with each delivery." url=products_url button="Products" %}
+
+        {% if claim_form %}
+            <dialog class="modal modal--wide" id="claim-dialog" aria-labelledby="claim-title">
+                <form class="modal__card" method="post" action="{% url 'inventory:claim_save' %}" data-fetch novalidate>
+                    {% csrf_token %}
+                    <div class="modal__head"><h2 id="claim-title">New claim</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                    <div class="modal__body stack">
+                        {% include "inventory/hub/field.html" with box=claim_form.serial %}
+                        <div class="ui-message" data-serial-answer hidden></div>
+                        <div class="ui-grid-2">
+                            {% include "inventory/hub/field.html" with box=claim_form.item %}
+                            {% include "inventory/hub/field.html" with box=claim_form.sold_on %}
+                            {% include "inventory/hub/field.html" with box=claim_form.customer %}
+                            {% include "inventory/hub/field.html" with box=claim_form.claim_date %}
+                        </div>
+                        {% include "inventory/hub/field.html" with box=claim_form.problem %}
+                        <div class="ui-grid-2">
+                            {% include "inventory/hub/field.html" with box=claim_form.outcome %}
+                            {% include "inventory/hub/field.html" with box=claim_form.cost %}
+                            {% include "inventory/hub/field.html" with box=claim_form.back_to %}
+                            {% include "inventory/hub/field.html" with box=claim_form.replaced_from %}
+                        </div>
+                        {% include "inventory/hub/field.html" with box=claim_form.reason %}
+                        {% if not rejected %}<p class="ui-muted">Tip: a store of type "Rejected" keeps faulty units apart from good stock (Stores).</p>{% endif %}
+                    </div>
+                    <div class="ui-message" data-form-message role="status" hidden></div>
+                    <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save claim</button></div>
+                </form>
+            </dialog>
+
+            <dialog class="modal" id="serials-dialog" aria-labelledby="serials-title">
+                <form class="modal__card" method="post" action="{% url 'inventory:serials_add' %}" data-fetch novalidate>
+                    {% csrf_token %}
+                    <div class="modal__head"><h2 id="serials-title">Serial numbers in</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                    <div class="modal__body stack">
+                        <p class="ui-muted">For units you received (bought, or already in stock). Products you make get theirs when the production finishes.</p>
+                        {% include "inventory/hub/field.html" with box=serials_form.item %}
+                        {% include "inventory/hub/field.html" with box=serials_form.serials %}
+                        <div class="ui-grid-2">
+                            {% include "inventory/hub/field.html" with box=serials_form.received_on %}
+                            {% include "inventory/hub/field.html" with box=serials_form.supplier %}
+                        </div>
+                    </div>
+                    <div class="ui-message" data-form-message role="status" hidden></div>
+                    <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save</button></div>
+                </form>
+            </dialog>
+
+            <dialog class="modal" id="delivery-dialog" aria-labelledby="delivery-title">
+                <form class="modal__card" method="post" action="{% url 'inventory:serials_deliver' %}" data-fetch novalidate>
+                    {% csrf_token %}
+                    <div class="modal__head"><h2 id="delivery-title">Serial numbers out</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                    <div class="modal__body stack">
+                        <p class="ui-muted">Scan each unit that left on a delivery: its warranty runs from the delivery date, for that customer.</p>
+                        {% include "inventory/hub/field.html" with box=delivery_form.delivery %}
+                        {% include "inventory/hub/field.html" with box=delivery_form.serials %}
+                    </div>
+                    <div class="ui-message" data-form-message role="status" hidden></div>
+                    <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save</button></div>
+                </form>
+            </dialog>
+        {% endif %}
+    {% endif %}
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script>
+        // A serial number is looked up as it is typed or scanned: covered or not.
+        (function () {
+            const box = document.querySelector("[data-serial-lookup]");
+            const answer = document.querySelector("[data-serial-answer]");
+            if (!box || !answer) return;
+            let timer = null;
+            box.addEventListener("input", function () {
+                window.clearTimeout(timer);
+                timer = window.setTimeout(async function () {
+                    const code = box.value.trim();
+                    if (!code) { answer.hidden = true; return; }
+                    try {
+                        const reply = await fetch("{% url 'inventory:serial_lookup' %}?serial=" + encodeURIComponent(code),
+                                                  {credentials: "same-origin"});
+                        const body = await reply.json();
+                        answer.className = "ui-message ui-message--" + (body.found && body.covered ? "ok" : "error");
+                        answer.textContent = body.text;
+                        answer.hidden = false;
+                    } catch (error) { answer.hidden = true; }
+                }, 300);
+            });
+        })();
+    </script>
+{% endblock %}

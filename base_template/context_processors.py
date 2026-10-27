@@ -74,6 +74,9 @@ def shell(request):
         "branch_menus": branch_menus,
         "sidebar_unrestricted_admin": unrestricted_admin,
         "sidebar_branch_manager": bool(membership and membership.role == 'manager'),
+        # The modules on and the module permissions held (the Products and stock
+        # flow bar shows Warranty only while it is on).
+        "module_codes": module_codes,
         "sidebar_leave_approver": leave_approver,
         # "My LFA", once the company has switched LFA on (2026-09-28).
         "sidebar_lfa": bool(self_service and company_id and _lfa_on(company_id)),
@@ -111,8 +114,13 @@ def _module_codes(user, company_id):
         return frozenset()
     from access_control.branch_access import FEATURE_OF
 
+    from inventory.warranty import warranty_on
+
     modules = {"inventory"} | ({"production"} if production_on(company_id) else set())
-    return frozenset({f"module:{module}" for module in modules} | {
+    # Warranty is a company switch inside Store & Inventory (2026-10-27).
+    markers = {f"module:{module}" for module in modules} | (
+        {"module:warranty"} if warranty_on(company_id) else set())
+    return frozenset(markers | {
         code for code, feature in FEATURE_OF.items()
         if feature in modules and can(user, company_id, code)})
 

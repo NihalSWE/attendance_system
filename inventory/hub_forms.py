@@ -26,12 +26,13 @@ class _HubItemForm(ItemForm):
     #: The boxes on the form, in order; the rest go under "More details".
     MAIN_BOXES = ()
     #: On/off settings, drawn as switches.
-    SWITCHES = ("track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix")
+    SWITCHES = ("track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix",
+                "warranty_months", "serial_numbers")
     #: ``{box: name of the box whose unit is shown beside it}``.
     UNIT_FROM = {"min_stock": "base_uom", "pack_factor": "base_uom", "sale_price": "base_uom",
                  "pack_price": "pack_uom"}
     #: ``{box: fixed words beside it}``.
-    UNIT_TEXT = {"shelf_life_days": "days", "keep_days": "days", "vat_rate": "%"}
+    UNIT_TEXT = {"shelf_life_days": "days", "keep_days": "days", "vat_rate": "%", "warranty_months": "months"}
     BATCH_HINT = "Each delivery gets its own batch number."
     PACK_LABELS = {}
     #: Shown under the "Stock to keep as" choice, not in the main grid.

@@ -43,6 +43,7 @@
             <a class="ui-flow__item" href="{% url 'inventory:stock' %}"><span class="ui-flow__num">{% if production %}5{% else %}3{% endif %}</span>Stock</a>
             <a class="ui-flow__item" href="{% url 'inventory:store_transfers' %}"><span class="ui-flow__num">{% if production %}6{% else %}4{% endif %}</span>Move stock</a>
             <a class="ui-flow__item" href="{% url 'sales:deliveries' %}"><span class="ui-flow__num">{% if production %}7{% else %}5{% endif %}</span>Sell</a>
+            {% if "module:warranty" in module_codes %}<a class="ui-flow__item{% if active == 'warranty' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:warranty' %}"><span class="ui-flow__num">{% include "ui/icon.html" with name="settings" small=True %}</span>Warranty</a>{% endif %}
         </nav>
         {% block content %}{% endblock %}
     </div>

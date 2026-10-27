@@ -53,6 +53,7 @@ def report_item(slug):
 INVENTORY_LINKS_SHOWN = {
     "inventory": (
         "inventory:start", "inventory:materials", "inventory:products", "production:runs", "production:cost_rates",
+        "inventory:warranty",
         "inventory:settings", "inventory:units", "inventory:categories",
         "inventory:stores", "inventory:bins", "inventory:items",
         "inventory:spare_parts", "inventory:general_items",
@@ -160,6 +161,9 @@ INVENTORY_MENUS = (
         # Plan → Start → Finish (2026-10-27, plan §8).
         item("Make", "production:runs", "production:run", "production:plan",
              needs=("inventory.view", "production.plan", "production.execute"), module="production"),
+        # Claims and serial numbers, once warranty is switched on (2026-10-27, plan §10).
+        item("Warranty", "inventory:warranty", needs=("inventory.view", "inventory.warranty"),
+             module="warranty"),
         # What an hour of people or a machine costs (2026-10-27, plan §7.4).
         item("Cost rates", "production:cost_rates", "production:cost_rate_save",
              "production:cost_rate_status", needs=("inventory.view", "production.bom"),

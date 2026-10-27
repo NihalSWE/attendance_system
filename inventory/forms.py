@@ -22,6 +22,7 @@ from inventory.models import (
     OpeningStockLine,
     Uom,
     Warehouse,
+    WarrantyClaim,
 )
 from organization.models import Branch
 from purchasing.models import Supplier
@@ -191,7 +192,7 @@ class ItemForm(CompanyForm):
         fields = (
             "code", "name", "name_bn", "kind", "category", "base_uom", "barcode",
             "track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix",
-            "sourcing", "keep_by", "min_stock", "keep_days", "reorder_point", "reorder_qty",
+            "warranty_months", "serial_numbers", "sourcing", "keep_by", "min_stock", "keep_days", "reorder_point", "reorder_qty",
             "max_stock", "default_warehouse", "standard_cost", "sale_price", "vat_rate", "hs_code",
             "notes",
         )
@@ -222,6 +223,15 @@ class ItemForm(CompanyForm):
         self.kind = kind
         super().__init__(*args, **kwargs)
         self._for_kind(kind)
+        # Warranty boxes only with the company's warranty on (2026-10-27, plan §10).
+        from inventory.warranty import warranty_on
+
+        if not warranty_on(self.company_id):
+            del self.fields["warranty_months"], self.fields["serial_numbers"]
+        else:
+            self.fields["warranty_months"].help_text = ("From delivery for what you sell; from receipt "
+                                                        "for what you buy (the supplier's).")
+            self.fields["serial_numbers"].help_text = "Each unit gets its own number, scanned at delivery."
         main = set(self.MAIN) | set(self.MAIN_FOR.get(kind, ())) | {"kind"}
         self.more_fields = [name for name in self.fields if name not in main]
         self.fields["shelf_life_days"].widget.attrs["data-show-when"] = "track_expiry:on"
@@ -389,7 +399,7 @@ class SettingsForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = InventorySettings
         fields = ("valuation_scope", "expiry_alert_days", "slow_moving_days", "alert_emails",
-                  "small_label", "large_label", "gs1_labels")
+                  "small_label", "large_label", "gs1_labels", "warranty_on")
         labels = {"valuation_scope": "Average cost", "expiry_alert_days": "Warn before expiry (days)"}
         widgets = {"alert_emails": forms.Textarea(attrs={"rows": 3})}
 
@@ -506,3 +516,84 @@ class PackageLabelForm(StyledFormMixin, forms.Form):
         if location is not None and warehouse is not None and location.warehouse_id != warehouse.pk:
             self.add_error("location", "This bin is in another store.")
         return data
+
+
+# --- Warranty (2026-10-27, plan §10; inventory.warranty) -----------------------
+
+class ClaimForm(StyledFormMixin, forms.Form):
+    """A warranty claim: by serial number, or by the item and when it was delivered."""
+
+    serial = forms.CharField(label="Serial number", required=False, max_length=64,
+                             help_text="Scan it or type it; the page says whether it is still covered.")
+    item = forms.ModelChoiceField(queryset=Item.all_objects.none(), required=False, label="Or the item",
+                                  help_text="Only for an item without serial numbers.")
+    sold_on = forms.DateField(label="Delivered on", required=False, widget=date_widget(),
+                              help_text="Only without a serial number.")
+    customer = forms.ModelChoiceField(queryset=Customer.all_objects.none(), required=False, label="Customer")
+    claim_date = forms.DateField(label="Claim date", widget=date_widget())
+    problem = forms.CharField(label="What is wrong", max_length=255)
+    outcome = forms.ChoiceField(label="What you do", choices=[("", "Choose what you do"),
+                                                               *WarrantyClaim.Outcome.choices])
+    cost = forms.DecimalField(label="Cost (repair or refund)", required=False, min_value=0, max_digits=18,
+                              decimal_places=2)
+    back_to = forms.ModelChoiceField(queryset=Warehouse.all_objects.none(), required=False,
+                                     label="Faulty unit into", empty_label="It stays with the customer",
+                                     help_text="Usually the rejected store.")
+    replaced_from = forms.ModelChoiceField(queryset=Warehouse.all_objects.none(), required=False,
+                                           label="New unit from")
+    reason = forms.CharField(label="Why (refused, or covered out of warranty)", required=False, max_length=255)
+
+    def __init__(self, *args, company_id, stores, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = Item.all_objects.filter(
+            company_id=company_id, status="active", warranty_months__isnull=False).order_by("code")
+        self.fields["customer"].queryset = Customer.all_objects.filter(company_id=company_id).order_by("name")
+        ids = [store.pk for store in stores]
+        self.fields["back_to"].queryset = Warehouse.all_objects.filter(pk__in=ids).order_by("-kind", "name")
+        self.fields["replaced_from"].queryset = Warehouse.all_objects.filter(pk__in=ids).order_by("name")
+        self.fields["cost"].widget.attrs["data-show-when"] = "outcome:repair,refund"
+        self.fields["back_to"].widget.attrs["data-show-when"] = "outcome:replace,repair,refund"
+        self.fields["replaced_from"].widget.attrs["data-show-when"] = "outcome:replace"
+        self.fields["cost"].unit_text = "Tk"
+        self.fields["serial"].widget.attrs.update({"autofocus": True, "data-serial-lookup": "1"})
+
+
+class SerialsForm(StyledFormMixin, forms.Form):
+    """Serial numbers of units received (scanned, typed or pasted)."""
+
+    item = forms.ModelChoiceField(queryset=Item.all_objects.none(), label="Item")
+    serials = forms.CharField(label="Serial numbers", widget=forms.Textarea(attrs={"rows": 5}),
+                              help_text="One per line, or separated by commas or spaces.")
+    received_on = forms.DateField(label="Received on", widget=date_widget(),
+                                  help_text="A material's (supplier's) warranty runs from this day.")
+    supplier = forms.ModelChoiceField(queryset=Supplier.all_objects.none(), required=False, label="Supplier")
+
+    def __init__(self, *args, company_id, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["item"].queryset = Item.all_objects.filter(
+            company_id=company_id, status="active", serial_numbers=True).order_by("code")
+        self.fields["supplier"].queryset = Supplier.all_objects.filter(company_id=company_id).order_by("name")
+
+
+class DeliverySerialsForm(StyledFormMixin, forms.Form):
+    """The serial numbers that left on a delivery."""
+
+    delivery = forms.ModelChoiceField(queryset=Item.all_objects.none(), label="Delivery")
+    serials = forms.CharField(label="Serial numbers", widget=forms.Textarea(attrs={"rows": 5}),
+                              help_text="Scan each unit as it leaves.")
+
+    def __init__(self, *args, company_id, **kwargs):
+        from sales.models import Delivery
+
+        super().__init__(*args, **kwargs)
+        import datetime
+
+        from django.utils import timezone
+
+        # The last year's deliveries (a list that can be checked, not sliced).
+        since = timezone.localdate() - datetime.timedelta(days=366)
+        self.fields["delivery"].queryset = (Delivery.all_objects.filter(
+            company_id=company_id, status=Delivery.Status.POSTED, delivery_date__gte=since)
+            .select_related("order__customer").order_by("-delivery_date", "-pk"))
+        self.fields["delivery"].label_from_instance = lambda row: (
+            f"{row.number} · {row.order.customer.name} · {row.delivery_date:%d %b %Y}")

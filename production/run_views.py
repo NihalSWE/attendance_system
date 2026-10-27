@@ -19,6 +19,7 @@ from base_template import fetch
 from base_template.tables import paginate, render
 from common.tenant import use_company
 from inventory import access
+from inventory.models import SerialNumber
 from inventory.views import branch_ids
 from production import making, orders, planning
 from production.gate import company_or_bail
@@ -106,6 +107,9 @@ def run(request, pk):
                 "made": making.made_batches(output) if output else [],
                 "costs": list(OrderCost.objects.filter(order=order)),
                 "leftovers": list(Leftover.objects.filter(order=order).select_related("item__base_uom")),
+                # Serial numbers made for it (warranty, plan §10).
+                "serials": SerialNumber.objects.filter(source="production", source_id=output.pk).count()
+                if output else 0,
             })
         total = (order.material_cost or Decimal("0")) + (order.other_cost or Decimal("0"))
         context.update({"total_cost": total, "can_reverse": order.status in (Status.COMPLETED, Status.FAILED)
