@@ -343,3 +343,79 @@ they are moved over. Colours come from tokens.css only.
     padding: var(--s2) var(--s3);
     margin-bottom: var(--s4);
 }
+
+/* ---------- Flow bar: the menu in the order of the work (preview of §3) ---------- */
+.ui-flow {
+    display: flex;
+    gap: var(--s1);
+    flex-wrap: wrap;
+    margin: 0 0 var(--s5);
+    padding: var(--s1);
+    background: var(--tile);
+    border-radius: 12px;
+}
+.ui-flow__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--r);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    text-decoration: none !important;
+}
+.ui-flow__item:hover { background: var(--surface); color: var(--text); }
+.ui-flow__num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--surface);
+    font-size: 11px;
+    color: var(--muted);
+}
+.ui-flow__item--on { background: var(--surface); color: var(--action-ink); box-shadow: var(--shadow-sm); }
+.ui-flow__item--on .ui-flow__num { background: var(--action); color: #fff; }
+.ui-flow__item--later { opacity: .55; cursor: default; }
+
+/* ---------- A box with its unit beside it: "18 | kg" ---------- */
+.ui-unit { display: flex; align-items: stretch; }
+.ui-unit .input { border-top-right-radius: 0; border-bottom-right-radius: 0; min-width: 0; }
+.ui-unit__label {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+    border: 1px solid var(--field);
+    border-left: 0;
+    border-radius: 0 var(--r) var(--r) 0;
+    background: var(--surface-sunken);
+    color: var(--muted);
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+/* ---------- A production's steps ---------- */
+.ui-steps { display: flex; gap: var(--s2); margin: 0 0 var(--s5); flex-wrap: wrap; }
+.ui-steps__step {
+    flex: 1;
+    min-width: 140px;
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    padding: var(--s2) var(--s3);
+    border-radius: var(--r);
+    background: var(--tile);
+    color: var(--muted);
+    font-weight: 500;
+}
+.ui-steps__step--done { background: var(--success-soft); color: var(--success-ink); }
+.ui-steps__step--now { background: var(--action); color: #fff; }
+
+/* ---------- Small text helpers ---------- */
+.ui-muted { color: var(--muted); }
+.ui-bad { color: var(--danger-ink); font-weight: 500; }
+.ui-good { color: var(--success-ink); font-weight: 500; }
+.ui-total td { font-weight: 600; background: var(--surface-sunken); }

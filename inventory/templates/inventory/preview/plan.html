@@ -1,0 +1,79 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}New production{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:preview_make' %}">Make</a> / New production</p>
+            <h1 class="ui-head__title">New production</h1>
+            <p class="ui-head__sub">Step 1 of 3: plan. Nothing leaves the stores until you start it.</p>
+        </div>
+    </div>
+    <div class="ui-steps"><span class="ui-steps__step ui-steps__step--now">1 · Plan</span><span class="ui-steps__step">2 · Start</span><span class="ui-steps__step">3 · Finish</span></div>
+
+    <form method="post" action="{% url 'inventory:preview_save' 'plan' %}" data-fetch novalidate>
+        {% csrf_token %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} What and how many</h2></div>
+            <div class="ui-card__body ui-grid-2">
+                {% include "inventory/preview/field.html" with name="product" label="Product" options=product_options value="FG-0001" %}
+                <div class="field">
+                    <label class="field__label" for="pv-batches">How many batches <span class="field__req">*</span></label>
+                    <div class="ui-unit"><input class="input" id="pv-batches" name="batches" type="number" step="1" min="1" inputmode="numeric" value="5" data-batches><span class="ui-unit__label">batches</span></div>
+                    <span class="field__help" data-batches-said>= 50 cartons (1,200 packets). Suggested: {{ summary.suggest }}.</span>
+                </div>
+                {% include "inventory/preview/field.html" with name="date" label="Date" type="date" value="2026-10-28" required=True %}
+                {% include "inventory/preview/field.html" with name="into" label="Finished goods into" options=store_options value="MAIN" help="From the product; change it, or split when finishing." %}
+            </div>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Materials for 5 batches</h2><span class="ui-card__note">Usual store first, then other stores of the branch; oldest expiry first</span></div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Material</th><th class="numeric">Needed</th><th class="numeric">In stock</th><th>Taken from</th></tr></thead>
+                    <tbody>
+                        {% for row in lines %}
+                            <tr>
+                                <td>{{ row.name }}</td>
+                                <td class="numeric">{{ row.need|floatformat:"-2" }} {{ row.unit }}</td>
+                                <td class="numeric">{{ row.in_stock|floatformat:"-2" }} {{ row.unit }}</td>
+                                <td>{% for store, qty in row.taken %}{{ store }} {{ qty|floatformat:"-2" }}{% if not forloop.last %} + {% endif %}{% endfor %}{% if row.short %} <span class="ui-chip ui-chip--bad">short {{ row.short|floatformat:"-2" }}</span>{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <div class="ui-card__foot ui-form-actions" style="justify-content: flex-start;">
+                <span class="ui-bad">Wrapper 100 g is short: this plan can be saved, but not started.</span>
+                <button class="ui-btn ui-btn--sm" type="button" data-make-fewer="{{ summary.possible }}">Make fewer ({{ summary.possible }} batches)</button>
+                <button class="ui-btn ui-btn--sm" type="button">Buy the rest (412 wrappers)</button>
+            </div>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-message" data-form-message role="status" hidden style="margin: var(--s4) var(--s4) 0;"></div>
+            <div class="ui-card__body ui-form-actions">
+                <a class="ui-btn" href="{% url 'inventory:preview_make' %}">Cancel</a>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save the plan</button>
+            </div>
+        </div>
+    </form>
+    {% include "ui/next_step.html" with what="After saving: start it when the materials leave the stores." %}
+    <script>
+        // Batches said in cartons and packets as you type; "Make fewer" sets the most the stock allows.
+        document.addEventListener("DOMContentLoaded", function () {
+            const box = document.querySelector("[data-batches]");
+            const said = document.querySelector("[data-batches-said]");
+            const show = function () {
+                const n = parseInt(box.value, 10) || 0;
+                said.textContent = "= " + (n * 10) + " cartons (" + (n * 240).toLocaleString() + " packets). Suggested: {{ summary.suggest }}.";
+            };
+            box.addEventListener("input", show);
+            document.querySelector("[data-make-fewer]").addEventListener("click", function () {
+                box.value = this.dataset.makeFewer;
+                show();
+                box.focus();
+            });
+        });
+    </script>
+{% endblock %}

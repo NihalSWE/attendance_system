@@ -1,0 +1,115 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}{{ p.number }}{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:preview_make' %}">Make</a> / {{ p.number }}</p>
+            <h1 class="ui-head__title">{{ p.number }} <span class="ui-chip ui-chip--{{ p.tone }}">{{ p.status }}</span></h1>
+            <p class="ui-head__sub">Biscuit 100 g · {{ p.batches }} batches ({% widthratio p.batches 1 10 %} cartons) · {{ p.date }} · into Main store</p>
+        </div>
+        {% if p.status == "Planned" %}
+            <div class="ui-head__actions"><button class="ui-btn ui-btn--danger" type="button">{% include "ui/icon.html" with name="x" %} Cancel</button></div>
+        {% endif %}
+    </div>
+    <div class="ui-steps">
+        <span class="ui-steps__step ui-steps__step--done">{% include "ui/icon.html" with name="check" small=True %} 1 · Planned</span>
+        <span class="ui-steps__step{% if p.status == 'Planned' %} ui-steps__step--now{% else %} ui-steps__step--done{% endif %}">{% if p.status != "Planned" %}{% include "ui/icon.html" with name="check" small=True %} {% endif %}2 · Start</span>
+        <span class="ui-steps__step{% if p.status == 'Started' %} ui-steps__step--now{% elif p.status == 'Finished' %} ui-steps__step--done{% endif %}">{% if p.status == "Finished" %}{% include "ui/icon.html" with name="check" small=True %} {% endif %}3 · Finish</span>
+    </div>
+
+    {% if p.status == "Planned" %}
+        {# Step 2: Start. Each store's lines are filled with the planned amounts. #}
+        <form method="post" action="{% url 'inventory:preview_save' 'start' %}" data-fetch novalidate>
+            {% csrf_token %}
+            <input type="hidden" name="number" value="{{ p.number }}">
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Materials leaving the stores</h2><span class="ui-card__note">Change a line only if a store gave more, less, or another batch</span></div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th>Store</th><th>Material</th><th class="numeric">Planned</th><th>Given</th></tr></thead>
+                        <tbody>
+                            {% for row in lines %}
+                                {% for store, qty in row.taken %}
+                                    <tr><td>{{ store }}</td><td>{{ row.name }}</td><td class="numeric">{{ qty|floatformat:"-2" }} {{ row.unit }}</td>
+                                        <td><div class="ui-unit" style="max-width:200px"><input class="input" name="given_{{ row.code }}_{{ forloop.counter }}" type="number" step="any" value="{{ qty|floatformat:'-2' }}"><span class="ui-unit__label">{{ row.unit }}</span></div></td></tr>
+                                {% endfor %}
+                                {% if row.short %}
+                                    <tr><td colspan="4" class="ui-bad">{{ row.name }}: {{ row.short|floatformat:"-2" }} {{ row.unit }} short, in no store of this branch.</td></tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="ui-message" data-form-message role="status" hidden style="margin: var(--s4) var(--s4) 0;"></div>
+                <div class="ui-card__foot ui-form-actions">
+                    <a class="ui-btn" href="{% url 'inventory:preview_plan' %}">{% include "ui/icon.html" with name="edit" %} Change the plan</a>
+                    <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="play" %} Start: materials out</button>
+                </div>
+            </div>
+        </form>
+    {% elif p.status == "Started" %}
+        {# Step 3: Finish. #}
+        <form method="post" action="{% url 'inventory:preview_save' 'finish' %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} What came out</h2><span class="ui-card__note">Planned: 30 cartons</span></div>
+                <div class="ui-card__body ui-grid-2">
+                    {% include "inventory/preview/field.html" with name="good" label="Good" type="number" unit="cartons" value="30" required=True %}
+                    {% include "inventory/preview/field.html" with name="damaged" label="Damaged" type="number" unit="cartons" value="0" help="Their cost is spread over the good ones." %}
+                    {% include "inventory/preview/field.html" with name="into_MAIN" label="Into Main store" type="number" unit="cartons" value="30" %}
+                    {% include "inventory/preview/field.html" with name="into_DEP" label="Into Depot" type="number" unit="cartons" value="0" help="Split across stores; they must add up to Good." %}
+                    {% include "inventory/preview/field.html" with name="reason" label="Why fewer (if below 90 % of the plan)" %}
+                </div>
+            </div>
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Other costs of this production</h2><span class="ui-card__note">Filled from the product; correct them if the day was different</span></div>
+                <div class="ui-card__body ui-grid-2">
+                    {% include "inventory/preview/field.html" with name="labour_hours" label="Line workers (4 people)" type="number" unit="hours" value="3.6" %}
+                    {% include "inventory/preview/field.html" with name="oven_hours" label="Oven" type="number" unit="hours" value="1.5" %}
+                    {% include "inventory/preview/field.html" with name="gas" label="Gas" type="number" unit="Tk" value="360" %}
+                    {% include "inventory/preview/field.html" with name="leftover" label="Leftover materials" options=leftover_options %}
+                </div>
+                <div class="ui-message" data-form-message role="status" hidden style="margin: 0 var(--s4) var(--s3);"></div>
+                <div class="ui-card__foot ui-form-actions">
+                    <button class="ui-btn ui-btn--danger" type="button">Record a failed production</button>
+                    <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Finish: into stock</button>
+                </div>
+            </div>
+        </form>
+    {% else %}
+        {# Finished: the result and its cost. #}
+        <div class="ui-tiles">
+            <div class="ui-tile ui-tile--good"><p class="ui-tile__label">Good</p><p class="ui-tile__value">{{ p.good }}</p><p class="ui-tile__hint">cartons into Main store</p></div>
+            <div class="ui-tile ui-tile--warn"><p class="ui-tile__label">Damaged</p><p class="ui-tile__value">{{ p.damaged }}</p><p class="ui-tile__hint">cartons · 96% yield</p></div>
+            <div class="ui-tile"><p class="ui-tile__label">Cost per carton</p><p class="ui-tile__value">{{ result.per_carton }}</p><p class="ui-tile__hint">expected {{ sheet.per_carton }}</p></div>
+            <div class="ui-tile ui-tile--bad"><p class="ui-tile__label">Cost per packet</p><p class="ui-tile__value">{{ result.per_packet }}</p><p class="ui-tile__hint">expected {{ sheet.per_packet }} · sells at 20</p></div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Cost: expected and actual</h2><span class="ui-card__note">Total ÷ good cartons; damaged carry no cost of their own</span></div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Cost</th><th class="numeric">Expected</th><th class="numeric">Actual</th><th class="numeric">Difference</th></tr></thead>
+                    <tbody>
+                        {% for label, planned, actual, diff in result.rows %}
+                            <tr><td>{{ label }}</td><td class="numeric">{{ planned|floatformat:"2g" }}</td><td class="numeric">{{ actual|floatformat:"2g" }}</td><td class="numeric{% if diff > 0 %} ui-bad{% endif %}">{% if diff > 0 %}+{% endif %}{{ diff|floatformat:"2g" }}</td></tr>
+                        {% endfor %}
+                        <tr class="ui-total"><td>Total</td><td class="numeric">{{ result.planned.total|floatformat:"2g" }}</td><td class="numeric">{{ result.total|floatformat:"2g" }}</td><td class="numeric">+120.00</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Batch made</h2><button class="ui-btn ui-btn--sm" type="button">Print labels</button></div>
+            <div class="ui-card__body">BIS-261026-1 · made 26 Oct · expiry 24 Apr · 48 cartons · <a href="{% url 'inventory:preview_product' 'FG-0001' %}">Biscuit 100 g</a></div>
+        </div>
+    {% endif %}
+
+    {% if p.status == "Planned" %}
+        {% include "ui/next_step.html" with what="Wrappers are short: buy the rest, or change the plan to 3 batches, then start." url="#" button="Buy 412 wrappers" %}
+    {% elif p.status == "Started" %}
+        {% include "ui/next_step.html" with what="When the batches are done, write what came out and finish." url="#" button="Finish" %}
+    {% else %}
+        {% url 'inventory:preview_product' 'FG-0001' as product_url %}
+        {% include "ui/next_step.html" with what="The biscuits are in stock. See the product, or sell them." url=product_url button="Biscuit 100 g" %}
+    {% endif %}
+{% endblock %}

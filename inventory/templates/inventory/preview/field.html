@@ -1,0 +1,19 @@
+{% comment %}
+    One box for the preview screens: name, label; optional value, type (text,
+    number, date), unit (shown beside the box) or unit_from (the name of the box
+    whose chosen unit is shown, so a unit is asked once), help, required, options
+    ([(value, label)] makes it a list), show_when (dependent.js), placeholder.
+{% endcomment %}
+<div class="field"{% if show_when %} data-show-when="{{ show_when }}"{% endif %}>
+    <label class="field__label" for="pv-{{ name }}">{{ label }}{% if required %} <span class="field__req">*</span>{% endif %}</label>
+    {% if options %}
+        <select class="input select js-select" id="pv-{{ name }}" name="{{ name }}">
+            {% for option_value, option_label in options %}<option value="{{ option_value }}"{% if option_value == value %} selected{% endif %}>{{ option_label }}</option>{% endfor %}
+        </select>
+    {% elif unit or unit_from %}
+        <div class="ui-unit"><input class="input" id="pv-{{ name }}" name="{{ name }}" type="{{ type|default:'text' }}" value="{{ value|default:'' }}"{% if type == "date" %} data-datepicker{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if type == "number" %} step="any" inputmode="decimal"{% endif %}><span class="ui-unit__label"{% if unit_from %} data-unit-from="{{ unit_from }}"{% endif %}>{{ unit|default:"—" }}</span></div>
+    {% else %}
+        <input class="input" id="pv-{{ name }}" name="{{ name }}" type="{{ type|default:'text' }}" value="{{ value|default:'' }}"{% if type == "date" %} data-datepicker{% endif %}{% if placeholder %} placeholder="{{ placeholder }}"{% endif %}{% if type == "number" %} step="any" inputmode="decimal"{% endif %}>
+    {% endif %}
+    {% if help %}<span class="field__help">{{ help }}</span>{% endif %}
+</div>

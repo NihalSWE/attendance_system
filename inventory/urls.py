@@ -8,6 +8,7 @@ from inventory import (
     import_views,
     label_views,
     opening_views,
+    preview_views,
     report_views,
     stock_views,
     store_views,
@@ -81,6 +82,19 @@ urlpatterns = [
     path("import/<slug:kind>/", import_views.import_page, name="import"),
     path("import/<slug:kind>/confirm/", import_views.import_confirm, name="import_confirm"),
     path("import/<slug:kind>/template/", import_views.template_download, name="import_template"),
+]
+
+# The redesigned screens on sample data, for approval (plan §15 phase 2).
+urlpatterns += [
+    path("preview/", preview_views.home, name="preview_home"),
+    path("preview/materials/", preview_views.materials, name="preview_materials"),
+    path("preview/materials/<str:code>/", preview_views.material, name="preview_material"),
+    path("preview/products/", preview_views.products, name="preview_products"),
+    path("preview/products/<str:code>/", preview_views.product, name="preview_product"),
+    path("preview/make/", preview_views.make, name="preview_make"),
+    path("preview/make/new/", preview_views.plan, name="preview_plan"),
+    path("preview/make/<str:number>/", preview_views.production, name="preview_production"),
+    path("preview/save/<slug:screen>/", preview_views.save, name="preview_save"),
 ]
 
 for key in MASTERS:
