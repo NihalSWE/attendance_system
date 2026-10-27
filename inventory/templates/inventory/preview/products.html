@@ -1,0 +1,79 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Products{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs">Products and stock / 2. Products</p>
+            <h1 class="ui-head__title">Products</h1>
+            <p class="ui-head__sub">What you sell: made here, bought ready, or both.</p>
+        </div>
+        <div class="ui-head__actions">
+            <button class="ui-btn ui-btn--main" type="button" data-open-dialog="product-dialog">{% include "ui/icon.html" with name="plus" %} Add product</button>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} All products</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Code</th><th>Name</th><th>How you get it</th><th class="numeric">In stock</th><th class="numeric">Price</th><th class="numeric">Cost</th><th class="numeric">Margin</th><th>Status</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>{{ product.code }}</td>
+                        <td><a href="{% url 'inventory:preview_product' product.code %}">{{ product.name }}</a></td>
+                        <td><span class="ui-chip ui-chip--info">Make</span></td>
+                        <td class="numeric">{{ summary.in_stock }} cartons</td>
+                        <td class="numeric">{{ summary.price|floatformat:2 }} / packet</td>
+                        <td class="numeric">{{ summary.sheet.per_packet }}</td>
+                        <td class="numeric ui-good">{{ summary.margin }} ({{ summary.margin_pct }}%)</td>
+                        <td><span class="ui-chip ui-chip--wait">Below stock to keep</span></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% url 'inventory:preview_product' 'FG-0001' as product_url %}
+    {% include "ui/next_step.html" with what="Open the product to check its recipe and cost, then make it." url=product_url button="Biscuit 100 g" %}
+
+    <dialog class="modal modal--wide" id="product-dialog" aria-labelledby="product-dialog-title">
+        <form class="modal__card" method="post" action="{% url 'inventory:preview_save' 'product' %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="modal__head">
+                <h2 id="product-dialog-title">Add product</h2>
+                <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+            </div>
+            <div class="modal__body stack">
+                <div class="field">
+                    <span class="field__label">How you get it <span class="field__req">*</span></span>
+                    <div class="check-list">
+                        {% for value, label in how_options %}<label class="check"><input class="check__input" type="radio" name="how" value="{{ value }}"{% if forloop.first %} checked{% endif %}><span>{{ label }}</span></label>{% endfor %}
+                    </div>
+                </div>
+                <div class="ui-grid-2">
+                    {% include "inventory/preview/field.html" with name="name" label="Name" required=True placeholder="e.g. Biscuit 100 g" %}
+                    {% include "inventory/preview/field.html" with name="code" label="Code" value="FG-0002" help="Suggested; change it if you like." %}
+                    {% include "inventory/preview/field.html" with name="unit" label="Smallest unit you sell" required=True options=units help="Stock is counted in this. Locked once stock moves." %}
+                    {% include "inventory/preview/field.html" with name="price_unit" label="Sale price" type="number" unit_from="unit" required=True help="For one of the smallest unit." %}
+                    {% include "inventory/preview/field.html" with name="other_unit" label="Also sold as (optional)" placeholder="e.g. carton" %}
+                    {% include "inventory/preview/field.html" with name="other_size" label="One of those holds" type="number" unit_from="unit" placeholder="e.g. 24" %}
+                    {% include "inventory/preview/field.html" with name="price_other" label="Its sale price" type="number" unit_from="other_unit" help="Not forced to size × price: give the carton its own price." %}
+                    {% include "inventory/preview/field.html" with name="vat" label="VAT" type="number" unit="%" %}
+                    {% include "inventory/preview/field.html" with name="store" label="New stock goes to" options=store_options %}
+                    {% include "inventory/preview/field.html" with name="keep" label="Stock to keep" type="number" unit_from="unit" help="Used to suggest how much to make." %}
+                </div>
+                <div>
+                    <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Keeps batches</span><span class="ui-switch__hint">Each production gets its own batch number.</span></span><input type="checkbox" name="batches" checked></label>
+                    <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Has an expiry date</span><span class="ui-switch__hint">Expiry = made date + shelf life.</span></span><input type="checkbox" name="has_expiry" data-ticks="batches" checked></label>
+                    <div class="ui-grid-2">{% include "inventory/preview/field.html" with name="shelf_life" label="Shelf life" type="number" unit="days" value="180" show_when="has_expiry:on" %}</div>
+                    <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Quality check before sale</span><span class="ui-switch__hint">New batches wait until checked.</span></span><input type="checkbox" name="qc"></label>
+                </div>
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="modal__foot">
+                <button class="ui-btn" type="button" data-close-dialog>Cancel</button>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Add product</button>
+            </div>
+        </form>
+    </dialog>
+{% endblock %}

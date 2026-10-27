@@ -1,0 +1,78 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Materials{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs">Products and stock / 1. Materials</p>
+            <h1 class="ui-head__title">Materials</h1>
+            <p class="ui-head__sub">What you buy and use up in production: raw materials and packaging.</p>
+        </div>
+        <div class="ui-head__actions">
+            <button class="ui-btn ui-btn--main" type="button" data-open-dialog="material-dialog">{% include "ui/icon.html" with name="plus" %} Add material</button>
+        </div>
+    </div>
+
+    <div class="ui-tiles">
+        <div class="ui-tile"><p class="ui-tile__label">Materials</p><p class="ui-tile__value">{{ rows|length }}</p><p class="ui-tile__hint">raw and packaging</p></div>
+        <div class="ui-tile{% if low %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Low or out</p><p class="ui-tile__value">{{ low }}</p><p class="ui-tile__hint">below stock to keep</p></div>
+        <div class="ui-tile"><p class="ui-tile__label">Value in stock</p><p class="ui-tile__value">{{ value|floatformat:0 }}</p><p class="ui-tile__hint">Tk, at average cost</p></div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} All materials</h2><span class="ui-card__note">Click a name to see its stock, batches and use</span></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Code</th><th>Name</th><th>Type</th><th class="numeric">In stock</th><th class="numeric">Keep</th><th class="numeric">Value</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for m in rows %}
+                        <tr>
+                            <td>{{ m.code }}</td>
+                            <td><a href="{% url 'inventory:preview_material' m.code %}">{{ m.name }}</a></td>
+                            <td>{{ m.type }}</td>
+                            <td class="numeric">{{ m.in_stock|floatformat:"-2" }} {{ m.unit }}</td>
+                            <td class="numeric">{{ m.keep|floatformat:"-2" }} {{ m.unit }}</td>
+                            <td class="numeric">{{ m.value|floatformat:0 }}</td>
+                            <td><span class="ui-chip ui-chip--{{ m.tone }}">{{ m.status }}</span></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% url 'inventory:preview_products' as products_url %}
+    {% include "ui/next_step.html" with what="Add the product that uses these materials, with its recipe." url=products_url button="Products" %}
+
+    <dialog class="modal modal--wide" id="material-dialog" aria-labelledby="material-dialog-title">
+        <form class="modal__card" method="post" action="{% url 'inventory:preview_save' 'material' %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="modal__head">
+                <h2 id="material-dialog-title">Add material</h2>
+                <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+            </div>
+            <div class="modal__body stack">
+                <div class="ui-grid-2">
+                    {% include "inventory/preview/field.html" with name="name" label="Name" required=True placeholder="e.g. Flour" %}
+                    {% include "inventory/preview/field.html" with name="code" label="Code" value="RM-0006" help="Suggested; change it if you like." %}
+                    {% include "inventory/preview/field.html" with name="type" label="Type" options=types %}
+                    {% include "inventory/preview/field.html" with name="unit" label="Unit" required=True options=units help="Stock is counted in this. Locked once stock moves." %}
+                    {% include "inventory/preview/field.html" with name="other_unit" label="Bought in (optional)" placeholder="e.g. bag" help="A bigger unit you buy it in." %}
+                    {% include "inventory/preview/field.html" with name="other_size" label="One of those holds" type="number" unit_from="unit" placeholder="e.g. 50" %}
+                    {% include "inventory/preview/field.html" with name="keep" label="Stock to keep" type="number" unit_from="unit" help="Below this it shows as low." %}
+                    {% include "inventory/preview/field.html" with name="store" label="Usual store" options=store_options %}
+                </div>
+                <div>
+                    <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Keeps batches</span><span class="ui-switch__hint">Each delivery gets its own batch number.</span></span><input type="checkbox" name="batches"></label>
+                    <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Has an expiry date</span><span class="ui-switch__hint">Turns batches on; expired stock can never be used.</span></span><input type="checkbox" name="has_expiry" data-ticks="batches"></label>
+                    <div class="ui-grid-2">{% include "inventory/preview/field.html" with name="shelf_life" label="Shelf life" type="number" unit="days" show_when="has_expiry:on" %}</div>
+                    <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Quality check before use</span><span class="ui-switch__hint">New stock waits until checked.</span></span><input type="checkbox" name="qc"></label>
+                </div>
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="modal__foot">
+                <button class="ui-btn" type="button" data-close-dialog>Cancel</button>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Add material</button>
+            </div>
+        </form>
+    </dialog>
+{% endblock %}
