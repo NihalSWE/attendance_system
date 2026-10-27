@@ -1,0 +1,49 @@
+{% extends "base_template/base.html" %}
+{% comment %}
+    The Products and stock pages on real records (plan §15 phase 4). The flow
+    bar is the menu in the order of the work (plan §3): Materials and Make only
+    with Production on. Steps not rebuilt yet open their current pages.
+{% endcomment %}
+{% block extra_css %}
+    {% include "inventory/_head.html" %}
+{% endblock %}
+{% block extra_js %}
+    {% include "inventory/_js.html" %}
+    <script>
+        // A unit is asked once: boxes after it show the chosen unit beside them.
+        (function () {
+            function followUnit(event) {
+                const box = event.target;
+                if (!box || !box.name || !box.form) return;
+                const labels = box.form.querySelectorAll('[data-unit-from~="' + box.name + '"]');
+                if (!labels.length) return;
+                let text = "—";
+                if (box.options) {
+                    const option = box.options[box.selectedIndex];
+                    if (option && option.value) text = option.dataset.unit || option.textContent.trim();
+                } else if (box.value.trim()) {
+                    text = box.value.trim();
+                }
+                labels.forEach(label => { label.textContent = text; });
+            }
+            document.addEventListener("change", followUnit);
+            document.addEventListener("input", followUnit);
+            if (window.jQuery) window.jQuery(document).on("select2:select select2:clear", followUnit);
+        })();
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="ui-page">
+        <nav class="ui-flow" aria-label="Products and stock">
+            <a class="ui-flow__item{% if active == 'start' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:start' %}"><span class="ui-flow__num">{% include "ui/icon.html" with name="flag" small=True %}</span>Start here</a>
+            {% if production %}<a class="ui-flow__item{% if active == 'materials' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:materials' %}"><span class="ui-flow__num">1</span>Materials</a>{% endif %}
+            <a class="ui-flow__item{% if active == 'products' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:products' %}"><span class="ui-flow__num">{% if production %}2{% else %}1{% endif %}</span>Products</a>
+            <a class="ui-flow__item" href="{% url 'purchasing:receipts' %}"><span class="ui-flow__num">{% if production %}3{% else %}2{% endif %}</span>Stock in</a>
+            {% if production %}<a class="ui-flow__item" href="{% url 'production:orders' %}"><span class="ui-flow__num">4</span>Make</a>{% endif %}
+            <a class="ui-flow__item" href="{% url 'inventory:stock' %}"><span class="ui-flow__num">{% if production %}5{% else %}3{% endif %}</span>Stock</a>
+            <a class="ui-flow__item" href="{% url 'inventory:store_transfers' %}"><span class="ui-flow__num">{% if production %}6{% else %}4{% endif %}</span>Move stock</a>
+            <a class="ui-flow__item" href="{% url 'sales:deliveries' %}"><span class="ui-flow__num">{% if production %}7{% else %}5{% endif %}</span>Sell</a>
+        </nav>
+        {% block content %}{% endblock %}
+    </div>
+{% endblock %}

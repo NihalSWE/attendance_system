@@ -52,9 +52,9 @@ def report_item(slug):
 # their address.
 INVENTORY_LINKS_SHOWN = {
     "inventory": (
+        "inventory:start", "inventory:materials", "inventory:products",
         "inventory:settings", "inventory:units", "inventory:categories",
         "inventory:stores", "inventory:bins", "inventory:items",
-        "inventory:raw_materials", "inventory:packaging", "inventory:finished_goods",
         "inventory:spare_parts", "inventory:general_items",
         "inventory:suppliers", "inventory:customers", "inventory:opening",
         "inventory:stock", "inventory:scan", "inventory:labels",
@@ -150,6 +150,13 @@ INVENTORY_MENUS = (
     # Store & Inventory (docs/inventory/00-PLAN.md, Phase 1). Shown once the
     # platform owner enables the module, to those holding "View stock and items".
     ("inventory", "Inventory", (
+        # The work in its order first (2026-10-27, plan §3 and §15 1.5):
+        # Start here, Materials (only with Production), Products.
+        item("Start here", "inventory:start", needs="inventory.view"),
+        item("Materials", "inventory:materials", "inventory:material", needs="inventory.view",
+             module="production"),
+        item("Products", "inventory:products", "inventory:product", "inventory:item_save",
+             needs="inventory.view"),
         item("Dashboard", "inventory:dashboard", "inventory:home", needs="inventory.view"),
         item("Stock on hand", "inventory:stock", needs="inventory.view"),
         item("Reports", "inventory:reports", *REPORT_URLS, needs=("inventory.view", *INVENTORY_REPORT_CODES)),
@@ -157,8 +164,8 @@ INVENTORY_MENUS = (
         item("Go-live", "inventory:golive", "inventory:golive_count_sheet", "inventory:golive_compare",
              needs=("inventory.adjust", "inventory.adjust_approve")),
         # One page per item type (2026-10-26), then every item together.
-        # Raw materials and packaging are used only by production: with
-        # Production off (a company that buys and sells) they are not shown.
+        # Raw materials, packaging and finished goods are Materials and
+        # Products now (2026-10-27); their old pages still open by address.
         *[item(label, f"inventory:{key}", f"inventory:{key}_edit", f"inventory:{key}_status",
                needs="inventory.view", module=module)
           for key, label, module in (("raw_materials", "Raw materials", "production"),

@@ -19,6 +19,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from access_control.branch_access import ALL_BRANCHES, branches_for
+from base_template import fetch
 from base_template.tables import paginate, render
 from common.choices import ActiveStatus
 from common.forms import apply_service_errors
@@ -298,15 +299,23 @@ def master_status(request, key, pk):
         return bail
     form = forms.StatusForm(request.POST)
     if not form.is_valid():
+        if fetch.wants_json(request):
+            return fetch.refused(message="Choose a valid status.")
         messages.error(request, "Choose a valid status.")
         return redirect(page.url)
     try:
         row = masters.set_status(page.master, actor=request.user, company_id=company_id, pk=pk,
                                  status=form.cleaned_data["status"])
     except ValidationError as exc:
+        if fetch.wants_json(request):
+            return fetch.refused(message="; ".join(exc.messages))
         messages.error(request, "; ".join(exc.messages))
     else:
-        messages.success(request, f"“{row}” is now {row.get_status_display().lower()}.")
+        done = f"“{row}” is now {row.get_status_display().lower()}."
+        if fetch.wants_json(request):
+            # The new pages (2026-10-27) answer in place, then show the row again.
+            return fetch.saved(done, _safe_next(request) or page.url)
+        messages.success(request, done)
     return redirect(request.POST.get("next") or page.url)
 
 
@@ -319,10 +328,23 @@ def item_delete(request, key, pk):
     try:
         code = masters.delete_item(actor=request.user, company_id=company_id, pk=pk)
     except ValidationError as exc:
+        if fetch.wants_json(request):
+            return fetch.refused(message="; ".join(exc.messages))
         messages.error(request, "; ".join(exc.messages))
         return redirect(request.POST.get("next") or page.url)
+    if fetch.wants_json(request):
+        # From the material page or the product hub: back to its list.
+        return fetch.saved(f"{code} is deleted.", _safe_next(request, "done") or page.url)
     messages.success(request, f"{code} is deleted.")
     return redirect(page.url)
+
+
+def _safe_next(request, name="next"):
+    """A page of this site to go on to, from the form; empty otherwise."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    target = request.POST.get(name, "")
+    return target if url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}) else ""
 
 
 master_list = login_required(master_list)

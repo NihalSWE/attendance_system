@@ -1,0 +1,58 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Products{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / {% if production %}2{% else %}1{% endif %}. Products</p>
+            <h1 class="ui-head__title">Products</h1>
+            <p class="ui-head__sub">{% if production %}What you sell: made here, bought ready, or both.{% else %}What you buy ready and sell.{% endif %}</p>
+        </div>
+        {% if form %}
+            <div class="ui-head__actions">
+                <a class="ui-btn" href="{% url 'inventory:import' 'items' %}">Import from Excel</a>
+                <button class="ui-btn ui-btn--main" type="button" data-open-dialog="product-dialog">{% include "ui/icon.html" with name="plus" %} Add product</button>
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} All products</h2><span class="ui-card__note">{{ count }} product{{ count|pluralize }} · click a name to see its stock, cost and sales</span></div>
+        {% include "inventory/hub/filters.html" %}
+        <div class="table-wrap">
+            <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                <thead><tr><th>Code</th><th>Name</th>{% if production %}<th>How you get it</th>{% endif %}<th class="numeric">In stock</th><th class="numeric">Price</th>{% if sees_costs %}<th class="numeric">Cost</th><th class="numeric">Margin</th>{% endif %}<th>Status</th></tr></thead>
+                <tbody>
+                    {% for row in rows %}{% with line=row.line %}
+                        <tr>
+                            <td>{{ line.item.code }}</td>
+                            <td><a href="{% url 'inventory:product' line.item.pk %}">{{ line.item.name }}</a>{% if line.item.status != "active" %} <span class="ui-chip">Inactive</span>{% endif %}</td>
+                            {% if production %}<td><span class="ui-chip ui-chip--info">{% if line.item.sourcing == "make" %}Make{% elif line.item.sourcing == "both" %}Both{% else %}Buy{% endif %}</span></td>{% endif %}
+                            <td class="numeric">{{ line.stock_text }}</td>
+                            <td class="numeric">{% if line.item.sale_price %}{{ line.item.sale_price|floatformat:"2g" }} / {{ line.item.base_uom.code }}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
+                            {% if sees_costs %}
+                                <td class="numeric">{% if line.cost %}{{ line.cost|floatformat:"2g" }}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
+                                <td class="numeric{% if line.margin and line.margin < 0 %} ui-bad{% elif line.margin %} ui-good{% endif %}">{% if line.margin is not None %}{{ line.margin|floatformat:"2g" }} ({{ line.margin_pct }}%){% else %}<span class="ui-muted">—</span>{% endif %}</td>
+                            {% endif %}
+                            <td><span class="ui-chip ui-chip--{{ line.tone }}">{% if line.tone == "wait" %}Below stock to keep{% else %}{{ line.words }}{% endif %}</span></td>
+                        </tr>
+                    {% endwith %}{% empty %}
+                        <tr><td colspan="9">{% if filtered %}Nothing matches: try clearing the filters.{% else %}No products yet. Add the first one.{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "base_template/includes/table_pagination.html" %}
+    </div>
+
+    {% if production %}
+        {% include "ui/next_step.html" with what="Open a product to write its recipe, see its cost and make it." %}
+    {% else %}
+        {% url 'purchasing:receipts' as receipts_url %}
+        {% include "ui/next_step.html" with what="Put your products in stock: receive a purchase." url=receipts_url button="Stock in" %}
+    {% endif %}
+
+    {% if form %}
+        {% url 'inventory:products' as add_url %}
+        {% include "inventory/hub/item_form.html" with id="product-dialog" title="Add product" action=add_url form=form submit="Add product" %}
+    {% endif %}
+{% endblock %}

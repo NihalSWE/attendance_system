@@ -1,0 +1,87 @@
+{% comment %}
+    What the material page and the product hub share (hub_views._item_parts):
+    the Units and prices card, and the Edit, Add unit, Delete / Deactivate
+    modals. Every form saves with fetch and answers above its buttons.
+{% endcomment %}
+<div class="ui-card">
+    <div class="ui-card__head">
+        <h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Units{% if item.kind == "finished" %} and prices{% endif %}</h2>
+        {% if pack_form %}<button class="ui-btn ui-btn--sm" type="button" data-open-dialog="pack-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add a bigger unit</button>{% endif %}
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Unit</th><th class="numeric">Holds</th>{% if item.kind == "finished" %}<th class="numeric">Sale price</th>{% endif %}<th class="no-sort"><span class="sr-only">Remove</span></th></tr></thead>
+            <tbody>
+                <tr><td>{{ item.base_uom.code }} <span class="ui-muted">(stock is counted in this)</span></td><td class="numeric">1</td>{% if item.kind == "finished" %}<td class="numeric">{% if item.sale_price %}{{ item.sale_price|floatformat:"2g" }}{% else %}<span class="ui-muted">not set</span>{% endif %}</td>{% endif %}<td></td></tr>
+                {% for pack in packs %}
+                    <tr>
+                        <td>{{ pack.uom.code }}</td>
+                        <td class="numeric">{{ pack.factor|floatformat:"-4" }} {{ item.base_uom.code }}</td>
+                        {% if item.kind == "finished" %}<td class="numeric">{% if pack.sale_price is not None %}{{ pack.sale_price|floatformat:"2g" }}{% elif pack.price %}{{ pack.price|floatformat:"2g" }} <span class="ui-muted">(price × size)</span>{% else %}<span class="ui-muted">not set</span>{% endif %}</td>{% endif %}
+                        <td>{% if pack_form %}
+                            <form method="post" action="{% url 'inventory:pack_unit_remove' item.pk pack.pk %}" data-fetch>
+                                {% csrf_token %}
+                                <button class="ui-btn ui-btn--danger ui-btn--sm" type="submit">{% include "ui/icon.html" with name="trash" small=True %} Remove</button>
+                            </form>
+                        {% endif %}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if edit_form %}
+    {% url 'inventory:item_save' item.pk as save_url %}
+    {% include "inventory/hub/item_form.html" with id="edit-dialog" title="Edit "|add:item.code action=save_url form=edit_form submit="Save" %}
+
+    <dialog class="modal" id="pack-dialog" aria-labelledby="pack-dialog-title">
+        <form class="modal__card" method="post" action="{% url 'inventory:pack_unit_add' item.pk %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="modal__head">
+                <h2 id="pack-dialog-title">Add a bigger unit</h2>
+                <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+            </div>
+            <div class="modal__body stack">
+                <p class="ui-muted">{% if item.kind == "finished" %}A unit you also sell in: 1 carton = 24 {{ item.base_uom.code }}.{% else %}A unit you buy it in: 1 bag = 50 {{ item.base_uom.code }}.{% endif %}</p>
+                <div class="ui-grid-2">
+                    {% include "inventory/hub/field.html" with box=pack_form.uom %}
+                    <div class="field">
+                        <label class="field__label" for="{{ pack_form.factor.id_for_label }}">One of those holds <span class="field__req">*</span></label>
+                        <div class="ui-unit">{{ pack_form.factor }}<span class="ui-unit__label">{{ item.base_uom.code }}</span></div>
+                    </div>
+                    {% if item.kind == "finished" %}{% include "inventory/hub/field.html" with box=pack_form.sale_price %}{% endif %}
+                    {% include "inventory/hub/field.html" with box=pack_form.barcode %}
+                </div>
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="modal__foot">
+                <button class="ui-btn" type="button" data-close-dialog>Cancel</button>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Add</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog class="modal" id="remove-dialog" aria-labelledby="remove-dialog-title">
+        {% if not moved %}
+            <form class="modal__card" method="post" action="{% url 'inventory:items_delete' item.pk %}" data-fetch>
+                {% csrf_token %}
+                <input type="hidden" name="done" value="{{ list_url }}">
+                <div class="modal__head"><h2 id="remove-dialog-title">Delete {{ item.code }}?</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                <div class="modal__body"><p>{{ item.code }} {{ item.name }} has never moved, so it can be deleted for good, with its units{% if item.kind == "finished" %} and its recipe{% endif %}.</p></div>
+                <div class="ui-message" data-form-message role="status" hidden></div>
+                <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--danger" type="submit">{% include "ui/icon.html" with name="trash" %} Delete</button></div>
+            </form>
+        {% else %}
+            <form class="modal__card" method="post" action="{% url 'inventory:items_status' item.pk %}" data-fetch>
+                {% csrf_token %}
+                <input type="hidden" name="status" value="{% if item.status == 'active' %}inactive{% else %}active{% endif %}">
+                <input type="hidden" name="next" value="{{ request.path }}">
+                <div class="modal__head"><h2 id="remove-dialog-title">{% if item.status == 'active' %}Deactivate{% else %}Activate{% endif %} {{ item.code }}?</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                <div class="modal__body"><p>{% if item.status == 'active' %}Its stock has moved, so it is kept for the record. Deactivated, it can no longer be chosen for anything new.{% else %}It can be chosen again.{% endif %}</p></div>
+                <div class="ui-message" data-form-message role="status" hidden></div>
+                <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn{% if item.status == 'active' %} ui-btn--danger{% else %} ui-btn--main{% endif %}" type="submit">{% if item.status == 'active' %}Deactivate{% else %}Activate{% endif %}</button></div>
+            </form>
+        {% endif %}
+    </dialog>
+{% endif %}

@@ -1,0 +1,20 @@
+{% comment %}The filters above a Materials or Products list: category, store, status.{% endcomment %}
+<form class="toolbar" method="get">
+    <label class="sr-only" for="f-category">Category</label>
+    <select class="input select js-select" id="f-category" name="category">
+        <option value="">All categories</option>
+        {% for c in categories %}<option value="{{ c.pk }}"{% if c.pk|stringformat:"s" == category %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+    </select>
+    <label class="sr-only" for="f-store">Store</label>
+    <select class="input select js-select" id="f-store" name="store">
+        <option value="">Stock in all stores</option>
+        {% for s in stores %}<option value="{{ s.pk }}"{% if s.pk|stringformat:"s" == store %} selected{% endif %}>{{ s.name }}</option>{% endfor %}
+    </select>
+    <label class="sr-only" for="f-status">Status</label>
+    <select class="input select js-select" id="f-status" name="status">
+        <option value="">Any status</option>
+        {% for value, label in statuses %}<option value="{{ value }}"{% if value == status %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    <button class="ui-btn ui-btn--sm" type="submit">Apply</button>
+    {% if filtered %}<a class="ui-btn ui-btn--sm" href="{{ request.path }}">Clear</a>{% endif %}
+</form>

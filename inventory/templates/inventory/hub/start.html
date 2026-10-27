@@ -1,0 +1,59 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Products and stock{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <h1 class="ui-head__title">Products and stock</h1>
+            <p class="ui-head__sub">{% if production %}Everything from materials to finished goods, in the order you work.{% else %}Your products, the stock you buy in and what you sell, in the order you work.{% endif %}</p>
+        </div>
+        <div class="ui-head__actions">
+            {% if production %}
+                <a class="ui-btn" href="{% url 'inventory:materials' %}">{% include "ui/icon.html" with name="box" %} Materials</a>
+                <a class="ui-btn ui-btn--main" href="{% url 'production:orders' %}">{% include "ui/icon.html" with name="play" %} Make</a>
+            {% else %}
+                <a class="ui-btn ui-btn--main" href="{% url 'inventory:products' %}">{% include "ui/icon.html" with name="box" %} Products</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ui-tiles">
+        {% if production %}
+            <div class="ui-tile{% if low_materials %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Materials low or out</p><p class="ui-tile__value">{{ low_materials|length }}</p><p class="ui-tile__hint">{% for line in low_materials|slice:":3" %}{{ line.item.name }}{% if not forloop.last %}, {% endif %}{% empty %}All above stock to keep{% endfor %}</p></div>
+        {% endif %}
+        <div class="ui-tile{% if low_products %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Products low or out</p><p class="ui-tile__value">{{ low_products|length }}</p><p class="ui-tile__hint">{% for line in low_products|slice:":3" %}{{ line.item.name }}{% if not forloop.last %}, {% endif %}{% empty %}All above stock to keep{% endfor %}</p></div>
+        {% if sees_costs %}
+            <div class="ui-tile"><p class="ui-tile__label">Value in stock</p><p class="ui-tile__value">{{ value|floatformat:"0g" }}</p><p class="ui-tile__hint">Tk, at average cost</p></div>
+        {% endif %}
+        <div class="ui-tile{% if done == steps|length %} ui-tile--good{% endif %}"><p class="ui-tile__label">Set-up</p><p class="ui-tile__value">{{ done }} / {{ steps|length }}</p><p class="ui-tile__hint">steps done</p></div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="flag" %} What to do</h2><span class="ui-card__note">{{ done }} of {{ steps|length }} done</span></div>
+        <div class="ui-card__body">{% include "ui/checklist.html" with steps=steps %}</div>
+    </div>
+
+    {% if production %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Latest productions</h2><a class="ui-btn ui-btn--sm" href="{% url 'production:orders' %}">All productions</a></div>
+            <div class="table-wrap">
+                <table class="table" data-local-table>
+                    <thead><tr><th>Production</th><th>Product</th><th>Date</th><th class="numeric">Quantity</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for p in productions %}
+                            <tr><td><a href="{% url 'production:order_detail' p.pk %}">{{ p.number }}</a></td><td><a href="{% url 'inventory:product' p.item_id %}">{{ p.item.name }}</a></td><td>{{ p.planned_date|date:"j M Y" }}</td><td class="numeric">{{ p.planned_qty|floatformat:"-2" }} {{ p.uom.code }}</td><td><span class="ui-chip ui-chip--{{ p.tone }}">{{ p.get_status_display }}</span></td></tr>
+                        {% empty %}
+                            <tr><td colspan="5">No production yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if next %}
+        {% include "ui/next_step.html" with what=next.what|add:": "|add:next.detail url=next.url button=next.button %}
+    {% else %}
+        {% url 'inventory:stock' as stock_url %}
+        {% include "ui/next_step.html" with what="Everything is set up. Check what is in stock." url=stock_url button="Stock" %}
+    {% endif %}
+{% endblock %}
