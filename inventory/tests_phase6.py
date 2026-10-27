@@ -1,0 +1,168 @@
+"""Phase 6 of the redesign (2026-10-27, docs/inventory/PRODUCTION_PLAN.md §15):
+how many to make, materials from several stores of the branch (usual store
+first, first expiry first), shortages with Make fewer and Buy the rest, and
+the plan page on the product."""
+
+import datetime
+
+from django.core.exceptions import ValidationError
+from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
+
+from common.tenant import use_company
+from inventory import posting
+from inventory.models import Batch, Item, MoveType, Warehouse
+from inventory.testing import D
+from organization.models import Branch
+from production import planning
+from production.models import ProductionOrder
+from production.tests_flow import ProductionFixture
+from purchasing.models import PurchaseRequisition
+
+FETCH = {"HTTP_X_REQUESTED_WITH": "fetch"}
+# The fixture: one batch = 1,000 bottles of juice: pulp 45 kg, sugar 22 kg,
+# bottles 1,015, caps 1,010. In the raw store: pulp 130 kg (P1 30, P2 100),
+# sugar 100 kg, bottles and caps 5,000 each - enough for 2 batches (pulp).
+
+
+class PlanFixture(ProductionFixture):
+    def setUp(self):
+        super().setUp()
+        self.recipe()
+        self.today = timezone.localdate()
+        self.client.force_login(self.owner)
+
+    def opening(self, store, item, qty, batch=None, number=9):
+        posting.post(company_id=self.company.pk, actor=self.owner, document_type="opening", document_id=number,
+                     move_type=MoveType.OPENING, work_date=datetime.date(2026, 9, 2), lines=[
+                         posting.Line(item=item, warehouse=store, batch=batch, qty=D(qty), unit_cost=D("200"))])
+
+    def pulp_batch(self, number, expiry):
+        return Batch.all_objects.create(company=self.company, item=self.pulp, batch_no=number, source="opening",
+                                        expiry_date=expiry)
+
+    def plan(self, batches, day=None):
+        return planning.plan(self.company.pk, self.juice, batches, self.fgw, day or self.today)
+
+
+class WhereFromTests(PlanFixture, TestCase):
+    def test_two_batches_take_pulp_first_expiry_first(self):
+        found = self.plan(2)
+        pulp = next(need for need in found.needs if need.item == self.pulp)
+        self.assertEqual(pulp.need, D("90"))
+        self.assertEqual([(take.batch.batch_no, take.qty) for take in pulp.takes], [("P1", D("30")), ("P2", D("60"))])
+        self.assertEqual(found.short, [])
+        self.assertEqual(found.possible, 2)
+        bottles = next(need for need in found.needs if need.item == self.bottle)
+        self.assertEqual(bottles.need, D("2030"))           # 1.5 % wastage
+
+    def test_the_usual_store_first_then_the_others_of_the_branch(self):
+        second = self.store("RSB", "Raw store B", Warehouse.Kind.RAW)
+        self.opening(second, self.pulp, "50", self.pulp_batch("P3", datetime.date(2027, 12, 31)))
+        Item.all_objects.filter(pk=self.pulp.pk).update(default_warehouse=second)
+        self.juice.refresh_from_db()
+        pulp = next(need for need in self.plan(3).needs if need.item.pk == self.pulp.pk)
+        self.assertEqual([(take.store.code, take.batch.batch_no, take.qty) for take in pulp.takes],
+                         [("RSB", "P3", D("50")), ("RMS", "P1", D("30")), ("RMS", "P2", D("55"))])
+        self.assertEqual(pulp.stores, [(second, D("50")), (self.rms, D("85"))])
+
+    def test_another_branch_expired_and_waiting_batches_are_not_counted(self):
+        with use_company(self.company):
+            north = Branch.objects.create(code="NTH", name="North")
+        far = self.store("NRS", "North raw store", Warehouse.Kind.RAW, branch=north)
+        self.opening(far, self.pulp, "500", self.pulp_batch("N1", datetime.date(2027, 12, 31)))
+        waiting = self.pulp_batch("Q1", datetime.date(2027, 12, 31))
+        self.opening(self.rms, self.pulp, "70", waiting, number=10)
+        Batch.all_objects.filter(pk=waiting.pk).update(status=Batch.Status.QUARANTINE)
+        pulp = next(need for need in self.plan(2).needs if need.item == self.pulp)
+        self.assertEqual(pulp.available, D("130"))
+        # P1 expires 31 Jan 2027: a plan for February cannot use it.
+        later = next(need for need in self.plan(2, datetime.date(2027, 2, 1)).needs if need.item == self.pulp)
+        self.assertEqual((later.available, later.short), (D("100"), D("0")))
+
+
+class ShortTests(PlanFixture, TestCase):
+    def test_three_batches_are_short_of_pulp_and_two_are_possible(self):
+        found = self.plan(3)
+        self.assertEqual([(need.item.code, need.short) for need in found.short], [("RM-0002", D("5"))])
+        self.assertEqual(found.possible, 2)
+
+    def test_buy_the_rest_asks_for_what_is_missing(self):
+        requisition = planning.buy_the_rest(actor=self.owner, company_id=self.company.pk, product=self.juice,
+                                            batches=3, into=self.fgw, day=self.today)
+        with use_company(self.company):
+            lines = list(requisition.lines.values_list("item__code", "qty"))
+        self.assertEqual(lines, [("RM-0002", D("5"))])
+        self.assertEqual(requisition.status, PurchaseRequisition.Status.DRAFT)
+        with self.assertRaisesMessage(ValidationError, "Nothing is short"):
+            planning.buy_the_rest(actor=self.owner, company_id=self.company.pk, product=self.juice,
+                                  batches=1, into=self.fgw, day=self.today)
+
+    def test_a_short_plan_is_saved_and_named_to_the_next_plan(self):
+        order, found = planning.save(actor=self.owner, company_id=self.company.pk, product=self.juice,
+                                     batches=3, into=self.fgw, day=self.today)
+        self.assertTrue(found.short)
+        self.assertEqual((order.planned_qty, order.status, order.material_warehouse), (D("3000"), "planned", self.rms))
+        pulp = next(need for need in self.plan(1).needs if need.item == self.pulp)
+        self.assertEqual(pulp.others, [order.number])
+
+
+class SuggestTests(PlanFixture, TestCase):
+    def test_keep_minus_stock_minus_planned_capped_by_the_materials(self):
+        self.assertIsNone(planning.suggest(self.company.pk, self.juice, self.fgw))   # nothing to keep
+        Item.all_objects.filter(pk=self.juice.pk).update(min_stock=D("3000"))
+        self.juice.refresh_from_db()
+        found = planning.suggest(self.company.pk, self.juice, self.fgw)
+        self.assertEqual((found.wanted, found.possible, found.batches), (3, 2, 2))
+        planning.save(actor=self.owner, company_id=self.company.pk, product=self.juice, batches=1,
+                      into=self.fgw, day=self.today)
+        found = planning.suggest(self.company.pk, self.juice, self.fgw)
+        self.assertEqual((found.coming, found.wanted, found.batches), (D("1000"), 2, 2))
+        page = self.client.get(reverse("inventory:product", args=[self.juice.pk]))
+        self.assertContains(page, "Suggested: make 2 batches")
+        self.assertContains(page, reverse("production:plan", args=[self.juice.pk]) + "?batches=2")
+
+
+class PlanPageTests(PlanFixture, TestCase):
+    def url(self):
+        return reverse("production:plan", args=[self.juice.pk])
+
+    def test_the_page_shows_where_from_and_what_is_short(self):
+        page = self.client.get(self.url(), {"batches": "3", "planned_date": self.today.isoformat(),
+                                            "into": self.fgw.pk})
+        self.assertContains(page, "Short by 5 KG")
+        self.assertContains(page, "Make fewer: 2 batches")
+        self.assertContains(page, "Raw material store 130")       # all it has; 5 short
+        part = self.client.get(self.url(), {"batches": "1", "planned_date": self.today.isoformat(),
+                                            "into": self.fgw.pk, "partial": "1"})
+        self.assertNotContains(part, "<html")
+        self.assertNotContains(part, "Short by")
+        # From the product's "Make 3 batches" link: the date and store keep their start.
+        page = self.client.get(self.url(), {"batches": "3"})
+        self.assertContains(page, f'value="{self.today.isoformat()}"')
+        self.assertContains(page, "Short by 5 KG")
+
+    def test_plan_it_and_buy_the_rest_answer_in_place(self):
+        data = {"batches": "0", "planned_date": self.today.isoformat(), "into": self.fgw.pk, "action": "save"}
+        body = self.client.post(self.url(), data, **FETCH).json()
+        self.assertEqual(body["errors"]["batches"], ["Make at least one batch."])
+        body = self.client.post(self.url(), {**data, "batches": "2"}, **FETCH).json()
+        order = ProductionOrder.all_objects.get(company=self.company)
+        self.assertEqual(body["redirect"], reverse("production:order_detail", args=[order.pk]))
+        self.assertEqual((order.planned_qty, order.note), (D("2000"), "2 batches"))
+        body = self.client.post(self.url(), {**data, "batches": "3", "action": "buy"}, **FETCH).json()
+        requisition = PurchaseRequisition.all_objects.get(company=self.company)
+        self.assertEqual(body["redirect"], reverse("purchasing:requisition_detail", args=[requisition.pk]))
+
+    def test_no_recipe_or_bought_products_are_sent_back(self):
+        from production.models import Bom
+
+        Bom.all_objects.filter(item=self.juice).update(status="archived")
+        self.assertContains(self.client.get(self.url()), "has no recipe yet")
+        Item.all_objects.filter(pk=self.juice.pk).update(sourcing="buy")
+        self.assertRedirects(self.client.get(self.url()), reverse("inventory:product", args=[self.juice.pk]))
+
+    def test_planning_needs_its_permission(self):
+        self.client.force_login(self.member("viewer@inv.test", "employee"))
+        self.assertNotEqual(self.client.get(self.url()).status_code, 200)

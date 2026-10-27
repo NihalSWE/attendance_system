@@ -2,7 +2,7 @@
 
 from django.urls import path
 
-from production import cost_views, recipe_views, views
+from production import cost_views, plan_views, recipe_views, views
 
 app_name = "production"
 
@@ -11,6 +11,8 @@ urlpatterns = [
     path("cost-rates/", cost_views.cost_rates, name="cost_rates"),
     path("cost-rates/<int:pk>/", cost_views.cost_rate_save, name="cost_rate_save"),
     path("cost-rates/<int:pk>/status/", cost_views.cost_rate_status, name="cost_rate_status"),
+    # Plan a production from the product's page (2026-10-27, plan §8.2).
+    path("products/<int:pk>/make/", plan_views.plan_page, name="plan"),
     path("products/<int:pk>/costs/", cost_views.cost_line_add, name="cost_line_add"),
     path("products/<int:pk>/costs/<int:line_pk>/remove/", cost_views.cost_line_remove,
          name="cost_line_remove"),

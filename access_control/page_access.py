@@ -151,6 +151,7 @@ BRANCH_PAGES = {
     **{f"inventory:{key}": "inventory.view"
        for key in ("start", "materials", "material", "products", "product")},
     "inventory:item_save": "inventory.items",
+    "production:plan": "production.plan",
     **{f"production:{name}": "production.bom"
        for name in ("cost_rates", "cost_rate_save", "cost_rate_status", "cost_line_add",
                     "cost_line_remove")},
