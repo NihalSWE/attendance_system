@@ -6864,3 +6864,28 @@ production at `/production/runs/<id>/`), templates `inventory/hub/runs.html`, `r
 - Tests: `inventory/tests_phase7.py` (15) and the apps touched. Full suite: after all phases.
 
 **Deploy:** pull, migrate (production 0003, inventory 0006), collectstatic, restart.
+
+### Inventory redesign, phase 8: warranty — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §10; §15 phase 8. Service `inventory/warranty.py`,
+page `inventory/warranty_views.py` (`/inventory/warranty/`), template `inventory/hub/warranty.html`.
+
+- **Company switch** (8.1): Inventory settings → Warranty (`InventorySettings.warranty_on`,
+  off by default). Off: no warranty box on any item, no menu entry, no flow-bar step; the page
+  says it is off (owner/admin get the settings link).
+- **Per item**: Warranty (months) and "A serial number for each unit" (`Item.warranty_months`,
+  `serial_numbers`) on the product and material forms. A product's warranty runs from delivery;
+  a material's (the supplier's) from receipt.
+- **Serial numbers** (8.2): one per unit made when a production finishes (batch number + running
+  number; removed again if it is reversed); "Serial numbers in" for units received; "Serial
+  numbers out" scans them against a delivery (each in stock, on the delivery, no more than
+  delivered) - the customer and date are kept; labels as a PDF per item or per production.
+- **Claims** (8.3): by serial (looked up as you type: covered until / out of warranty since) or
+  by item and delivery date; replace / repair (cost) / refund (amount) / refuse (reason);
+  covering one out of warranty needs a reason; the faulty unit can go into a store (its own
+  blocked batch), the new unit leaves one (first expiry first); a unit replaced or refunded once
+  is not claimed again. Claims list, and this year's claims by item with the commonest problems.
+- New permission "Record warranty claims and serial numbers" (`inventory.warranty`).
+- Tests: `inventory/tests_phase8.py` (12) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (inventory 0007), collectstatic, restart.

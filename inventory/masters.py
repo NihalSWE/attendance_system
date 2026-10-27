@@ -169,6 +169,7 @@ ITEM = Master(Item, (
     "track_expiry", "shelf_life_days", "qc_required", "min_stock", "reorder_point",
     "reorder_qty", "max_stock", "default_warehouse", "standard_cost", "sale_price",
     "vat_rate", "hs_code", "notes", "sourcing", "keep_by", "keep_days", "batch_per_mix",
+    "warranty_months", "serial_numbers",
 ), "inventory.item")
 WAREHOUSE = Master(Warehouse, ("branch", "code", "name", "kind", "notes"),
                    "inventory.warehouse", branch_path="branch")
@@ -303,7 +304,7 @@ def units_for(item):
 
 
 SETTINGS_FIELDS = ("valuation_scope", "expiry_alert_days", "slow_moving_days", "alert_emails", "small_label",
-                   "large_label", "gs1_labels")
+                   "large_label", "gs1_labels", "warranty_on")
 
 
 @transaction.atomic

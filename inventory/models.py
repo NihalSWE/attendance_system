@@ -62,6 +62,10 @@ class InventorySettings(TenantOwned, ActorTracked):
         max_length=16, choices=ValuationScope.choices, default=ValuationScope.COMPANY,
         help_text="Fixed once stock has moved: changing it would rewrite every cost.",
     )
+    # Warranty (2026-10-27, plan §10): off by default; a food company never sees it.
+    warranty_on = models.BooleanField(
+        "Warranty", default=False,
+        help_text="On: items can carry a warranty and serial numbers, and claims are recorded.")
     expiry_alert_days = models.PositiveIntegerField(
         default=30, validators=[MaxValueValidator(3650)],
         help_text="Warn this many days before a batch expires (an item can say otherwise).",
@@ -254,6 +258,11 @@ class Item(TenantOwned, ActorTracked):
     qc_required = models.BooleanField(default=False)
     # One batch number per production (default), or one per mix (2026-10-27, plan §6.2).
     batch_per_mix = models.BooleanField("New batch number for every batch made", default=False)
+    # Warranty on this item (plan §10): from delivery for a product, from receipt
+    # for a material (the supplier's). Only with the company's warranty on.
+    warranty_months = models.PositiveSmallIntegerField("Warranty (months)", null=True, blank=True,
+                                                       validators=[MaxValueValidator(240)])
+    serial_numbers = models.BooleanField("A serial number for each unit", default=False)
     min_stock = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
     reorder_point = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
     reorder_qty = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
@@ -788,3 +797,78 @@ class OpeningStockLine(TenantOwned):
 
 # Phase 4 store documents live in their own module to keep this one readable.
 from inventory.models_store import *  # noqa: E402,F401,F403
+
+
+# --- Warranty (2026-10-27, docs/inventory/PRODUCTION_PLAN.md §10) ------------------
+
+class SerialNumber(TenantOwned, ActorTracked):
+    """One unit of an item tracked one by one: made at production (or entered
+    at receipt), scanned at delivery, found again by a warranty claim."""
+
+    class Status(models.TextChoices):
+        IN_STOCK = "in_stock", "In stock"
+        DELIVERED = "delivered", "With the customer"
+        RETURNED = "returned", "Returned"
+
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="serials")
+    serial = models.CharField(max_length=64)
+    batch = models.ForeignKey(Batch, null=True, blank=True, on_delete=models.PROTECT, related_name="serials")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.IN_STOCK)
+    source = models.CharField(max_length=32, blank=True)
+    source_id = models.PositiveBigIntegerField(null=True, blank=True)
+    received_on = models.DateField(null=True, blank=True)
+    supplier = models.ForeignKey("purchasing.Supplier", null=True, blank=True, on_delete=models.PROTECT,
+                                 related_name="+")
+    delivered_on = models.DateField(null=True, blank=True)
+    customer = models.ForeignKey("sales.Customer", null=True, blank=True, on_delete=models.PROTECT,
+                                 related_name="+")
+    delivery_id = models.PositiveBigIntegerField(null=True, blank=True)
+
+    class Meta:
+        db_table = "inventory_serial_number"
+        ordering = ("item", "serial")
+        constraints = [models.UniqueConstraint(fields=["company", "serial"], name="uniq_serial_number")]
+
+    def __str__(self):
+        return self.serial
+
+
+class WarrantyClaim(TenantOwned, ActorTracked):
+    """A unit brought back under warranty, and what was done."""
+
+    DOC_TYPE = "warranty_claim"
+    PREFIX = "WC"
+
+    class Outcome(models.TextChoices):
+        REPLACE = "replace", "Replace it"
+        REPAIR = "repair", "Repair it"
+        REFUND = "refund", "Refund"
+        REFUSE = "refuse", "Refuse the claim"
+
+    number = models.CharField(max_length=32)
+    claim_date = models.DateField()
+    item = models.ForeignKey(Item, on_delete=models.PROTECT, related_name="+")
+    serial = models.ForeignKey(SerialNumber, null=True, blank=True, on_delete=models.PROTECT,
+                               related_name="claims")
+    customer = models.ForeignKey("sales.Customer", null=True, blank=True, on_delete=models.PROTECT,
+                                 related_name="+")
+    sold_on = models.DateField("Delivered on", null=True, blank=True)
+    covered_until = models.DateField(null=True, blank=True)
+    covered = models.BooleanField(default=False)
+    problem = models.CharField(max_length=255)
+    outcome = models.CharField(max_length=16, choices=Outcome.choices)
+    cost = models.DecimalField("Cost (repair or refund)", **MONEY, default=ZERO,
+                               validators=[MinValueValidator(ZERO)])
+    reason = models.CharField(max_length=255, blank=True)
+    back_to = models.ForeignKey(Warehouse, null=True, blank=True, on_delete=models.PROTECT, related_name="+",
+                                verbose_name="Faulty unit into")
+    replaced_from = models.ForeignKey(Warehouse, null=True, blank=True, on_delete=models.PROTECT,
+                                      related_name="+", verbose_name="New unit from")
+
+    class Meta:
+        db_table = "inventory_warranty_claim"
+        ordering = ("-claim_date", "-pk")
+        constraints = [models.UniqueConstraint(fields=["company", "number"], name="uniq_warranty_claim_number")]
+
+    def __str__(self):
+        return self.number

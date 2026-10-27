@@ -75,6 +75,9 @@ BRANCH_PERMISSIONS = (
     ("inventory.adjust_approve", "Approve and post adjustments and opening stock", "inventory", "approve"),
     ("inventory.valuation", "See stock costs and values", "inventory", "view"),
     ("inventory.period_close", "Close a stock month", "inventory", "manage"),
+    # Warranty (2026-10-27, plan §10): serial numbers and claims, once the
+    # company switches warranty on.
+    ("inventory.warranty", "Record warranty claims and serial numbers", "inventory", "create"),
     # Purchase (Phase 3), part of the same module: requisition -> order ->
     # goods receipt -> quality check -> return. Each follows the document's
     # branch (the requisition's or order's branch, the receiving store's).

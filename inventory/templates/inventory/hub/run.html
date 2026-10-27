@@ -170,6 +170,7 @@
                 <div class="ui-card__body">
                     {% for batch in made %}<p>Batch <strong>{{ batch.batch_no }}</strong> · made {{ batch.mfg_date|date:"j M Y" }}{% if batch.expiry_date %} · expires {{ batch.expiry_date|date:"j M Y" }}{% endif %} {% if batch.status != "released" %}<span class="ui-chip ui-chip--wait">{{ batch.get_status_display }}</span>{% endif %}</p>{% endfor %}
                     <p>{% for part in parts %}{{ part.warehouse.name }} {{ part.qty_base|floatformat:"-4g" }} {{ unit }}{% if not forloop.last %} + {% endif %}{% endfor %}</p>
+                    {% if serials %}<p>{{ serials }} serial number{{ serials|pluralize }} made · <a href="{% url 'inventory:serial_labels' %}?output={{ output.pk }}">Print serial labels</a></p>{% endif %}
                 </div>
             </div>
         {% endif %}

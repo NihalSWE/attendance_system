@@ -14,6 +14,7 @@ from inventory import (
     stock_views,
     store_views,
     views,
+    warranty_views,
 )
 from inventory.reports import REPORTS
 
@@ -93,6 +94,13 @@ urlpatterns += [
     path("products/", hub_views.products, name="products"),
     path("products/<int:pk>/", hub_views.product, name="product"),
     path("items/<int:pk>/save/", hub_views.item_save, name="item_save"),
+    # Warranty (2026-10-27, plan §10).
+    path("warranty/", warranty_views.warranty_page, name="warranty"),
+    path("warranty/serial/", warranty_views.serial_lookup, name="serial_lookup"),
+    path("warranty/claims/", warranty_views.claim_save, name="claim_save"),
+    path("warranty/serials/", warranty_views.serials_add, name="serials_add"),
+    path("warranty/serials/delivered/", warranty_views.serials_deliver, name="serials_deliver"),
+    path("warranty/serials/labels/", warranty_views.serial_labels, name="serial_labels"),
 ]
 
 # The redesigned screens on sample data, for approval (plan §15 phase 2).
