@@ -86,6 +86,7 @@ class OrderForm(ServiceForm):
     def limit_choices(self):
         products = Bom.all_objects.filter(company_id=self.company_id, status=Bom.Status.ACTIVE).values("item_id")
         self.fields["item"].queryset = (self._active(Item).filter(pk__in=products)
+                                        .exclude(sourcing=Item.Sourcing.BUY)
                                         .select_related("base_uom").order_by("code"))
         self.fields["item"].label_from_instance = lambda item: f"{item.code} · {item.name} ({item.base_uom.code})"
         stores = self._active(Warehouse).exclude(kind__in=["quarantine", "rejected", "transit"]).order_by("name")

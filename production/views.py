@@ -17,8 +17,9 @@ from common.forms import apply_service_errors
 from common.tenant import use_company
 from inventory import access
 from inventory.forms import PrintForm
-from inventory.views import branch_ids, company_or_bail
+from inventory.views import branch_ids
 from production import boms, forms, orders
+from production.gate import company_or_bail
 from production.models import Consumption, Output, ProductionOrder
 
 

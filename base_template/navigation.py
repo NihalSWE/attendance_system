@@ -17,7 +17,7 @@ INVENTORY_REPORT_CODES = tuple(dict.fromkeys(
 
 
 def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False,
-         salary=False, group="", report_kind="", people="", needs=""):
+         salary=False, group="", report_kind="", people="", needs="", module=""):
     # record: shown to people who may record leave (HR as well as administrators).
     # salary: shown to people who see pay (the payroll manager as well; not HR).
     # group: the dropdown inside its menu the item sits in (Reports: "Attendance
@@ -27,10 +27,11 @@ def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, r
     # edits employees in every branch (Ajay, 2026-09-27).
     # needs: a module permission the viewer must hold somewhere (Store &
     # Inventory); such an entry is hidden when the company lacks the module.
+    # module: a module of its own the company must have (Production).
     return {"label": label, "view": view, "aliases": aliases, "fragment": fragment,
             "manage": manage, "unrestricted": unrestricted, "record": record,
             "salary": salary, "group": group, "report_kind": report_kind, "people": people,
-            "needs": needs}
+            "needs": needs, "module": module}
 
 
 def report_item(slug):
@@ -156,11 +157,15 @@ INVENTORY_MENUS = (
         item("Go-live", "inventory:golive", "inventory:golive_count_sheet", "inventory:golive_compare",
              needs=("inventory.adjust", "inventory.adjust_approve")),
         # One page per item type (2026-10-26), then every item together.
+        # Raw materials and packaging are used only by production: with
+        # Production off (a company that buys and sells) they are not shown.
         *[item(label, f"inventory:{key}", f"inventory:{key}_edit", f"inventory:{key}_status",
-               needs="inventory.view")
-          for key, label in (("raw_materials", "Raw materials"), ("packaging", "Packaging"),
-                             ("finished_goods", "Finished goods"), ("spare_parts", "Spare parts"),
-                             ("general_items", "General items"))],
+               needs="inventory.view", module=module)
+          for key, label, module in (("raw_materials", "Raw materials", "production"),
+                                     ("packaging", "Packaging", "production"),
+                                     ("finished_goods", "Finished goods", ""),
+                                     ("spare_parts", "Spare parts", ""),
+                                     ("general_items", "General items", ""))],
         item("All items", "inventory:items", "inventory:items_edit", "inventory:items_status",
              "inventory:item_detail", "inventory:pack_unit_add", "inventory:pack_unit_remove",
              needs="inventory.view"),
@@ -223,10 +228,11 @@ INVENTORY_MENUS = (
              "production:order_labels", "production:order_action", "production:consumption_detail",
              "production:consumption_line_add", "production:consumption_line_remove",
              "production:consumption_scan", "production:consumption_action",
-             needs=("production.plan", "production.execute", "inventory.view")),
+             needs=("production.plan", "production.execute", "inventory.view"), module="production"),
         item("BOMs", "production:boms", "production:bom_detail", "production:bom_line_add",
-             "production:bom_line_remove", "production:bom_action", needs=("production.bom", "inventory.view")),
-        item("Production report", "production:report", needs="inventory.view"),
+             "production:bom_line_remove", "production:bom_action", needs=("production.bom", "inventory.view"),
+             module="production"),
+        item("Production report", "production:report", needs="inventory.view", module="production"),
     )),
     # Sales (Phase 6): order, reserve, deliver, invoice, return.
     ("sales", "Sales", (
@@ -322,6 +328,9 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
             # company lacks the module - its entries are then never shown.
             needs = entry["needs"]
             if needs and not module_codes.intersection((needs,) if isinstance(needs, str) else needs):
+                continue
+            # A module of its own (Production, 2026-10-27): hidden while it is off.
+            if entry["module"] and f"module:{entry['module']}" not in module_codes:
                 continue
             if allowed is not None:
                 if not allowed(entry["view"]):

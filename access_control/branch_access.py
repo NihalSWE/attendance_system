@@ -85,9 +85,9 @@ BRANCH_PERMISSIONS = (
     ("purchase.qc", "Quality check received goods", "inventory", "approve"),
     # Production (Phase 5): BOMs are the company's (held in any branch);
     # orders, consumption and output follow the finished-goods store's branch.
-    ("production.bom", "Set up BOMs (recipes)", "inventory", "edit"),
-    ("production.plan", "Plan and release production orders", "inventory", "create"),
-    ("production.execute", "Use materials and record production output", "inventory", "create"),
+    ("production.bom", "Set up BOMs (recipes)", "production", "edit"),
+    ("production.plan", "Plan and release production orders", "production", "create"),
+    ("production.execute", "Use materials and record production output", "production", "create"),
     # Sales (Phase 6): orders, confirming them, delivering and invoicing,
     # each in the branch of the store the order is delivered from.
     ("sales.order", "Enter sales orders and price lists", "inventory", "create"),
@@ -100,7 +100,10 @@ CODES = tuple(code for code, *_ in BRANCH_PERMISSIONS)
 LABELS = {code: label for code, label, *_ in BRANCH_PERMISSIONS}
 #: Features a company has only once the platform owner enables them: their
 #: permissions are not offered (Access page, API) to a company without them.
-GATED_FEATURES = frozenset({"inventory"})
+GATED_FEATURES = frozenset({"inventory", "production"})
+#: A feature that works only on top of another (2026-10-27): Production needs
+#: Store & Inventory - a company that only buys and sells has Inventory alone.
+REQUIRES = {"production": "inventory"}
 FEATURE_OF = {code: feature for code, _label, feature, _action in BRANCH_PERMISSIONS}
 
 
@@ -108,6 +111,8 @@ def feature_on(company_id, feature_code):
     """Whether the company has this feature (always, for an ungated one)."""
     if feature_code not in GATED_FEATURES:
         return True
+    if feature_code in REQUIRES and not feature_on(company_id, REQUIRES[feature_code]):
+        return False
     from access_control.services import is_feature_enabled
 
     feature = Feature.objects.filter(code=feature_code, is_active=True).first()

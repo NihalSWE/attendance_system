@@ -261,6 +261,26 @@ class Item(TenantOwned, ActorTracked):
     )
     standard_cost = models.DecimalField(**MONEY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
     sale_price = models.DecimalField(**MONEY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
+
+    # How the company gets it (2026-10-27, plan §1): bought ready, made here,
+    # or both. Only a finished good can be made; everything else is bought.
+    class Sourcing(models.TextChoices):
+        BUY = "buy", "Buy it ready"
+        MAKE = "make", "Make it here"
+        BOTH = "both", "Both"
+
+    sourcing = models.CharField("How you get it", max_length=8, choices=Sourcing.choices,
+                                default=Sourcing.BUY)
+
+    # Stock to keep (plan §7.1): ``min_stock`` as a quantity, or days of sales
+    # worked out from the average sold per day over the last 30 days.
+    class KeepBy(models.TextChoices):
+        QUANTITY = "quantity", "A quantity"
+        DAYS = "days", "Days of sales"
+
+    keep_by = models.CharField("Stock to keep as", max_length=10, choices=KeepBy.choices,
+                               default=KeepBy.QUANTITY)
+    keep_days = models.PositiveIntegerField("Days of sales to keep", null=True, blank=True)
     vat_rate = models.DecimalField(
         "VAT %", max_digits=5, decimal_places=2, null=True, blank=True,
         validators=[MinValueValidator(ZERO), MaxValueValidator(Decimal("100"))],
@@ -287,6 +307,10 @@ class Item(TenantOwned, ActorTracked):
         errors = {}
         if self.track_expiry and not self.track_batch:
             errors["track_expiry"] = "An item with an expiry date must also keep batches."
+        if self.sourcing != Item.Sourcing.BUY and self.kind != ItemKind.FINISHED:
+            errors["sourcing"] = "Only a finished good is made here; this one is bought."
+        if self.keep_by == Item.KeepBy.DAYS and not self.keep_days:
+            errors["keep_days"] = "Say how many days of sales to keep."
         if self.category_id:
             category = ItemCategory.all_objects.filter(pk=self.category_id).first()
             if category is not None and category.kind != self.kind:
@@ -310,6 +334,10 @@ class ItemUom(TenantOwned, ActorTracked):
         validators=[MinValueValidator(Decimal("0.000001"))],
     )
     barcode = models.CharField(max_length=64, blank=True)
+    # The pack's own sale price (2026-10-27): a carton need not cost 24 packets.
+    # Empty: the item's price × the pack size.
+    sale_price = models.DecimalField("Sale price of one pack", **MONEY, null=True, blank=True,
+                                     validators=[MinValueValidator(ZERO)])
 
     class Meta:
         db_table = "inventory_item_uom"

@@ -37,7 +37,8 @@ class ProductionFixture(InventoryFixture):
         self.bottle = self.item("PM-0001", "PET bottle 250 ml", ItemKind.PACKAGING, packing, self.pcs)
         self.cap = self.item("PM-0002", "Cap 28 mm", ItemKind.PACKAGING, packing, self.pcs)
         self.juice = self.item("FG-0001", "Mango juice 250 ml", ItemKind.FINISHED, juice, self.pcs,
-                               track_batch=True, track_expiry=True, shelf_life_days=270)
+                               track_batch=True, track_expiry=True, shelf_life_days=270,
+                               sourcing="make")
         self.pks = self.store("PKS", "Packaging store", Warehouse.Kind.PACKAGING)
         # Materials in stock: pulp in two batches (FEFO), sugar, bottles, caps.
         self.p1 = Batch.all_objects.create(company=self.company, item=self.pulp, batch_no="P1", source="opening",

@@ -134,6 +134,9 @@ def ensure_feature_catalogue(*, actor):
     # Store & Inventory (docs/inventory/00-PLAN.md): off until enabled.
     Feature.objects.get_or_create(code="inventory",
                                   defaults={"name": "Store & Inventory", "sort_order": 50})
+    # Production needs Store & Inventory; off until enabled (2026-10-27).
+    Feature.objects.get_or_create(code="production",
+                                  defaults={"name": "Production", "sort_order": 51})
 
 
 @transaction.atomic

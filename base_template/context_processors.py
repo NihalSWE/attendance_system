@@ -101,16 +101,20 @@ def developer_api_on(company_id):
 
 
 def _module_codes(user, company_id):
-    """The Store & Inventory permissions ``user`` holds somewhere - none when
-    the company does not have the module (its menu then stays hidden)."""
-    from inventory.access import inventory_on
+    """The Store & Inventory (and Production) permissions ``user`` holds
+    somewhere, plus "module:<code>" for each of the two the company has - none
+    when it lacks Inventory (its menus then stay hidden). A menu entry marked
+    with a module shows only while that module is on (2026-10-27)."""
+    from inventory.access import inventory_on, production_on
 
     if not inventory_on(company_id):
         return frozenset()
     from access_control.branch_access import FEATURE_OF
 
-    return frozenset(code for code, feature in FEATURE_OF.items()
-                     if feature == "inventory" and can(user, company_id, code))
+    modules = {"inventory"} | ({"production"} if production_on(company_id) else set())
+    return frozenset({f"module:{module}" for module in modules} | {
+        code for code, feature in FEATURE_OF.items()
+        if feature in modules and can(user, company_id, code)})
 
 
 def _lfa_on(company_id):

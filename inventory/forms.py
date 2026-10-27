@@ -191,31 +191,37 @@ class ItemForm(CompanyForm):
         fields = (
             "code", "name", "name_bn", "kind", "category", "base_uom", "barcode",
             "track_batch", "track_expiry", "shelf_life_days", "qc_required",
-            "min_stock", "reorder_point", "reorder_qty", "max_stock", "default_warehouse",
-            "standard_cost", "sale_price", "vat_rate", "hs_code", "notes",
+            "sourcing", "keep_by", "min_stock", "keep_days", "reorder_point", "reorder_qty",
+            "max_stock", "default_warehouse", "standard_cost", "sale_price", "vat_rate", "hs_code",
+            "notes",
         )
         labels = {
             "kind": "Item type", "base_uom": "Base unit", "track_batch": "Keeps batches",
             "track_expiry": "Has an expiry date", "shelf_life_days": "Shelf life (days)",
             "qc_required": "QC before use", "default_warehouse": "Usual store",
             "standard_cost": "Standard cost", "sale_price": "Sale price",
+            "min_stock": "Stock to keep", "keep_days": "Days of sales to keep",
         }
         help_texts = {
             "barcode": "Only a barcode already printed on the product (EAN-13).",
             "shelf_life_days": "Fills the expiry from the manufacture date when only that is known.",
             "base_uom": "Stock is counted in this unit. Fixed once stock has moved.",
+            "min_stock": "In the base unit. Below this it shows as low.",
+            "keep_days": "Worked out from the average sold per day over the last 30 days.",
+            "sale_price": "For one of the base unit; packs get their own price on the item's page.",
         }
 
     #: Shown on the Add form of each item type's page (2026-10-26); the rest
     #: are under "More details". Shelf life only once "Has an expiry date".
     MAIN = ("code", "name", "category", "base_uom", "track_batch", "track_expiry",
-            "shelf_life_days", "default_warehouse")
+            "shelf_life_days", "default_warehouse", "min_stock")
     MAIN_FOR = {ItemKind.RAW: ("qc_required",), ItemKind.PACKAGING: ("qc_required",),
-                ItemKind.FINISHED: ("sale_price", "vat_rate")}
+                ItemKind.FINISHED: ("sourcing", "sale_price", "vat_rate", "keep_by", "keep_days")}
 
     def __init__(self, *args, kind=None, **kwargs):
         self.kind = kind
         super().__init__(*args, **kwargs)
+        self._for_kind(kind)
         main = set(self.MAIN) | set(self.MAIN_FOR.get(kind, ())) | {"kind"}
         self.more_fields = [name for name in self.fields if name not in main]
         self.fields["shelf_life_days"].widget.attrs["data-show-when"] = "track_expiry:on"
@@ -228,9 +234,50 @@ class ItemForm(CompanyForm):
                 self.data = self.data.copy()
                 self.data[self.add_prefix("kind")] = kind
 
+    def _for_kind(self, kind):
+        """How you get it and stock-to-keep-as-days are for finished goods only
+        (2026-10-27); "How you get it" also only with Production on - without it
+        everything is bought."""
+        from inventory.access import production_on
+
+        finished_possible = kind in (None, ItemKind.FINISHED)
+        if not finished_possible or not production_on(self.company_id):
+            del self.fields["sourcing"]
+        else:
+            self.fields["sourcing"].widget = forms.RadioSelect(choices=Item.Sourcing.choices,
+                                                               attrs={"class": "check__input"})
+            if not self.instance.pk:
+                self.initial.setdefault("sourcing", Item.Sourcing.MAKE)   # a manufacturer's product
+            if kind is None:
+                self.fields["sourcing"].widget.attrs["data-show-when"] = "kind:finished"
+        for name in ("sourcing", "keep_by"):
+            if name in self.fields:
+                self.fields[name].required = False   # the default when not said (clean)
+        if not finished_possible:
+            del self.fields["keep_by"], self.fields["keep_days"]
+        else:
+            self.fields["keep_by"].widget = forms.RadioSelect(choices=Item.KeepBy.choices,
+                                                              attrs={"class": "check__input"})
+            self.fields["min_stock"].widget.attrs["data-show-when"] = "keep_by:quantity"
+            self.fields["keep_days"].widget.attrs["data-show-when"] = "keep_by:days"
+
     @property
     def more_has_errors(self):
         return any(name in self.errors for name in self.more_fields)
+
+    def clean(self):
+        data = super().clean()
+        # Only a finished good is made or kept by days of sales; anything else
+        # (or a finished good that did not say) is bought and kept by quantity.
+        finished = (data.get("kind") or self.kind) == ItemKind.FINISHED
+        if "sourcing" in self.fields and (not finished or not data.get("sourcing")):
+            data["sourcing"] = Item.Sourcing.BUY if not finished else (
+                self.instance.sourcing if self.instance.pk else Item.Sourcing.MAKE)
+        if "keep_by" in self.fields and (not finished or not data.get("keep_by")):
+            data["keep_by"] = Item.KeepBy.QUANTITY
+            if not finished:
+                data["keep_days"] = None
+        return data
 
     def limit_choices(self):
         categories = self._active(ItemCategory).order_by("kind", "name")
@@ -250,9 +297,11 @@ class PackUnitForm(CompanyForm):
 
     class Meta:
         model = ItemUom
-        fields = ("uom", "factor", "barcode")
-        labels = {"uom": "Pack unit"}
+        fields = ("uom", "factor", "sale_price", "barcode")
+        labels = {"uom": "Pack unit", "sale_price": "Sale price of one pack"}
         help_texts = {"factor": "How many base units in one pack, e.g. 24.",
+                      "sale_price": "Optional: its own price (a carton need not cost 24 packets). "
+                                    "Empty: the item's price × the pack size.",
                       "barcode": "Only if the pack has its own barcode printed."}
 
     def __init__(self, *args, item=None, **kwargs):
