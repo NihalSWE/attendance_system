@@ -1,0 +1,84 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}New sale{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:preview_sales' %}">Sell</a> / New sale</p>
+            <h1 class="ui-head__title">New sale</h1>
+            <p class="ui-head__sub">Prices come from the product: choose the unit, the price fills itself.</p>
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'inventory:preview_save' 'sale' %}" data-fetch novalidate>
+        {% csrf_token %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} To whom, from where</h2></div>
+            <div class="ui-card__body ui-grid-2">
+                <div class="field">
+                    <label class="field__label" for="pv-customer">Customer <span class="field__req">*</span></label>
+                    <select class="input select js-select" id="pv-customer" name="customer"><option value="">Choose the customer</option>{% for code, name in customers %}<option value="{{ code }}">{{ name }}</option>{% endfor %}</select>
+                </div>
+                <div class="field">
+                    <label class="field__label" for="pv-store">From store <span class="field__req">*</span></label>
+                    <select class="input select" id="pv-store" name="store" data-sale-store>
+                        <option value="">Choose the store</option>
+                        {% for number, made, expiry, store, cartons, cost in stock %}<option value="{{ store }}" data-batch="{{ number }}" data-expiry="{{ expiry }}" data-cartons="{{ cartons }}">{% for key, label in stores.items %}{% if key == store %}{{ label }}{% endif %}{% endfor %} · {{ cartons }} cartons</option>{% endfor %}
+                    </select>
+                    <span class="field__help" data-sale-batch>Only stores that have it are listed.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} What they buy</h2></div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>Product</th><th>Unit</th><th>Quantity</th><th class="numeric">Price</th><th class="numeric">Line total</th></tr></thead>
+                    <tbody>
+                        {% for i in line_numbers %}
+                            <tr data-sale-line>
+                                <td>Biscuit 100 g</td>
+                                <td><select class="input select" name="unit_{{ i }}" data-sale-unit>{% for unit, price in prices %}<option value="{{ unit }}" data-price="{{ price }}"{% if unit == "carton" and forloop.parentloop.counter == 1 %} selected{% endif %}>{{ unit }}</option>{% endfor %}</select></td>
+                                <td><div class="field" style="margin:0"><input class="input" name="qty_{{ i }}" type="number" step="1" min="1" inputmode="numeric" data-sale-qty style="max-width:120px"></div></td>
+                                <td class="numeric" data-sale-price>—</td>
+                                <td class="numeric" data-sale-total>—</td>
+                            </tr>
+                        {% endfor %}
+                        <tr class="ui-total"><td colspan="4">Total</td><td class="numeric" data-sale-grand>0.00</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden style="margin: var(--s4) var(--s4) 0;"></div>
+            <div class="ui-card__foot ui-form-actions">
+                <a class="ui-btn" href="{% url 'inventory:preview_sales' %}">Cancel</a>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save the sale</button>
+            </div>
+        </div>
+    </form>
+    {% include "ui/next_step.html" with what="After saving: deliver it, then the invoice follows." %}
+    <script>
+        // The price follows the unit; totals add up as you type; the oldest batch of the store is said.
+        document.addEventListener("DOMContentLoaded", function () {
+            const money = n => n.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            const add = function () {
+                let grand = 0;
+                document.querySelectorAll("[data-sale-line]").forEach(function (line) {
+                    const unit = line.querySelector("[data-sale-unit]");
+                    const price = Number(unit.selectedOptions[0].dataset.price);
+                    const qty = Number(line.querySelector("[data-sale-qty]").value) || 0;
+                    line.querySelector("[data-sale-price]").textContent = money(price) + " / " + unit.value;
+                    line.querySelector("[data-sale-total]").textContent = qty ? money(price * qty) : "—";
+                    grand += price * qty;
+                });
+                document.querySelector("[data-sale-grand]").textContent = money(grand);
+                const store = document.querySelector("[data-sale-store]").selectedOptions[0];
+                document.querySelector("[data-sale-batch]").textContent = store && store.value
+                    ? "Taken from batch " + store.dataset.batch + " (expires " + store.dataset.expiry + "), the oldest there."
+                    : "Only stores that have it are listed.";
+            };
+            document.addEventListener("input", add);
+            document.addEventListener("change", add);
+            add();
+        });
+    </script>
+{% endblock %}

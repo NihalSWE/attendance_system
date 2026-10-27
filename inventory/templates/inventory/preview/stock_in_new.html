@@ -1,0 +1,81 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Stock in{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:preview_stock_in' %}">Stock in</a> / New</p>
+            <h1 class="ui-head__title">Stock in</h1>
+            <p class="ui-head__sub">What came in, into which store. Batch and expiry are asked only for items that keep them.</p>
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'inventory:preview_save' 'stock_in' %}" data-fetch novalidate data-lines-form>
+        {% csrf_token %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Where it comes from</h2></div>
+            <div class="ui-card__body stack">
+                <div class="field">
+                    <div class="check-list">
+                        <label class="check"><input class="check__input" type="radio" name="source" value="purchase" checked><span>A purchase from a supplier</span></label>
+                        <label class="check"><input class="check__input" type="radio" name="source" value="count"><span>The first count (opening stock)</span></label>
+                        <label class="check"><input class="check__input" type="radio" name="source" value="return"><span>A return from a customer</span></label>
+                    </div>
+                </div>
+                <div class="ui-grid-2">
+                    <div class="field" data-show-when="source:purchase">
+                        <label class="field__label" for="pv-supplier">Supplier <span class="field__req">*</span></label>
+                        <select class="input select js-select" id="pv-supplier" name="supplier"><option value="">Choose the supplier</option>{% for code, name in suppliers %}<option value="{{ code }}">{{ name }}</option>{% endfor %}</select>
+                    </div>
+                    <div class="field" data-show-when="source:return">
+                        <label class="field__label" for="pv-customer">Customer <span class="field__req">*</span></label>
+                        <select class="input select js-select" id="pv-customer" name="customer"><option value="">Choose the customer</option>{% for code, name in customers %}<option value="{{ code }}">{{ name }}</option>{% endfor %}</select>
+                    </div>
+                    {% include "inventory/preview/field.html" with name="store" label="Into store" options=store_options required=True %}
+                    {% include "inventory/preview/field.html" with name="date" label="Date" type="date" value="2026-10-27" required=True %}
+                </div>
+            </div>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Items</h2><span class="ui-card__note">Leave a line empty to skip it</span></div>
+            <div class="ui-card__body stack">
+                {% for i in line_numbers %}
+                    <div class="ui-grid-2" data-line style="padding-bottom: var(--s3); border-bottom: 1px solid var(--border);">
+                        <div class="field">
+                            <label class="field__label" for="pv-item_{{ i }}">Item {{ i }}</label>
+                            <select class="input select js-select" id="pv-item_{{ i }}" name="item_{{ i }}" data-line-item>
+                                <option value="">Choose an item</option>
+                                {% for code, name, unit, keeps_batches, _stock in items %}<option value="{{ code }}" data-unit="{{ unit }}" data-batches="{% if keeps_batches %}1{% endif %}">{{ code }} · {{ name }}</option>{% endfor %}
+                            </select>
+                        </div>
+                        <div class="field"><label class="field__label" for="pv-qty_{{ i }}">Quantity</label><div class="ui-unit"><input class="input" id="pv-qty_{{ i }}" name="qty_{{ i }}" type="number" step="any" inputmode="decimal"><span class="ui-unit__label" data-line-unit>—</span></div></div>
+                        <div class="field" data-show-when="source:purchase,count"><label class="field__label" for="pv-cost_{{ i }}">Cost</label><div class="ui-unit"><input class="input" id="pv-cost_{{ i }}" name="cost_{{ i }}" type="number" step="any" inputmode="decimal"><span class="ui-unit__label" data-line-cost>Tk per —</span></div></div>
+                        <div class="field" data-line-batch hidden><label class="field__label" for="pv-batch_{{ i }}">Batch number</label><input class="input" id="pv-batch_{{ i }}" name="batch_{{ i }}" placeholder="From the label"></div>
+                        <div class="field" data-line-batch hidden><label class="field__label" for="pv-expiry_{{ i }}">Expiry date</label><input class="input" id="pv-expiry_{{ i }}" name="expiry_{{ i }}" type="date" data-datepicker></div>
+                    </div>
+                {% endfor %}
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="ui-card__foot ui-form-actions">
+                <a class="ui-btn" href="{% url 'inventory:preview_stock_in' %}">Cancel</a>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Put in stock</button>
+            </div>
+        </div>
+    </form>
+    {% include "ui/next_step.html" with what="After this, the stock shows in Stock, by store and batch." %}
+    <script>
+        // Each line follows its item: the unit beside the boxes, batch and expiry only when it keeps batches.
+        document.addEventListener("change", function (event) {
+            const select = event.target.closest("[data-line-item]");
+            if (!select) return;
+            const line = select.closest("[data-line]");
+            const option = select.options[select.selectedIndex];
+            const unit = option && option.value ? option.dataset.unit : "—";
+            line.querySelector("[data-line-unit]").textContent = unit;
+            line.querySelector("[data-line-cost]").textContent = "Tk per " + unit;
+            line.querySelectorAll("[data-line-batch]").forEach(function (field) {
+                field.hidden = !(option && option.dataset.batches);
+            });
+        });
+    </script>
+{% endblock %}

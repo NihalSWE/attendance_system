@@ -94,6 +94,14 @@ urlpatterns += [
     path("preview/make/", preview_views.make, name="preview_make"),
     path("preview/make/new/", preview_views.plan, name="preview_plan"),
     path("preview/make/<str:number>/", preview_views.production, name="preview_production"),
+    path("preview/stock-in/", preview_views.stock_in, name="preview_stock_in"),
+    path("preview/stock-in/new/", preview_views.stock_in_new, name="preview_stock_in_new"),
+    path("preview/stock/", preview_views.stock, name="preview_stock"),
+    path("preview/move/", preview_views.moves, name="preview_moves"),
+    path("preview/move/new/", preview_views.move_new, name="preview_move_new"),
+    path("preview/sell/", preview_views.sales, name="preview_sales"),
+    path("preview/sell/new/", preview_views.sale_new, name="preview_sale_new"),
+    path("preview/warranty/", preview_views.warranty, name="preview_warranty"),
     path("preview/save/<slug:screen>/", preview_views.save, name="preview_save"),
 ]
 

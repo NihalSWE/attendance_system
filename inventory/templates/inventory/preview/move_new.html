@@ -1,0 +1,86 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Move stock{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:preview_moves' %}">Move stock</a> / New</p>
+            <h1 class="ui-head__title">Move stock</h1>
+            <p class="ui-head__sub">Each list offers only what fits the one before it.</p>
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'inventory:preview_save' 'move' %}" data-fetch novalidate>
+        {% csrf_token %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="arrow-right" %} From where, to where</h2></div>
+            <div class="ui-card__body ui-grid-2">
+                <div class="field">
+                    <label class="field__label" for="pv-from_store">From store <span class="field__req">*</span></label>
+                    <select class="input select" id="pv-from_store" name="from_store">{% for value, label in store_options %}<option value="{{ value }}">{% if value %}{{ label }}{% else %}Choose the store{% endif %}</option>{% endfor %}</select>
+                </div>
+                <div class="field">
+                    <label class="field__label" for="pv-to_store">To store <span class="field__req">*</span></label>
+                    <select class="input select" id="pv-to_store" name="to_store">{% for value, label in store_options %}<option value="{{ value }}">{% if value %}{{ label }}{% else %}Choose the store{% endif %}</option>{% endfor %}</select>
+                    <span class="field__help">The store it leaves is not offered.</span>
+                </div>
+                <div class="field">
+                    <label class="field__label" for="pv-item">Item <span class="field__req">*</span></label>
+                    <select class="input select" id="pv-item" name="item" data-move-item>
+                        <option value="">Choose the store first</option>
+                        {% for code, name, unit, keeps_batches, stock in items %}<option value="{{ code }}" data-unit="{{ unit }}" data-batches="{% if keeps_batches %}1{% endif %}" data-stock="{% for store, qty in stock.items %}{{ store }}={{ qty }};{% endfor %}">{{ code }} · {{ name }}</option>{% endfor %}
+                    </select>
+                    <span class="field__help">Only items in the From store.</span>
+                </div>
+                <div class="field" data-move-batch-field hidden>
+                    <label class="field__label" for="pv-batch">Batch</label>
+                    <select class="input select" id="pv-batch" name="batch" data-move-batch>
+                        <option value="">Oldest expiry first</option>
+                        {% for code, number, store, label in batches %}<option value="{{ number }}" data-item="{{ code }}" data-store="{{ store }}">{{ label }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="field">
+                    <label class="field__label" for="pv-qty">Quantity <span class="field__req">*</span></label>
+                    <div class="ui-unit"><input class="input" id="pv-qty" name="qty" type="number" step="any" inputmode="decimal"><span class="ui-unit__label" data-move-unit>—</span></div>
+                    <span class="field__help" data-move-have></span>
+                </div>
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="ui-card__foot ui-form-actions">
+                <a class="ui-btn" href="{% url 'inventory:preview_moves' %}">Cancel</a>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Move</button>
+            </div>
+        </div>
+    </form>
+    {% include "ui/next_step.html" with what="When it arrives, the other store presses Received." %}
+    <script>
+        // To never offers From; Item only what From holds; Batch only that item's in that store.
+        document.addEventListener("DOMContentLoaded", function () {
+            const form = document.querySelector("form[data-fetch]");
+            const from = form.querySelector('[name="from_store"]');
+            const to = form.querySelector('[name="to_store"]');
+            const item = form.querySelector("[data-move-item]");
+            const batch = form.querySelector("[data-move-batch]");
+            const have = form.querySelector("[data-move-have]");
+            const stockOf = function (option, store) {
+                const found = (option.dataset.stock || "").split(";").find(part => part.startsWith(store + "="));
+                return found ? Number(found.split("=")[1]) : 0;
+            };
+            const update = function () {
+                Array.from(to.options).forEach(o => { o.hidden = Boolean(o.value) && o.value === from.value; });
+                if (to.value && to.value === from.value) to.value = "";
+                Array.from(item.options).forEach(o => { o.hidden = Boolean(o.value) && (!from.value || !stockOf(o, from.value)); });
+                if (item.selectedOptions[0] && item.selectedOptions[0].hidden) item.value = "";
+                item.options[0].textContent = from.value ? "Choose an item" : "Choose the store first";
+                const chosen = item.selectedOptions[0];
+                const keeps = chosen && chosen.value && chosen.dataset.batches;
+                form.querySelector("[data-move-batch-field]").hidden = !keeps;
+                Array.from(batch.options).forEach(o => { o.hidden = Boolean(o.value) && (o.dataset.item !== item.value || o.dataset.store !== from.value); });
+                if (batch.selectedOptions[0] && batch.selectedOptions[0].hidden) batch.value = "";
+                form.querySelector("[data-move-unit]").textContent = chosen && chosen.value ? chosen.dataset.unit : "—";
+                have.textContent = chosen && chosen.value && from.value ? "In that store: " + stockOf(chosen, from.value) + " " + chosen.dataset.unit : "";
+            };
+            [from, to, item, batch].forEach(el => el.addEventListener("change", update));
+            update();
+        });
+    </script>
+{% endblock %}

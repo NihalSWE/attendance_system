@@ -1,0 +1,31 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Stock in{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs">Products and stock / 3. Stock in</p>
+            <h1 class="ui-head__title">Stock in</h1>
+            <p class="ui-head__sub">Everything that comes into a store: purchases, the first count, returns from customers.</p>
+        </div>
+        <div class="ui-head__actions">
+            <a class="ui-btn ui-btn--main" href="{% url 'inventory:preview_stock_in_new' %}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} What came in</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Number</th><th>Date</th><th>Where from</th><th>From</th><th>Into</th><th>Items</th><th class="numeric">Value</th></tr></thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr><td>{{ row.number }}</td><td>{{ row.date }}</td><td><span class="ui-chip ui-chip--{% if row.kind == 'Purchase' %}info{% else %}ok{% endif %}">{{ row.kind }}</span></td><td>{{ row.from }}</td><td>{{ row.store }}</td><td>{{ row.lines }}</td><td class="numeric">{{ row.value|floatformat:"2g" }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% url 'inventory:preview_plan' as plan_url %}
+    {% include "ui/next_step.html" with what="Materials are in: make the product." url=plan_url button="Make" %}
+{% endblock %}
