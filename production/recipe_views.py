@@ -3,6 +3,7 @@
 Each action posts, says what happened inside the card (where the page lands,
 not in the message bar above) and goes back to the item."""
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -13,8 +14,8 @@ from django.views.decorators.http import require_POST
 from inventory import access, masters
 from inventory.models import Item
 from inventory.stock_views import item_page
-from inventory.views import company_or_bail
 from production import forms, recipes
+from production.gate import company_or_bail
 
 
 def _item(company_id, pk):
@@ -25,6 +26,10 @@ def _item(company_id, pk):
 
 
 def _back(request, item, tone, text):
+    if item.sourcing == item.Sourcing.BUY:
+        # No Materials card on a bought product: say it at the top of the page.
+        getattr(messages, "error" if tone == "danger" else "success")(request, text)
+        return redirect("inventory:item_detail", pk=item.pk)
     request.session["recipe_note"] = [tone, text]
     return redirect(reverse("inventory:item_detail", args=[item.pk]) + "#materials")
 

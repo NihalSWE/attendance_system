@@ -114,7 +114,9 @@ def _item_context(request, company_id, item, *, pack_form=None, material_form=No
     # The page of the item's own type (2026-10-26), for the crumbs and Edit.
     type_page = TYPE_PAGES.get(item.kind, ("items", "Items"))
     recipe = {}
-    if item.kind == ItemKind.FINISHED:
+    # Its recipe: a product made here, with Production on (2026-10-27).
+    if (item.kind == ItemKind.FINISHED and item.sourcing != Item.Sourcing.BUY
+            and access.production_on(company_id)):
         # A finished good's materials, on its own page (production.recipes).
         from production import forms as production_forms
         from production import recipes

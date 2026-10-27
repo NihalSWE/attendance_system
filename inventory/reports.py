@@ -415,17 +415,23 @@ def reorder_rows(company_id, store_ids, branches, item_ids=None):
     """
     from django.db.models import Q
 
+    from inventory.keep import stock_to_keep
+
     candidates = Item.all_objects.filter(company_id=company_id, status="active").filter(
-        Q(reorder_point__gt=0) | Q(min_stock__gt=0)).select_related("base_uom")
+        Q(reorder_point__gt=0) | Q(min_stock__gt=0) | Q(keep_by=Item.KeepBy.DAYS, keep_days__gt=0)
+    ).select_related("base_uom")
     if item_ids is not None:
         candidates = candidates.filter(pk__in=item_ids)
     candidates = list(candidates.order_by("code"))
     ids = [item.pk for item in candidates]
     free = available_by_item(company_id, store_ids, ids)
     ordered = on_order(company_id, branches, ids)
+    # The stock to keep: a quantity, or days of sales (2026-10-27).
+    keep = stock_to_keep(company_id, candidates)
     found = []
     for item in candidates:
-        point, least = item.reorder_point or ZERO, item.min_stock or ZERO
+        item.keep = keep.get(item.pk, ZERO)
+        point, least = item.reorder_point or ZERO, item.keep
         most, batch = item.max_stock or ZERO, item.reorder_qty or ZERO
         available, coming = free.get(item.pk, ZERO), ordered.get(item.pk, ZERO)
         if not ((point and available <= point) or (least and available < least)):
@@ -444,12 +450,12 @@ def reorder_rows(company_id, store_ids, branches, item_ids=None):
 def reorder(ctx):
     found = reorder_rows(ctx.company_id, ctx.store_ids, ctx.branches, ctx.item_ids)
     rows = [[item.code, item.name, item.get_kind_display(), item.base_uom.code, available,
-             item.reorder_point or ZERO, item.min_stock or ZERO, item.max_stock or ZERO, coming, wanted, status]
+             item.reorder_point or ZERO, item.keep, item.max_stock or ZERO, coming, wanted, status]
             for item, available, coming, wanted, status in found]
     return Result(
         columns=[Column("Item"), Column("Name", weight=2), Column("Type"), Column("Unit"),
                  Column("Available", True, kind="qty"), Column("Reorder point", True, kind="qty"),
-                 Column("Minimum", True, kind="qty"), Column("Maximum", True, kind="qty"),
+                 Column("Stock to keep", True, kind="qty"), Column("Maximum", True, kind="qty"),
                  Column("On order", True, kind="qty"), Column("Suggested", True, kind="qty"),
                  Column("Status", kind="status")],
         rows=rows,

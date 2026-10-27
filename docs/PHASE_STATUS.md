@@ -6731,3 +6731,24 @@ stayed refused as "unknown employee". Branch `fix/attendance-setup`.
   edit page to mark worked days by hand. `setup_fix.move_start_back`.
 
 **Deploy:** pull, migrate (devices 0012 and 0013), collectstatic, restart.
+
+### Inventory redesign, phase 3: production switch, buy/make, pack prices, stock to keep — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §15. Phases 1-2 (layout pieces, screens on
+sample data at /inventory/preview/) were merged before this.
+
+- **Production is its own module** (tenants 0009): needs Store & Inventory; its three
+  permissions move to it; production pages answer "Production is not enabled" without it
+  (`production/gate.py`); the menu hides Production, Raw materials and Packaging
+  (`item(module=...)`). Every company with Inventory on gets Production on, so nothing
+  changes for them.
+- **How you get it** on items (`Item.sourcing`: buy / make / both; only a finished good is
+  made). Finished goods with a recipe became "make" (inventory 0005). The recipe card and
+  production planning are for made products only; a recipe for a bought one is refused.
+- **A sale price per pack** (`ItemUom.sale_price`): sales use it before price × pack size.
+- **Stock to keep** as a quantity (`min_stock`) or days of sales (`keep_by`, `keep_days`,
+  `inventory/keep.py`: 30-day average of deliveries less returns); the reorder report and
+  the morning email use it.
+- Tests: `inventory/tests_phase3.py` (9) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (tenants 0009, inventory 0005), collectstatic, restart.

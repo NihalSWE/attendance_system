@@ -57,9 +57,9 @@ class PlatformTests(TestCase):
         self.assertTrue(Branch.all_objects.get(company=company).is_default)
         self.assertEqual(CompanyAttendanceSettings.all_objects.filter(company=company).count(), 1)
         # The catalogue: the three modules, the Developer's API link (2026-10-06)
-        # and Store & Inventory (2026-10-15).
+        # Store & Inventory (2026-10-15) and Production on top of it (2026-10-27).
         self.assertEqual(set(Feature.objects.values_list("code", flat=True)),
-                         {"attendance", "leave", "payroll", "developer_api", "inventory"})
+                         {"attendance", "leave", "payroll", "developer_api", "inventory", "production"})
         self.client.logout()
         self.assertTrue(self.client.login(email="new-admin@example.test", password="Different-Safe-Test-782!"))
         self.assertContains(self.client.get("/"), "Acme Company")

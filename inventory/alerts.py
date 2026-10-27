@@ -74,7 +74,7 @@ def message_text(company, found, today):
         for item, available, coming, wanted, status in low[:SHOWN]:
             unit = item.base_uom.code
             limit = (f"reorder point {_qty(item.reorder_point, unit)}" if item.reorder_point
-                     else f"minimum {_qty(item.min_stock, unit)}")
+                     else f"stock to keep {_qty(getattr(item, 'keep', item.min_stock), unit)}")
             lines.append(f"- {item.code} {item.name}: {_qty(available, unit)} available, {limit}, "
                          f"on order {_qty(coming, unit)}; "
                          f"order {_qty(wanted, unit)}" + (" - BELOW MINIMUM" if status == "Below minimum" else ""))

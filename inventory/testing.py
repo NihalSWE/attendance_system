@@ -78,11 +78,15 @@ class InventoryFixture:
 
     # --- helpers ---------------------------------------------------------
 
-    def enable_module(self, on):
-        feature = Feature.objects.get(code="inventory")
-        platform_services.set_company_feature(
-            actor=self.root, company_id=self.company.pk, feature_id=feature.pk,
-            effect="enable" if on else "disable", reason="Inventory tests")
+    def enable_module(self, on, production=None):
+        """Store & Inventory on or off; Production follows it unless said
+        (2026-10-27: Production is its own module on top of Inventory)."""
+        production = on if production is None else production
+        for code, value in (("inventory", on), ("production", production)):
+            feature = Feature.objects.get(code=code)
+            platform_services.set_company_feature(
+                actor=self.root, company_id=self.company.pk, feature_id=feature.pk,
+                effect="enable" if value else "disable", reason="Inventory tests")
 
     def member(self, email, role):
         user = User.objects.create_user(email=email, password=self.password)

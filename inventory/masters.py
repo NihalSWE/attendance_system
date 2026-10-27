@@ -168,7 +168,7 @@ ITEM = Master(Item, (
     "code", "name", "name_bn", "kind", "category", "base_uom", "barcode", "track_batch",
     "track_expiry", "shelf_life_days", "qc_required", "min_stock", "reorder_point",
     "reorder_qty", "max_stock", "default_warehouse", "standard_cost", "sale_price",
-    "vat_rate", "hs_code", "notes",
+    "vat_rate", "hs_code", "notes", "sourcing", "keep_by", "keep_days",
 ), "inventory.item")
 WAREHOUSE = Master(Warehouse, ("branch", "code", "name", "kind", "notes"),
                    "inventory.warehouse", branch_path="branch")
@@ -270,14 +270,14 @@ def delete_item(*, actor, company_id, pk):
 def add_pack_unit(*, actor, company_id, item_id, values):
     """1 CARTON = 24 PCS: a pack the item can be entered in."""
     membership, item = get_for_edit(ITEM, actor=actor, company_id=company_id, pk=item_id)
-    values = _writable(values, ("uom", "factor", "barcode"))
+    values = _writable(values, ("uom", "factor", "sale_price", "barcode"))
     with use_company(company_id):
         pack = create_validated(ItemUom, company=membership.company, item=item,
                                 created_by=actor, updated_by=actor, **values)
         record_company_event(actor=actor, membership=membership, company=membership.company,
                              action="inventory.item.pack_unit_added", obj=item,
                              after={"uom": pack.uom.code, "factor": plain(pack.factor),
-                                    "barcode": pack.barcode})
+                                    "sale_price": plain(pack.sale_price), "barcode": pack.barcode})
     return pack
 
 

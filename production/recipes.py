@@ -67,6 +67,8 @@ def set_batch(*, actor, company_id, item, batch_size):
     """How much one batch makes, in the product's own unit."""
     if item.kind != ItemKind.FINISHED:
         raise ValidationError("Only a finished good has a recipe.")
+    if item.sourcing == item.Sourcing.BUY:
+        raise ValidationError(f"{item.code} is bought ready: set How you get it to Make or Both first.")
     bom = current(company_id, item)
     if bom is None:
         return boms.create_bom(actor=actor, company_id=company_id, values={
