@@ -113,7 +113,7 @@ class DoneWhenTests(ProductionFixture, TestCase):
         usage = {row["item"].code: row for row in orders.usage(order)}
         self.assertEqual((usage["PM-0001"]["planned"], usage["PM-0001"]["used"]), (D("1015"), D("1015")))
         self.assertEqual(posting.ledger_differences(self.company.pk), [])
-        with self.assertRaisesMessage(ValidationError, "is completed"):
+        with self.assertRaisesMessage(ValidationError, "is finished"):
             orders.start_consumption(**self.kw, order_id=order.pk)
         orders.close(**self.kw, order_id=order.pk)
 
@@ -179,7 +179,7 @@ class RuleTests(ProductionFixture, TestCase):
             "item": self.juice, "bom": None, "planned_qty": D("100"), "uom": self.pcs, "planned_date": DAY,
             "material_warehouse": self.rms, "output_warehouse": self.fgw, "line_name": "", "shift_name": "",
             "note": ""})
-        with self.assertRaisesMessage(ValidationError, "only on a released order"):
+        with self.assertRaisesMessage(ValidationError, "only on a started production"):
             orders.start_consumption(**mine, order_id=order.pk)
         with self.assertRaisesMessage(PermissionDenied, "someone else approves it"):
             orders.release(**mine, order_id=order.pk)

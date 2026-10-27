@@ -252,6 +252,8 @@ class Item(TenantOwned, ActorTracked):
     track_expiry = models.BooleanField(default=False)
     shelf_life_days = models.PositiveIntegerField(null=True, blank=True)
     qc_required = models.BooleanField(default=False)
+    # One batch number per production (default), or one per mix (2026-10-27, plan §6.2).
+    batch_per_mix = models.BooleanField("New batch number for every batch made", default=False)
     min_stock = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
     reorder_point = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
     reorder_qty = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(ZERO)])

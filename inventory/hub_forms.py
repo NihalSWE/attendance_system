@@ -26,7 +26,7 @@ class _HubItemForm(ItemForm):
     #: The boxes on the form, in order; the rest go under "More details".
     MAIN_BOXES = ()
     #: On/off settings, drawn as switches.
-    SWITCHES = ("track_batch", "track_expiry", "shelf_life_days", "qc_required")
+    SWITCHES = ("track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix")
     #: ``{box: name of the box whose unit is shown beside it}``.
     UNIT_FROM = {"min_stock": "base_uom", "pack_factor": "base_uom", "sale_price": "base_uom",
                  "pack_price": "pack_uom"}
@@ -136,7 +136,7 @@ class MaterialForm(_HubItemForm):
         self.fields["category"].queryset = self.fields["category"].queryset.filter(kind__in=hub.MATERIAL_KINDS)
         self.fields["base_uom"].label = "Unit"
         self.fields["min_stock"].help_text = "Below this it shows as low and is in the morning email."
-        for name in ("sourcing", "keep_by", "keep_days", "sale_price", "vat_rate"):
+        for name in ("sourcing", "keep_by", "keep_days", "sale_price", "vat_rate", "batch_per_mix"):
             self.fields.pop(name, None)
         # A material keeps a quantity: no "as days of sales" choice to wait for.
         self.fields["min_stock"].widget.attrs.pop("data-show-when", None)

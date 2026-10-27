@@ -55,3 +55,22 @@ def refused(form=None, message=None, status=400):
         message = form_errors.pop(0) if form_errors and not errors else FIX_THE_RED
     return JsonResponse({"ok": False, "message": message, "errors": errors,
                          "form_errors": form_errors}, status=status)
+
+
+def refused_errors(exc, status=400):
+    """A service's ``ValidationError`` as the answer: its reasons by box name
+    (the names the page's boxes carry), the rest as the message."""
+    if not hasattr(exc, "error_dict"):
+        messages = list(exc.messages)
+        return JsonResponse({"ok": False, "message": messages[0] if messages else FIX_THE_RED,
+                             "errors": {}, "form_errors": messages[1:]}, status=status)
+    errors, form_errors = {}, []
+    for name, reasons in exc.error_dict.items():
+        texts = [_plain(text) for reason in reasons for text in reason.messages]
+        if name == "__all__":
+            form_errors += texts
+        else:
+            errors[name] = texts
+    message = form_errors.pop(0) if form_errors and not errors else FIX_THE_RED
+    return JsonResponse({"ok": False, "message": message, "errors": errors, "form_errors": form_errors},
+                        status=status)

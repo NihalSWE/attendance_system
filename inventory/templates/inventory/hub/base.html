@@ -39,7 +39,7 @@
             {% if production %}<a class="ui-flow__item{% if active == 'materials' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:materials' %}"><span class="ui-flow__num">1</span>Materials</a>{% endif %}
             <a class="ui-flow__item{% if active == 'products' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:products' %}"><span class="ui-flow__num">{% if production %}2{% else %}1{% endif %}</span>Products</a>
             <a class="ui-flow__item" href="{% url 'purchasing:receipts' %}"><span class="ui-flow__num">{% if production %}3{% else %}2{% endif %}</span>Stock in</a>
-            {% if production %}<a class="ui-flow__item" href="{% url 'production:orders' %}"><span class="ui-flow__num">4</span>Make</a>{% endif %}
+            {% if production %}<a class="ui-flow__item" href="{% url 'production:runs' %}"><span class="ui-flow__num">4</span>Make</a>{% endif %}
             <a class="ui-flow__item" href="{% url 'inventory:stock' %}"><span class="ui-flow__num">{% if production %}5{% else %}3{% endif %}</span>Stock</a>
             <a class="ui-flow__item" href="{% url 'inventory:store_transfers' %}"><span class="ui-flow__num">{% if production %}6{% else %}4{% endif %}</span>Move stock</a>
             <a class="ui-flow__item" href="{% url 'sales:deliveries' %}"><span class="ui-flow__num">{% if production %}7{% else %}5{% endif %}</span>Sell</a>

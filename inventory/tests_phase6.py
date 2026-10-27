@@ -149,7 +149,7 @@ class PlanPageTests(PlanFixture, TestCase):
         self.assertEqual(body["errors"]["batches"], ["Make at least one batch."])
         body = self.client.post(self.url(), {**data, "batches": "2"}, **FETCH).json()
         order = ProductionOrder.all_objects.get(company=self.company)
-        self.assertEqual(body["redirect"], reverse("production:order_detail", args=[order.pk]))
+        self.assertEqual(body["redirect"], reverse("production:run", args=[order.pk]))
         self.assertEqual((order.planned_qty, order.note), (D("2000"), "2 batches"))
         body = self.client.post(self.url(), {**data, "batches": "3", "action": "buy"}, **FETCH).json()
         requisition = PurchaseRequisition.all_objects.get(company=self.company)

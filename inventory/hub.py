@@ -317,7 +317,7 @@ def checklist(company_id, actor, today=None):
         steps.append({
             "done": made, "what": "First production finished",
             "detail": "Products have been made." if made else "Plan a production, start it, finish it.",
-            "url": reverse("production:orders"), "button": "Make",
+            "url": reverse("production:runs"), "button": "Make",
         })
     sold_any = MoveType.DELIVERY in moved
     steps.append({

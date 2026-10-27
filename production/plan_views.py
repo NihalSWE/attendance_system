@@ -102,4 +102,4 @@ def _act(request, company_id, product, form):
     text = f"{order.number} planned: {data['batches']} batch{'es' if data['batches'] != 1 else ''}."
     if found.short:
         text += " Some materials are short: it can start once they are in."
-    return fetch.saved(text, reverse("production:order_detail", args=[order.pk]))
+    return fetch.saved(text, reverse("production:run", args=[order.pk]))

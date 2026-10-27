@@ -112,10 +112,13 @@ class ProductionOrder(TenantOwned, ActorTracked):
 
     class Status(models.TextChoices):
         PLANNED = "planned", "Planned"
-        RELEASED = "released", "Released"
-        COMPLETED = "completed", "Completed"
+        # Plain words (2026-10-27, plan §8.6): Plan → Start → Finish.
+        RELEASED = "released", "Started"
+        COMPLETED = "completed", "Finished"
         CLOSED = "closed", "Closed"
         CANCELLED = "cancelled", "Cancelled"
+        FAILED = "failed", "Failed"
+        REVERSED = "reversed", "Reversed"
 
     number = models.CharField(max_length=32)
     item = models.ForeignKey("inventory.Item", on_delete=models.PROTECT, related_name="+",
@@ -144,6 +147,14 @@ class ProductionOrder(TenantOwned, ActorTracked):
     good_qty_base = models.DecimalField(**QTY, null=True, blank=True)
     rejected_qty_base = models.DecimalField(**QTY, null=True, blank=True)
     unit_cost = models.DecimalField(**QTY, null=True, blank=True)
+    # Full cost (2026-10-27, plan §8.5): what one unit was expected to cost at
+    # Start, the other costs of the day (people, machines...) at Finish, and why
+    # the result was far from the plan, failed or was reversed.
+    expected_unit_cost = models.DecimalField(**QTY, null=True, blank=True)
+    other_cost = models.DecimalField(**QTY, null=True, blank=True)
+    reason = models.CharField(max_length=500, blank=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = _user()
 
     class Meta:
         db_table = "production_order"
@@ -187,6 +198,9 @@ class Consumption(TenantOwned, ActorTracked):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     posted_at = models.DateTimeField(null=True, blank=True)
     posted_by = _user()
+    # The store it went out of (or back into); empty: the order's materials store.
+    warehouse = models.ForeignKey("inventory.Warehouse", null=True, blank=True, on_delete=models.PROTECT,
+                                  related_name="+")
 
     class Meta:
         db_table = "production_consumption"
@@ -349,3 +363,44 @@ class CostLine(TenantOwned, ActorTracked):
         for name in ("rate", "people", "hours", "amount", "percent"):
             if name not in needs:
                 setattr(self, name, None)
+
+
+# --- Start and Finish (2026-10-27, plan §8.3-8.6, §15 phase 7) -----------------
+
+class OrderCost(TenantOwned):
+    """A cost of the day of one production besides its materials: people,
+    machines, gas... filled from the product's cost sheet at Finish."""
+
+    order = models.ForeignKey(ProductionOrder, on_delete=models.CASCADE, related_name="costs")
+    name = models.CharField(max_length=64)
+    amount = models.DecimalField(**MONEY, validators=[MinValueValidator(ZERO)])
+
+    class Meta:
+        db_table = "production_order_cost"
+        ordering = ("order", "pk")
+
+
+class OutputPart(TenantOwned):
+    """How much of the output went into which store (a split: Main 30 + Depot 18)."""
+
+    output = models.ForeignKey(Output, on_delete=models.CASCADE, related_name="parts")
+    warehouse = models.ForeignKey("inventory.Warehouse", on_delete=models.PROTECT, related_name="+")
+    qty_base = models.DecimalField(**QTY, validators=[MinValueValidator(FOUR)])
+
+    class Meta:
+        db_table = "production_output_part"
+        ordering = ("output", "pk")
+
+
+class Leftover(TenantOwned):
+    """What was left of a material at Finish: returned to its store, or wasted (why)."""
+
+    order = models.ForeignKey(ProductionOrder, on_delete=models.CASCADE, related_name="leftovers")
+    item = models.ForeignKey("inventory.Item", on_delete=models.PROTECT, related_name="+")
+    returned = models.DecimalField(**QTY, default=ZERO, validators=[MinValueValidator(ZERO)])
+    wasted = models.DecimalField(**QTY, default=ZERO, validators=[MinValueValidator(ZERO)])
+    reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "production_leftover"
+        ordering = ("order", "pk")
