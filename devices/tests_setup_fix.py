@@ -2,6 +2,7 @@
 Unassigned department with no shift and missing from devices, fixed in bulk."""
 
 import datetime
+from decimal import Decimal
 
 from django.test import override_settings
 from django.urls import reverse
@@ -130,3 +131,53 @@ class SetupFixTests(MappingCase):
             "department": self.loose_department.pk, "designation": self.loose_designation.pk,
             "start": setup_fix.month_starts(self.company)[0][0]})
         self.assertContains(page, "Choose their real department")
+
+    def test_missing_days_start_from_the_chosen_day_and_count_the_refused_scans(self):
+        from attendance.models import AttendanceRecord
+        from employees.services import create_employee
+
+        start = setup_fix.month_starts(self.company)[0][0]
+        scan_day = max(start, timezone.localdate() - datetime.timedelta(days=5))
+        added = mapping.day_start(self.company, timezone.localdate() - datetime.timedelta(days=1))
+        # Added yesterday from the device: placement and link from yesterday.
+        late = create_employee(
+            company=self.company, first_name="Late", employee_code="130200", branch=self.hq,
+            department=self.department, designation=self.designation, effective_from=added,
+            pay_basis="monthly", base_rate=Decimal("20000"))["employee"]
+        with use_company(self.company):
+            DeviceEnrollment.objects.create(
+                company=self.company, device=self.device, employee=late, device_user_id="130200",
+                effective_from=added, assigned_device_authorized=True,
+                enrollment_status=DeviceEnrollment.EnrollmentStatus.SYNCED)
+        self.client.post(f"/iclock/cdata?SN={SN}&table=ATTLOG&Stamp=78",
+                         data=f"130200\t{scan_day:%Y-%m-%d} 09:00:00\t0\t15\t0\t\t\n",
+                         content_type="text/plain")
+        punch = PunchEvent.all_objects.get(device_user_id="130200")
+        # Refused: before the link started (or before any link at all).
+        self.assertNotEqual(punch.authorization_status, PunchEvent.AuthorizationStatus.AUTHORIZED)
+
+        self.client.post(reverse("attendance:setup_fix"), {
+            "section": "missing_days", "who": "people", "people": [late.pk],
+            "start": start.isoformat()})
+
+        start_at = mapping.day_start(self.company, start)
+        self.assertEqual(EmployeeAssignment.all_objects.get(employee=late).effective_from, start_at)
+        self.assertEqual(DeviceEnrollment.all_objects.get(employee=late).effective_from, start_at)
+        late.refresh_from_db()
+        self.assertEqual(late.joining_date, start)
+        punch.refresh_from_db()
+        self.assertEqual(punch.authorization_status, PunchEvent.AuthorizationStatus.AUTHORIZED)
+        record = AttendanceRecord.all_objects.get(employee=late, work_date=scan_day)
+        self.assertNotEqual(record.attendance_status, AttendanceRecord.AttendanceStatus.ABSENT)
+        job = SetupFixJob.all_objects.get(kind="missing_days")
+        self.assertEqual(job.status, "done")
+        row = job.results[0]
+        self.assertTrue(any(text.startswith("Placement from") for text in row["moved"]))
+        self.assertIsNotNone(row["absent"])
+
+    def test_missing_days_needs_someone_chosen(self):
+        page = self.client.post(reverse("attendance:setup_fix"), {
+            "section": "missing_days", "who": "people",
+            "start": setup_fix.month_starts(self.company)[0][0].isoformat()})
+        self.assertContains(page, 'data-open-on-load="missing-dialog"')
+        self.assertContains(page, "Choose at least one person.")

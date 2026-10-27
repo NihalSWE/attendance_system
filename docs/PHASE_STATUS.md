@@ -6721,4 +6721,13 @@ stayed refused as "unknown employee". Branch `fix/attendance-setup`.
 - Tests: `devices/tests_setup_fix.py` (10). Checked in the browser on a test copy
   with the jobs in the background.
 
-**Deploy:** pull, migrate (devices 0012), collectstatic, restart.
+- **Missing days** (2026-10-27): for people set up correctly now whose first days
+  are missing. People added from a device had their placement, salary, own shift
+  and device links start on the day they were added, so earlier scans were refused
+  and those days had no placement. For chosen people (or a department) and a salary
+  month start: the first of each record starts from that day (when later; one held
+  by someone else is said, not moved), joining date too; refused scans re-checked;
+  attendance rebuilt; a table per person of days still absent, linked to the month
+  edit page to mark worked days by hand. `setup_fix.move_start_back`.
+
+**Deploy:** pull, migrate (devices 0012 and 0013), collectstatic, restart.
