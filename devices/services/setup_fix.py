@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import connection, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -200,6 +200,113 @@ def month_starts(company, count=3):
     return starts
 
 
+# --- people set up now whose first days are missing (2026-10-27) -------------
+#
+# Added from a device, a person's placement, salary, own shift and device links
+# all started on the day they were added. Scans from before that day were
+# refused ("unknown employee"), and those days had no placement, so attendance
+# wrote nothing for them. Fixing the department later does not reach them.
+
+
+def move_start_back(*, actor, company, employee, start_day):
+    """Start the person's first placement, salary, own shift and device links on
+    ``start_day`` when they start later, and their joining date with them.
+    Returns what moved, in words. A record that cannot move (another person held
+    their Employee ID, or their device number, on those days) is said, not moved."""
+    from auditlog.services import record_company_event
+    from devices.models import DeviceEnrollment
+    from devices.services import panel_access
+    from employees.models import EmployeeAssignment, EmployeeCompensation
+    from scheduling.models import EmployeeShiftAssignment
+
+    zone = _zone(company)
+    start = mapping.day_start(company, start_day)
+    moved, refused = [], []
+
+    def move(row, label):
+        before = row.effective_from.astimezone(zone).date()
+        row.effective_from = start
+        if hasattr(row, "updated_by"):
+            row.updated_by = actor
+        try:
+            with transaction.atomic():
+                row.save()
+        except IntegrityError:
+            refused.append(f"{label} stays from {before:%d %b}: someone else held it then")
+            return
+        moved.append(f"{label} from {start_day:%d %b} (was {before:%d %b})")
+
+    for model, label in ((EmployeeAssignment, "Placement"), (EmployeeCompensation, "Salary"),
+                         (EmployeeShiftAssignment, "Own shift")):
+        first = (model.objects.filter(employee=employee).exclude(status="cancelled")
+                 .order_by("effective_from", "pk").first())
+        if first is not None and first.effective_from > start:
+            move(first, label)
+    links = (DeviceEnrollment.objects.filter(employee=employee)
+             .exclude(enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED)
+             .select_related("device").order_by("device_id", "effective_from", "pk"))
+    seen = set()
+    for link in links:
+        if link.device_id in seen:
+            continue
+        seen.add(link.device_id)       # only the first link on each device moves
+        if link.effective_from > start:
+            move(link, f"{link.device.name} link")
+    if employee.joining_date is None or employee.joining_date > start_day:
+        before = employee.joining_date
+        employee.joining_date = start_day
+        employee.save(update_fields=["joining_date", "updated_at"])
+        moved.append(f"Joining date {start_day:%d %b}" + (f" (was {before:%d %b})" if before else ""))
+    if moved:
+        record_company_event(actor=actor, membership=panel_access.managing_membership(actor, company.pk),
+                             company=company, action="employee.start_moved_back", obj=employee,
+                             after={"from": start_day.isoformat(), "moved": moved, "refused": refused})
+    return moved, refused
+
+
+def _missing_days_step(actor, job):
+    """The first step moves every chosen person's start back and judges the
+    refused scans again; then their days are rebuilt ``STEP`` people at a time
+    and the days still absent are counted. Returns ``(done, rest, note)``."""
+    from attendance.models import AttendanceRecord
+    from attendance.services import recalculate
+    from django.db.models import Count
+    from employees.models import Employee
+
+    with use_company(job.company_id):
+        if not job.results:
+            rows = []
+            for employee in (Employee.objects.filter(pk__in=job.remaining)
+                             .order_by("first_name", "last_name")):
+                moved, refused = move_start_back(actor=actor, company=job.company,
+                                                 employee=employee, start_day=job.start)
+                rows.append({"id": employee.pk, "name": employee.full_name,
+                             "moved": moved or ["Already from this date"], "refused": refused,
+                             "absent": None})
+            job.results = rows
+            _, note = _recheck(actor, job)
+            return 0, job.remaining, note
+        batch, rest = job.remaining[:STEP], job.remaining[STEP:]
+        recalculate(job.company_id, employee_ids=batch, start=job.start, end=today(job.company))
+        absent = dict(AttendanceRecord.objects.filter(
+            employee_id__in=batch, work_date__gte=job.start,
+            attendance_status=AttendanceRecord.AttendanceStatus.ABSENT)
+            .values("employee_id").annotate(n=Count("pk")).values_list("employee_id", "n"))
+        written = set(AttendanceRecord.objects.filter(employee_id__in=batch, work_date__gte=job.start)
+                      .values_list("employee_id", flat=True).distinct())
+        rows = []
+        for row in job.results:
+            if row["id"] in batch:
+                row = {**row, "absent": absent.get(row["id"], 0)}
+                if row["id"] not in written:
+                    # No day at all: attendance has nothing to measure them by.
+                    row["refused"] = row["refused"] + [
+                        "No attendance days at all: their department (or they) need a shift first"]
+            rows.append(row)
+        job.results = rows
+        return len(batch), rest, ""
+
+
 # --- the background jobs -----------------------------------------------------
 
 
@@ -278,6 +385,8 @@ def _step(job_id):
             # A thread has no request, so no company: every step sets its own.
             with use_company(job.company_id):
                 done, note = _recheck(actor, job)
+        elif job.kind == SetupFixJob.Kind.MISSING_DAYS:
+            done, rest, note = _missing_days_step(actor, job)
         else:
             with use_company(job.company_id):
                 found = Employee.all_objects.in_bulk(batch)
@@ -304,6 +413,8 @@ def _step(job_id):
             job.message = note
         if not rest:
             job.status, job.finished_at = SetupFixJob.Status.DONE, job.heartbeat_at
+            if job.kind == SetupFixJob.Kind.MISSING_DAYS:
+                job.message = f"{_finished(job)} {job.message}".strip()
             job.message = job.message or _finished(job)
         job.save()
         return bool(rest)
@@ -345,6 +456,8 @@ def _recheck(actor, job):
 
 
 def _finished(job):
+    if job.kind == SetupFixJob.Kind.MISSING_DAYS:
+        return f"Attendance of {job.done_count} people rebuilt from {job.start:%d %b %Y}."
     # A failure is one person on one device: count the people.
     people = len({name for name, _ in job.failures}) if job.failures else job.failed_count
     if job.kind == SetupFixJob.Kind.SEND:

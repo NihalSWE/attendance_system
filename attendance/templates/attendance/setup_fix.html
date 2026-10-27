@@ -80,13 +80,14 @@
     <div class="page__head"{% if open_dialog %} data-open-on-load="{{ open_dialog }}"{% endif %}>
         <div>
             <h1 class="page__title">Fix setup</h1>
-            <p class="page__sub">Everyone whose setup stops their attendance: in the Unassigned department, in a department with no shift, or not on every device of their branch. Tick people (or use everyone in the list), then fix them in the order of the buttons.</p>
+            <p class="page__sub">Everyone whose setup stops their attendance: in the Unassigned department, in a department with no shift, or not on every device of their branch. Tick people (or use everyone in the list), then fix them in the order of the buttons. People set up correctly now but missing their first days: <strong>Missing days</strong>.</p>
         </div>
         <div class="page__actions row">
             <button class="btn btn--primary" type="button" data-open-dialog="placement-dialog">1. Set department</button>
             <button class="btn btn--ghost" type="button" data-open-dialog="send-dialog">2. Send to devices</button>
             <button class="btn btn--ghost" type="button" data-open-dialog="recheck-dialog">3. Re-check refused scans</button>
             <button class="btn btn--ghost" type="button" data-open-dialog="recalculate-dialog">Recalculate</button>
+            <button class="btn btn--ghost" type="button" data-open-dialog="missing-dialog">Missing days</button>
         </div>
     </div>
 
@@ -107,6 +108,26 @@
                     <p>Working in the background. This page looks again every few seconds; you may leave it.</p>
                 {% else %}
                     <p>{{ job.message }}</p>
+                {% endif %}
+                {% if job.kind == "missing_days" and job.results %}
+                    {# One row per person: what moved, and the days still absent to fix by hand. #}
+                    <div class="table-wrap">
+                        <table class="table" data-local-table>
+                            <thead><tr><th>Who</th><th>Now starts from {{ job.start|date:"d M" }}</th><th>Problems</th><th class="numeric">Days still absent</th><th class="no-sort"><span class="sr-only">Fix</span></th></tr></thead>
+                            <tbody>
+                                {% for row in job.results %}
+                                    <tr>
+                                        <td>{{ row.name }}</td>
+                                        <td>{{ row.moved|join:"; " }}</td>
+                                        <td>{% if row.refused %}<span class="t-danger">{{ row.refused|join:"; " }}</span>{% else %}<span class="t-faint">—</span>{% endif %}</td>
+                                        <td class="numeric">{% if row.absent is None %}<span class="t-faint">…</span>{% else %}{{ row.absent }}{% endif %}</td>
+                                        <td>{% if row.absent %}<a href="{% url 'attendance:attendance_month_edit' row.id job.start.year job.start.month %}">Fix days</a>{% endif %}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="t-faint">Days still absent had no scan at all (e.g. not on any device yet). Open <em>Fix days</em> to mark the days they worked, with a reason. Generate the salary month again after fixing.</p>
                 {% endif %}
                 {% if job.failures %}
                     <div class="table-wrap">
@@ -194,5 +215,6 @@
     </div>
     {% with action="?"|add:request.GET.urlencode %}
         {% include "organization/profile/modal_form.html" with id="recheck-dialog" title="3. Re-check refused scans" action=action form=forms.recheck section="recheck" submit="Re-check" note="Scans refused before a person was linked (\"unknown employee\") or for another rule are judged again under today's setup. The days of every scan that now counts are recalculated." %}
+        {% include "organization/profile/modal_form.html" with id="missing-dialog" title="Missing days" action=action form=forms.missing_days section="missing_days" submit="Fill missing days" wide=True note="For people set up correctly now whose first days are missing. Their placement, salary, own shift and device links start from the chosen day (when they start later), their refused scans are judged again, and their attendance is rebuilt. Days with no scan at all are listed after, to fix by hand." %}
     {% endwith %}
 {% endblock %}

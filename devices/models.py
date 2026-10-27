@@ -729,6 +729,8 @@ class SetupFixJob(TenantOwned):
         SEND = "send", "Send to devices"
         RECALCULATE = "recalculate", "Recalculate attendance"
         RECHECK = "recheck", "Re-check refused scans"
+        # People set up correctly now whose first days are missing (2026-10-27).
+        MISSING_DAYS = "missing_days", "Fill missing days"
 
     class Status(models.TextChoices):
         RUNNING = "running", "Working"
@@ -745,6 +747,7 @@ class SetupFixJob(TenantOwned):
     failed_count = models.PositiveIntegerField(default=0)
     remaining = models.JSONField(default=list)        # employee ids still to do
     failures = models.JSONField(default=list)         # [name, reason], the first 50
+    results = models.JSONField(default=list)          # Fill missing days: one row per person
     message = models.TextField(blank=True)            # what the finished job did, in words
     heartbeat_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)

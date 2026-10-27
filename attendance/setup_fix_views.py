@@ -14,14 +14,17 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils import timezone
 
 from base_template.tables import Sortable, paginate_rows, render
 from base_template.views import company_admin_required
 from common.forms import StyledFormMixin, apply_service_errors
 from devices.models import SetupFixJob
 from devices.services import setup_fix
+from employees.models import Employee, EmployeeAssignment
 from organization.employee_forms import EmployeeCreateForm
 from organization.models import Branch, Department, Designation
 from tenants.models import Company
@@ -81,14 +84,60 @@ class RecheckForm(StyledFormMixin, forms.Form):
         self.fields["start"].choices = [(d.isoformat(), label) for d, label in (starts or [])]
 
 
+class MissingDaysForm(StyledFormMixin, forms.Form):
+    """People set up correctly now whose first days are missing (2026-10-27)."""
+
+    who = forms.ChoiceField(label="Who", initial="people", widget=forms.RadioSelect,
+                            choices=(("people", "Chosen people"), ("department", "A whole department")))
+    people = forms.ModelMultipleChoiceField(queryset=Employee.all_objects.none(), required=False,
+                                            label="People", help_text="Search by name or Employee ID.")
+    department = forms.ModelChoiceField(queryset=Department.all_objects.none(), required=False,
+                                        label="Department")
+    start = _start_field("Their attendance starts from")
+
+    def __init__(self, *args, starts=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["start"].choices = [(d.isoformat(), label) for d, label in (starts or [])]
+        self.fields["people"].queryset = (Employee.objects.exclude(employment_status__in=setup_fix.LEFT)
+                                          .order_by("first_name", "last_name"))
+        self.fields["department"].queryset = (Department.objects.filter(status="active")
+                                              .select_related("branch").order_by("branch__name", "name"))
+        self.fields["department"].label_from_instance = lambda d: f"{d.branch.name} · {d.name}"
+        self.fields["people"].widget.attrs["data-show-when"] = "who:people"
+        self.fields["department"].widget.attrs["data-show-when"] = "who:department"
+
+    def clean(self):
+        data = super().clean()
+        if data.get("who") == "department":
+            if data.get("department") is None:
+                self.add_error("department", "Choose the department.")
+        elif not data.get("people"):
+            self.add_error("people", "Choose at least one person.")
+        return data
+
+    def chosen_ids(self):
+        data = self.cleaned_data
+        if data["who"] == "people":
+            return [e.pk for e in data["people"]]
+        now = timezone.now()
+        return list(EmployeeAssignment.objects.filter(department=data["department"])
+                    .exclude(status="cancelled").filter(effective_from__lte=now)
+                    .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=now))
+                    .exclude(employee__employment_status__in=setup_fix.LEFT)
+                    .values_list("employee_id", flat=True))
+
+
 FORMS = {"placement": PlacementForm, "send": SendForm, "recalculate": RecalculateForm,
-         "recheck": RecheckForm}
+         "recheck": RecheckForm, "missing_days": MissingDaysForm}
+# Forms that do not act on the list of people to fix.
+OWN_PEOPLE = ("recheck", "missing_days")
 # Each modal its own element ids; Set department keeps "id_", which
 # organization/js/employee_form.js looks for (#id_branch ...).
 AUTO_ID = {"placement": "id_%s", "send": "send_%s", "recalculate": "recalc_%s",
-           "recheck": "recheck_%s"}
+           "recheck": "recheck_%s", "missing_days": "missing_%s"}
 DIALOGS = {"placement": "placement-dialog", "send": "send-dialog",
-           "recalculate": "recalculate-dialog", "recheck": "recheck-dialog"}
+           "recalculate": "recalculate-dialog", "recheck": "recheck-dialog",
+           "missing_days": "missing-dialog"}
 
 
 def _filters(request):
@@ -124,7 +173,7 @@ def setup_fix_page(request):
     kw = {"ticked": ticked, "listed": len(listed), "starts": starts}
     forms_ = {}
     for name, cls in FORMS.items():
-        kwargs = {"starts": starts} if name == "recheck" else kw
+        kwargs = {"starts": starts} if name in OWN_PEOPLE else kw
         forms_[name] = bound if name == section and bound is not None else cls(
             auto_id=AUTO_ID[name], **kwargs)
 
@@ -150,7 +199,7 @@ def setup_fix_page(request):
 def _save(request, company, section, listed, starts):
     """Do one action. None when it was done (the page redirects); the bound
     form, with its reasons, when it was refused."""
-    kwargs = {"starts": starts} if section == "recheck" else {
+    kwargs = {"starts": starts} if section in OWN_PEOPLE else {
         "ticked": len(request.POST.getlist("ids")), "listed": len(listed), "starts": starts}
     form = FORMS[section](request.POST, auto_id=AUTO_ID[section], **kwargs)
     if not form.is_valid():
@@ -161,6 +210,12 @@ def _save(request, company, section, listed, starts):
         start_day = datetime.date.fromisoformat(data["start"])
     if section == "recheck":
         return _job(request, company, SetupFixJob.Kind.RECHECK, [], start_day, form)
+    if section == "missing_days":
+        ids = form.chosen_ids()
+        if not ids:
+            form.add_error(None, "Nobody works in that department now.")
+            return form
+        return _job(request, company, SetupFixJob.Kind.MISSING_DAYS, ids, start_day, form)
     if data["who"] == "all":
         chosen = [p.employee for p in listed]
     else:
