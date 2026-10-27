@@ -37,11 +37,12 @@
             <a class="ui-flow__item{% if active == 'home' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_home' %}"><span class="ui-flow__num">{% include "ui/icon.html" with name="flag" small=True %}</span>Start here</a>
             <a class="ui-flow__item{% if active == 'materials' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_materials' %}"><span class="ui-flow__num">1</span>Materials</a>
             <a class="ui-flow__item{% if active == 'products' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_products' %}"><span class="ui-flow__num">2</span>Products</a>
-            <span class="ui-flow__item ui-flow__item--later" title="Coming in the next part"><span class="ui-flow__num">3</span>Stock in</span>
+            <a class="ui-flow__item{% if active == 'stock_in' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_stock_in' %}"><span class="ui-flow__num">3</span>Stock in</a>
             <a class="ui-flow__item{% if active == 'make' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_make' %}"><span class="ui-flow__num">4</span>Make</a>
-            <span class="ui-flow__item ui-flow__item--later" title="Coming in the next part"><span class="ui-flow__num">5</span>Stock</span>
-            <span class="ui-flow__item ui-flow__item--later" title="Coming in the next part"><span class="ui-flow__num">6</span>Move stock</span>
-            <span class="ui-flow__item ui-flow__item--later" title="Coming in the next part"><span class="ui-flow__num">7</span>Sell</span>
+            <a class="ui-flow__item{% if active == 'stock' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_stock' %}"><span class="ui-flow__num">5</span>Stock</a>
+            <a class="ui-flow__item{% if active == 'moves' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_moves' %}"><span class="ui-flow__num">6</span>Move stock</a>
+            <a class="ui-flow__item{% if active == 'sell' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_sales' %}"><span class="ui-flow__num">7</span>Sell</a>
+            <a class="ui-flow__item{% if active == 'warranty' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:preview_warranty' %}"><span class="ui-flow__num">{% include "ui/icon.html" with name="settings" small=True %}</span>Warranty</a>
         </nav>
         {% block content %}{% endblock %}
     </div>

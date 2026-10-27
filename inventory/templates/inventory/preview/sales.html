@@ -1,0 +1,37 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Sell{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs">Products and stock / 7. Sell</p>
+            <h1 class="ui-head__title">Sales</h1>
+            <p class="ui-head__sub">What went out to customers, from which store. Stock leaves the oldest batch first.</p>
+        </div>
+        <div class="ui-head__actions">
+            <a class="ui-btn ui-btn--main" href="{% url 'inventory:preview_sale_new' %}">{% include "ui/icon.html" with name="plus" %} New sale</a>
+        </div>
+    </div>
+
+    <div class="ui-tiles">
+        <div class="ui-tile"><p class="ui-tile__label">Sales this week</p><p class="ui-tile__value">{{ rows|length }}</p><p class="ui-tile__hint">deliveries</p></div>
+        <div class="ui-tile ui-tile--good"><p class="ui-tile__label">Sold for</p><p class="ui-tile__value">{{ total|floatformat:"0g" }}</p><p class="ui-tile__hint">Tk</p></div>
+        <div class="ui-tile ui-tile--warn"><p class="ui-tile__label">Invoices due</p><p class="ui-tile__value">1</p><p class="ui-tile__hint">Tk 18,000</p></div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Sales</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Number</th><th>Date</th><th>Customer</th><th>From store</th><th>What</th><th class="numeric">Total</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr><td>{{ row.number }}</td><td>{{ row.date }}</td><td>{{ row.customer }}</td><td>{{ row.store }}</td><td>{{ row.lines }}</td><td class="numeric">{{ row.total|floatformat:"2g" }}</td><td><span class="ui-chip ui-chip--{{ row.tone }}">{{ row.status }}</span></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% url 'inventory:preview_product' 'FG-0001' as product_url %}
+    {% include "ui/next_step.html" with what="Stock goes down as you sell: check what is left to make." url=product_url button="Biscuit 100 g" %}
+{% endblock %}

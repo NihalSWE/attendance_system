@@ -140,3 +140,76 @@ def finished_cost():
             "per_packet": money(total / (good_cartons * 24)),
             "rows": [(label, planned, act, act - planned) for (label, _, planned), (_, _, act)
                      in zip(sheet["lines"], actual)]}
+
+
+# --- 2.5: stock in, stock, moves, sales (2026-10-27) --------------------------
+
+SUPPLIERS = [("SUP-001", "ABC Flour Mills"), ("SUP-002", "Deshi Sugar Ltd"), ("SUP-003", "PrintPack")]
+CUSTOMERS = [("CUS-001", "Sylhet Traders"), ("CUS-002", "Karim Stores"), ("CUS-003", "City Mart")]
+
+STOCK_IN = [
+    {"number": "IN-0004", "date": "24 Oct", "kind": "Purchase", "from": "ABC Flour Mills",
+     "store": "Raw store B", "lines": "Flour 60 kg", "value": D("3120")},
+    {"number": "IN-0003", "date": "23 Oct", "kind": "Purchase", "from": "ABC Flour Mills",
+     "store": "Raw store A", "lines": "Flour 60 kg", "value": D("3120")},
+    {"number": "IN-0002", "date": "20 Oct", "kind": "Purchase", "from": "Deshi Sugar Ltd",
+     "store": "Raw store A", "lines": "Sugar 40 kg", "value": D("3800")},
+    {"number": "IN-0001", "date": "15 Oct", "kind": "First count", "from": "—",
+     "store": "Raw store A, Packing store", "lines": "Palm oil 30 litre, Wrappers 800 pcs, Cartons 300 pcs",
+     "value": D("9720")},
+]
+
+MOVES = [
+    {"number": "MV-0002", "date": "26 Oct", "from": "Main store", "to": "Depot",
+     "lines": "Biscuit 100 g · BIS-261026-1 · 30 cartons", "status": "Received", "tone": "ok"},
+    {"number": "MV-0001", "date": "25 Oct", "from": "Raw store A", "to": "Raw store B",
+     "lines": "Flour · FL-231026 · 10 kg", "status": "On the way", "tone": "wait"},
+]
+
+SALES = [
+    {"number": "SL-0003", "date": "27 Oct", "customer": "City Mart", "store": "Main store",
+     "lines": "Biscuit 100 g · 20 cartons", "total": D("9000"), "status": "Delivered", "tone": "ok"},
+    {"number": "SL-0002", "date": "26 Oct", "customer": "Karim Stores", "store": "Depot",
+     "lines": "Biscuit 100 g · 5 cartons + 30 packets", "total": D("2850"), "status": "Delivered", "tone": "ok"},
+    {"number": "SL-0001", "date": "25 Oct", "customer": "Sylhet Traders", "store": "Main store",
+     "lines": "Biscuit 100 g · 40 cartons", "total": D("18000"), "status": "Invoice due", "tone": "wait"},
+]
+
+
+def stock_rows():
+    """Every item: in stock by store, value, expiring soon."""
+    rows = []
+    for code, m in MATERIALS.items():
+        total = sum(m["stock"].values(), D("0"))
+        rows.append({"code": code, "name": m["name"], "type": m["type"], "unit": m["unit"],
+                     "total": total, "by_store": [(STORES[s], q) for s, q in m["stock"].items()],
+                     "value": money(total * m["cost"]), "keep": m["keep"],
+                     "url_kind": "material"})
+    cartons = sum(row[4] for row in PRODUCT["stock"])
+    rows.append({"code": PRODUCT["code"], "name": PRODUCT["name"], "type": "Product", "unit": "carton",
+                 "total": D(cartons), "by_store": [(STORES[r[3]], D(r[4])) for r in PRODUCT["stock"]],
+                 "value": money(sum(r[4] * r[5] for r in PRODUCT["stock"])), "keep": D(PRODUCT["keep_cartons"]),
+                 "url_kind": "product"})
+    return rows
+
+
+EXPIRING = [("Palm oil", "OL-151026", "Raw store A", "30 litre", "15 Apr", "170 days"),
+            ("Biscuit 100 g", "BIS-201026-1", "Main store", "120 cartons", "18 Apr", "173 days")]
+
+
+# --- 2.6: warranty (shown on an electronics example) ---------------------------
+
+WARRANTY_ITEMS = [("FAN-56", "Ceiling fan 56\"", "Product", 24, "Serial per unit", "from delivery"),
+                  ("MOT-12", "Fan motor 12V", "Material", 12, "Serial per unit", "from receipt (supplier)")]
+
+CLAIMS = [
+    {"number": "WC-0003", "date": "27 Oct", "serial": "FAN56-000418", "item": "Ceiling fan 56\"",
+     "customer": "City Mart", "delivered": "12 Mar 2026", "until": "12 Mar 2028", "problem": "Noisy at speed 5",
+     "outcome": "Waiting", "tone": "wait"},
+    {"number": "WC-0002", "date": "20 Oct", "serial": "FAN56-000102", "item": "Ceiling fan 56\"",
+     "customer": "Karim Stores", "delivered": "02 Jan 2026", "until": "02 Jan 2028", "problem": "Does not start",
+     "outcome": "Replaced", "tone": "ok"},
+    {"number": "WC-0001", "date": "02 Oct", "serial": "FAN56-000017", "item": "Ceiling fan 56\"",
+     "customer": "Sylhet Traders", "delivered": "10 Sep 2023", "until": "10 Sep 2025",
+     "problem": "Wobbles", "outcome": "Refused: out of warranty", "tone": "bad"},
+]

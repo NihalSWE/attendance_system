@@ -69,3 +69,56 @@ class PreviewScreenTests(InventoryFixture, TestCase):
     def test_only_administrators_see_the_preview(self):
         self.client.force_login(self.member("keeper@inv.test", "employee"))
         self.assertNotEqual(self.client.get(reverse("inventory:preview_home")).status_code, 200)
+
+
+class PreviewStockScreenTests(InventoryFixture, TestCase):
+    """2.5 and 2.6: stock in, stock, moves, sales, warranty (2026-10-27)."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.owner)
+
+    def save(self, screen, data):
+        return self.client.post(reverse("inventory:preview_save", args=[screen]), data, **FETCH).json()
+
+    def test_every_new_screen_opens(self):
+        for name in ("preview_stock_in", "preview_stock_in_new", "preview_stock", "preview_moves",
+                     "preview_move_new", "preview_sales", "preview_sale_new", "preview_warranty"):
+            page = self.client.get(reverse(f"inventory:{name}"))
+            self.assertEqual(page.status_code, 200, name)
+            self.assertContains(page, "ui-next", msg_prefix=name)
+            self.assertNotContains(page, "ui-flow__item--later", msg_prefix=name)
+
+    def test_stock_in_asks_batch_only_for_items_that_keep_batches(self):
+        body = self.save("stock_in", {"source": "purchase", "store": "RSA", "date": "2026-10-27",
+                                      "supplier": "SUP-001", "item_1": "RM-0001", "qty_1": "50",
+                                      "cost_1": "52", "item_2": "PK-0001", "qty_2": "1000", "cost_2": "0.9"})
+        self.assertEqual(set(body["errors"]), {"batch_1", "expiry_1"})
+        body = self.save("stock_in", {"source": "purchase", "store": "RSA", "date": "2026-10-27"})
+        self.assertIn("supplier", body["errors"])
+        self.assertIn("Add at least one line", " ".join(body["form_errors"]))
+        body = self.save("stock_in", {"source": "count", "store": "PKS", "date": "2026-10-27",
+                                      "item_1": "PK-0001", "qty_1": "1000", "cost_1": "0.9"})
+        self.assertEqual(body["ok"], True)
+
+    def test_a_move_needs_two_stores_and_enough_stock(self):
+        body = self.save("move", {"from_store": "RSA", "to_store": "RSA", "item": "RM-0001", "qty": "10"})
+        self.assertIn("to_store", body["errors"])
+        body = self.save("move", {"from_store": "RSA", "to_store": "RSB", "item": "RM-0001", "qty": "61"})
+        self.assertEqual(body["errors"]["qty"], ["Only 60 there."])
+        self.assertEqual(self.save("move", {"from_store": "RSA", "to_store": "RSB", "item": "RM-0001",
+                                            "qty": "10"})["ok"], True)
+
+    def test_a_sale_cannot_take_more_than_the_store_has(self):
+        body = self.save("sale", {"customer": "CUS-001", "store": "DEP", "unit_1": "carton", "qty_1": "31"})
+        self.assertIn("Only 30 cartons", body["message"])
+        body = self.save("sale", {"customer": "CUS-001", "store": "DEP", "unit_1": "carton", "qty_1": "29",
+                                  "unit_2": "packet", "qty_2": "24"})
+        self.assertEqual(body["ok"], True)
+
+    def test_a_claim_checks_the_serial_and_the_cover(self):
+        self.assertIn("serial", self.save("claim", {"serial": "NOPE", "problem": "x", "outcome": "replace"})["errors"])
+        body = self.save("claim", {"serial": "FAN56-000017", "problem": "Wobbles", "outcome": "replace"})
+        self.assertIn("reason", body["errors"])
+        self.assertEqual(self.save("claim", {"serial": "FAN56-000418", "problem": "Noisy",
+                                             "outcome": "repair"})["ok"], True)

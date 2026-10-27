@@ -1,0 +1,61 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Stock{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs">Products and stock / 5. Stock</p>
+            <h1 class="ui-head__title">Stock</h1>
+            <p class="ui-head__sub">What you have, in which store, and what it is worth.</p>
+        </div>
+        <div class="ui-head__actions">
+            <a class="ui-btn" href="{% url 'inventory:preview_move_new' %}">{% include "ui/icon.html" with name="arrow-right" %} Move stock</a>
+            <a class="ui-btn ui-btn--main" href="{% url 'inventory:preview_stock_in_new' %}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+        </div>
+    </div>
+
+    <div class="ui-tiles">
+        <div class="ui-tile"><p class="ui-tile__label">Items in stock</p><p class="ui-tile__value">{{ rows|length }}</p><p class="ui-tile__hint">materials and products</p></div>
+        <div class="ui-tile{% if low %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Below stock to keep</p><p class="ui-tile__value">{{ low }}</p><p class="ui-tile__hint">to buy or make</p></div>
+        <div class="ui-tile"><p class="ui-tile__label">Value</p><p class="ui-tile__value">{{ value|floatformat:"0g" }}</p><p class="ui-tile__hint">Tk, at cost</p></div>
+        <div class="ui-tile"><p class="ui-tile__label">Expiring in 180 days</p><p class="ui-tile__value">{{ expiring|length }}</p><p class="ui-tile__hint">batches</p></div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Everything in stock</h2><span class="ui-card__note">Click a name for its batches and movements</span></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Code</th><th>Name</th><th>Type</th><th>By store</th><th class="numeric">Total</th><th class="numeric">Value</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for r in rows %}
+                        <tr>
+                            <td>{{ r.code }}</td>
+                            <td>{% if r.url_kind == "product" %}<a href="{% url 'inventory:preview_product' r.code %}">{{ r.name }}</a>{% else %}<a href="{% url 'inventory:preview_material' r.code %}">{{ r.name }}</a>{% endif %}</td>
+                            <td>{{ r.type }}</td>
+                            <td>{% for store, qty in r.by_store %}{{ store }} {{ qty|floatformat:"-2" }}{% if not forloop.last %} · {% endif %}{% endfor %}</td>
+                            <td class="numeric">{{ r.total|floatformat:"-2g" }} {{ r.unit }}</td>
+                            <td class="numeric">{{ r.value|floatformat:"0g" }}</td>
+                            <td>{% if r.total < r.keep %}<span class="ui-chip ui-chip--wait">Below {{ r.keep|floatformat:"-2g" }}</span>{% else %}<span class="ui-chip ui-chip--ok">OK</span>{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="alert" %} Expires first</h2><span class="ui-card__note">Used and sold first, oldest expiry first</span></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Item</th><th>Batch</th><th>Store</th><th class="numeric">Quantity</th><th>Expiry</th><th>Left</th></tr></thead>
+                <tbody>
+                    {% for name, batch, store, qty, expiry, left in expiring %}
+                        <tr><td>{{ name }}</td><td>{{ batch }}</td><td>{{ store }}</td><td class="numeric">{{ qty }}</td><td>{{ expiry }}</td><td><span class="ui-chip ui-chip--info">{{ left }}</span></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% url 'inventory:preview_sale_new' as sale_url %}
+    {% include "ui/next_step.html" with what="Finished goods are in stock: sell them." url=sale_url button="Sell" %}
+{% endblock %}

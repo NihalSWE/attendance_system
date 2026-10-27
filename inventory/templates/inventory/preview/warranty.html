@@ -1,0 +1,73 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Warranty{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs">Products and stock / Settings / Warranty</p>
+            <h1 class="ui-head__title">Warranty</h1>
+            <p class="ui-head__sub">Shown on an electronics example: a biscuit company leaves warranty off and never sees it.</p>
+        </div>
+        <div class="ui-head__actions">
+            <button class="ui-btn ui-btn--main" type="button" data-open-dialog="claim-dialog">{% include "ui/icon.html" with name="plus" %} New claim</button>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="settings" %} For this company</h2></div>
+        <div class="ui-card__body">
+            <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Use warranty</span><span class="ui-switch__hint">Off by default. On: any material or product can have warranty, set on the item.</span></span><input type="checkbox" checked></label>
+            <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Serial number per unit</span><span class="ui-switch__hint">For items tracked one by one: a serial label at receipt or production, scanned at delivery.</span></span><input type="checkbox" checked></label>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Items with warranty</h2><span class="ui-card__note">Set on each item's Edit</span></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Code</th><th>Item</th><th>Type</th><th class="numeric">Months</th><th>Tracked by</th><th>Counts</th></tr></thead>
+                <tbody>
+                    {% for code, name, kind, months, tracked, counts in items %}
+                        <tr><td>{{ code }}</td><td>{{ name }}</td><td>{{ kind }}</td><td class="numeric">{{ months }}</td><td>{{ tracked }}</td><td>{{ counts }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="alert" %} Claims</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Claim</th><th>Date</th><th>Serial</th><th>Item</th><th>Customer</th><th>Covered until</th><th>Problem</th><th>Outcome</th></tr></thead>
+                <tbody>
+                    {% for c in claims %}
+                        <tr><td>{{ c.number }}</td><td>{{ c.date }}</td><td>{{ c.serial }}</td><td>{{ c.item }}</td><td>{{ c.customer }}</td><td>{{ c.until }}</td><td>{{ c.problem }}</td><td><span class="ui-chip ui-chip--{{ c.tone }}">{{ c.outcome }}</span></td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% include "ui/next_step.html" with what="A unit that is replaced goes to the rejected store; one that passes a check goes back to stock." %}
+
+    <dialog class="modal" id="claim-dialog" aria-labelledby="claim-dialog-title">
+        <form class="modal__card" method="post" action="{% url 'inventory:preview_save' 'claim' %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="modal__head">
+                <h2 id="claim-dialog-title">New warranty claim</h2>
+                <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+            </div>
+            <div class="modal__body stack">
+                {% include "inventory/preview/field.html" with name="serial" label="Serial number" required=True placeholder="Scan or type it" help="Try FAN56-000418 (covered) or FAN56-000017 (out of warranty)." %}
+                {% include "inventory/preview/field.html" with name="problem" label="What is wrong" required=True %}
+                {% include "inventory/preview/field.html" with name="outcome" label="What you do" options=outcomes required=True %}
+                {% include "inventory/preview/field.html" with name="reason" label="Note" help="Needed if you cover a unit out of warranty." %}
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="modal__foot">
+                <button class="ui-btn" type="button" data-close-dialog>Cancel</button>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save claim</button>
+            </div>
+        </form>
+    </dialog>
+{% endblock %}

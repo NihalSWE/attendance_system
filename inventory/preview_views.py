@@ -213,4 +213,151 @@ def save(request, screen):
             answer.errors["reason"] = ["Good is below 90 % of the plan: say why."]
         return answer.reply("Finished: 30 cartons into stock as batch BIS-271026-1 (sample).",
                             reverse("inventory:preview_production", args=["PRD-0001"]))
+    more = save_more(request, screen, answer)
+    if more is not None:
+        return more
     raise Http404
+
+
+# --- 2.5 and 2.6: stock in, stock, moves, sales, warranty (2026-10-27) ---------
+
+# Every item that can be stocked, with what the screens need to follow it:
+# its unit, whether it keeps batches, and where it is.
+def _items():
+    items = [(code, m["name"], m["unit"], bool(m["batches"]), m["stock"]) for code, m in data.MATERIALS.items()]
+    product_stock = {}
+    for _number, _made, _expiry, store, cartons, _cost in data.PRODUCT["stock"]:
+        product_stock[store] = product_stock.get(store, 0) + cartons
+    items.append((data.PRODUCT["code"], data.PRODUCT["name"], "carton", True, product_stock))
+    return items
+
+
+def _batches():
+    rows = [(code, number, store, f"{number} · expires {expiry} · {qty.normalize():f} {data.MATERIALS[code]['unit']}")
+            for code, m in data.MATERIALS.items() for number, _received, expiry, store, qty in m["batches"]]
+    rows += [(data.PRODUCT["code"], number, store, f"{number} · expires {expiry} · {cartons} cartons")
+             for number, _made, expiry, store, cartons, _cost in data.PRODUCT["stock"]]
+    return rows
+
+
+@_gate
+def stock_in(request):
+    return _page(request, "stock_in.html", rows=data.STOCK_IN, active="stock_in")
+
+
+@_gate
+def stock_in_new(request):
+    return _page(request, "stock_in_new.html", items=_items(), suppliers=data.SUPPLIERS,
+                 customers=data.CUSTOMERS, line_numbers=range(1, 4), active="stock_in")
+
+
+@_gate
+def stock(request):
+    rows = data.stock_rows()
+    return _page(request, "stock.html", rows=rows, expiring=data.EXPIRING, active="stock",
+                 value=sum((r["value"] for r in rows), Decimal("0")),
+                 low=sum(1 for r in rows if r["total"] < r["keep"]))
+
+
+@_gate
+def moves(request):
+    return _page(request, "moves.html", rows=data.MOVES, active="moves")
+
+
+@_gate
+def move_new(request):
+    return _page(request, "move_new.html", items=_items(), batches=_batches(), active="moves")
+
+
+@_gate
+def sales(request):
+    return _page(request, "sales.html", rows=data.SALES, active="sell",
+                 total=sum((r["total"] for r in data.SALES), Decimal("0")))
+
+
+@_gate
+def sale_new(request):
+    return _page(request, "sale_new.html", customers=data.CUSTOMERS, prices=data.PRODUCT["prices"],
+                 stock=data.PRODUCT["stock"], line_numbers=range(1, 3), active="sell")
+
+
+@_gate
+def warranty(request):
+    return _page(request, "warranty.html", items=data.WARRANTY_ITEMS, claims=data.CLAIMS,
+                 outcomes=[("", "Choose what you do"), ("replace", "Replace it"), ("repair", "Repair it"),
+                           ("refund", "Refund"), ("refuse", "Refuse the claim")],
+                 active="warranty")
+
+
+def _available(code, store):
+    """How much of an item is in a store (sample), in its own unit."""
+    for item_code, _name, _unit, _batches, stock_by_store in _items():
+        if item_code == code:
+            return Decimal(stock_by_store.get(store, 0))
+    return Decimal("0")
+
+
+def save_more(request, screen, answer):
+    """The checks of the 2.5 and 2.6 screens; None when the screen is not one of them."""
+    post = request.POST
+    if screen == "stock_in":
+        answer.need("store", "date")
+        if post.get("source") == "purchase":
+            answer.need("supplier")
+        elif post.get("source") == "return":
+            answer.need("customer")
+        items = dict((code, batches) for code, _n, _u, batches, _s in _items())
+        lines = 0
+        for i in range(1, 11):
+            code = post.get(f"item_{i}", "")
+            if not code:
+                continue
+            lines += 1
+            answer.need(f"qty_{i}")
+            answer.positive(f"qty_{i}")
+            if post.get("source") != "return":
+                answer.need(f"cost_{i}")
+            if items.get(code):
+                answer.need(f"batch_{i}", f"expiry_{i}")
+        if not lines:
+            answer.form_errors.append("Add at least one line: choose an item and its quantity.")
+        return answer.reply(f"{lines} line(s) in stock (sample).", reverse("inventory:preview_stock_in"))
+    if screen == "move":
+        answer.need("from_store", "to_store", "item", "qty")
+        qty = answer.positive("qty")
+        if post.get("from_store") and post.get("from_store") == post.get("to_store"):
+            answer.errors.setdefault("to_store", []).append("Choose another store than the one it leaves.")
+        if qty and post.get("item") and post.get("from_store"):
+            have = _available(post["item"], post["from_store"])
+            if qty > have:
+                answer.errors.setdefault("qty", []).append(f"Only {have:f} there.")
+        return answer.reply("Moved (sample). The other store receives it when it arrives.",
+                            reverse("inventory:preview_moves"))
+    if screen == "sale":
+        answer.need("customer", "store")
+        cartons_there = _available(data.PRODUCT["code"], post.get("store", ""))
+        wanted = Decimal("0")
+        for i in range(1, 3):
+            if not post.get(f"qty_{i}", "").strip():
+                continue
+            qty = answer.positive(f"qty_{i}", whole=True)
+            if qty:
+                # In cartons: a packet is 1/24 of one.
+                wanted += qty / 24 if post.get(f"unit_{i}") == "packet" else qty
+        if not wanted and not answer.errors:
+            answer.form_errors.append("Add at least one line with a quantity.")
+        elif post.get("store") and wanted > cartons_there:
+            answer.form_errors.append(f"Only {cartons_there:f} cartons in that store: sell less, or from another store.")
+        return answer.reply("Sale saved; stock leaves the oldest batch first (sample).", reverse("inventory:preview_sales"))
+    if screen == "claim":
+        answer.need("serial", "problem", "outcome")
+        known = {c["serial"]: c for c in data.CLAIMS}
+        serial = post.get("serial", "").strip().upper()
+        if serial and serial not in known:
+            answer.errors.setdefault("serial", []).append("No unit with this serial was delivered.")
+        elif serial and known[serial]["outcome"].startswith("Refused") and post.get("outcome") not in ("", "refuse") \
+                and not post.get("reason", "").strip():
+            answer.errors.setdefault("reason", []).append(
+                f"Out of warranty since {known[serial]['until']}: refuse it, or say why you cover it.")
+        return answer.reply("Claim saved (sample).", reverse("inventory:preview_warranty"))
+    return None
