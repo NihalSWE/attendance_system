@@ -378,3 +378,22 @@ class CostLineForm(CompanyForm):
         self.fields["rate"].widget.option_attrs = lambda rows: {
             pk: {"data-how": kind} for pk, kind in rows.values_list("pk", "kind")}
         self.fields["rate"].widget.attrs.update({"data-follows": "how", "data-follow-by": "how"})
+
+
+class PlanForm(StyledFormMixin, forms.Form):
+    """Plan a production from the product's page (2026-10-27, plan §8.2): how
+    many batches, when, and which store the products go into. The materials
+    are worked out from the recipe (production.planning)."""
+
+    batches = forms.IntegerField(label="How many batches", min_value=1, max_value=100000,
+                                 error_messages={"min_value": "Make at least one batch."})
+    planned_date = forms.DateField(label="Date", widget=date_widget())
+    into = forms.ModelChoiceField(queryset=Warehouse.all_objects.none(), label="Products go into",
+                                  empty_label=None)
+
+    def __init__(self, *args, stores, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["into"].queryset = Warehouse.all_objects.filter(pk__in=[store.pk for store in stores])
+        self.fields["into"].label_from_instance = lambda store: f"{store.name} ({store.branch.name})"
+        self.fields["batches"].unit_text = "batches"
+        self.fields["into"].help_text = "Materials come from the stores of the same branch."

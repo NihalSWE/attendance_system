@@ -6811,3 +6811,29 @@ Plan: docs/inventory/PRODUCTION_PLAN.md §7.3, §7.4, §15 phase 5.
 - Tests: `inventory/tests_phase5.py` (14) and the apps touched. Full suite: after all phases.
 
 **Deploy:** pull, migrate (production 0002), collectstatic, restart.
+
+### Inventory redesign, phase 6: planning a production — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §8.1, §8.2, §11 (1-7, 26); §15 phase 6.
+
+- **How many to make** (`production/planning.py` `suggest`): stock to keep − in stock −
+  what open productions will make, in whole batches, capped by what the materials allow.
+  A card on the product page says it and links to the plan ("Make 2 batches").
+- **Plan page** `/production/products/<id>/make/` (`production/plan_views.py`,
+  `inventory/hub/plan.html`): batches, date, store the products go into. The materials
+  table redraws as these change: needed (wastage included, rounded up to the unit),
+  usable in the branch, taken from which stores, enough / short.
+- **Where from**: every usable store of the output store's branch - the material's usual
+  store first, then the others, first expiry first inside each. Expired batches, batches
+  waiting for QC, and quarantine / rejected / transit stores are not counted; another
+  branch's stock is not taken.
+- **Short**: red, with the most batches the materials allow, **Make fewer** (sets it) and
+  **Buy the rest** (a draft purchase requisition for exactly what is missing, rounded up to
+  the unit). A product made here that is short offers **Make it first**. Other open
+  productions needing the same material are named. A short plan can be saved.
+- **Plan it** creates the production (planned quantity = whole batches; materials store =
+  the store most materials come from until Start takes from several, phase 7); a date in a
+  closed month is refused.
+- Tests: `inventory/tests_phase6.py` (11) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, collectstatic, restart (no migration).

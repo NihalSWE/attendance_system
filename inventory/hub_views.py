@@ -195,7 +195,8 @@ def product(request, pk):
         next_step = ("Write its recipe: what one batch makes and the materials it uses.",
                      reverse("inventory:product", args=[item.pk]) + "#recipe", "Write the recipe")
     elif line.tone != "ok" and makes:
-        next_step = ("Stock is below what you keep: plan a production.", reverse("production:orders"), "Make")
+        next_step = ("Stock is below what you keep: plan a production.",
+                     reverse("production:plan", args=[item.pk]), "Make")
     elif line.tone != "ok":
         next_step = ("Stock is below what you keep: receive a purchase.", reverse("purchasing:receipts"),
                      "Stock in")
@@ -224,7 +225,15 @@ def _making(request, company_id, item, recipe, packs):
         amounts = {row.line.pk: row for row in sheet.materials}
         for line in recipe["lines"]:
             line.cost_row = amounts.get(line.pk)
-    found = {"sheet": sheet, "per_pack": sheet.per_pack(packs) if sheet else [], "can_edit_recipe": can_edit}
+    found = {"sheet": sheet, "per_pack": sheet.per_pack(packs) if sheet else [], "can_edit_recipe": can_edit,
+             "can_plan": access.may(request.user, company_id, "production.plan")}
+    # How many to make (plan §8.1), once the recipe has its materials.
+    if recipe is not None and recipe["lines"]:
+        from production import planning
+
+        into = planning.default_into(item, planning.output_stores(company_id))
+        found["suggestion"] = planning.suggest(company_id, item, into) if into else None
+        found["has_recipe"] = True
     if can_edit:
         material_form = production_forms.RecipeMaterialForm(
             company_id=company_id, product=item, can_create=access.may(request.user, company_id, masters.CODE))
