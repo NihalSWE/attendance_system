@@ -48,6 +48,13 @@ class Take:
     store: Warehouse
     batch: object
     qty: Decimal
+    location: object = None
+    available: Decimal = ZERO
+
+    @property
+    def key(self):
+        """How a Start screen names this line: material-store-batch."""
+        return f"{self.store.pk}-{self.batch.pk if self.batch else 0}-{self.location.pk if self.location else 0}"
 
 
 @dataclass
@@ -151,25 +158,28 @@ def _wanted_elsewhere(company_id, branch_id, item_ids, exclude=None):
     return found
 
 
-def plan(company_id, product, batches, into, day=None, exclude_order=None):
-    """What ``batches`` batches of ``product`` into store ``into`` need, and where from."""
+def plan(company_id, product, batches, into, day=None, exclude_order=None, bom=None, makes=None):
+    """What ``batches`` batches of ``product`` into store ``into`` need, and
+    where from; ``bom`` and ``makes`` for a production already planned (its
+    recipe, its quantity in the product's unit)."""
     day = day or timezone.localdate()
-    bom = recipe_in_use(company_id, product)
+    bom = bom or recipe_in_use(company_id, product)
     stores = stores_of(company_id, into.branch_id)
     with use_company(company_id):
         lines = list(bom.lines.select_related("item__base_uom", "item__default_warehouse"))
     found = Plan(product=product, bom=bom, batches=batches, into=into, day=day)
+    output = makes if makes is not None else bom.batch_size_base * batches
     others = _wanted_elsewhere(company_id, into.branch_id, [line.item_id for line in lines], exclude_order)
     for line in lines:
         per_batch = line.planned_base(bom.batch_size_base, bom.batch_size_base)
-        need = _up(line.planned_base(bom.batch_size_base * batches, bom.batch_size_base), line.item)
+        need = _up(line.planned_base(output, bom.batch_size_base), line.item)
         rows = _usable(company_id, line.item, stores, day)
         remaining, takes = need, []
         for store, row in rows:
             if remaining <= 0:
                 break
             qty = min(row.available, remaining)
-            takes.append(Take(store, row.batch, qty))
+            takes.append(Take(store, row.batch, qty, row.location, row.available))
             remaining -= qty
         available = sum((row.available for _store, row in rows), ZERO)
         found.needs.append(Need(line.item, per_batch, need, available, takes, others.get(line.item_id, [])))

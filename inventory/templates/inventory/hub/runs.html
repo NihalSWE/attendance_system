@@ -1,0 +1,48 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Make{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / 4. Make</p>
+            <h1 class="ui-head__title">Make</h1>
+            <p class="ui-head__sub">Every production: Plan → Start → Finish. A production is planned from its product's page.</p>
+        </div>
+        {% if can_plan %}<div class="ui-head__actions"><a class="ui-btn ui-btn--main" href="{% url 'inventory:products' %}">{% include "ui/icon.html" with name="play" %} New production</a></div>{% endif %}
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Productions</h2><span class="ui-card__note">{{ server_table.total }} in all</span></div>
+        <form class="toolbar" method="get">
+            <label class="sr-only" for="f-status">Status</label>
+            <select class="input select js-select" id="f-status" name="status">
+                <option value="">Any status</option>
+                {% for value, label in statuses %}<option value="{{ value }}"{% if value == status %} selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <button class="ui-btn ui-btn--sm" type="submit">Apply</button>
+            {% if status %}<a class="ui-btn ui-btn--sm" href="{{ request.path }}">Clear</a>{% endif %}
+        </form>
+        <div class="table-wrap">
+            <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                <thead><tr><th>Production</th><th>Product</th><th>Date</th><th class="numeric">Quantity</th><th>Status</th><th><span class="sr-only">Next</span></th></tr></thead>
+                <tbody>
+                    {% for p in rows %}
+                        <tr>
+                            <td><a href="{% url 'production:run' p.pk %}">{{ p.number }}</a></td>
+                            <td><a href="{% url 'inventory:product' p.item_id %}">{{ p.item.name }}</a></td>
+                            <td>{{ p.planned_date|date:"j M Y" }}</td>
+                            <td class="numeric">{{ p.planned_qty|floatformat:"-4g" }} {{ p.uom.code }}</td>
+                            <td><span class="ui-chip ui-chip--{{ p.tone }}">{{ p.get_status_display }}</span></td>
+                            <td>{% if p.status == "planned" %}<a class="ui-btn ui-btn--sm" href="{% url 'production:run' p.pk %}">Start</a>{% elif p.status == "released" %}<a class="ui-btn ui-btn--main ui-btn--sm" href="{% url 'production:run' p.pk %}">Finish</a>{% endif %}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6">{% if status %}Nothing matches: clear the filter.{% else %}No production yet. Open a product and press Make this.{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "base_template/includes/table_pagination.html" %}
+    </div>
+
+    {% url 'inventory:products' as products_url %}
+    {% include "ui/next_step.html" with what="Plan a production from the product you want to make." url=products_url button="Products" %}
+{% endblock %}

@@ -9,7 +9,7 @@
         <div class="ui-head__actions">
             {% if production %}
                 <a class="ui-btn" href="{% url 'inventory:materials' %}">{% include "ui/icon.html" with name="box" %} Materials</a>
-                <a class="ui-btn ui-btn--main" href="{% url 'production:orders' %}">{% include "ui/icon.html" with name="play" %} Make</a>
+                <a class="ui-btn ui-btn--main" href="{% url 'production:runs' %}">{% include "ui/icon.html" with name="play" %} Make</a>
             {% else %}
                 <a class="ui-btn ui-btn--main" href="{% url 'inventory:products' %}">{% include "ui/icon.html" with name="box" %} Products</a>
             {% endif %}
@@ -34,13 +34,13 @@
 
     {% if production %}
         <div class="ui-card">
-            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Latest productions</h2><a class="ui-btn ui-btn--sm" href="{% url 'production:orders' %}">All productions</a></div>
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Latest productions</h2><a class="ui-btn ui-btn--sm" href="{% url 'production:runs' %}">All productions</a></div>
             <div class="table-wrap">
                 <table class="table" data-local-table>
                     <thead><tr><th>Production</th><th>Product</th><th>Date</th><th class="numeric">Quantity</th><th>Status</th></tr></thead>
                     <tbody>
                         {% for p in productions %}
-                            <tr><td><a href="{% url 'production:order_detail' p.pk %}">{{ p.number }}</a></td><td><a href="{% url 'inventory:product' p.item_id %}">{{ p.item.name }}</a></td><td>{{ p.planned_date|date:"j M Y" }}</td><td class="numeric">{{ p.planned_qty|floatformat:"-2" }} {{ p.uom.code }}</td><td><span class="ui-chip ui-chip--{{ p.tone }}">{{ p.get_status_display }}</span></td></tr>
+                            <tr><td><a href="{% url 'production:run' p.pk %}">{{ p.number }}</a></td><td><a href="{% url 'inventory:product' p.item_id %}">{{ p.item.name }}</a></td><td>{{ p.planned_date|date:"j M Y" }}</td><td class="numeric">{{ p.planned_qty|floatformat:"-2" }} {{ p.uom.code }}</td><td><span class="ui-chip ui-chip--{{ p.tone }}">{{ p.get_status_display }}</span></td></tr>
                         {% empty %}
                             <tr><td colspan="5">No production yet.</td></tr>
                         {% endfor %}

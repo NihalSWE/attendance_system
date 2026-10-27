@@ -52,7 +52,7 @@ def report_item(slug):
 # their address.
 INVENTORY_LINKS_SHOWN = {
     "inventory": (
-        "inventory:start", "inventory:materials", "inventory:products", "production:cost_rates",
+        "inventory:start", "inventory:materials", "inventory:products", "production:runs", "production:cost_rates",
         "inventory:settings", "inventory:units", "inventory:categories",
         "inventory:stores", "inventory:bins", "inventory:items",
         "inventory:spare_parts", "inventory:general_items",
@@ -157,6 +157,9 @@ INVENTORY_MENUS = (
              module="production"),
         item("Products", "inventory:products", "inventory:product", "inventory:item_save",
              needs="inventory.view"),
+        # Plan → Start → Finish (2026-10-27, plan §8).
+        item("Make", "production:runs", "production:run", "production:plan",
+             needs=("inventory.view", "production.plan", "production.execute"), module="production"),
         # What an hour of people or a machine costs (2026-10-27, plan §7.4).
         item("Cost rates", "production:cost_rates", "production:cost_rate_save",
              "production:cost_rate_status", needs=("inventory.view", "production.bom"),

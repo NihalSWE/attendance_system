@@ -6837,3 +6837,30 @@ Plan: docs/inventory/PRODUCTION_PLAN.md §8.1, §8.2, §11 (1-7, 26); §15 phase
 - Tests: `inventory/tests_phase6.py` (11) and the apps touched. Full suite: after all phases.
 
 **Deploy:** pull, collectstatic, restart (no migration).
+
+### Inventory redesign, phase 7: Start and Finish — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §8.3-8.6, §11; §15 phase 7. Service
+`production/making.py`; pages `production/run_views.py` (`/production/runs/`, one
+production at `/production/runs/<id>/`), templates `inventory/hub/runs.html`, `run.html`.
+
+- **Start** (7.1): the store lines come from the plan (every usable store of the branch,
+  usual store first, first expiry first); the store keeper changes a quantity only if a store
+  gave more or less; more than 5 % over needs a reason; refused while short. One material use
+  per store (`Consumption.warehouse`), posted at once; the expected cost per unit is kept.
+- **Finish** (7.2-7.4): good and damaged; into one store or split (`OutputPart`, must add up);
+  the day's other costs filled from the cost sheet × batches and editable (`OrderCost`);
+  leftovers back to the store and batch they came from at the cost used, or wasted with a
+  reason (`Leftover`); good below 90 % / above 105 % needs a reason; 0 good = **Failed**
+  (reason, cost a loss). Unit cost = (materials used + other costs) ÷ good; the new batch is
+  valued at it; the page shows expected against actual.
+- **Batch per mix** (7.6): product switch "New batch number for every batch made"
+  (`Item.batch_per_mix`, inventory 0006): one batch per mix, the good shared over them, one
+  store only.
+- **Reverse** (7.5, reason) while nothing made was sold, moved or used; **Cancel after Start**
+  returns every material. QC pass / fail covers every batch made.
+- Statuses read Planned → Started → Finished (+ Failed, Reversed, Cancelled). Old production
+  orders still open on their old page. The menu's Make and the flow bar go to the new list.
+- Tests: `inventory/tests_phase7.py` (15) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (production 0003, inventory 0006), collectstatic, restart.

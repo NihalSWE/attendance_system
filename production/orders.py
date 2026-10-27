@@ -196,7 +196,7 @@ def material_cost(order):
 def _running(order):
     if order.status != Status.RELEASED:
         raise ValidationError(f"{order.number} is {order.get_status_display().lower()}: materials are used "
-                              "only on a released order before its output.")
+                              "only on a started production, before it is finished.")
 
 
 def get_consumption(*, actor, company_id, pk):
@@ -494,9 +494,13 @@ def record_qc(*, actor, company_id, order_id, passed, notes=""):
         notes = (notes or "").strip()
         if not passed and not notes:
             raise ValidationError({"notes": "Say what failed."})
-        output.batch.status = Batch.Status.RELEASED if passed else Batch.Status.BLOCKED
-        output.batch.updated_by = actor
-        output.batch.save(update_fields=["status", "updated_by", "updated_at"])
+        # Every batch it made: one per mix when the product says so (2026-10-27).
+        from production.making import made_batches
+
+        for batch in made_batches(output) or [output.batch]:
+            batch.status = Batch.Status.RELEASED if passed else Batch.Status.BLOCKED
+            batch.updated_by = actor
+            batch.save(update_fields=["status", "updated_by", "updated_at"])
         audit(actor, membership, f"production.qc.{'passed' if passed else 'failed'}", order,
               after={"batch": output.batch.batch_no, "notes": notes})
     return output

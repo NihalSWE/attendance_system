@@ -99,7 +99,9 @@
         busy(button, true);
         let reply = null;
         try {
-            const response = await fetch(form.getAttribute("action") || window.location.href, {
+            // A button can send the form elsewhere (formaction: Passed / Failed).
+            const target = (button && button.getAttribute("formaction")) || form.getAttribute("action");
+            const response = await fetch(target || window.location.href, {
                 method: "POST",
                 body: body,
                 credentials: "same-origin",

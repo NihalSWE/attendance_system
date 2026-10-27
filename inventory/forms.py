@@ -190,7 +190,7 @@ class ItemForm(CompanyForm):
         model = Item
         fields = (
             "code", "name", "name_bn", "kind", "category", "base_uom", "barcode",
-            "track_batch", "track_expiry", "shelf_life_days", "qc_required",
+            "track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix",
             "sourcing", "keep_by", "min_stock", "keep_days", "reorder_point", "reorder_qty",
             "max_stock", "default_warehouse", "standard_cost", "sale_price", "vat_rate", "hs_code",
             "notes",
@@ -253,6 +253,13 @@ class ItemForm(CompanyForm):
         for name in ("sourcing", "keep_by"):
             if name in self.fields:
                 self.fields[name].required = False   # the default when not said (clean)
+        if not finished_possible or "sourcing" not in self.fields:
+            # One batch number per mix: only for a product made here (2026-10-27).
+            del self.fields["batch_per_mix"]
+        else:
+            self.fields["batch_per_mix"].widget.attrs["data-show-when"] = "track_batch:on"
+            self.fields["batch_per_mix"].help_text = ("Off: one batch number per production. On: one per "
+                                                      "mix, and the products go into one store.")
         if not finished_possible:
             del self.fields["keep_by"], self.fields["keep_days"]
         else:
@@ -273,6 +280,8 @@ class ItemForm(CompanyForm):
         if "sourcing" in self.fields and (not finished or not data.get("sourcing")):
             data["sourcing"] = Item.Sourcing.BUY if not finished else (
                 self.instance.sourcing if self.instance.pk else Item.Sourcing.MAKE)
+        if "batch_per_mix" in self.fields and not finished:
+            data["batch_per_mix"] = False
         if "keep_by" in self.fields and (not finished or not data.get("keep_by")):
             data["keep_by"] = Item.KeepBy.QUANTITY
             if not finished:
