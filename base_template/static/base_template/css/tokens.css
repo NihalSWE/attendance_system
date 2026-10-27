@@ -80,6 +80,18 @@ needed that is not here, add it here and recalculate its contrast first
     --r: 8px;
     --r-lg: 11px;
     --r-pill: 999px;
+    /* ---------- The 2026 layout (inventory redesign, approved mockup) ----------
+    Blue for the one main action and for links, so what can be clicked is
+    obvious. Used only by the ui-* pieces (ui.css); older pages keep ink. */
+    --action:            #1d5fb4;
+    /* the main button, links                    */
+    --action-hover:      #174d93;
+    --action-soft:       #e8f0fa;
+    /* next-step box, selected rows              */
+    --action-ink:        #164a8c;
+    /* text on --action-soft                     */
+    --tile:              #f6f4ef;
+    /* number tiles                              */
     /* ---------- Spacing (4px base) ---------- */
     --s1: 4px;
     --s2: 8px;

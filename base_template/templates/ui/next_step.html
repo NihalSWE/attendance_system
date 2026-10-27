@@ -1,0 +1,12 @@
+{% comment %}
+    The Next step box at the end of a page (plan §3): what to do next and one
+    button to it. {% include "ui/next_step.html" with what="Add the product that uses it" url=... button="Add product" %}
+{% endcomment %}
+<div class="ui-next" role="note">
+    {% include "ui/icon.html" with name="arrow-right" %}
+    <div class="ui-next__text">
+        <p class="ui-next__label">Next step</p>
+        <p class="ui-next__what">{{ what }}</p>
+    </div>
+    {% if url %}<a class="ui-btn ui-btn--main" href="{{ url }}">{{ button|default:"Go" }} {% include "ui/icon.html" with name="arrow-right" small=True %}</a>{% endif %}
+</div>
