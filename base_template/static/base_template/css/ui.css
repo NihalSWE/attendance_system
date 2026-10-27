@@ -1,0 +1,345 @@
+/* ============================================================================
+The 2026 layout pieces (inventory redesign, docs/inventory/PRODUCTION_PLAN.md §4).
+Every new screen is built from these; older pages keep their own classes until
+they are moved over. Colours come from tokens.css only.
+
+  ui-head        page header: crumbs, title, actions
+  ui-tiles       number tiles across the top
+  ui-card        a section: title bar with its own buttons, body, foot
+  ui-btn         buttons: --main (one per page), plain (outlined), --danger
+  ui-link        blue underlined links (and any plain <a> inside .ui-page)
+  ui-chip        status: --ok green, --wait amber, --bad red, --info blue
+  ui-switch      on/off settings, each with one line saying what it does
+  ui-next        the Next step box at the end of a page
+  ui-checklist   the setup checklist
+  ui-message     the result of saving, just above the Save button
+========================================================================= */
+
+/* ---------- Page header ---------- */
+.ui-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--s4);
+    flex-wrap: wrap;
+    margin-bottom: var(--s5);
+}
+.ui-head__crumbs {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: var(--s1);
+}
+.ui-head__crumbs a { color: var(--muted); }
+.ui-head__title {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text);
+}
+.ui-head__sub {
+    margin: var(--s1) 0 0;
+    color: var(--muted);
+    font-size: 14px;
+}
+.ui-head__actions {
+    display: flex;
+    gap: var(--s2);
+    flex-wrap: wrap;
+}
+
+/* ---------- Number tiles ---------- */
+.ui-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: var(--s3);
+    margin-bottom: var(--s5);
+}
+.ui-tile {
+    background: var(--tile);
+    border-radius: var(--r);
+    padding: var(--s3) var(--s4);
+    min-width: 0;
+}
+.ui-tile__label {
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0;
+}
+.ui-tile__value {
+    font-size: 26px;
+    font-weight: 600;
+    margin: 2px 0 0;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.ui-tile__hint {
+    font-size: 12px;
+    color: var(--muted);
+    margin: 2px 0 0;
+}
+.ui-tile--good { background: var(--success-soft); }
+.ui-tile--good .ui-tile__label,
+.ui-tile--good .ui-tile__value,
+.ui-tile--good .ui-tile__hint { color: var(--success-ink); }
+.ui-tile--bad { background: var(--danger-soft); }
+.ui-tile--bad .ui-tile__label,
+.ui-tile--bad .ui-tile__value,
+.ui-tile--bad .ui-tile__hint { color: var(--danger-ink); }
+.ui-tile--warn { background: var(--warning-soft); }
+.ui-tile--warn .ui-tile__label,
+.ui-tile--warn .ui-tile__value,
+.ui-tile--warn .ui-tile__hint { color: var(--warning-ink); }
+
+/* ---------- Cards (sections) ---------- */
+.ui-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--s4);
+    overflow: hidden;
+}
+.ui-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+    flex-wrap: wrap;
+    padding: var(--s3) var(--s4);
+    border-bottom: 1px solid var(--border);
+}
+.ui-card__title {
+    display: flex;
+    align-items: center;
+    gap: var(--s2);
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+}
+.ui-card__title .ui-icon { color: var(--action); }
+.ui-card__note {
+    font-size: 13px;
+    color: var(--muted);
+}
+.ui-card__body { padding: var(--s4); }
+.ui-card__body > :last-child { margin-bottom: 0; }
+.ui-card__foot {
+    padding: var(--s3) var(--s4);
+    border-top: 1px solid var(--border);
+    background: var(--surface-sunken);
+}
+.ui-card .table-wrap { margin: 0; }
+/* Codes and numbers never break across lines. */
+.ui-page td:first-child, .ui-page td.numeric { white-space: nowrap; }
+
+/* ---------- Icons ---------- */
+.ui-icon {
+    width: 18px;
+    height: 18px;
+    flex: none;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vertical-align: -3px;
+}
+.ui-icon--sm { width: 15px; height: 15px; }
+
+/* ---------- Buttons ---------- */
+.ui-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 38px;
+    padding: 0 14px;
+    border-radius: var(--r);
+    border: 1px solid var(--field);
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background var(--tr), border-color var(--tr), color var(--tr);
+    white-space: nowrap;
+}
+.ui-btn:hover { background: var(--surface-sunken); border-color: var(--faint); }
+.ui-btn:focus-visible { outline: none; box-shadow: 0 0 0 var(--ring-width) var(--action-soft); border-color: var(--action); }
+.ui-btn--main {
+    background: var(--action);
+    border-color: var(--action);
+    color: #fff;
+}
+.ui-btn--main:hover { background: var(--action-hover); border-color: var(--action-hover); }
+.ui-btn--danger { color: var(--danger-ink); border-color: var(--danger-soft); }
+.ui-btn--danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+.ui-btn--sm { min-height: 30px; padding: 0 10px; font-size: 13px; }
+.ui-btn[aria-busy="true"] { opacity: .75; cursor: progress; pointer-events: none; }
+.ui-btn[aria-busy="true"]::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: ui-spin .7s linear infinite;
+}
+@keyframes ui-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Links: anything clickable looks clickable ---------- */
+.ui-link,
+.ui-page a:not(.ui-btn):not(.nav-item):not(.crumbs a) {
+    color: var(--action);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.ui-link:hover,
+.ui-page a:not(.ui-btn):hover { color: var(--action-hover); }
+
+/* ---------- Status chips ---------- */
+.ui-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px;
+    border-radius: var(--r-pill);
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    white-space: nowrap;
+}
+.ui-chip--ok { background: var(--success-soft); color: var(--success-ink); }
+.ui-chip--wait { background: var(--warning-soft); color: var(--warning-ink); }
+.ui-chip--bad { background: var(--danger-soft); color: var(--danger-ink); }
+.ui-chip--info { background: var(--action-soft); color: var(--action-ink); }
+
+/* ---------- Switches ---------- */
+.ui-switch {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s4);
+    padding: var(--s2) 0;
+    cursor: pointer;
+}
+.ui-switch + .ui-switch { border-top: 1px solid var(--border); }
+.ui-switch__text { display: flex; flex-direction: column; gap: 2px; }
+.ui-switch__label { font-weight: 500; color: var(--text); }
+.ui-switch__hint { font-size: 13px; color: var(--muted); }
+.ui-switch input {
+    appearance: none;
+    -webkit-appearance: none;
+    flex: none;
+    width: 40px;
+    height: 22px;
+    margin: 0;
+    border-radius: 11px;
+    background: var(--field);
+    position: relative;
+    cursor: pointer;
+    transition: background var(--tr);
+}
+.ui-switch input::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--tr);
+}
+.ui-switch input:checked { background: var(--action); }
+.ui-switch input:checked::after { transform: translateX(18px); }
+.ui-switch input:focus-visible { outline: none; box-shadow: 0 0 0 var(--ring-width) var(--action-soft); }
+
+/* ---------- Next step ---------- */
+.ui-next {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    flex-wrap: wrap;
+    padding: var(--s3) var(--s4);
+    margin: var(--s5) 0 var(--s4);
+    border-radius: 12px;
+    background: var(--action-soft);
+    color: var(--action-ink);
+}
+.ui-next__text { flex: 1; min-width: 200px; }
+.ui-next__label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin: 0; }
+.ui-next__what { margin: 2px 0 0; font-weight: 500; color: var(--text); }
+
+/* ---------- Setup checklist ---------- */
+.ui-checklist { list-style: none; margin: 0; padding: 0; }
+.ui-checklist__item {
+    display: flex;
+    align-items: center;
+    gap: var(--s3);
+    padding: var(--s3) 0;
+}
+.ui-checklist__item + .ui-checklist__item { border-top: 1px solid var(--border); }
+.ui-checklist__mark {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--tile);
+    color: var(--muted);
+}
+.ui-checklist__item--done .ui-checklist__mark { background: var(--success-soft); color: var(--success-ink); }
+.ui-checklist__item--todo .ui-checklist__mark { background: var(--warning-soft); color: var(--warning-ink); }
+.ui-checklist__text { flex: 1; min-width: 0; }
+.ui-checklist__what { font-weight: 500; color: var(--text); margin: 0; }
+.ui-checklist__detail { font-size: 13px; color: var(--muted); margin: 2px 0 0; }
+
+/* ---------- The result of saving, just above the Save button ---------- */
+.ui-message {
+    display: flex;
+    gap: var(--s2);
+    align-items: flex-start;
+    padding: var(--s3) var(--s4);
+    margin: 0 var(--s4) var(--s3);
+    border-radius: var(--r);
+    font-size: 14px;
+    font-weight: 500;
+}
+.ui-message[hidden] { display: none; }
+.ui-message--ok { background: var(--success-soft); color: var(--success-ink); }
+.ui-message--error { background: var(--danger-soft); color: var(--danger-ink); }
+.ui-message ul { margin: 4px 0 0; padding-left: 18px; font-weight: 400; }
+.ui-message--inline { margin: 0 0 var(--s3); }
+.field.ui-field--error .input,
+.field.ui-field--error .select2-selection,
+.field.ui-field--error .cs__control,
+.field.ui-field--error .dp__btn { border-color: var(--danger) !important; box-shadow: 0 0 0 var(--ring-width) var(--ring-danger); }
+
+/* ---------- Form layout ---------- */
+.ui-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--s2);
+    flex-wrap: wrap;
+}
+.ui-grid-2 {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--s3) var(--s4);
+}
+.ui-sample {
+    font-size: 12px;
+    color: var(--muted);
+    border: 1px dashed var(--field);
+    border-radius: var(--r);
+    padding: var(--s2) var(--s3);
+    margin-bottom: var(--s4);
+}

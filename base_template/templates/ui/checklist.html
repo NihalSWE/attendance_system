@@ -1,0 +1,16 @@
+{% comment %}
+    The setup checklist (plan §3): one line per step, done or not, each a link to
+    where it is done. ``steps``: [{"done": bool, "what", "detail", "url", "button"}].
+{% endcomment %}
+<ul class="ui-checklist">
+    {% for step in steps %}
+        <li class="ui-checklist__item {% if step.done %}ui-checklist__item--done{% else %}ui-checklist__item--todo{% endif %}">
+            <span class="ui-checklist__mark" aria-hidden="true">{% if step.done %}{% include "ui/icon.html" with name="check" small=True %}{% else %}{{ forloop.counter }}{% endif %}</span>
+            <div class="ui-checklist__text">
+                <p class="ui-checklist__what">{{ step.what }}<span class="sr-only">{% if step.done %} (done){% else %} (to do){% endif %}</span></p>
+                {% if step.detail %}<p class="ui-checklist__detail">{{ step.detail }}</p>{% endif %}
+            </div>
+            {% if step.url %}<a class="ui-btn {% if step.done %}ui-btn--sm{% else %}ui-btn--main ui-btn--sm{% endif %}" href="{{ step.url }}">{{ step.button|default:"Open" }}</a>{% endif %}
+        </li>
+    {% endfor %}
+</ul>

@@ -1,0 +1,109 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% block title %}
+    Layout preview
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    {# Modals and switches that show boxes. #}
+    <script defer src="{% static 'organization/js/employee_profile.js' %}">
+    </script>
+{% endblock %}
+{% block page %}
+    <div class="ui-page">
+        <p class="ui-sample">Sample data: the layout pieces every new inventory screen is built from. Nothing on this page is saved.</p>
+
+        <div class="ui-head">
+            <div>
+                <p class="ui-head__crumbs">Products &amp; stock / Products</p>
+                <h1 class="ui-head__title">Biscuit 100 g</h1>
+                <p class="ui-head__sub">Made here · sold by the packet and the carton (1 carton = 24 packets)</p>
+            </div>
+            <div class="ui-head__actions">
+                <button class="ui-btn" type="button">{% include "ui/icon.html" with name="edit" %} Edit</button>
+                <button class="ui-btn ui-btn--main" type="button" data-open-dialog="demo-dialog">{% include "ui/icon.html" with name="play" %} Make this</button>
+            </div>
+        </div>
+
+        <div class="ui-tiles">
+            <div class="ui-tile"><p class="ui-tile__label">Cost per packet</p><p class="ui-tile__value">10.35</p><p class="ui-tile__hint">Tk 248.33 per carton</p></div>
+            <div class="ui-tile"><p class="ui-tile__label">Sale price</p><p class="ui-tile__value">20.00</p><p class="ui-tile__hint">per packet · carton 450</p></div>
+            <div class="ui-tile ui-tile--good"><p class="ui-tile__label">Margin</p><p class="ui-tile__value">9.65</p><p class="ui-tile__hint">48% per packet</p></div>
+            <div class="ui-tile ui-tile--warn"><p class="ui-tile__label">In stock</p><p class="ui-tile__value">150</p><p class="ui-tile__hint">cartons · keep 200</p></div>
+        </div>
+
+        <div class="ui-card" id="materials">
+            <div class="ui-card__head">
+                <h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} What one batch uses</h2>
+                <button class="ui-btn ui-btn--sm" type="button">{% include "ui/icon.html" with name="plus" small=True %} Add material</button>
+            </div>
+            <div class="table-wrap">
+                <table class="table" data-local-table>
+                    <thead><tr><th>Code</th><th>Material</th><th>Unit</th><th class="numeric">In stock</th><th>Status</th><th class="no-sort"><span class="sr-only">Actions</span></th></tr></thead>
+                    <tbody>
+                        {% for code, name, unit, stock, tone, status in rows %}
+                            <tr>
+                                <td>{{ code }}</td>
+                                <td><a href="#materials">{{ name }}</a></td>
+                                <td>{{ unit }}</td>
+                                <td class="numeric">{{ stock }}</td>
+                                <td><span class="ui-chip ui-chip--{{ tone }}">{{ status }}</span></td>
+                                <td><button class="ui-btn ui-btn--danger ui-btn--sm" type="button">{% include "ui/icon.html" with name="trash" small=True %} Remove</button></td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="settings" %} Settings with switches</h2></div>
+            <div class="ui-card__body">
+                <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Keeps batches</span><span class="ui-switch__hint">Each production gets its own batch number.</span></span><input type="checkbox" checked></label>
+                <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Has an expiry date</span><span class="ui-switch__hint">Expired batches can never be used or sold.</span></span><input type="checkbox" checked></label>
+                <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Quality check before sale</span><span class="ui-switch__hint">New batches wait until checked.</span></span><input type="checkbox"></label>
+            </div>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="flag" %} Getting started</h2><span class="ui-card__note">2 of 4 done</span></div>
+            <div class="ui-card__body">{% include "ui/checklist.html" with steps=steps %}</div>
+        </div>
+
+        <div class="ui-card" id="form">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Saving without reloading</h2><span class="ui-card__note">Try: leave Name empty · type "flour" · switch expiry on without a shelf life</span></div>
+            <form method="post" action="{{ action }}" data-fetch novalidate>
+                {% csrf_token %}
+                <div class="ui-card__body ui-grid-2">
+                    {% include "leaves/includes/field.html" with field=form.name %}
+                    {% include "leaves/includes/field.html" with field=form.unit %}
+                    {% include "leaves/includes/field.html" with field=form.stock_to_keep %}
+                    {% include "leaves/includes/field.html" with field=form.shelf_life %}
+                    <label class="ui-switch"><span class="ui-switch__text"><span class="ui-switch__label">Has an expiry date</span><span class="ui-switch__hint">Then give the shelf life.</span></span><input type="checkbox" name="has_expiry"></label>
+                </div>
+                <div class="ui-message" data-form-message role="status" hidden></div>
+                <div class="ui-card__foot ui-form-actions">
+                    <button class="ui-btn" type="reset">Clear</button>
+                    <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="alert" %} Buttons and status</h2></div>
+            <div class="ui-card__body" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                <button class="ui-btn ui-btn--main" type="button">Main action</button>
+                <button class="ui-btn" type="button">Other action</button>
+                <button class="ui-btn ui-btn--danger" type="button">Delete</button>
+                <a href="#form">A link opens something</a>
+                <span class="ui-chip ui-chip--ok">Done</span>
+                <span class="ui-chip ui-chip--wait">Waiting</span>
+                <span class="ui-chip ui-chip--bad">Problem</span>
+                <span class="ui-chip ui-chip--info">Planned</span>
+            </div>
+        </div>
+
+        {% include "ui/next_step.html" with what="Put the materials in stock: a first count, or a purchase." url="#form" button="Stock in" %}
+    </div>
+    {% include "organization/profile/modal_form.html" with id="demo-dialog" title="Add a material (sample)" action=action form=modal_form submit="Save" fetch=True note="The same saving in a modal: errors appear above the buttons and the modal stays open." %}
+{% endblock %}
