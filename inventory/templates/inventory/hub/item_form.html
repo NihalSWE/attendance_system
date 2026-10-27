@@ -1,0 +1,36 @@
+{% comment %}
+    The Add / Edit modal of a material or product (inventory/hub_forms.py):
+    id, title, action, form, submit; optional done (where to go after).
+{% endcomment %}
+<dialog class="modal modal--wide" id="{{ id }}" aria-labelledby="{{ id }}-title">
+    <form class="modal__card" method="post" action="{{ action }}" data-fetch novalidate>
+        {% csrf_token %}
+        <div class="modal__head">
+            <h2 id="{{ id }}-title">{{ title }}</h2>
+            <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <div class="modal__body stack">
+            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+            {% if form.sourcing_box %}{% include "inventory/hub/field.html" with box=form.sourcing_box %}{% endif %}
+            <div class="ui-grid-2">
+                {% for box in form.main_boxes %}{% include "inventory/hub/field.html" %}{% endfor %}
+            </div>
+            {% if form.keep_box %}
+                {% include "inventory/hub/field.html" with box=form.keep_box %}
+                <div class="ui-grid-2">{% for box in form.keep_boxes %}{% include "inventory/hub/field.html" %}{% endfor %}</div>
+            {% endif %}
+            <div>{% for box in form.switch_boxes %}{% include "inventory/hub/field.html" %}{% endfor %}</div>
+            {% if form.more_boxes %}
+                <details class="more-details">
+                    <summary>More details (optional)</summary>
+                    <div class="ui-grid-2">{% for box in form.more_boxes %}{% include "inventory/hub/field.html" %}{% endfor %}</div>
+                </details>
+            {% endif %}
+        </div>
+        <div class="ui-message" data-form-message role="status" hidden></div>
+        <div class="modal__foot">
+            <button class="ui-btn" type="button" data-close-dialog>Cancel</button>
+            <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} {{ submit }}</button>
+        </div>
+    </form>
+</dialog>

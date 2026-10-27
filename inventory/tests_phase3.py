@@ -29,10 +29,10 @@ class ProductionModuleTests(ProductionFixture, TestCase):
         page = self.client.get(reverse("production:orders"))
         self.assertEqual(page.status_code, 404)
         self.assertContains(page, "Production is not enabled", status_code=404)
-        menu = self.client.get(reverse("inventory:finished_goods"))
+        menu = self.client.get(reverse("inventory:products"))
         self.assertNotContains(menu, f'href="{reverse("production:orders")}"')
-        self.assertNotContains(menu, f'href="{reverse("inventory:raw_materials")}"')
-        self.assertContains(menu, f'href="{reverse("inventory:finished_goods")}"')
+        self.assertNotContains(menu, f'href="{reverse("inventory:materials")}"')
+        self.assertContains(menu, f'href="{reverse("inventory:products")}"')
         self.assertNotIn("production.plan", offered(self.company.pk))
         # The finished good shows no recipe card.
         self.assertNotContains(self.client.get(reverse("inventory:item_detail", args=[self.juice.pk])),
@@ -45,7 +45,7 @@ class ProductionModuleTests(ProductionFixture, TestCase):
     def test_production_on_shows_it(self):
         page = self.client.get(reverse("production:orders"))
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, f'href="{reverse("inventory:raw_materials")}"')
+        self.assertContains(page, f'href="{reverse("inventory:materials")}"')
         self.assertIn("production.plan", offered(self.company.pk))
 
     def test_companies_with_inventory_keep_production(self):

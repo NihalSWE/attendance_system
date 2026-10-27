@@ -6752,3 +6752,34 @@ sample data at /inventory/preview/) were merged before this.
 - Tests: `inventory/tests_phase3.py` (9) and the apps touched. Full suite: after all phases.
 
 **Deploy:** pull, migrate (tenants 0009, inventory 0005), collectstatic, restart.
+
+### Inventory redesign, phase 4: Materials and Products on real records — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §15 phase 4 (and 1.5, the menu in work order).
+The screens approved on sample data are now real pages:
+
+- **Start here** `/inventory/start/` (`inventory/hub.py` `checklist`): tiles (materials and
+  products low or out, value in stock, set-up steps) and the checklist from the company's
+  own records - stores, materials, products, recipes, stock in, first production, first
+  sale, below stock to keep - each a link; a trading company sees no production steps. The
+  Next step box is the first step not done.
+- **Materials** `/inventory/materials/` (Production only) and **Products**
+  `/inventory/products/`: server tables (SL, search, pages) with stock in the stores the
+  person sees, stock to keep, value, status chip (OK / Low / Out); products also how you
+  get it, price, cost and margin (money only with "See costs"). Filters: category, store,
+  status.
+- **Add / Edit / Delete save with fetch** (`inventory/hub_forms.py`, `hub_views.py`): the
+  answer above the Save button, wrong boxes red. A code is suggested when left empty
+  (RM-0003); the unit is asked once and shown beside every quantity; the bigger unit
+  (1 bag = 50 kg, 1 carton = 24 at its own price) is on the Add form. Delete for an item
+  that never moved, else Deactivate. Pack add/remove, delete and status answer fetch too.
+- **Material page**: stock by store and batch, used in, units, Next step.
+- **Product hub**: cost, price, margin, in stock (also in its biggest unit), sold in the
+  last 30 days and per day; recipe with what is in stock and how many batches it is enough
+  for (editing it stays on the item page until phase 5); stock by store and batch;
+  productions or purchases; units and prices; Next step.
+- **Menu**: Start here, Materials, Products first; Raw materials / Packaging / Finished
+  goods leave the menu (their pages still open). The BOM list goes to Products.
+- Tests: `inventory/tests_phase4.py` (17) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, collectstatic, restart (no migration).

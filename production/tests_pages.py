@@ -30,7 +30,7 @@ class ProductionPageTests(ProductionFixture, TestCase):
     def test_the_links_shown_open(self):
         # Scan and Labels (2026-10-25) and Production orders (2026-10-26) show;
         # BOMs is not in the menu - the recipe is on the finished good's page.
-        shown = ("inventory:scan", "inventory:labels", "production:orders", "inventory:finished_goods")
+        shown = ("inventory:scan", "inventory:labels", "production:orders", "inventory:products")
         for name in shown:
             page = self.client.get(reverse(name))
             self.assertEqual(page.status_code, 200, name)
@@ -46,7 +46,7 @@ class ProductionPageTests(ProductionFixture, TestCase):
         self.assertRedirects(self.client.get(reverse("production:bom_detail", args=[bom.pk])), product,
                              fetch_redirect_response=False)
         self.assertRedirects(self.client.get(reverse("production:boms")),
-                             reverse("inventory:finished_goods"), fetch_redirect_response=False)
+                             reverse("inventory:products"), fetch_redirect_response=False)
         self.assertNotContains(self.client.get(product), "version")
 
     def test_a_whole_run_through_the_pages(self):

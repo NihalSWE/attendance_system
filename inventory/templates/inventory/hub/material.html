@@ -1,0 +1,61 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}{{ item.name }}{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:materials' %}">Materials</a> / {{ item.code }}</p>
+            <h1 class="ui-head__title">{{ item.name }}{% if item.status != "active" %} <span class="ui-chip">Inactive</span>{% endif %}</h1>
+            <p class="ui-head__sub">{{ item.get_kind_display }}{% if item.category %} · {{ item.category.name }}{% endif %} · counted in {{ item.base_uom.code }}{% for pack in packs %} · 1 {{ pack.uom.code }} = {{ pack.factor|floatformat:"-4" }} {{ item.base_uom.code }}{% endfor %}{% if item.track_expiry %} · expires{% if item.shelf_life_days %} after {{ item.shelf_life_days }} days{% endif %}{% elif item.track_batch %} · keeps batches{% endif %}{% if item.qc_required %} · checked before use{% endif %}</p>
+        </div>
+        <div class="ui-head__actions">
+            {% include "inventory/hub/_head_actions.html" %}
+            <a class="ui-btn ui-btn--main" href="{% url 'purchasing:receipts' %}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+        </div>
+    </div>
+
+    <div class="ui-tiles">
+        <div class="ui-tile{% if line.tone == 'wait' %} ui-tile--warn{% elif line.tone == 'bad' %} ui-tile--bad{% endif %}"><p class="ui-tile__label">In stock</p><p class="ui-tile__value">{{ line.on_hand|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ item.base_uom.code }}{% if line.keep %} · keep {{ line.keep|floatformat:"-2g" }}{% endif %}</p></div>
+        {% if sees_costs %}
+            <div class="ui-tile"><p class="ui-tile__label">Average cost</p><p class="ui-tile__value">{% if line.avg_cost is not None %}{{ line.avg_cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">Tk per {{ item.base_uom.code }} · value {{ line.value|floatformat:"0g" }}</p></div>
+        {% endif %}
+        <div class="ui-tile"><p class="ui-tile__label">Used in</p><p class="ui-tile__value">{{ used|length }}</p><p class="ui-tile__hint">product{{ used|length|pluralize }}</p></div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Stock by store{% if item.track_batch %} and batch{% endif %}</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:store_transfers' %}">Move stock</a></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr>{% if item.track_batch %}<th>Batch</th>{% endif %}<th>Store</th>{% if item.track_batch %}<th>Received</th><th>Expiry</th>{% endif %}<th class="numeric">Quantity</th>{% if sees_costs %}<th class="numeric">Cost per {{ item.base_uom.code }}</th>{% endif %}</tr></thead>
+                <tbody>
+                    {% for row in batches %}
+                        <tr>{% if item.track_batch %}<td>{{ row.batch.batch_no|default:"—" }}{% if row.batch.status and row.batch.status != "released" %} <span class="ui-chip ui-chip--wait">{{ row.batch.get_status_display }}</span>{% endif %}</td>{% endif %}<td>{{ row.warehouse.name }}{% if row.location %} · {{ row.location.code }}{% endif %}</td>{% if item.track_batch %}<td>{{ row.batch.mfg_date|date:"j M Y"|default:"—" }}</td><td>{{ row.batch.expiry_date|date:"j M Y"|default:"—" }}</td>{% endif %}<td class="numeric">{{ row.qty_on_hand|floatformat:"-2g" }} {{ item.base_uom.code }}</td>{% if sees_costs %}<td class="numeric">{{ row.unit_cost|floatformat:"2g" }}</td>{% endif %}</tr>
+                    {% empty %}
+                        <tr><td colspan="6">None in stock{% if line.keep %}: keep {{ line.keep|floatformat:"-2g" }} {{ item.base_uom.code }}{% endif %}.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Used in</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Product</th><th class="numeric">One batch uses</th><th class="numeric">Wastage</th></tr></thead>
+                <tbody>
+                    {% for use in used %}
+                        <tr><td><a href="{% url 'inventory:product' use.bom.item_id %}">{{ use.bom.item.name }}</a></td><td class="numeric">{{ use.qty|floatformat:"-4g" }} {{ use.uom.code }}</td><td class="numeric">{{ use.scrap_pct|floatformat:"-2" }} %</td></tr>
+                    {% empty %}
+                        <tr><td colspan="3">Not in any recipe yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% include "inventory/hub/_item_parts.html" %}
+
+    <p class="ui-muted">Every movement of it: <a href="{% url 'inventory:item_detail' item.pk %}#moves">stock card</a>.</p>
+
+    {% include "ui/next_step.html" with what=next_step.0 url=next_step.1 button=next_step.2 %}
+{% endblock %}

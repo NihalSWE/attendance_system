@@ -1,0 +1,5 @@
+{% comment %}Edit and Delete (or Deactivate) on an item's own page.{% endcomment %}
+{% if edit_form %}
+    <button class="ui-btn ui-btn--sm" type="button" data-open-dialog="remove-dialog">{% if not moved %}{% include "ui/icon.html" with name="trash" small=True %} Delete{% elif item.status == "active" %}Deactivate{% else %}Activate{% endif %}</button>
+    <button class="ui-btn" type="button" data-open-dialog="edit-dialog">{% include "ui/icon.html" with name="edit" %} Edit</button>
+{% endif %}

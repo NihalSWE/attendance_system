@@ -5,6 +5,7 @@ from django.views.generic import RedirectView
 
 from inventory import (
     golive_views,
+    hub_views,
     import_views,
     label_views,
     opening_views,
@@ -82,6 +83,16 @@ urlpatterns = [
     path("import/<slug:kind>/", import_views.import_page, name="import"),
     path("import/<slug:kind>/confirm/", import_views.import_confirm, name="import_confirm"),
     path("import/<slug:kind>/template/", import_views.template_download, name="import_template"),
+]
+
+# The redesigned screens on real records (plan §15 phase 4).
+urlpatterns += [
+    path("start/", hub_views.start, name="start"),
+    path("materials/", hub_views.materials, name="materials"),
+    path("materials/<int:pk>/", hub_views.material, name="material"),
+    path("products/", hub_views.products, name="products"),
+    path("products/<int:pk>/", hub_views.product, name="product"),
+    path("items/<int:pk>/save/", hub_views.item_save, name="item_save"),
 ]
 
 # The redesigned screens on sample data, for approval (plan §15 phase 2).

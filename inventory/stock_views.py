@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from access_control.branch_access import ALL_BRANCHES, branches_for
+from base_template import fetch
 from base_template.tables import paginate, render
 from common.forms import apply_service_errors
 from common.tenant import use_company
@@ -191,13 +192,19 @@ def pack_unit_add(request, pk):
     form = forms.PackUnitForm(request.POST, company_id=company_id, item=item)
     if form.is_valid():
         try:
-            masters.add_pack_unit(actor=request.user, company_id=company_id, item_id=item.pk,
-                                  values=form.cleaned_data)
+            pack = masters.add_pack_unit(actor=request.user, company_id=company_id, item_id=item.pk,
+                                         values=form.cleaned_data)
         except ValidationError as exc:
             apply_service_errors(form, exc)
         else:
+            if fetch.wants_json(request):
+                # From the material page or the product hub (2026-10-27).
+                return fetch.saved(f"1 {pack.uom.code} = {pack.factor.normalize():f} {item.base_uom.code} added.",
+                                   _back_to(request, item))
             messages.success(request, "Pack unit added.")
             return redirect("inventory:item_detail", pk=item.pk)
+    if fetch.wants_json(request):
+        return fetch.refused(form)
     return render(request, "inventory/item_detail.html",
                   _item_context(request, company_id, item, pack_form=form, open_dialog="pack-dialog"))
 
@@ -208,6 +215,22 @@ def pack_unit_remove(request, pk, pack_pk):
     company_id, bail = company_or_bail(request)
     if bail:
         return bail
-    masters.remove_pack_unit(actor=request.user, company_id=company_id, item_id=pk, pack_id=pack_pk)
+    try:
+        masters.remove_pack_unit(actor=request.user, company_id=company_id, item_id=pk, pack_id=pack_pk)
+    except ValidationError as exc:
+        if fetch.wants_json(request):
+            return fetch.refused(message="; ".join(exc.messages))
+        raise
+    if fetch.wants_json(request):
+        with use_company(company_id):
+            item = Item.objects.get(pk=pk)
+        return fetch.saved("Unit removed.", _back_to(request, item))
     messages.success(request, "Pack unit removed.")
     return redirect("inventory:item_detail", pk=pk)
+
+
+def _back_to(request, item):
+    """The page the form came from: the item's own new page (hub_views)."""
+    from inventory.hub_views import _page_of
+
+    return _page_of(item)

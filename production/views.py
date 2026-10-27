@@ -61,7 +61,7 @@ def bom_list(request):
                 return _to_product(bom)
         else:
             messages.error(request, " ".join(e for errors in form.errors.values() for e in errors))
-    return redirect("inventory:finished_goods")
+    return redirect("inventory:products")
 
 
 def _to_product(bom):
