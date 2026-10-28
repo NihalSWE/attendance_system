@@ -1,0 +1,36 @@
+{% comment %}
+    One item line of Stock in / Move stock / Sell (static/inventory/js/lines.js):
+    i (its number), items (flow_views._item_options), mode "in", "move" or "sell".
+    Plain selects: lines are copied by "Add a line".
+{% endcomment %}
+<div class="ui-line" data-line="{{ i }}">
+    <p class="ui-line__title" data-line-title>Line {{ i }}</p>
+    <div class="ui-grid-2">
+        <div class="field">
+            <label class="field__label" for="item_{{ i }}">Item</label>
+            <select class="input select" id="item_{{ i }}" name="item_{{ i }}" data-line-item>
+                <option value="">Choose an item</option>
+                {% for option in items %}<option value="{{ option.item.pk }}" data-units="{{ option.units }}" data-batch="{{ option.batch }}" data-expiry="{{ option.expiry }}">{{ option.item.code }} · {{ option.item.name }}</option>{% endfor %}
+            </select>
+            {% if mode != "in" %}<span class="field__help" data-line-have></span>{% endif %}
+        </div>
+        <div class="field">
+            <label class="field__label" for="qty_{{ i }}">Quantity</label>
+            <div class="ui-unit"><input class="input" id="qty_{{ i }}" name="qty_{{ i }}" type="number" step="any" min="0" inputmode="decimal"><span class="ui-unit__label" data-qty-unit>—</span></div>
+        </div>
+        <div class="field ui-line__unit" hidden>
+            <label class="field__label" for="unit_{{ i }}">Unit</label>
+            <select class="input select" id="unit_{{ i }}" name="unit_{{ i }}" data-line-unit></select>
+        </div>
+        {% if mode == "in" %}
+            <div class="field" data-source-only="purchase,count"><label class="field__label" for="cost_{{ i }}">Cost</label><div class="ui-unit"><input class="input" id="cost_{{ i }}" name="cost_{{ i }}" type="number" step="any" min="0" inputmode="decimal"><span class="ui-unit__label">Tk <span data-per-unit>per —</span></span></div></div>
+            <div class="field" data-needs-batch="batch" hidden><label class="field__label" for="batch_{{ i }}">Batch number</label><input class="input" id="batch_{{ i }}" name="batch_{{ i }}" placeholder="From the label; empty: one is made"></div>
+            <div class="field" data-needs-batch="expiry" data-source-only="purchase,count" hidden><label class="field__label" for="expiry_{{ i }}">Expiry date</label><input class="input" id="expiry_{{ i }}" name="expiry_{{ i }}" type="date"></div>
+            <div class="field" data-source-only="return"><label class="field__label" for="condition_{{ i }}">Condition</label><select class="input select" id="condition_{{ i }}" name="condition_{{ i }}"><option value="good">Good: back to stock</option><option value="damaged">Damaged: to the rejected store</option></select></div>
+        {% elif mode == "move" %}
+            <div class="field" hidden><label class="field__label" for="batch_{{ i }}">Batch</label><select class="input select" id="batch_{{ i }}" name="batch_{{ i }}" data-line-batch></select></div>
+        {% elif mode == "sell" %}
+            <div class="field"><label class="field__label" for="price_{{ i }}">Price</label><div class="ui-unit"><input class="input" id="price_{{ i }}" name="price_{{ i }}" type="number" step="any" min="0" inputmode="decimal" data-line-price placeholder="the customer's price"><span class="ui-unit__label">Tk <span data-per-unit>per —</span></span></div><span class="field__help">Empty: the customer's price list, else the product's price.</span></div>
+        {% endif %}
+    </div>
+</div>

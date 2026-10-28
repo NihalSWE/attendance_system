@@ -130,7 +130,7 @@ def material(request, pk):
                      "Products")
     elif not line.on_hand:
         next_step = ("Put it in stock: count what you have, or receive a purchase.",
-                     reverse("inventory:opening"), "Stock in")
+                     reverse("inventory:stock_in_new"), "Stock in")
     else:
         product = used[0].bom.item
         next_step = (f"See {product.name}, which uses it, and make it.",
@@ -198,10 +198,10 @@ def product(request, pk):
         next_step = ("Stock is below what you keep: plan a production.",
                      reverse("production:plan", args=[item.pk]), "Make")
     elif line.tone != "ok":
-        next_step = ("Stock is below what you keep: receive a purchase.", reverse("purchasing:receipts"),
+        next_step = ("Stock is below what you keep: receive a purchase.", reverse("inventory:stock_in_new"),
                      "Stock in")
     else:
-        next_step = ("Sell it: deliver to a customer from stock.", reverse("sales:deliveries"), "Sell")
+        next_step = ("Sell it: deliver to a customer from stock.", reverse("inventory:sale_new"), "Sell")
     return render(request, "inventory/hub/product.html", {
         **context, **parts, **making, "line": line, "makes": makes,
         "buys": buys, "recipe": recipe, "sold": sold, "per_day": per_day,

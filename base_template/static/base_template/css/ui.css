@@ -456,3 +456,8 @@ they are moved over. Colours come from tokens.css only.
 }
 .ui-card > .toolbar .input { max-width: 220px; }
 .ui-page .dt-layout-row:first-child { padding-bottom: var(--s2); }
+
+/* Item lines of Stock in / Move stock / Sell (2026-10-28, inventory/hub/_line.html). */
+.ui-line { padding: var(--s3) 0; border-bottom: 1px solid var(--border); }
+.ui-line:first-child { padding-top: 0; }
+.ui-line__title { margin: 0 0 var(--s2); font-size: 12px; font-weight: 600; color: var(--muted); }

@@ -4,6 +4,7 @@ from django.urls import path
 from django.views.generic import RedirectView
 
 from inventory import (
+    flow_views,
     golive_views,
     hub_views,
     import_views,
@@ -94,6 +95,15 @@ urlpatterns += [
     path("products/", hub_views.products, name="products"),
     path("products/<int:pk>/", hub_views.product, name="product"),
     path("items/<int:pk>/save/", hub_views.item_save, name="item_save"),
+    # Stock in, Stock, Move stock and Sell in the new look (2026-10-28, plan §15 9.4).
+    path("stock-in/", flow_views.stock_in, name="stock_in"),
+    path("stock-in/new/", flow_views.stock_in_new, name="stock_in_new"),
+    path("stock/now/", flow_views.stock_now, name="stock_now"),
+    path("move/", flow_views.moves, name="moves"),
+    path("move/new/", flow_views.move_new, name="move_new"),
+    path("move/<int:pk>/receive/", flow_views.move_receive, name="move_receive"),
+    path("sell/", flow_views.sales, name="sales"),
+    path("sell/new/", flow_views.sale_new, name="sale_new"),
     # Warranty (2026-10-27, plan §10).
     path("warranty/", warranty_views.warranty_page, name="warranty"),
     path("warranty/serial/", warranty_views.serial_lookup, name="serial_lookup"),

@@ -1,0 +1,36 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Move stock{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / Move stock</p>
+            <h1 class="ui-head__title">Move stock</h1>
+            <p class="ui-head__sub">Stock sent from one store to another: in transit until the other store receives it.</p>
+        </div>
+        <div class="ui-head__actions"><a class="ui-btn ui-btn--main" href="{% url 'inventory:move_new' %}">{% include "ui/icon.html" with name="plus" %} Move stock</a></div>
+    </div>
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Moves</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                <thead><tr><th>Number</th><th>Date</th><th>From</th><th>To</th><th class="numeric">Lines</th><th>Status</th><th><span class="sr-only">Receive</span></th></tr></thead>
+                <tbody>
+                    {% for cells in rows %}{% with row=cells.line %}
+                        <tr>
+                            <td><a href="{% url 'inventory:store_transfers_detail' row.pk %}">{{ row.number }}</a></td>
+                            <td>{{ row.transfer_date|date:"j M Y" }}</td><td>{{ row.from_warehouse.name }}</td><td>{{ row.to_warehouse.name }}</td>
+                            <td class="numeric">{{ row.n }}</td>
+                            <td><span class="ui-chip ui-chip--{{ row.tone }}">{{ row.get_status_display }}</span></td>
+                            <td>{% if row.can_receive %}<form method="post" action="{% url 'inventory:move_receive' row.pk %}" data-fetch>{% csrf_token %}<button class="ui-btn ui-btn--main ui-btn--sm" type="submit">Receive</button></form>{% endif %}</td>
+                        </tr>
+                    {% endwith %}{% empty %}
+                        <tr><td colspan="7">No stock moved yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "base_template/includes/table_pagination.html" %}
+    </div>
+    {% url 'inventory:stock_now' as stock_url %}
+    {% include "ui/next_step.html" with what="See where everything is now." url=stock_url button="Stock" %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Sell{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / Sell</p>
+            <h1 class="ui-head__title">Sell</h1>
+            <p class="ui-head__sub">Sales to customers, their deliveries and invoices.</p>
+        </div>
+        <div class="ui-head__actions"><a class="ui-btn ui-btn--main" href="{% url 'inventory:sale_new' %}">{% include "ui/icon.html" with name="plus" %} New sale</a></div>
+    </div>
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Sales</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                <thead><tr><th>Sale</th><th>Date</th><th>Customer</th><th>Store</th><th class="numeric">Total</th><th>Status</th><th>Delivery</th><th>Invoice</th></tr></thead>
+                <tbody>
+                    {% for cells in rows %}{% with order=cells.line %}
+                        <tr>
+                            <td><a href="{% url 'sales:order_detail' order.pk %}">{{ order.number }}</a></td>
+                            <td>{{ order.order_date|date:"j M Y" }}</td><td>{{ order.customer.name }}</td><td>{{ order.warehouse.name }}</td>
+                            <td class="numeric">{% if shows_money %}{{ order.total|floatformat:"2g" }}{% endif %}</td>
+                            <td><span class="ui-chip ui-chip--{{ order.tone }}">{{ order.get_status_display }}</span></td>
+                            <td>{% if order.delivery %}<a href="{% url 'sales:delivery_detail' order.delivery.1 %}">{{ order.delivery.0 }}</a>{% else %}—{% endif %}</td>
+                            <td>{{ order.invoice|default:"—" }}</td>
+                        </tr>
+                    {% endwith %}{% empty %}
+                        <tr><td colspan="8">No sales yet: press New sale.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "base_template/includes/table_pagination.html" %}
+    </div>
+    {% url 'inventory:stock_now' as stock_url %}
+    {% include "ui/next_step.html" with what="See what is left in stock." url=stock_url button="Stock" %}
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends "inventory/hub/base.html" %}
+{% load static %}
+{% block title %}Stock in{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:stock_in' %}">Stock in</a> / New</p>
+            <h1 class="ui-head__title">Stock in</h1>
+            <p class="ui-head__sub">What came in, into which store. Batch and expiry are asked only for items that keep them.</p>
+        </div>
+    </div>
+    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-most="{{ most }}" novalidate>
+        {% csrf_token %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Where it comes from</h2></div>
+            <div class="ui-card__body stack">
+                {% include "inventory/hub/field.html" with box=form.source %}
+                <div class="ui-grid-2">
+                    {% include "inventory/hub/field.html" with box=form.supplier %}
+                    {% include "inventory/hub/field.html" with box=form.customer %}
+                    {% include "inventory/hub/field.html" with box=form.store %}
+                    {% include "inventory/hub/field.html" with box=form.day %}
+                    {% include "inventory/hub/field.html" with box=form.reason %}
+                </div>
+                <p class="ui-muted" data-source-only="count">A first count is posted at once when you may approve opening stock; otherwise it waits for whoever does.</p>
+            </div>
+        </div>
+        {% url 'inventory:stock_in' as cancel_url %}
+        {% include "inventory/hub/_lines_card.html" with mode="in" button="Put in stock" cancel_url=cancel_url %}
+    </form>
+    {% url 'inventory:stock_now' as stock_url %}
+    {% include "ui/next_step.html" with what="After this, the stock shows in Stock, by store and batch." url=stock_url button="Stock" %}
+{% endblock %}
+{% block extra_js %}{{ block.super }}<script defer src="{% static 'inventory/js/lines.js' %}"></script>{% endblock %}
