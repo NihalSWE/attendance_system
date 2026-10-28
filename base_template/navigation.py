@@ -52,7 +52,8 @@ def report_item(slug):
 # their address.
 INVENTORY_LINKS_SHOWN = {
     "inventory": (
-        "inventory:start", "inventory:materials", "inventory:products", "production:runs", "production:cost_rates",
+        "inventory:start", "inventory:materials", "inventory:products", "production:runs", "production:cost_rates", "inventory:stock_in", "inventory:stock_now",
+        "inventory:moves", "inventory:sales",
         "inventory:warranty",
         "inventory:settings", "inventory:units", "inventory:categories",
         "inventory:stores", "inventory:bins", "inventory:items",
@@ -164,6 +165,13 @@ INVENTORY_MENUS = (
         # Claims and serial numbers, once warranty is switched on (2026-10-27, plan §10).
         item("Warranty", "inventory:warranty", needs=("inventory.view", "inventory.warranty"),
              module="warranty"),
+        # The everyday jobs in the new look (2026-10-28, plan §3, §15 9.4).
+        item("Stock in", "inventory:stock_in", "inventory:stock_in_new",
+             needs=("inventory.view", "purchase.receive", "inventory.adjust")),
+        item("Stock", "inventory:stock_now", needs="inventory.view"),
+        item("Move stock", "inventory:moves", "inventory:move_new", needs=("inventory.view", "inventory.transfer")),
+        item("Sell", "inventory:sales", "inventory:sale_new",
+             needs=("inventory.view", "sales.order", "sales.deliver", "sales.invoice")),
         # What an hour of people or a machine costs (2026-10-27, plan §7.4).
         item("Cost rates", "production:cost_rates", "production:cost_rate_save",
              "production:cost_rate_status", needs=("inventory.view", "production.bom"),

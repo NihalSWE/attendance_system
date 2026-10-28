@@ -1,0 +1,13 @@
+{% comment %}The Items card of a lines form: mode, items, rows, button (the Save words), cancel_url.{% endcomment %}
+<div class="ui-card">
+    <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Items</h2><span class="ui-card__note">A line left without an item is skipped</span></div>
+    <div class="ui-card__body">
+        {% for i in rows %}{% include "inventory/hub/_line.html" %}{% endfor %}
+        <p><button class="ui-btn ui-btn--sm" type="button" data-add-line>{% include "ui/icon.html" with name="plus" small=True %} Add a line</button></p>
+        <div class="ui-message" data-form-message role="status" hidden></div>
+        <div class="ui-form-actions">
+            <a class="ui-btn" href="{{ cancel_url }}">Cancel</a>
+            <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} {{ button }}</button>
+        </div>
+    </div>
+</div>

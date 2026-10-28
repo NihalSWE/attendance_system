@@ -12,7 +12,7 @@
             {% if makes and can_plan %}
                 <a class="ui-btn ui-btn--main" href="{% url 'production:plan' item.pk %}">{% include "ui/icon.html" with name="play" %} Make this</a>
             {% elif not makes %}
-                <a class="ui-btn ui-btn--main" href="{% url 'purchasing:receipts' %}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+                <a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
             {% endif %}
         </div>
     </div>
@@ -51,7 +51,7 @@
     {% endif %}
 
     <div class="ui-card">
-        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Stock by store{% if item.track_batch %} and batch{% endif %}</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:store_transfers' %}">Move stock</a></div>
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Stock by store{% if item.track_batch %} and batch{% endif %}</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:move_new' %}">Move stock</a></div>
         <div class="table-wrap">
             <table class="table" data-local-table>
                 <thead><tr>{% if item.track_batch %}<th>Batch</th>{% endif %}<th>Store</th>{% if item.track_batch %}<th>Made</th><th>Expiry</th>{% endif %}<th class="numeric">Quantity</th>{% if sees_costs %}<th class="numeric">Cost per {{ item.base_uom.code }}</th>{% endif %}</tr></thead>
@@ -86,7 +86,7 @@
 
     {% if buys %}
         <div class="ui-card">
-            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Bought and counted in</h2><a class="ui-btn ui-btn--sm" href="{% url 'purchasing:receipts' %}">Goods receipts</a></div>
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Bought and counted in</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:stock_in' %}">Stock in</a></div>
             <div class="table-wrap">
                 <table class="table" data-local-table>
                     <thead><tr><th>Date</th><th>How</th><th>Store</th><th class="numeric">Quantity</th>{% if sees_costs %}<th class="numeric">Cost per {{ item.base_uom.code }}</th>{% endif %}</tr></thead>

@@ -155,6 +155,14 @@ BRANCH_PAGES = {
     **{f"inventory:{name}": "inventory.warranty"
        for name in ("claim_save", "serials_add", "serials_deliver", "serial_labels")},
     "production:plan": "production.plan",
+    "inventory:stock_in": ("inventory.view", "purchase.receive", "inventory.adjust"),
+    "inventory:stock_in_new": ("purchase.receive", "inventory.adjust", "sales.deliver"),
+    "inventory:stock_now": "inventory.view",
+    "inventory:moves": ("inventory.view", "inventory.transfer"),
+    "inventory:move_new": "inventory.transfer",
+    "inventory:move_receive": "inventory.transfer",
+    "inventory:sales": ("inventory.view", "sales.order", "sales.deliver", "sales.invoice"),
+    "inventory:sale_new": "sales.order",
     **{f"production:{name}": ("inventory.view", "production.plan", "production.execute")
        for name in ("runs", "run")},
     **{f"production:{name}": "production.execute" for name in ("run_start", "run_finish", "run_action")},

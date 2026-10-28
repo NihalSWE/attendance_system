@@ -6913,3 +6913,35 @@ Plan: docs/inventory/PRODUCTION_PLAN.md §13; §15 phase 9 (9.1, 9.2) and 1.2.
 **Deploy:** pull, migrate (production 0004), collectstatic, restart.
 Left in phase 9: 9.3 tutorial from the new screens; 9.4 Stock in, Stock, Move stock and Sell in
 the new look (the flow bar opens their current pages today).
+
+### Inventory redesign, phase 9 part 2: Stock in, Stock, Move stock, Sell — 2026-10-28
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §3, §15 9.4 (screens approved on sample data in 2.5).
+Service `inventory/flows.py`, pages `inventory/flow_views.py`, templates `inventory/hub/stock_in*`,
+`stock_now`, `moves`, `move_new`, `sales`, `sale_new`, `_line.html`, script
+`inventory/static/inventory/js/lines.js`.
+
+- **One screen per job**, each filling the existing document and posting it at once in one
+  transaction (every check of the document still applies; a refusal keeps nothing):
+  - **Stock in** `/inventory/stock-in/`: a purchase (goods receipt, received and posted), the
+    first count (opening stock: posted when the person may approve, else waits), a customer
+    return (good back to stock, damaged to the rejected store). The list shows all three,
+    each linking to its document.
+  - **Stock** `/inventory/stock/now/`: every item in stock, where it is, stock to keep, value,
+    status; the batches that expire first (within the settings' warning days). The detailed
+    stock-on-hand page stays one click away.
+  - **Move stock** `/inventory/move/`: send from one store to another (a batch can be chosen,
+    else the one expiring first); it waits in transit until the other store presses Receive.
+  - **Sell** `/inventory/sell/`: customer, store, lines → the sale is confirmed and delivered
+    (first expiry first), and invoiced when asked. Someone who may not confirm their own sale
+    leaves it for whoever confirms. More than the store has is refused, nothing kept.
+- **Lines follow their item**: the item's own units, "per <unit>" for cost / price, batch and
+  expiry only for items that keep them (and not on a return), what is in the chosen store,
+  the batch list of that store; "Add a line" up to 30. A refused line names its row and box.
+  The product's price is only a hint on Sell: empty, the customer's price list decides.
+- The flow bar, the menu (Stock in, Stock, Move stock, Sell) and every button on the new
+  pages now open these screens.
+- Tests: `inventory/tests_phase9b.py` (9) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, collectstatic, restart (no migration).
+Left in phase 9: 9.3 the tutorial from the new screens; then the full suite and deploy.

@@ -309,7 +309,7 @@ def checklist(company_id, actor, today=None):
         "done": stocked, "what": "Stock in",
         "detail": "Stock has come in." if stocked else
         "Count what you have (first count), or receive a purchase.",
-        "url": reverse("inventory:opening" if not stocked else "inventory:stock"),
+        "url": reverse("inventory:stock_in_new" if not stocked else "inventory:stock_now"),
         "button": "First count" if not stocked else "Stock",
     })
     if production:
@@ -323,7 +323,7 @@ def checklist(company_id, actor, today=None):
     steps.append({
         "done": sold_any, "what": "First sale delivered",
         "detail": "Stock has gone to customers." if sold_any else "Deliver to a customer from stock.",
-        "url": reverse("sales:deliveries"), "button": "Sell",
+        "url": reverse("inventory:sale_new"), "button": "Sell",
     })
     low = [line for line in lines(company_id, actor, list(MATERIAL_KINDS) + [ItemKind.FINISHED],
                                   today=today) if line.tone == "wait" or (line.tone == "bad" and line.keep)]

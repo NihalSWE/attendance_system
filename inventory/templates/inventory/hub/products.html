@@ -47,7 +47,7 @@
     {% if production %}
         {% include "ui/next_step.html" with what="Open a product to write its recipe, see its cost and make it." %}
     {% else %}
-        {% url 'purchasing:receipts' as receipts_url %}
+        {% url 'inventory:stock_in_new' as receipts_url %}
         {% include "ui/next_step.html" with what="Put your products in stock: receive a purchase." url=receipts_url button="Stock in" %}
     {% endif %}
 

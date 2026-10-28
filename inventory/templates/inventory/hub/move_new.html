@@ -1,0 +1,28 @@
+{% extends "inventory/hub/base.html" %}
+{% load static %}
+{% block title %}Move stock{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:moves' %}">Move stock</a> / New</p>
+            <h1 class="ui-head__title">Move stock</h1>
+            <p class="ui-head__sub">From one store to another. It waits in transit until the other store receives it.</p>
+        </div>
+    </div>
+    {{ balances|json_script:"stock-rows" }}
+    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-most="{{ most }}" novalidate>
+        {% csrf_token %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} From and to</h2></div>
+            <div class="ui-card__body"><div class="ui-grid-2">
+                {% include "inventory/hub/field.html" with box=form.from_store %}
+                {% include "inventory/hub/field.html" with box=form.to_store %}
+                {% include "inventory/hub/field.html" with box=form.day %}
+            </div></div>
+        </div>
+        {% url 'inventory:moves' as cancel_url %}
+        {% include "inventory/hub/_lines_card.html" with mode="move" button="Send it" cancel_url=cancel_url %}
+    </form>
+    {% include "ui/next_step.html" with what="When it arrives, the other store presses Receive on Move stock." %}
+{% endblock %}
+{% block extra_js %}{{ block.super }}<script defer src="{% static 'inventory/js/lines.js' %}"></script>{% endblock %}
