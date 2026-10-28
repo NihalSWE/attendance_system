@@ -51,7 +51,9 @@ class InventoryApiTestCase(CompanyApiTestCase):
         self.juice = masters.create(masters.ITEM, **kw, values={
             "code": "FG-0001", "name": "Mango juice", "kind": ItemKind.FINISHED, "category": self.juices,
             "base_uom": self.pcs, "track_batch": True, "track_expiry": True, "shelf_life_days": 270,
-            "default_warehouse": self.fgw, "sale_price": D("25"), "vat_rate": D("15")})
+            "default_warehouse": self.fgw, "sale_price": D("25"), "vat_rate": D("15"),
+            # Made here (2026-10-27: only a product made here is planned).
+            "sourcing": "make"})
         self.customer = masters.create(CUSTOMER, **kw, values={"code": "CUS-1", "name": "Sylhet Distribution",
                                                                "customer_type": "distributor",
                                                                "payment_terms_days": 30})

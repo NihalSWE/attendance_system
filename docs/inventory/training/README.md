@@ -1,5 +1,12 @@
 # Training sheets - one per role
 
+**Start with the step-by-step guide of the new screens (2026-10-28):**
+[PRODUCTS-AND-STOCK-TUTORIAL.pdf](../PRODUCTS-AND-STOCK-TUTORIAL.pdf) - Start here,
+Materials, Products (recipe and cost), Stock in, Make (Plan, Start, Finish), Stock, Move
+stock, Sell and Warranty, every box with what to write and what it does. Rebuild it with
+`venv/Scripts/python docs/scripts/build_products_tutorial.py`. The sheets below cover the
+older document pages (requisitions, purchase orders, GRN, QC), which stay as they are.
+
 Each sheet is one page: what the person does every day, where it is in the
 menu, and the mistakes the software stops. Train on the real masters, each
 person doing their own flow once from start to finish.

@@ -6945,3 +6945,20 @@ Service `inventory/flows.py`, pages `inventory/flow_views.py`, templates `invent
 
 **Deploy:** pull, collectstatic, restart (no migration).
 Left in phase 9: 9.3 the tutorial from the new screens; then the full suite and deploy.
+
+### Inventory redesign, phase 9.3 and the full test run — 2026-10-28
+
+- **Tutorial** (9.3): `docs/scripts/build_products_tutorial.py` writes
+  `docs/inventory/PRODUCTS-AND-STOCK-TUTORIAL.pdf` - Start here, Materials, Products, recipe and
+  cost, Stock in, Make (Plan, Start, Finish), Stock, Move stock, Sell, Warranty, reports and the
+  questions people ask; every box with what to write and what it does. The training README points
+  to it first.
+- **Full suite** (after every phase, as asked): 2,761 tests, 1 failure -
+  `api.tests.test_inventory.ProductionTests`: its fixture made the product straight through the
+  service, without "How you get it", so it was a bought product, which since phase 3 cannot be
+  planned. The API itself creates products through the form, which defaults to Make: the
+  behaviour is right, the fixture was not (the same fix the production fixture had in phase 3).
+  Fixed; the 12 API inventory tests pass.
+
+**The redesign (phases 0-9) is complete. Deploy everything together:** pull, migrate (devices
+0012/0013, tenants 0009, inventory 0005-0007, production 0002-0004), collectstatic, restart.
