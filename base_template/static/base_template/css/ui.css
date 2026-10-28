@@ -419,3 +419,40 @@ they are moved over. Colours come from tokens.css only.
 .ui-bad { color: var(--danger-ink); font-weight: 500; }
 .ui-good { color: var(--success-ink); font-weight: 500; }
 .ui-total td { font-weight: 600; background: var(--surface-sunken); }
+
+/* ---------- 1.2 Data tables in the new look (2026-10-28) ----------
+   The same behaviour (SL, Show N, search, pages, sort) as every list; on the
+   new pages they read like the approved product page: headers in plain case,
+   the current page and focus in the action blue, a soft blue row under the
+   pointer, the SL column quiet. Scoped to .ui-page: the old pages keep theirs. */
+.ui-page .table thead th {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+    text-transform: none;
+}
+.ui-page .table tbody tr:hover { background: var(--action-soft); }
+.ui-page .table .table-sl { color: var(--muted); font-size: 12px; }
+.ui-page .dt-paging-button.current {
+    background: var(--action);
+    border-color: var(--action);
+    color: #fff;
+}
+.ui-page .dt-paging-button:hover:not(.current):not(:disabled) {
+    border-color: var(--action);
+    color: var(--action-ink);
+}
+.ui-page .dt-input:focus,
+.ui-page .toolbar .input:focus {
+    border-color: var(--action);
+    box-shadow: 0 0 0 3px var(--action-soft);
+}
+.ui-card > .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    align-items: center;
+    padding: var(--s3) var(--s4) 0;
+}
+.ui-card > .toolbar .input { max-width: 220px; }
+.ui-page .dt-layout-row:first-child { padding-bottom: var(--s2); }

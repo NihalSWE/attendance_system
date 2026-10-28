@@ -6889,3 +6889,27 @@ page `inventory/warranty_views.py` (`/inventory/warranty/`), template `inventory
 - Tests: `inventory/tests_phase8.py` (12) and the apps touched. Full suite: after all phases.
 
 **Deploy:** pull, migrate (inventory 0007), collectstatic, restart.
+
+### Inventory redesign, phase 9 part 1: reports, data conversion, table look — 2026-10-28
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §13; §15 phase 9 (9.1, 9.2) and 1.2.
+
+- **Reports** (9.1, `inventory/reports.py`, same filters / server table / Excel / PDF as the
+  others, under Inventory reports → Production): **Production cost** (materials, other costs,
+  total, cost per unit against expected, % over), **Material use** (per material and store:
+  out at Start, back at Finish, used, of it wasted, cost), **Waste and failed productions**
+  (wasted material, damaged output, failed productions with reason and loss), **Shortages**
+  (planned productions that cannot start, each material short now). Stock value, expiry and
+  reorder were there already.
+- **Conversion** (9.2, migration production 0004, runs once at deploy, safe to repeat): old
+  material uses get their store; old outputs record the store they went into; old finished
+  productions get other costs 0. A company with exactly one active price list gets its prices
+  onto products where none is set (base unit → sale price, pack → pack price); with several
+  lists nothing is guessed.
+- **Table look** (1.2, `ui.css`, `.ui-page` only): plain-case headers, action-blue current
+  page and focus, soft blue row hover, quiet SL column, filter row padding inside cards.
+- Tests: `inventory/tests_phase9.py` (5) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (production 0004), collectstatic, restart.
+Left in phase 9: 9.3 tutorial from the new screens; 9.4 Stock in, Stock, Move stock and Sell in
+the new look (the flow bar opens their current pages today).
