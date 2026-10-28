@@ -650,6 +650,181 @@ def production_yield(ctx):
         empty="No production completed in these dates."))
 
 
+# --- the redesigned production's reports (2026-10-28, plan §13, §15 phase 9) ---
+
+def _finished_runs(ctx):
+    from production.models import ProductionOrder
+
+    f = ctx.f
+    runs = ProductionOrder.all_objects.filter(
+        company_id=ctx.company_id, output_warehouse_id__in=ctx.store_ids,
+        status__in=[ProductionOrder.Status.COMPLETED, ProductionOrder.Status.CLOSED,
+                    ProductionOrder.Status.FAILED],
+        completed_at__date__gte=f.date_from, completed_at__date__lte=f.date_to)
+    if ctx.item_ids is not None:
+        runs = runs.filter(item_id__in=ctx.item_ids)
+    return runs.select_related("item__base_uom").order_by("completed_at", "number")
+
+
+def production_cost(ctx):
+    """Each finished production: materials, the day's other costs, the total,
+    and what one unit cost against what was expected."""
+    _value_note(ctx)
+    rows, good_total, cost_total = [], ZERO, ZERO
+    for run in _finished_runs(ctx):
+        good = run.good_qty_base or ZERO
+        row = [run.number, timezone.localtime(run.completed_at).date(), run.item.code, run.item.name,
+               run.get_status_display(), run.item.base_uom.code, good, run.rejected_qty_base or ZERO]
+        if ctx.costs:
+            materials, other = run.material_cost or ZERO, run.other_cost or ZERO
+            total = materials + other
+            difference = (_pct(run.unit_cost - run.expected_unit_cost, run.expected_unit_cost)
+                          if run.unit_cost is not None and run.expected_unit_cost else None)
+            row += [materials.quantize(CENT), other.quantize(CENT), total.quantize(CENT), run.unit_cost,
+                    run.expected_unit_cost, difference]
+            cost_total += total
+        good_total += good
+        rows.append(row)
+    summary = [("Productions", len(rows)), ("Good made", f"{good_total.normalize():,f}")]
+    if ctx.costs:
+        summary.append(("Total cost", _money_text(cost_total)))
+    return _done(ctx, Result(
+        columns=[Column("Production"), Column("Finished", kind="date"), Column("Product"),
+                 Column("Name", weight=1.6), Column("Status"), Column("Unit"),
+                 Column("Good", True, kind="qty"), Column("Damaged", True, kind="qty"),
+                 *_cost(ctx, Column("Materials", True, kind="money"), Column("Other costs", True, kind="money"),
+                        Column("Total", True, kind="money"), Column("Cost per unit", True, kind="cost"),
+                        Column("Expected", True, kind="cost"), Column("Over expected %", True, kind="pct"))],
+        rows=rows, summary=summary,
+        note="Cost per unit: (materials used + the other costs of the day) / good. Expected: what the "
+             "product's cost of one batch said when it started. A failed production's cost is a loss.",
+        empty="No production finished in these dates."))
+
+
+def material_use(ctx):
+    """Per material and store: what productions took, what went back, what was
+    wasted, and what it cost."""
+    from production.models import Consumption, Leftover
+
+    f = ctx.f
+    _value_note(ctx)
+    moves = StockMove.all_objects.filter(
+        company_id=ctx.company_id, document_type=Consumption.DOC_TYPE, warehouse_id__in=ctx.store_ids,
+        work_date__gte=f.date_from, work_date__lte=f.date_to)
+    if ctx.item_ids is not None:
+        moves = moves.filter(item_id__in=ctx.item_ids)
+    used = defaultdict(lambda: [ZERO, ZERO, ZERO])          # out, back, value
+    for item_id, store_id, qty, value in moves.values_list("item_id", "warehouse_id", "qty", "value"):
+        line = used[(item_id, store_id)]
+        if qty < 0:
+            line[0] -= qty
+        else:
+            line[1] += qty
+        line[2] -= value
+    wasted = defaultdict(lambda: ZERO)
+    leftovers = Leftover.all_objects.filter(
+        company_id=ctx.company_id, order__completed_at__date__gte=f.date_from,
+        order__completed_at__date__lte=f.date_to, order__output_warehouse_id__in=ctx.store_ids, wasted__gt=0)
+    for item_id, qty in leftovers.values_list("item_id", "wasted"):
+        wasted[item_id] += qty
+    items, stores = _items({i for i, _s in used}), {s.pk: s for s in ctx.stores}
+    rows, total = [], ZERO
+    for (item_id, store_id), (out, back, value) in sorted(
+            used.items(), key=lambda kv: (items[kv[0][0]].code, stores[kv[0][1]].code)):
+        item = items[item_id]
+        row = [item.code, item.name, stores[store_id].code, item.base_uom.code, out, back, out - back,
+               wasted.pop(item_id, ZERO)]
+        if ctx.costs:
+            row.append(value.quantize(CENT))
+            total += value
+        rows.append(row)
+    summary = [("Materials", len({i for i, _s in used})), ("Lines", len(rows))]
+    if ctx.costs:
+        summary.append(("Cost of what was used", _money_text(total)))
+    return _done(ctx, Result(
+        columns=[Column("Material"), Column("Name", weight=1.6), Column("Store"), Column("Unit"),
+                 Column("Out to production", True, kind="qty"), Column("Back", True, kind="qty"),
+                 Column("Used", True, kind="qty"), Column("Of it wasted", True, kind="qty"),
+                 *_cost(ctx, Column("Cost", True, kind="money"))],
+        rows=rows, summary=summary,
+        note="Out: taken at Start. Back: leftovers returned at Finish. Wasted: leftovers recorded as "
+             "wasted (part of what was used).",
+        empty="No material went to production in these dates."))
+
+
+def waste(ctx):
+    """Wasted material, damaged output and failed productions, with the reason."""
+    from production.models import Leftover, ProductionOrder
+
+    _value_note(ctx)
+    rows, loss = [], ZERO
+    runs = list(_finished_runs(ctx))
+    by_pk = {run.pk: run for run in runs}
+    for left in (Leftover.all_objects.filter(order_id__in=list(by_pk), wasted__gt=0)
+                 .select_related("item__base_uom").order_by("order_id", "pk")):
+        run = by_pk[left.order_id]
+        row = [timezone.localtime(run.completed_at).date(), run.number, "Wasted material", left.item.name,
+               left.wasted, left.item.base_uom.code, left.reason]
+        rows.append(row + ([None] if ctx.costs else []))
+    for run in runs:
+        day = timezone.localtime(run.completed_at).date()
+        if run.rejected_qty_base:
+            row = [day, run.number, "Damaged output", run.item.name, run.rejected_qty_base,
+                   run.item.base_uom.code, run.reason]
+            rows.append(row + ([None] if ctx.costs else []))
+        if run.status == ProductionOrder.Status.FAILED:
+            cost = (run.material_cost or ZERO) + (run.other_cost or ZERO)
+            row = [day, run.number, "Failed production", run.item.name, ZERO, run.item.base_uom.code, run.reason]
+            if ctx.costs:
+                row.append(cost.quantize(CENT))
+                loss += cost
+            rows.append(row)
+    rows.sort(key=lambda row: (row[0], row[1]))
+    summary = [("Lines", len(rows))]
+    if ctx.costs:
+        summary.append(("Lost in failed productions", _money_text(loss)))
+    return _done(ctx, Result(
+        columns=[Column("Date", kind="date"), Column("Production"), Column("What"), Column("Item", weight=1.6),
+                 Column("Quantity", True, kind="qty"), Column("Unit"), Column("Why", weight=2),
+                 *_cost(ctx, Column("Loss", True, kind="money"))],
+        rows=rows, summary=summary,
+        note="Damaged output carries no cost of its own: it raises the cost of the good. A failed "
+             "production's whole cost is a loss.",
+        empty="No waste, damage or failed production in these dates."))
+
+
+def shortages(ctx):
+    """Planned productions that cannot start: each material short now."""
+    from production import planning
+    from production.models import ProductionOrder
+
+    planned = ProductionOrder.all_objects.filter(
+        company_id=ctx.company_id, status=ProductionOrder.Status.PLANNED, output_warehouse_id__in=ctx.store_ids)
+    if ctx.item_ids is not None:
+        planned = planned.filter(item_id__in=ctx.item_ids)
+    rows, short_runs = [], 0
+    for order in planned.select_related("item__base_uom", "bom", "output_warehouse").order_by(
+            "planned_date", "number"):
+        size = order.bom.batch_size_base or Decimal("1")
+        batches = int((order.planned_base / size).to_integral_value()) or 1
+        found = planning.plan(ctx.company_id, order.item, batches, order.output_warehouse, ctx.today,
+                              exclude_order=order.pk, bom=order.bom, makes=order.planned_base)
+        if found.short:
+            short_runs += 1
+        for need in found.short:
+            rows.append([order.number, order.planned_date, order.item.name, need.item.code, need.item.name,
+                         need.item.base_uom.code, need.need, need.available, need.short, found.possible])
+    return _done(ctx, Result(
+        columns=[Column("Production"), Column("Planned for", kind="date"), Column("Product", weight=1.4),
+                 Column("Material"), Column("Name", weight=1.4), Column("Unit"),
+                 Column("Needed", True, kind="qty"), Column("Usable in the branch", True, kind="qty"),
+                 Column("Short", True, kind="qty"), Column("Batches possible", True)],
+        rows=rows, summary=[("Planned productions short", short_runs), ("Materials short", len(rows))],
+        note="Usable: in the stores of the production's branch, not expired, not waiting for a check. "
+             "Buy the rest from the plan page, or plan fewer batches.",
+        empty="Every planned production has its materials."))
+
+
 # --------------------------------------------------------------------------
 # Sales
 # --------------------------------------------------------------------------
@@ -792,6 +967,14 @@ REPORTS = (
            consumption_by_department, "What each department took from the stores, less returns."),
     Report("production-yield", "Production yield and wastage", PRODUCTION, PRODUCTION_CODES, RANGE,
            production_yield, "Completed runs: planned against good and rejected output, and cost."),
+    Report("production-cost", "Production cost", PRODUCTION, PRODUCTION_CODES, RANGE, production_cost,
+           "Finished productions: materials, other costs, cost per unit against expected."),
+    Report("material-use", "Material use", PRODUCTION, PRODUCTION_CODES, RANGE, material_use,
+           "Per material and store: taken by productions, returned, wasted, and the cost."),
+    Report("waste", "Waste and failed productions", PRODUCTION, PRODUCTION_CODES, RANGE, waste,
+           "Wasted material, damaged output and failed productions, with the reason."),
+    Report("shortages", "Shortages", PRODUCTION, PRODUCTION_CODES, NOW, shortages,
+           "Planned productions that cannot start yet, and what each is short of."),
     Report("sales-register", "Sales register", SALES, SALES_CODES, RANGE, sales_register,
            "Invoices issued in any dates, with VAT and what is unpaid.", extras=("store",)),
     Report("customer-sales", "Customer and item sales", SALES, SALES_CODES, RANGE, customer_item_sales,
