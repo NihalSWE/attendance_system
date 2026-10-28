@@ -61,6 +61,37 @@ class ProductionModuleTests(ProductionFixture, TestCase):
         self.assertTrue(feature_on(self.company.pk, "production"))
 
 
+    def test_inventory_switched_off_and_on_again_still_gets_production(self):
+        """2026-10-28: 0009 copied an old, ended inventory grant, so Production
+        started already over and Materials was hidden; 0010 repairs it."""
+        import datetime
+
+        from django.db import connection
+        from django.db.migrations.executor import MigrationExecutor
+        from django.utils import timezone
+
+        inventory = Feature.objects.get(code="inventory")
+        production = Feature.objects.get(code="production")
+        CompanyFeature.all_objects.filter(company=self.company, feature=production).delete()
+        before = timezone.now() - datetime.timedelta(days=10)
+        CompanyFeature.all_objects.create(company=self.company, feature=inventory, effect="enable",
+                                          starts_at=before - datetime.timedelta(days=1), ends_at=before,
+                                          is_active=True)
+        apps = MigrationExecutor(connection).loader.project_state(("tenants", "0010_repair_production_switch")).apps
+        importlib.import_module("tenants.migrations.0009_production_feature").add(apps, None)
+        self.assertTrue(feature_on(self.company.pk, "production"))
+        # A database where the old 0009 already made an ended grant: 0010 repairs it.
+        CompanyFeature.all_objects.filter(company=self.company, feature=production).update(
+            starts_at=before - datetime.timedelta(days=1), ends_at=before)
+        self.assertFalse(feature_on(self.company.pk, "production"))
+        importlib.import_module("tenants.migrations.0010_repair_production_switch").repair(apps, None)
+        self.assertTrue(feature_on(self.company.pk, "production"))
+        # Production switched off by a person stays off.
+        self.enable_module(True, production=False)
+        importlib.import_module("tenants.migrations.0010_repair_production_switch").repair(apps, None)
+        self.assertFalse(feature_on(self.company.pk, "production"))
+
+
 class SourcingTests(ProductionFixture, TestCase):
     def setUp(self):
         super().setUp()

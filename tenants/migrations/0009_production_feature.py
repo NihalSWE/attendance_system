@@ -6,6 +6,8 @@ Every company that has Store & Inventory switched on today keeps production:
 it gets Production switched on too, from the same moment as its Inventory grant."""
 
 from django.db import migrations
+from django.db.models import Q
+from django.utils import timezone
 
 CODE = "production"
 
@@ -22,7 +24,14 @@ def add(apps, schema_editor):
     inventory = Feature.objects.filter(code="inventory").first()
     if inventory is None:
         return
-    for grant in CompanyFeature.objects.filter(feature=inventory, effect="enable", is_active=True):
+    # The switch-on in effect now (2026-10-28 fix): a company that switched
+    # inventory off and on again has older, ended grants - copying one of
+    # those made Production already over (tenants 0010 repairs that).
+    now = timezone.now()
+    current = (CompanyFeature.objects.filter(feature=inventory, effect="enable", is_active=True)
+               .filter(Q(starts_at__isnull=True) | Q(starts_at__lte=now))
+               .filter(Q(ends_at__isnull=True) | Q(ends_at__gt=now)))
+    for grant in current:
         if CompanyFeature.objects.filter(company_id=grant.company_id, feature=production).exists():
             continue
         CompanyFeature.objects.create(
