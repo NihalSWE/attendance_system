@@ -231,6 +231,88 @@ story += [
     ]),
 ]
 
+# ------------------------------------------------------------------ the whole workflow
+def walk(rows):
+    """Step | Where you click | What you type or choose | What you see."""
+    return grid(("#", "Where you click", "What you type or choose", "What you see"), rows, (10, 46, 62, 52))
+
+
+story += [
+    PageBreak(), P("The whole workflow, from the first material to the sale", "h1"),
+    P("One example from start to end: a biscuit factory. <b>One batch</b> (one mix) makes <b>240 packets = 10 "
+      "cartons</b> and uses flour 18 kg, sugar 5 kg, 240 wrappers and 10 cartons. The button names are the ones on "
+      "the screens. Part A is done <b>once</b>; Part B is what you do <b>every time</b> you buy, make and sell."),
+    box("Part A is once; Part B is every time", [
+        "The <b>Start here</b> checklist (4 / 7 steps ...) only tracks Part A and your first production and first sale. "
+        "Once those are ticked you never need it again: every day you go straight to Stock in, Make and Sell.",
+    ], "ok"),
+
+    P("Part A &middot; Once: set up", "h2"),
+    walk([
+        ("A1", "Inventory &rarr; <b>Units</b> &rarr; Add standard units. Inventory &rarr; <b>Stores</b> &rarr; Add store",
+         "Stores: Raw store (raw), Packing store (packaging), Main store (finished goods), each in its branch.",
+         "The units (KG, PCS, BAG, CARTON ...) and the rooms stock is kept in."),
+        ("A2", "Flow bar <b>1 Materials</b> &rarr; <b>Add material</b>",
+         "Type Raw material, name Flour, category, unit KG, Bought in BAG, One of those holds 50, stock to keep 200, "
+         "usual store Raw store, Keeps batches + Has an expiry date. Press <b>Add material</b>. "
+         "Do the same for Sugar (KG), Wrapper and Carton (type Packaging, unit PCS).",
+         "\"RM-0001 Flour added\" above the button; the material's page opens. Code left empty is given (RM-0001)."),
+        ("A3", "Flow bar <b>2 Products</b> &rarr; <b>Add product</b>",
+         "How you get it: Make it here. Name Biscuit 100 g, smallest unit you sell PCS (the packet), sale price 20; "
+         "also sold as CARTON, one holds 24, its sale price 450. Stock to keep 5,000 (or days of sales). Keeps batches, "
+         "expiry, shelf life 180 days, new stock goes to Main store. Press <b>Add product</b>.",
+         "The product page opens, asking for its recipe."),
+        ("A4", "On the product page, card <b>Recipe</b>",
+         "\"One batch makes\": 240 (PCS) &rarr; <b>Save</b>. Then <b>Add material</b>: Flour 18 (KG), wastage 2 %; "
+         "Sugar 5; Wrapper 240; Carton 10 - each <b>Add</b>.",
+         "\"Recipe: one batch makes 240 PCS\"; each line with its cost, what is in stock and \"enough for N batches\"."),
+        ("A5", "Inventory &rarr; <b>Cost rates</b> &rarr; <b>Add rate</b>; then the product &rarr; card <b>Cost of one batch</b> "
+               "&rarr; <b>Add cost</b> (optional, for the full cost)",
+         "Rates: Line worker, People, 75 per hour; Oven, Machine, 300 per hour. Costs: People 4 x 1.2 h x Line worker; "
+         "Machine 0.5 h x Oven; Fixed per batch: Gas 120.",
+         "Total for one batch, cost per PCS and per CARTON, margin per PCS. The Cost tile shows the expected cost."),
+    ]),
+
+    P("Part B &middot; Every time: buy, make, sell", "h2"),
+    walk([
+        ("B1", "Flow bar <b>3 Stock in</b> &rarr; <b>Stock in</b>",
+         "Where it comes from: A purchase (the very first time: First count). Supplier, Into store: Raw store, date. "
+         "Lines: Flour 10 BAG, cost 2,600 per BAG, batch number, expiry; Sugar 50 KG ...; Wrapper 5,000; Carton 300. "
+         "<b>Add a line</b> for more. Press <b>Put in stock</b>.",
+         "\"GRN-...: 4 lines received into Raw store\". The list shows it; Materials show OK instead of Out."),
+        ("B2", "Product page &rarr; <b>Make this</b> (or <b>Make N batches</b> on the Suggested card, or flow bar "
+               "<b>4 Make</b>)",
+         "How many batches: 5; date; products go into Main store.",
+         "The materials table: needed (wastage included), usable in the branch, taken from which store, Enough or "
+         "<b>Short by</b>. Short: <b>Make fewer</b> or <b>Buy the rest</b>."),
+        ("B3", "Plan page &rarr; <b>Plan it</b>", "-",
+         "\"PRD-... planned: 5 batches.\" The production page opens at step 2 Start."),
+        ("B4", "Production page &rarr; <b>Start: materials out</b> (when the store gives the materials)",
+         "Change a \"Given\" quantity only if a store gave more or less (over 5 % needs a reason).",
+         "\"Started: the materials left the stores\"; Raw store stock goes down; the page moves to step 3 Finish."),
+        ("B5", "Production page &rarr; <b>Finish: into stock</b> (when the batches are done)",
+         "Good 1,180, Damaged 20 (PCS). Into Main store 1,180 (or split across stores). Leftover flour back 1 KG. "
+         "Other costs filled from the cost sheet x 5 - correct them if the day was different.",
+         "\"PRD-... finished: 1,180 PCS into stock as batch ...\". Cost per PCS against the expected cost; the batch is "
+         "in Main store."),
+        ("B6", "Flow bar <b>5 Stock</b>", "Filters if you like: store, type, status.",
+         "Biscuit 100 g: 1,180 PCS (49.17 CARTON) in Main store, its value, and what expires first."),
+        ("B7", "Flow bar <b>6 Move stock</b> &rarr; <b>Move stock</b> (only if it is sold from another store)",
+         "From Main store, To Depot, Biscuit 20 CARTON. <b>Send it</b>. At the depot: <b>Receive</b> on the list.",
+         "\"ST-... sent\" - in transit - then received in Depot."),
+        ("B8", "Flow bar <b>7 Sell</b> &rarr; <b>New sale</b>",
+         "Customer, From store Main store, date, tick Make the invoice now. Line: Biscuit 100 g, 10, unit CARTON; price "
+         "empty (the customer's price list, else 450). Press <b>Sell and deliver</b>.",
+         "\"SO-... delivered as DC-..., invoice INV-...\". Stock goes down from the batch that expires first. Done."),
+    ]),
+    Spacer(1, 4),
+    box("Next time", [
+        "Only Part B: <b>Stock in</b> when materials arrive, <b>Make</b> (plan, start, finish) when you produce, "
+        "<b>Sell</b> when you sell. The product page tells you how many batches to make, and Start here lists what "
+        "is below stock to keep.",
+    ], "ok"),
+]
+
 # ------------------------------------------------------------------ start here
 story += section(0, "Start here", "Inventory &rarr; Start here (the flag in the flow bar)",
                  "The first page: tiles (materials and products low or out, the value in stock, set-up steps "
@@ -241,6 +323,12 @@ story += [
               "Stock in", "First production finished (Production)", "First sale delivered",
               "Below stock to keep - the items to buy or make now"]),
     box("Next step", ["The box at the bottom always names the first thing not done yet, with one button to it."], "ok"),
+    box("A one-time checklist", [
+        "The ticks and \"4 / 7 steps done\" are worked out from your records - nobody ticks them. They track setting "
+        "up and your first production and first sale; once done they stay done. You do <b>not</b> go through it each "
+        "time you produce: for that, use Stock in, Make and Sell (Part B of the workflow). Two lines can come back: "
+        "Recipes saved (a new product you make has no recipe yet) and Below stock to keep (an alert).",
+    ]),
 ]
 
 # ------------------------------------------------------------------ materials
