@@ -24,7 +24,7 @@ from django.db import transaction
 from auditlog.services import record_company_event
 from common.tenant import use_company
 from inventory import access
-from inventory.models import Item, ItemCost, ItemKind, ItemUom
+from inventory.models import MADE_KINDS, Item, ItemCost, ItemKind, ItemUom
 from production.models import CostLine, CostRate
 
 CODE = "production.bom"
@@ -123,7 +123,7 @@ def set_rate_status(*, actor, company_id, pk, active):
 # --- a product's cost lines ---------------------------------------------------
 
 def _made(item):
-    if item.kind != ItemKind.FINISHED or item.sourcing == Item.Sourcing.BUY:
+    if item.kind not in MADE_KINDS or item.sourcing == Item.Sourcing.BUY:
         raise ValidationError(f"{item.code} is not made here: it has no cost of making.")
 
 
@@ -233,7 +233,7 @@ def unit_cost(company_id, item, seen=frozenset()):
     if rows:
         weight = sum(qty for _cost, qty in rows)
         return (sum(cost * qty for cost, qty in rows) / weight).quantize(Decimal("0.0001"))
-    if item.kind == ItemKind.FINISHED and item.sourcing != Item.Sourcing.BUY and item.pk not in seen:
+    if item.kind in MADE_KINDS and item.sourcing != Item.Sourcing.BUY and item.pk not in seen:
         made = sheet(company_id, item, seen=seen | {item.pk})
         if made is not None and made.per_unit and not made.missing:
             return made.per_unit

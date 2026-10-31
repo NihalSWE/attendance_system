@@ -156,7 +156,7 @@ class RuleTests(ProductionFixture, TestCase):
             self.assertEqual((v2.version, v2.lines.count()), (2, 4))
         boms.activate(**self.kw, bom_id=v2.pk)
         self.assertEqual(Bom.all_objects.get(pk=v1.pk).status, "archived")
-        with self.assertRaisesMessage(ValidationError, "is not a finished product"):
+        with self.assertRaisesMessage(ValidationError, "it has no recipe"):
             boms.create_bom(**self.kw, values={"item": self.sugar, "batch_size": D("1"), "batch_uom": self.kg,
                                                "effective_from": None, "note": ""})
 

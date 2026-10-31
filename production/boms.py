@@ -16,7 +16,7 @@ from django.db.models import Max
 from common.choices import ActiveStatus
 from common.tenant import use_company
 from inventory.doc_common import _writable, audit, check_qty, now, plain, require, unit_factor
-from inventory.models import ItemKind
+from inventory.models import MADE_KINDS, ItemKind
 from production.models import Bom, BomLine, ProductionOrder
 
 CODE = "production.bom"
@@ -55,8 +55,9 @@ def create_bom(*, actor, company_id, values, copy_from=None):
     item = values.get("item")
     if item is None:
         raise ValidationError({"item": "Choose the finished product."})
-    if item.kind != ItemKind.FINISHED:
-        raise ValidationError({"item": f"{item.code} is not a finished product."})
+    # A product, or a material made here (2026-10-31).
+    if item.kind not in MADE_KINDS or item.sourcing == item.Sourcing.BUY:
+        raise ValidationError({"item": f"{item.code} is bought, not made here: it has no recipe."})
     factor = unit_factor(item, values.get("batch_uom"))
     check_qty(item, values.get("batch_size"), factor, field="batch_size")
     with use_company(company_id):

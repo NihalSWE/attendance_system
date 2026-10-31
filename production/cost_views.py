@@ -100,7 +100,9 @@ def _product(company_id, pk):
 
 
 def _hub(item):
-    return reverse("inventory:product", args=[item.pk]) + "#costs"
+    from inventory.hub_views import _page_of
+
+    return _page_of(item) + "#costs"
 
 
 @login_required

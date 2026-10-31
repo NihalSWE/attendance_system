@@ -102,11 +102,18 @@ class SourcingTests(ProductionFixture, TestCase):
             "code": "FG-0002", "name": "Mango juice 1 l", "category": self.juice.category_id,
             "base_uom": self.pcs.pk, "keep_by": "quantity"})
         self.assertEqual(Item.all_objects.get(code="FG-0002").sourcing, "make")
+        # A material is bought unless said (since 2026-10-31 it can be made here
+        # too); it is always kept by a quantity.
         self.client.post(reverse("inventory:items"), {
             "code": "RM-0009", "name": "Salt", "kind": "raw", "category": self.pulp.category_id,
-            "base_uom": self.kg.pk, "sourcing": "make", "keep_by": "days"})
+            "base_uom": self.kg.pk, "keep_by": "days"})
         salt = Item.all_objects.get(code="RM-0009")
         self.assertEqual((salt.sourcing, salt.keep_by), ("buy", "quantity"))
+        # A spare part is never made here.
+        self.client.post(reverse("inventory:items"), {
+            "code": "SP-0009", "name": "Belt", "kind": "spare", "category": self.spares.pk,
+            "base_uom": self.pcs.pk, "sourcing": "make"})
+        self.assertEqual(Item.all_objects.get(code="SP-0009").sourcing, "buy")
 
     def test_a_bought_product_has_no_recipe_and_cannot_be_planned(self):
         Item.all_objects.filter(pk=self.juice.pk).update(sourcing="buy")
@@ -114,7 +121,7 @@ class SourcingTests(ProductionFixture, TestCase):
         self.assertNotContains(page, 'id="materials"')
         response = self.client.post(reverse("production:recipe_batch", args=[self.juice.pk]),
                                     {"batch_size": "1000"}, follow=True)
-        self.assertContains(response, "is bought ready")
+        self.assertContains(response, "is bought")
 
     def test_keeping_by_days_needs_the_days(self):
         page = self.client.post(reverse("inventory:finished_goods"), {

@@ -264,7 +264,7 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
             .exclude(pk=product.pk).exclude(pk__in=self._on_recipe(company_id, product))
             .select_related("base_uom").order_by("kind", "code"))
         self.fields["material"].label_from_instance = lambda item: f"{item.code} · {item.name}" + (
-            " (made here)" if item.kind == ItemKind.FINISHED else "")
+            " (made here)" if item.sourcing != Item.Sourcing.BUY else "")
         # The material's unit beside the quantity (inventory/hub/_recipe.html).
         self.fields["material"].widget.option_attrs = lambda rows: {
             pk: {"data-unit": code} for pk, code in rows.values_list("pk", "base_uom__code")}

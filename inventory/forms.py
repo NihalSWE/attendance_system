@@ -11,6 +11,7 @@ from django import forms
 from common.choices import ActiveStatus
 from common.forms import StyledFormMixin, date_widget
 from inventory.models import (
+    MADE_KINDS,
     Batch,
     InventorySettings,
     Item,
@@ -286,12 +287,17 @@ class ItemForm(CompanyForm):
         data = super().clean()
         # Only a finished good is made or kept by days of sales; anything else
         # (or a finished good that did not say) is bought and kept by quantity.
-        finished = (data.get("kind") or self.kind) == ItemKind.FINISHED
-        if "sourcing" in self.fields and (not finished or not data.get("sourcing")):
-            data["sourcing"] = Item.Sourcing.BUY if not finished else (
-                self.instance.sourcing if self.instance.pk else Item.Sourcing.MAKE)
-        if "batch_per_mix" in self.fields and not finished:
-            data["batch_per_mix"] = False
+        kind = data.get("kind") or self.kind
+        finished = kind == ItemKind.FINISHED
+        # Made here: a product or a material (2026-10-31); spares and general
+        # items are always bought. Not said: what it was, else a new product is
+        # made and a new material bought.
+        if "sourcing" in self.fields:
+            if kind not in MADE_KINDS:
+                data["sourcing"] = Item.Sourcing.BUY
+            elif not data.get("sourcing"):
+                data["sourcing"] = self.instance.sourcing if self.instance.pk else (
+                    Item.Sourcing.MAKE if finished else Item.Sourcing.BUY)
         if "keep_by" in self.fields and (not finished or not data.get("keep_by")):
             data["keep_by"] = Item.KeepBy.QUANTITY
             if not finished:
