@@ -5,6 +5,7 @@
         const group = row.closest(".salary__group");
         const open = group.classList.toggle("is-open");
         row.setAttribute("aria-expanded", open ? "true" : "false");
+        group.querySelectorAll(".salary__person").forEach(function (person) { person.hidden = !open; });
     }
 
     document.addEventListener("click", function (event) {

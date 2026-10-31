@@ -179,15 +179,13 @@
             {% endif %}
             {% if branches|length > 1 %}
                 <label class="sr-only" for="pay-branch">Branch</label>
-                <select class="input select js-select" id="pay-branch" name="branch">
-                    <option value="">All branches</option>
-                    {% for option in branches %}<option value="{{ option.pk }}"{% if option.pk|stringformat:"s" == branch %} selected{% endif %}>{{ option.name }}</option>{% endfor %}
+                <select class="input select js-select2" id="pay-branch" name="branch" multiple data-placeholder="All branches">
+                    {% for option in branches %}<option value="{{ option.pk }}"{% if option.pk in branch %} selected{% endif %}>{{ option.name }}</option>{% endfor %}
                 </select>
             {% endif %}
             <label class="sr-only" for="pay-department">Department</label>
-            <select class="input select js-select" id="pay-department" name="department">
-                <option value="">All departments</option>
-                {% for option in departments %}<option value="{{ option.pk }}"{% if option.pk|stringformat:"s" == department %} selected{% endif %}>{{ option.name }}{% if branches|length > 1 %} · {{ option.branch.name }}{% endif %}</option>{% endfor %}
+            <select class="input select js-select2" id="pay-department" name="department" multiple data-placeholder="All departments">
+                {% for option in departments %}<option value="{{ option.pk }}"{% if option.pk in department %} selected{% endif %}>{{ option.name }}{% if branches|length > 1 %} · {{ option.branch.name }}{% endif %}</option>{% endfor %}
             </select>
             <input type="hidden" name="view" value="{{ view }}">
             <button class="ui-btn" type="submit">Show</button>
@@ -211,53 +209,57 @@
                 <div class="empty__text">Press Generate. Attendance for the month is calculated first, then each employee's salary.</div>
             </div>
         {% elif view == 'departments' %}
+            {# One table: a row per department, its people in the same columns (opened with the row). #}
             <div class="table-wrap">
                 <table class="table salary__departments">
+                    <colgroup>
+                        <col class="salary__col-sl"><col><col><col class="salary__col-num"><col class="salary__col-money">
+                        <col class="salary__col-money"><col class="salary__col-money"><col class="salary__col-action">
+                    </colgroup>
                     <thead><tr>
-                        <th><span class="sr-only">Open</span></th><th>Department</th><th>Branch</th><th class="numeric">People</th>
-                        <th class="numeric">Gross</th><th class="numeric">Deductions</th><th class="numeric">Net pay</th>
+                        <th class="numeric">SL</th><th>Department / employee</th><th>Branch / pay basis</th>
+                        <th class="numeric">People</th><th class="numeric">Gross</th><th class="numeric">Deductions</th>
+                        <th class="numeric">Net pay</th><th><span class="sr-only">Payslip</span></th>
                     </tr></thead>
                     {% for group in by_department %}
                         <tbody class="salary__group">
                             <tr class="salary__group-row" data-salary-toggle tabindex="0" aria-expanded="false">
-                                <td class="salary__chevron" aria-hidden="true">›</td>
-                                <td><strong>{{ group.name }}</strong></td>
+                                <td class="numeric salary__sl">{{ forloop.counter }}</td>
+                                <td><span class="salary__chevron" aria-hidden="true">›</span><strong>{{ group.name }}</strong></td>
                                 <td>{{ group.branch }}</td>
                                 <td class="numeric">{{ group.people }}</td>
                                 <td class="numeric">{{ group.gross|money }}</td>
                                 <td class="numeric">{{ group.deductions|money }}</td>
                                 <td class="numeric"><strong>{{ group.net|money }}</strong></td>
+                                <td class="salary__open-hint">{{ group.people }} {{ group.people|pluralize:"person,people" }}</td>
                             </tr>
-                            <tr class="salary__people-row">
-                                <td colspan="7">
-                                    <div class="salary__people"><div class="salary__people-inner">
-                                        <table class="table salary__inner">
-                                            <tbody>
-                                                {% for record in group.records %}
-                                                    <tr>
-                                                        <td>{{ record.employee.full_name }} <span class="salary__code">{{ record.employee_assignment_at_period_end.employee_code }}</span>{% if record.calculation_snapshot.override %} <span class="ui-chip ui-chip--info">by hand</span>{% endif %}</td>
-                                                        <td>{{ record.calculation_snapshot.pay_basis|title }}</td>
-                                                        <td class="numeric">{{ record.gross_earnings|money }}</td>
-                                                        <td class="numeric">{{ record.total_deductions|money }}</td>
-                                                        <td class="numeric"><strong>{{ record.net_pay|money }}</strong></td>
-                                                        <td><a class="ui-btn ui-btn--sm" href="{% url 'payroll:payslip' record.pk %}">Payslip</a></td>
-                                                    </tr>
-                                                {% endfor %}
-                                            </tbody>
-                                        </table>
-                                    </div></div>
-                                </td>
-                            </tr>
+                            {% with outer=forloop.counter %}
+                                {% for record in group.records %}
+                                    <tr class="salary__person" hidden>
+                                        <td class="numeric salary__sl">{{ outer }}.{{ forloop.counter }}</td>
+                                        <td class="salary__person-name">{{ record.employee.full_name }}{% if record.calculation_snapshot.override %} <span class="ui-chip ui-chip--info" title="Present days set by hand">by hand</span>{% endif %}<span class="salary__code">{{ record.employee_assignment_at_period_end.employee_code }}</span></td>
+                                        <td>{{ record.calculation_snapshot.pay_basis|title }}</td>
+                                        <td class="numeric"></td>
+                                        <td class="numeric">{{ record.gross_earnings|money }}</td>
+                                        <td class="numeric">{{ record.total_deductions|money }}</td>
+                                        <td class="numeric">{{ record.net_pay|money }}</td>
+                                        <td><a class="ui-btn ui-btn--sm" href="{% url 'payroll:payslip' record.pk %}">Payslip</a></td>
+                                    </tr>
+                                {% endfor %}
+                            {% endwith %}
                         </tbody>
                     {% empty %}
-                        <tbody><tr><td colspan="7">Nobody matches these filters.</td></tr></tbody>
+                        <tbody><tr><td colspan="8">Nobody matches these filters.</td></tr></tbody>
                     {% endfor %}
-                    <tfoot><tr class="ui-total">
-                        <td></td><td>Total</td><td>{% if not company_wide %}in your branches{% endif %}</td>
+                    <tfoot><tr class="salary__total">
+                        <td></td>
+                        <td>Total{% if not company_wide %} <span class="salary__code">in your branches</span>{% endif %}</td>
+                        <td>{{ by_department|length }} department{{ by_department|length|pluralize }}</td>
                         <td class="numeric">{{ totals.employees }}</td>
                         <td class="numeric">{{ totals.gross|money }}</td>
                         <td class="numeric">{{ totals.deductions|money }}</td>
                         <td class="numeric">{{ totals.net|money }}</td>
+                        <td>{{ currency }}</td>
                     </tr></tfoot>
                 </table>
             </div>
@@ -287,8 +289,8 @@
                             </tr>
                         {% endfor %}
                     </tbody>
-                    <tfoot><tr class="ui-total">
-                        <td colspan="7">{{ totals.employees }} employee(s), {{ currency }}{% if not company_wide %}, in your branches{% endif %}</td>
+                    <tfoot><tr class="salary__total">
+                        <td colspan="8">Total · {{ totals.employees }} employee{{ totals.employees|pluralize }}, {{ currency }}{% if not company_wide %}, in your branches{% endif %}</td>
                         <td class="numeric">{{ totals.gross|money }}</td>
                         <td class="numeric">{{ totals.deductions|money }}</td>
                         <td class="numeric">{{ totals.net|money }}</td>
