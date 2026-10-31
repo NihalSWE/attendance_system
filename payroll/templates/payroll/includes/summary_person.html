@@ -1,0 +1,106 @@
+{% comment %}
+    The side panel of Attendance -> Summary for one person (payroll/summary_views.py):
+    1 what the scans say, 2 the number set by hand, 3 why, 4 the history.
+{% endcomment %}
+{% with scans=person.scans override=person.override employee=person.employee %}
+<div class="summary__panel-head">
+    <div>
+        <h2 class="summary__panel-title">{{ employee.full_name }}</h2>
+        <p class="ui-muted">{{ person.placement.employee_code }} · {{ person.placement.department.name }} · {{ first|date:"d M" }} – {{ last|date:"d M Y" }}</p>
+    </div>
+    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+</div>
+
+<section class="summary__section">
+    <h3 class="summary__section-title"><span class="summary__step">1</span> From the scans</h3>
+    <div class="summary__mini">
+        <div><span>Working days</span><strong>{{ scans.working }}</strong></div>
+        <div><span>Present</span><strong>{{ scans.present }}</strong></div>
+        <div><span>Half day</span><strong>{{ scans.half_day }}</strong></div>
+        <div class="{% if scans.incomplete %}is-warn{% endif %}"><span>No check-out</span><strong>{{ scans.incomplete }}</strong></div>
+        <div><span>Absent</span><strong>{{ scans.absent }}</strong></div>
+        <div><span>{% if hourly %}Hours{% else %}Leave{% endif %}</span><strong>{% if hourly %}{{ scans.hours }}{% else %}{{ scans.leave }}{% endif %}</strong></div>
+    </div>
+</section>
+
+{% if locked %}
+    <section class="summary__section">
+        <div class="ui-message ui-message--info">The salary is {{ salary_state|lower }}: nothing can be changed now.{% if override %} The salary uses {% if override.present_days is not None %}{{ override.present_days }} present days{% else %}{{ override.hours }} hours{% endif %}, set by hand.{% endif %}</div>
+    </section>
+{% else %}
+    <form method="post" action="{% url 'payroll:attendance_summary_save' employee.pk %}" data-fetch data-summary-form
+          data-working="{{ scans.working }}" data-hourly="{% if hourly %}1{% endif %}">
+        {% csrf_token %}
+        <input type="hidden" name="back" value="{{ back }}">
+        <input type="hidden" name="year" value="{{ year }}"><input type="hidden" name="month" value="{{ month }}">
+        {% if pay_group %}<input type="hidden" name="group" value="{{ pay_group.pk }}"><input type="hidden" name="week" value="{{ week_first|date:'Y-m-d' }}">{% endif %}
+        <section class="summary__section">
+            <h3 class="summary__section-title"><span class="summary__step">2</span> {% if hourly %}Hours worked you set{% else %}Present days you set{% endif %}</h3>
+            {% if hourly %}
+                <div class="field">
+                    <label class="field__label" for="sum-hours">Hours worked in the period</label>
+                    <div class="summary__stepper">
+                        <input class="input summary__number" id="sum-hours" name="hours" type="number" min="0" step="0.25" inputmode="decimal" value="{% if override.hours is not None %}{{ override.hours }}{% else %}{{ scans.hours }}{% endif %}">
+                        <span class="ui-muted">hours · by the scans {{ scans.hours }}</span>
+                    </div>
+                    <span class="field__help">Paid at the hourly rate; a day without a check-out adds nothing of its own.</span>
+                </div>
+            {% else %}
+                <div class="field">
+                    <label class="field__label" for="sum-present">Present days</label>
+                    <div class="summary__stepper">
+                        <button class="ui-btn" type="button" data-step="-1" aria-label="One day less">−</button>
+                        <input class="input summary__number" id="sum-present" name="present_days" type="number" min="0" max="{{ scans.working }}" step="1" inputmode="numeric" value="{% if override.present_days is not None %}{{ override.present_days }}{% else %}{{ scans.present }}{% endif %}">
+                        <button class="ui-btn" type="button" data-step="1" aria-label="One day more">+</button>
+                        <span class="ui-muted">of {{ scans.working }} working days</span>
+                    </div>
+                    <span class="field__help">Each counts as a full present day. Leave, holidays and weekly offs stay as they are.</span>
+                </div>
+                <div class="summary__preview" data-summary-preview>
+                    <div><span>Present</span><strong data-preview="present">–</strong></div>
+                    <div><span>Absent</span><strong data-preview="absent">–</strong></div>
+                    <div><span>Half day</span><strong>0</strong></div>
+                    <div><span>No check-out</span><strong>0</strong></div>
+                </div>
+            {% endif %}
+        </section>
+        <section class="summary__section">
+            <h3 class="summary__section-title"><span class="summary__step">3</span> Why</h3>
+            <div class="field">
+                <label class="field__label" for="sum-reason">Reason <span class="field__req">*</span></label>
+                <input class="input" id="sum-reason" name="reason" maxlength="255" placeholder="Forgot to check out, confirmed by the supervisor">
+            </div>
+        </section>
+        <div class="summary__actions">
+            <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save</button>
+        </div>
+    </form>
+    {% if override %}
+        <form method="post" action="{% url 'payroll:attendance_summary_revert' employee.pk %}" data-fetch class="summary__revert">
+            {% csrf_token %}
+            <input type="hidden" name="back" value="{{ back }}">
+            <input type="hidden" name="year" value="{{ year }}"><input type="hidden" name="month" value="{{ month }}">
+            {% if pay_group %}<input type="hidden" name="group" value="{{ pay_group.pk }}"><input type="hidden" name="week" value="{{ week_first|date:'Y-m-d' }}">{% endif %}
+            <p class="ui-muted">The salary uses {% if override.present_days is not None %}{{ override.present_days }} present days{% else %}{{ override.hours }} hours{% endif %}, set by hand.</p>
+            <button class="ui-btn ui-btn--danger" type="submit">{% include "ui/icon.html" with name="history" %} Back to scans</button>
+        </form>
+    {% endif %}
+{% endif %}
+
+<section class="summary__section">
+    <h3 class="summary__section-title"><span class="summary__step">4</span> History</h3>
+    {% if history %}
+        <ol class="summary__history">
+            {% for row in history %}
+                <li class="summary__history-item is-{{ row.status }}">
+                    <p><strong>{% if row.present_days is not None %}{{ row.scan_present_days }} → {{ row.present_days }} present days{% else %}{{ row.scan_hours }} → {{ row.hours }} hours{% endif %}</strong> <span class="ui-chip{% if row.status == 'active' %} ui-chip--info{% endif %}">{{ row.get_status_display }}</span></p>
+                    <p class="ui-muted">{{ row.created_at|date:"d M Y, H:i" }} · {{ row.created_by.get_full_name|default:row.created_by.email }} · “{{ row.reason }}”</p>
+                    {% if row.status == "reverted" %}<p class="ui-muted">Back to scans {{ row.ended_at|date:"d M Y, H:i" }} · {{ row.ended_by.get_full_name|default:row.ended_by.email }}</p>{% endif %}
+                </li>
+            {% endfor %}
+        </ol>
+    {% else %}
+        <p class="ui-muted">No changes: the salary follows the scans.</p>
+    {% endif %}
+</section>
+{% endwith %}

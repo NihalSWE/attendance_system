@@ -101,6 +101,12 @@ BRANCH_PAGES = {
     "attendance:attendance_day": "attendance.view",
     "attendance:attendance_now": ("employees.view", "attendance.view"),
     "attendance:attendance_review": "attendance.fix",
+    # Present days set by hand (2026-10-31): the service also refuses a head
+    # of department, who fixes days but not a period's count.
+    "payroll:attendance_summary": "attendance.fix",
+    "payroll:attendance_summary_person": "attendance.fix",
+    "payroll:attendance_summary_save": "attendance.fix",
+    "payroll:attendance_summary_revert": "attendance.fix",
     "attendance:attendance_day_fix": "attendance.fix",
     "attendance:attendance_correction_withdraw": "attendance.fix",
     # N11: missed scans employees report, for whoever may fix the day's branch.
