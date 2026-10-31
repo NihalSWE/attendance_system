@@ -150,6 +150,10 @@ class Uom(TenantOwned, ActorTracked):
         return self.code
 
 
+#: What can be made here (2026-10-31): products, and materials made in-house.
+MADE_KINDS = ("finished", "raw", "packaging")
+
+
 class ItemCategory(TenantOwned, ActorTracked):
     """The client's own grouping (Sweetener, Bottle, Bearing), under one item type."""
 
@@ -318,8 +322,11 @@ class Item(TenantOwned, ActorTracked):
         errors = {}
         if self.track_expiry and not self.track_batch:
             errors["track_expiry"] = "An item with an expiry date must also keep batches."
-        if self.sourcing != Item.Sourcing.BUY and self.kind != ItemKind.FINISHED:
-            errors["sourcing"] = "Only a finished good is made here; this one is bought."
+        # A product or a material can be made here (2026-10-31: a cream or a
+        # dough made in-house and used in another product); spares and general
+        # store items are bought.
+        if self.sourcing != Item.Sourcing.BUY and self.kind not in MADE_KINDS:
+            errors["sourcing"] = "Only a product or a material is made here; this one is bought."
         if self.keep_by == Item.KeepBy.DAYS and not self.keep_days:
             errors["keep_days"] = "Say how many days of sales to keep."
         if self.category_id:

@@ -28,12 +28,15 @@ def _item(company_id, pk):
 def _back(request, item, tone, text):
     """The answer: in place for the product page's forms (fetch), else as a
     message on the product page, at its recipe (2026-10-27)."""
+    from inventory.hub_views import _page_of
+
+    page = _page_of(item) + "#recipe"
     if fetch.wants_json(request):
         if tone == "danger":
             return fetch.refused(message=text)
-        return fetch.saved(text, reverse("inventory:product", args=[item.pk]) + "#recipe")
+        return fetch.saved(text, page)
     getattr(messages, "error" if tone == "danger" else "success")(request, text)
-    return redirect(reverse("inventory:product", args=[item.pk]) + "#recipe")
+    return redirect(page)
 
 
 def _errors(form):

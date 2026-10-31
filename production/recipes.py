@@ -18,7 +18,7 @@ from django.db import transaction
 
 from common.tenant import use_company
 from inventory.doc_common import check_qty
-from inventory.models import ItemKind
+from inventory.models import MADE_KINDS, ItemKind
 from production import boms
 from production.models import Bom, ProductionOrder
 
@@ -59,10 +59,10 @@ def uses(company_id, product, wanted, seen=None):
     for item_id, kind in parts:
         if item_id == wanted.pk:
             return True
-        if kind == ItemKind.FINISHED:
-            part = type(product).all_objects.get(pk=item_id)
-            if uses(company_id, part, wanted, seen):
-                return True
+        # Any part can have its own recipe (a made material too, 2026-10-31).
+        part = type(product).all_objects.get(pk=item_id)
+        if part.sourcing != part.Sourcing.BUY and uses(company_id, part, wanted, seen):
+            return True
     return False
 
 
@@ -86,10 +86,10 @@ def _in_use(*, actor, company_id, bom):
 @transaction.atomic
 def set_batch(*, actor, company_id, item, batch_size):
     """How much one batch makes, in the product's own unit."""
-    if item.kind != ItemKind.FINISHED:
-        raise ValidationError("Only a finished good has a recipe.")
+    if item.kind not in MADE_KINDS:
+        raise ValidationError("Only a product or a material made here has a recipe.")
     if item.sourcing == item.Sourcing.BUY:
-        raise ValidationError(f"{item.code} is bought ready: set How you get it to Make or Both first.")
+        raise ValidationError(f"{item.code} is bought: set How you get it to Made here or Both first.")
     bom = current(company_id, item)
     if bom is None:
         return boms.create_bom(actor=actor, company_id=company_id, values={
@@ -108,14 +108,14 @@ def add_material(*, actor, company_id, item, material, qty, scrap_pct=None):
     """A material and how much one batch uses, in the material's own unit. A
     product made here can go in too (semi-finished: cream in cream biscuits,
     2026-10-27), unless it is made with this product: that is a loop."""
-    if material.kind == ItemKind.FINISHED:
-        if material.sourcing == material.Sourcing.BUY:
-            raise ValidationError({"material": f"{material.code} is bought ready, not made here: "
-                                               "choose a material, or a product you make."})
+    if material.kind == ItemKind.FINISHED and material.sourcing == material.Sourcing.BUY:
+        raise ValidationError({"material": f"{material.code} is bought ready, not made here: "
+                                           "choose a material, or a product you make."})
+    if material.kind in MADE_KINDS and material.sourcing != material.Sourcing.BUY:
         if material.pk == item.pk or uses(company_id, material, item):
             raise ValidationError({"material": f"{material.code} is made with {item.code}, so it "
                                                f"cannot go into {item.code}'s recipe: that is a loop."})
-    elif material.kind not in MATERIAL_KINDS:
+    if material.kind not in MATERIAL_KINDS and material.kind != ItemKind.FINISHED:
         raise ValidationError({"material": "Choose a raw material, a packaging item or a product you make."})
     bom = _editable(actor=actor, company_id=company_id, item=item)
     boms.add_line(actor=actor, company_id=company_id, bom_id=bom.pk, values={

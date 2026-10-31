@@ -46,8 +46,11 @@ def plan_page(request, pk):
         return bail
     access.require(request.user, company_id, CODE)
     product = _product(company_id, pk)
-    hub_url = reverse("inventory:product", args=[product.pk])
-    if product.kind != ItemKind.FINISHED or product.sourcing == Item.Sourcing.BUY:
+    from inventory.hub_views import _page_of
+    from inventory.models import MADE_KINDS
+
+    hub_url = _page_of(product)
+    if product.kind not in MADE_KINDS or product.sourcing == Item.Sourcing.BUY:
         return redirect(hub_url)
     stores = planning.output_stores(company_id, branch_ids(request.user, company_id, CODE))
     into = planning.default_into(product, stores)

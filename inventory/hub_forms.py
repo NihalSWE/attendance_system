@@ -158,7 +158,7 @@ class MaterialForm(_HubItemForm):
     """A raw material or packaging item (Production on)."""
 
     SECTIONS = (
-        ("Item", "What it is.", ("kind", "name", "code", "category")),
+        ("Item", "What it is, and whether you buy it or make it.", ("sourcing", "kind", "name", "code", "category")),
         ("Units", "How it is counted and bought.", ("base_uom", "pack_uom", "pack_factor")),
         ("Stock control", "When it runs low, and where it is kept.",
          ("min_stock", "reorder_qty", "default_warehouse", "standard_cost")),
@@ -180,8 +180,18 @@ class MaterialForm(_HubItemForm):
         self.fields["base_uom"].help_text = "Stock is counted in this unit; fixed once stock moves."
         if "pack_uom" in self.fields:
             self.fields["pack_uom"].help_text = "Optional: the unit you buy in, e.g. BAG."
-        for name in ("sourcing", "keep_by", "keep_days", "sale_price", "vat_rate", "batch_per_mix"):
+        for name in ("keep_by", "keep_days", "sale_price", "vat_rate", "batch_per_mix"):
             self.fields.pop(name, None)
+        # Bought, made here, or both (2026-10-31): a made material gets its own
+        # recipe and is made with Make; its cost comes from its production.
+        if "sourcing" in self.fields:
+            self.fields["sourcing"].label = "How you get it"
+            self.fields["sourcing"].widget = forms.RadioSelect(
+                choices=[("buy", "Bought"), ("make", "Made here"), ("both", "Both")],
+                attrs={"class": "check__input"})
+            self.fields["sourcing"].help_text = "Made here: it gets its own recipe and is made with Make."
+            if not self.instance.pk:
+                self.initial["sourcing"] = "buy"
         # A material keeps a quantity: no "as days of sales" choice to wait for.
         self.fields["min_stock"].widget.attrs.pop("data-show-when", None)
         # An estimate only (2026-10-31): costs a product before the first purchase;

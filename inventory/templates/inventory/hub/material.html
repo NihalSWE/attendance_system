@@ -5,11 +5,16 @@
         <div>
             <p class="ui-head__crumbs"><a href="{% url 'inventory:materials' %}">Materials</a> / {{ item.code }}</p>
             <h1 class="ui-head__title">{{ item.name }}{% if item.status != "active" %} <span class="ui-chip">Inactive</span>{% endif %}</h1>
-            <p class="ui-head__sub">{{ item.get_kind_display }}{% if item.category %} · {{ item.category.name }}{% endif %} · counted in {{ item.base_uom.code }}{% for pack in packs %} · 1 {{ pack.uom.code }} = {{ pack.factor|floatformat:"-4" }} {{ item.base_uom.code }}{% endfor %}{% if item.track_expiry %} · expires{% if item.shelf_life_days %} after {{ item.shelf_life_days }} days{% endif %}{% elif item.track_batch %} · keeps batches{% endif %}{% if item.qc_required %} · checked before use{% endif %}</p>
+            <p class="ui-head__sub">{% if makes %}{% if item.sourcing == "both" %}Made here and bought{% else %}Made here{% endif %} · {% endif %}{{ item.get_kind_display }}{% if item.category %} · {{ item.category.name }}{% endif %} · counted in {{ item.base_uom.code }}{% for pack in packs %} · 1 {{ pack.uom.code }} = {{ pack.factor|floatformat:"-4" }} {{ item.base_uom.code }}{% endfor %}{% if item.track_expiry %} · expires{% if item.shelf_life_days %} after {{ item.shelf_life_days }} days{% endif %}{% elif item.track_batch %} · keeps batches{% endif %}{% if item.qc_required %} · checked before use{% endif %}</p>
         </div>
         <div class="ui-head__actions">
             {% include "inventory/hub/_head_actions.html" %}
-            <a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+            {% if makes %}
+                <a class="ui-btn" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+                {% if can_plan and has_recipe %}<a class="ui-btn ui-btn--main" href="{% url 'production:plan' item.pk %}">{% include "ui/icon.html" with name="play" %} Make this</a>{% endif %}
+            {% else %}
+                <a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+            {% endif %}
         </div>
     </div>
 
@@ -20,6 +25,12 @@
         {% endif %}
         <div class="ui-tile"><p class="ui-tile__label">Used in</p><p class="ui-tile__value">{{ used|length }}</p><p class="ui-tile__hint">product{{ used|length|pluralize }}</p></div>
     </div>
+
+    {% if makes %}
+        {# A material made here (2026-10-31): its own recipe and cost of one batch. #}
+        {% include "inventory/hub/_recipe.html" %}
+        {% if sees_costs %}{% include "inventory/hub/_cost_sheet.html" %}{% endif %}
+    {% endif %}
 
     <div class="ui-card">
         <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Stock by store{% if item.track_batch %} and batch{% endif %}</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:move_new' %}">Move stock</a></div>

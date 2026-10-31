@@ -138,8 +138,15 @@ def material(request, pk):
         product = used[0].bom.item
         next_step = (f"See {product.name}, which uses it, and make it.",
                      reverse("inventory:product", args=[product.pk]), product.name)
+    parts = _item_parts(request, company_id, item)
+    makes = context["production"] and item.sourcing != Item.Sourcing.BUY
+    recipe = hub.recipe(company_id, request.user, item) if makes else None
+    making = _making(request, company_id, item, recipe, parts["packs"]) if makes else {}
+    if makes and recipe is None:
+        next_step = ("Write its recipe: what one batch makes and what it uses.",
+                     _page_of(item) + "#recipe", "Write the recipe")
     return render(request, "inventory/hub/material.html", {
-        **context, **_item_parts(request, company_id, item), "line": line, "used": used,
+        **context, **parts, **making, "line": line, "used": used, "makes": makes, "recipe": recipe,
         "batches": batches, "next_step": next_step,
     })
 

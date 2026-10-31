@@ -345,7 +345,7 @@ def _without_recipe(company_id):
     with use_company(company_id):
         with_recipe = Bom.objects.filter(status=Bom.Status.ACTIVE).filter(
             Q(lines__isnull=False)).values("item_id")
-        return list(Item.objects.filter(kind=ItemKind.FINISHED, status="active")
+        return list(Item.objects.filter(kind__in=("finished", "raw", "packaging"), status="active")
                     .exclude(sourcing=Item.Sourcing.BUY).exclude(pk__in=with_recipe).order_by("code"))
 
 
