@@ -1,73 +1,66 @@
 {% extends "base_template/base.html" %}
-{% load money %}
+{% load money static %}
+{% comment %}
+    Salary by month (2026-10-31 redesign): where the month stands (Generate ->
+    Submit -> Approve -> payslips out) with one main button for the next step,
+    everything that needs a look in one panel, the totals, then the payslips by
+    person or by department (branch and department filters, downloads).
+{% endcomment %}
 {% block title %}
     Salary · Attendance
 {% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'payroll/css/salary.css' %}">
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'payroll/js/salary.js' %}"></script>
+{% endblock %}
 {% block page %}
-    <div class="crumbs">
-        <a href="{% url 'dashboard' %}">
-            Dashboard
-        </a>
-        <span class="crumbs__sep" aria-hidden="true">
-            /
-        </span>
-        Salary
-    </div>
-    <div class="page__head">
+<div class="ui-page salary">
+    <div class="ui-head">
         <div>
-            <h1 class="page__title">
-                Salary
-            </h1>
-            <p class="page__sub">
-                {% if company_wide %}
-                    Generating a month recalculates its attendance first. The result is a
-                    draft: generate it again as often as you need, then submit it for
-                    approval. Approving finalises the month.
+            <p class="ui-head__crumbs"><a href="{% url 'dashboard' %}">Dashboard</a> / Salary</p>
+            <h1 class="ui-head__title">Salary · {{ run_title }}</h1>
+            <p class="ui-head__sub">
+                {% if pay_group %}
+                    {{ period_first|date:"d M" }} – {{ period_last|date:"d M Y" }}. Its people are paid their daily or hourly rate for the days they
+                    are in {{ pay_group.name }}; allowances and recurring deductions come in the last
+                    week ending in the month. Monthly salaries are not paid here.
                 {% else %}
-                    Salary for the people placed in your branches. Generating rebuilds only
-                    their payslips. When it is ready, submit the month for approval; the
-                    owner or company administrator approves it.
+                    {{ month_name }} {{ year }} covers {{ period_first|date:"d M Y" }} - {{ period_last|date:"d M Y" }}
+                    ({{ period_days }} days){% if period_changeover %}: a shorter changeover month, after
+                    the salary month's start day changed{% endif %}.{% if pay_groups %} Weekly pay groups'
+                    days are paid by their weeks, not here.{% endif %}
                 {% endif %}
+                {% if not company_wide %}Salary for the people placed in your branches.{% endif %}
             </p>
         </div>
-        <div class="page__actions">
-            {% if decides_overtime %}
-                <a class="btn btn--ghost" href="{% url 'payroll:overtime_list' %}?month={{ month }}&year={{ year }}">
-                    Overtime{% if overtime_waiting %} ({{ overtime_waiting }} waiting){% endif %}
-                </a>
-            {% endif %}
-            {% if can_manage %}
-                <a class="btn btn--ghost" href="{% url 'payroll:component_list' %}">
-                    Allowances
-                </a>
-                <a class="btn btn--ghost" href="{% url 'payroll:salary_settings' %}">
-                    Salary settings
-                </a>
-                <a class="btn btn--ghost" href="{% url 'payroll:pay_groups' %}">
-                    Pay groups
-                </a>
-                {% if run.status == 'posted' %}
-                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_reopen' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
-                        Undo finalise
-                    </a>
-                {% endif %}
-            {% endif %}
+        <div class="ui-head__actions">
+            <details class="salary__more">
+                <summary class="ui-btn">More {% include "ui/icon.html" with name="list" small=True %}</summary>
+                <div class="salary__menu">
+                    {% if decides_overtime %}
+                        <a href="{% url 'payroll:overtime_list' %}?month={{ month }}&year={{ year }}">Overtime{% if overtime_waiting %} ({{ overtime_waiting }} waiting){% endif %}</a>
+                    {% endif %}
+                    <a href="{% url 'payroll:attendance_summary' %}?{{ filters }}">Attendance summary</a>
+                    {% if can_manage %}
+                        <a href="{% url 'payroll:component_list' %}">Allowances</a>
+                        <a href="{% url 'payroll:salary_settings' %}">Salary settings</a>
+                        <a href="{% url 'payroll:pay_groups' %}">Pay groups</a>
+                        {% if run.status == 'posted' %}
+                            <a class="salary__menu-danger" href="{% url 'payroll:payroll_reopen' %}?month={{ month }}&year={{ year }}{{ pay_query }}">Undo finalise</a>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </details>
             {# Approval (A11): whoever prepares submits; the owner/admin approves. #}
             {% if run.status == 'submitted' %}
                 {% if can_manage or is_submitter %}
-                    <a class="btn btn--ghost" href="{% url 'payroll:payroll_return' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
-                        {% if can_manage %}Send back{% else %}Take back{% endif %}
-                    </a>
+                    <a class="ui-btn" href="{% url 'payroll:payroll_return' %}?month={{ month }}&year={{ year }}{{ pay_query }}">{% if can_manage %}Send back{% else %}Take back{% endif %}</a>
                 {% endif %}
                 {% if can_manage and not approval_blocked %}
-                    <a class="btn btn--primary" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
-                        Approve {{ run_label }}
-                    </a>
+                    <a class="ui-btn ui-btn--main" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}{{ pay_query }}">{% include "ui/icon.html" with name="check" %} Approve {{ run_label }}</a>
                 {% endif %}
-            {% elif run.status == 'draft' and can_generate %}
-                <a class="btn btn--ghost" href="{% url 'payroll:payroll_submit' %}?month={{ month }}&year={{ year }}{{ pay_query }}">
-                    Submit {{ run_label }} for approval
-                </a>
             {% endif %}
             {% if can_generate and run.status != 'posted' and run.status != 'submitted' %}
                 <form method="post" action="{% url 'payroll:payroll_generate' %}">
@@ -78,292 +71,233 @@
                         <input type="hidden" name="group" value="{{ pay_group.pk }}">
                         <input type="hidden" name="week" value="{{ week_first|date:'Y-m-d' }}">
                     {% endif %}
-                    <button class="btn btn--primary" type="submit">
-                        {% if run %}Regenerate{% else %}Generate{% endif %} {% if pay_group %}the week{% else %}{{ month_name }} {{ year }}{% if not company_wide %} for your branches{% endif %}{% endif %}
-                    </button>
+                    <button class="ui-btn{% if not run %} ui-btn--main{% endif %}" type="submit">{% include "ui/icon.html" with name="play" small=True %} {% if run %}Regenerate{% else %}Generate{% endif %} {% if pay_group %}the week{% else %}{{ month_name }} {{ year }}{% if not company_wide %} for your branches{% endif %}{% endif %}</button>
                 </form>
+            {% endif %}
+            {% if run.status == 'draft' and can_generate %}
+                <a class="ui-btn ui-btn--main" href="{% url 'payroll:payroll_submit' %}?month={{ month }}&year={{ year }}{{ pay_query }}">{% include "ui/icon.html" with name="arrow-right" %} Submit {{ run_label }} for approval</a>
             {% endif %}
         </div>
     </div>
 
-    {# The dates this salary month covers (payroll/periods.py, 2026-10-24). #}
-    {% if pay_group %}
-        {# A weekly pay group's week (payroll/paygroups.py, 2026-10-24). #}
-        <p class="t-faint">
-            {{ run_title }}. Its people are paid their daily or hourly rate for the days they
-            are in {{ pay_group.name }}; allowances and recurring deductions come in the last
-            week ending in the month. Monthly salaries are not paid here.
-        </p>
-    {% else %}
-        <p class="t-faint">
-            {{ month_name }} {{ year }} covers {{ period_first|date:"d M Y" }} - {{ period_last|date:"d M Y" }}
-            ({{ period_days }} days){% if period_changeover %}: a shorter changeover month, after
-            the salary month's start day changed{% endif %}.{% if pay_groups %} Weekly pay groups'
-            days are paid by their weeks, not here.{% endif %}
-        </p>
+    {# Where the month stands. #}
+    <ol class="ui-steps salary__steps" aria-label="Where this salary stands">
+        <li class="ui-steps__step{% if run %} ui-steps__step--done{% else %} ui-steps__step--now{% endif %}">
+            <span class="salary__dot">{% if run %}{% include "ui/icon.html" with name="check" small=True %}{% else %}1{% endif %}</span>
+            <span>{% if run %}Generated{% if run.calculation_finished_at %} {{ run.calculation_finished_at|date:"d M, H:i" }}{% endif %}{% else %}Generate{% endif %}</span>
+        </li>
+        <li class="ui-steps__step{% if run.status == 'submitted' or run.status == 'posted' %} ui-steps__step--done{% elif run.status == 'draft' %} ui-steps__step--now{% endif %}">
+            <span class="salary__dot">{% if run.status == 'submitted' or run.status == 'posted' %}{% include "ui/icon.html" with name="check" small=True %}{% else %}2{% endif %}</span>
+            <span>{% if run.submitted_at and run.status != 'draft' %}Submitted {{ run.submitted_at|date:"d M" }}{% else %}Submit{% endif %}</span>
+        </li>
+        <li class="ui-steps__step{% if run.status == 'posted' %} ui-steps__step--done{% elif run.status == 'submitted' %} ui-steps__step--now{% endif %}">
+            <span class="salary__dot">{% if run.status == 'posted' %}{% include "ui/icon.html" with name="check" small=True %}{% else %}3{% endif %}</span>
+            <span>{% if run.status == 'posted' %}Finalised {{ run.posted_at|date:"d M Y" }}{% elif run.status == 'submitted' %}Waiting for approval{% else %}Approve{% endif %}</span>
+        </li>
+        <li class="ui-steps__step{% if run.status == 'posted' %} ui-steps__step--done{% endif %}">
+            <span class="salary__dot">4</span><span>Payslips out</span>
+        </li>
+    </ol>
+
+    {# Everything that needs a look, in one place. #}
+    {% if period_preview or run.status == 'submitted' or run.return_reason and run.status == 'draft' or attendance_since_run or overtime_since_run or run and overtime_waiting or approval_blocked and can_manage %}
+        <section class="salary__attention" aria-label="Needs attention">
+            <h2 class="salary__attention-title">{% include "ui/icon.html" with name="alert" small=True %} Needs attention</h2>
+            <ul>
+                {% if period_preview %}
+                    <li>Preview: {{ run_title }} ends on {{ period_last|date:"d M Y" }}. Days after today are
+                        not counted yet, so these figures change until the month is over. Generate it again
+                        then.</li>
+                {% endif %}
+                {% if run.status == 'submitted' %}
+                    <li class="is-info">{{ run_title }} is waiting for approval — submitted by
+                        {{ run.submitted_by.get_full_name|default:run.submitted_by.email|default:"someone" }}
+                        on {{ run.submitted_at|date:"d M Y, H:i" }}. It cannot be regenerated or have lines
+                        added until it is approved or sent back.
+                        {% if not can_manage %}The owner or company administrator approves it.{% endif %}</li>
+                    {% if approval_blocked and can_manage %}<li>{{ approval_blocked }}</li>{% endif %}
+                {% elif run.status == 'draft' and run.return_reason %}
+                    <li>Sent back by {{ run.returned_by.get_full_name|default:run.returned_by.email|default:"someone" }}
+                        on {{ run.returned_at|date:"d M Y, H:i" }}: {{ run.return_reason }}</li>
+                {% endif %}
+                {% if attendance_since_run %}
+                    <li>Attendance changed for {{ attendance_since_run }}
+                        {{ attendance_since_run|pluralize:"person,people" }} since this salary was
+                        generated. Generate {{ run_label }} again{% if run.status == 'submitted' %} — it
+                        cannot be approved until you do{% endif %}.</li>
+                {% endif %}
+                {% if overtime_since_run %}
+                    <li>Overtime was decided for {{ overtime_since_run }} day{{ overtime_since_run|pluralize }} after this
+                        salary was generated. Generate {{ run_label }} again to include it.</li>
+                {% endif %}
+                {% if run and overtime_waiting %}
+                    <li class="is-info">{{ overtime_waiting }} day{{ overtime_waiting|pluralize }} of overtime in {{ month_name }}
+                        {{ overtime_waiting|pluralize:"is,are" }} still waiting for a decision and will not be paid until approved.
+                        <a href="{% url 'payroll:overtime_list' %}?month={{ month }}&year={{ year }}">Decide overtime</a></li>
+                {% endif %}
+            </ul>
+        </section>
     {% endif %}
-    {% if period_preview %}
-        <div class="alert alert--info">
-            Preview: {{ run_title }} ends on {{ period_last|date:"d M Y" }}. Days after today are
-            not counted yet, so these figures change until the month is over. Generate it again
-            then.
+    {% if run.status == 'posted' %}
+        <p class="salary__posted">Employees can see these payslips. The month's attendance and overtime
+            are locked; use Undo finalise to correct a mistake.</p>
+    {% endif %}
+
+    {% if run %}
+        <div class="ui-tiles salary__tiles">
+            <div class="ui-tile"><p class="ui-tile__label">People</p><p class="ui-tile__value">{{ totals.employees }}</p><p class="ui-tile__hint">{% if branch or department %}in the filter{% elif not company_wide %}in your branches{% else %}with a payslip{% endif %}</p></div>
+            <div class="ui-tile"><p class="ui-tile__label">Gross</p><p class="ui-tile__value">{{ totals.gross|money }}</p><p class="ui-tile__hint">{{ currency }}</p></div>
+            <div class="ui-tile"><p class="ui-tile__label">Deductions</p><p class="ui-tile__value">{{ totals.deductions|money }}</p><p class="ui-tile__hint">{{ currency }}</p></div>
+            <div class="ui-tile ui-tile--good"><p class="ui-tile__label">Net pay</p><p class="ui-tile__value">{{ totals.net|money }}</p><p class="ui-tile__hint">{{ currency }}</p></div>
         </div>
     {% endif %}
 
-    {% if run.status == 'submitted' %}
-        <div class="alert alert--info">
-            {{ run_title }} is waiting for approval — submitted by
-            {{ run.submitted_by.get_full_name|default:run.submitted_by.email|default:"someone" }}
-            on {{ run.submitted_at|date:"d M Y, H:i" }}. It cannot be regenerated or have lines
-            added until it is approved or sent back.
-            {% if not can_manage %}
-                The owner or company administrator approves it.
-            {% endif %}
-        </div>
-    {% elif run.status == 'draft' and run.return_reason %}
-        <div class="alert alert--warning">
-            Sent back by {{ run.returned_by.get_full_name|default:run.returned_by.email|default:"someone" }}
-            on {{ run.returned_at|date:"d M Y, H:i" }}: {{ run.return_reason }}
-        </div>
-    {% endif %}
-    {% if attendance_since_run %}
-        <div class="alert alert--warning">
-            Attendance changed for {{ attendance_since_run }}
-            {{ attendance_since_run|pluralize:"person,people" }} since this salary was
-            generated. Generate {{ run_label }} again{% if run.status == 'submitted' %} — it
-            cannot be approved until you do{% endif %}.
-        </div>
-    {% endif %}
-    {% if overtime_since_run %}
-        <div class="alert alert--warning">
-            Overtime was decided for {{ overtime_since_run }} day{{ overtime_since_run|pluralize }} after this
-            salary was generated. Generate {{ run_label }} again to include it.
-        </div>
-    {% endif %}
-    {% if run and overtime_waiting %}
-        <div class="alert alert--info">
-            {{ overtime_waiting }} day{{ overtime_waiting|pluralize }} of overtime in {{ month_name }}
-            {{ overtime_waiting|pluralize:"is,are" }} still waiting for a decision and will not be paid until approved.
-            <a href="{% url 'payroll:overtime_list' %}?month={{ month }}&year={{ year }}">Decide overtime</a>
-        </div>
-    {% endif %}
-
-    <div class="card">
-        <div class="card__head">
-            <h2>
-                {{ run_title }}
-            </h2>
-            {% if run.status == 'posted' %}
-                <span class="badge badge--success">
-                    Finalised {{ run.posted_at|date:"d M Y" }}
-                </span>
-            {% elif run.status == 'submitted' %}
-                <span class="badge badge--info">
-                    Waiting for approval
-                </span>
-            {% elif run %}
-                <span class="badge badge--warning">
-                    Draft
-                </span>
-            {% endif %}
-        </div>
-        {% if run.status == 'posted' %}
-            <div class="card__body">
-                <p class="field__help">
-                    Employees can see these payslips. The month's attendance and overtime
-                    are locked; use Undo finalise to correct a mistake.
-                </p>
-            </div>
-        {% endif %}
-        <form method="get" class="toolbar">
-            <label class="sr-only" for="pay-month">
-                Month
-            </label>
-            <select class="input select js-select" id="pay-month" name="month">
-                {% for value, label in months %}
-                    <option value="{{ value }}" {% if value == month %}selected{% endif %}>
-                        {{ label }}
-                    </option>
-                {% endfor %}
-            </select>
-            <label class="sr-only" for="pay-year">
-                Year
-            </label>
-            <select class="input select js-select" id="pay-year" name="year">
-                {% for option in years %}
-                    <option value="{{ option }}" {% if option == year %}selected{% endif %}>
-                        {{ option }}
-                    </option>
-                {% endfor %}
-            </select>
+    <div class="ui-card">
+        <form method="get" class="salary__filters">
             {% if pay_groups %}
-                <label class="sr-only" for="pay-group">
-                    Paid
-                </label>
+                <label class="sr-only" for="pay-group">Paid</label>
                 <select class="input select" id="pay-group" name="group" onchange="this.form.submit()">
                     <option value="">Monthly staff</option>
                     {% for option in pay_groups %}
-                        <option value="{{ option.pk }}" {% if option == pay_group %}selected{% endif %}>
-                            {{ option.name }} (weekly)
-                        </option>
+                        <option value="{{ option.pk }}" {% if option == pay_group %}selected{% endif %}>{{ option.name }} (weekly)</option>
                     {% endfor %}
                 </select>
             {% endif %}
+            <label class="sr-only" for="pay-month">Month</label>
+            <select class="input select" id="pay-month" name="month">
+                {% for value, label in months %}<option value="{{ value }}" {% if value == month %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <label class="sr-only" for="pay-year">Year</label>
+            <select class="input select" id="pay-year" name="year">
+                {% for option in years %}<option value="{{ option }}" {% if option == year %}selected{% endif %}>{{ option }}</option>{% endfor %}
+            </select>
             {% if pay_group %}
-                <label class="sr-only" for="pay-week">
-                    Week
-                </label>
+                <label class="sr-only" for="pay-week">Week</label>
                 <select class="input select" id="pay-week" name="week">
-                    {% for first, last in weeks %}
-                        <option value="{{ first|date:'Y-m-d' }}" {% if first == week_first %}selected{% endif %}>
-                            {{ first|date:"d M" }} - {{ last|date:"d M" }}
-                        </option>
-                    {% endfor %}
+                    {% for first, last in weeks %}<option value="{{ first|date:'Y-m-d' }}" {% if first == week_first %}selected{% endif %}>{{ first|date:"d M" }} - {{ last|date:"d M" }}</option>{% endfor %}
                 </select>
             {% endif %}
-            <button class="btn btn--ghost" type="submit">
-                Show
-            </button>
+            {% if branches|length > 1 %}
+                <label class="sr-only" for="pay-branch">Branch</label>
+                <select class="input select js-select" id="pay-branch" name="branch">
+                    <option value="">All branches</option>
+                    {% for option in branches %}<option value="{{ option.pk }}"{% if option.pk|stringformat:"s" == branch %} selected{% endif %}>{{ option.name }}</option>{% endfor %}
+                </select>
+            {% endif %}
+            <label class="sr-only" for="pay-department">Department</label>
+            <select class="input select js-select" id="pay-department" name="department">
+                <option value="">All departments</option>
+                {% for option in departments %}<option value="{{ option.pk }}"{% if option.pk|stringformat:"s" == department %} selected{% endif %}>{{ option.name }}{% if branches|length > 1 %} · {{ option.branch.name }}{% endif %}</option>{% endfor %}
+            </select>
+            <input type="hidden" name="view" value="{{ view }}">
+            <button class="ui-btn" type="submit">Show</button>
         </form>
+        <div class="salary__bar">
+            <nav class="salary__seg" aria-label="Show the salary">
+                <a class="salary__seg-item{% if view == 'people' %} is-on{% endif %}" href="?{{ filters }}">People</a>
+                <a class="salary__seg-item{% if view == 'departments' %} is-on{% endif %}" href="?{{ filters }}&amp;view=departments">By department</a>
+            </nav>
+            {% if run %}
+                <span class="salary__downloads">
+                    <a class="ui-btn ui-btn--sm" href="?{{ filters }}&amp;format=xlsx">Excel by department</a>
+                    <a class="ui-btn ui-btn--sm" href="?{{ filters }}&amp;format=pdf">PDF by department</a>
+                </span>
+            {% endif %}
+        </div>
 
-        {% if not records %}
-            <div class="empty server-table-empty">
-                <div class="empty__title">
-                    No salary generated for {{ run_title }}
-                </div>
-                <div class="empty__text">
-                    Press Generate. Attendance for the month is calculated first, then
-                    each employee's salary.
-                </div>
+        {% if not run %}
+            <div class="empty">
+                <div class="empty__title">No salary generated for {{ run_title }}</div>
+                <div class="empty__text">Press Generate. Attendance for the month is calculated first, then each employee's salary.</div>
             </div>
-        {% endif %}
-        {% if server_table or records %}
+        {% elif view == 'departments' %}
             <div class="table-wrap">
-                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
-                    <colgroup>
-                        <col style="width: 17%">
-                        <col style="width: 9%">
-                        <col style="width: 9%">
-                        <col style="width: 7%">
-                        <col style="width: 6%">
-                        <col style="width: 7%">
-                        <col style="width: 9%">
-                        <col style="width: 10%">
-                        <col style="width: 10%">
-                        <col style="width: 10%">
-                        <col style="width: 6%">
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th>
-                                Employee
-                            </th>
-                            <th>
-                                Pay basis
-                            </th>
-                            <th class="numeric">
-                                Rate
-                            </th>
-                            <th class="numeric">
-                                Present
-                            </th>
-                            <th class="numeric">
-                                Half
-                            </th>
-                            <th class="numeric">
-                                Absent
-                            </th>
-                            <th class="numeric">
-                                Unpaid leave
-                            </th>
-                            <th class="numeric">
-                                Gross
-                            </th>
-                            <th class="numeric">
-                                Deductions
-                            </th>
-                            <th class="numeric">
-                                Net pay
-                            </th>
-                            <th class="no-sort">
-                                Payslip
-                            </th>
-                        </tr>
-                    </thead>
+                <table class="table salary__departments">
+                    <thead><tr>
+                        <th><span class="sr-only">Open</span></th><th>Department</th><th>Branch</th><th class="numeric">People</th>
+                        <th class="numeric">Gross</th><th class="numeric">Deductions</th><th class="numeric">Net pay</th>
+                    </tr></thead>
+                    {% for group in by_department %}
+                        <tbody class="salary__group">
+                            <tr class="salary__group-row" data-salary-toggle tabindex="0" aria-expanded="false">
+                                <td class="salary__chevron" aria-hidden="true">›</td>
+                                <td><strong>{{ group.name }}</strong></td>
+                                <td>{{ group.branch }}</td>
+                                <td class="numeric">{{ group.people }}</td>
+                                <td class="numeric">{{ group.gross|money }}</td>
+                                <td class="numeric">{{ group.deductions|money }}</td>
+                                <td class="numeric"><strong>{{ group.net|money }}</strong></td>
+                            </tr>
+                            <tr class="salary__people-row">
+                                <td colspan="7">
+                                    <div class="salary__people"><div class="salary__people-inner">
+                                        <table class="table salary__inner">
+                                            <tbody>
+                                                {% for record in group.records %}
+                                                    <tr>
+                                                        <td>{{ record.employee.full_name }} <span class="salary__code">{{ record.employee_assignment_at_period_end.employee_code }}</span>{% if record.calculation_snapshot.override %} <span class="ui-chip ui-chip--info">by hand</span>{% endif %}</td>
+                                                        <td>{{ record.calculation_snapshot.pay_basis|title }}</td>
+                                                        <td class="numeric">{{ record.gross_earnings|money }}</td>
+                                                        <td class="numeric">{{ record.total_deductions|money }}</td>
+                                                        <td class="numeric"><strong>{{ record.net_pay|money }}</strong></td>
+                                                        <td><a class="ui-btn ui-btn--sm" href="{% url 'payroll:payslip' record.pk %}">Payslip</a></td>
+                                                    </tr>
+                                                {% endfor %}
+                                            </tbody>
+                                        </table>
+                                    </div></div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    {% empty %}
+                        <tbody><tr><td colspan="7">Nobody matches these filters.</td></tr></tbody>
+                    {% endfor %}
+                    <tfoot><tr class="ui-total">
+                        <td></td><td>Total</td><td>{% if not company_wide %}in your branches{% endif %}</td>
+                        <td class="numeric">{{ totals.employees }}</td>
+                        <td class="numeric">{{ totals.gross|money }}</td>
+                        <td class="numeric">{{ totals.deductions|money }}</td>
+                        <td class="numeric">{{ totals.net|money }}</td>
+                    </tr></tfoot>
+                </table>
+            </div>
+        {% else %}
+            <div class="table-wrap">
+                <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table salary__table">
+                    <thead><tr>
+                        <th>Employee</th><th>Pay basis</th><th class="numeric">Rate</th><th class="numeric">Present</th>
+                        <th class="numeric">Half</th><th class="numeric">Absent</th><th class="numeric">Unpaid leave</th>
+                        <th class="numeric">Gross</th><th class="numeric">Deductions</th><th class="numeric">Net pay</th>
+                        <th class="no-sort">Payslip</th>
+                    </tr></thead>
                     <tbody>
                         {% for record in records %}
                             <tr>
-                                <td>
-                                    {{ record.employee.full_name }}
-                                </td>
-                                <td>
-                                    {{ record.calculation_snapshot.pay_basis|title }}
-                                </td>
-                                <td class="numeric">
-                                    {{ record.calculation_snapshot.base_rate|money }}
-                                </td>
-                                <td class="numeric">
-                                    {{ record.calculation_snapshot.counts.present|default:0 }}
-                                </td>
-                                <td class="numeric">
-                                    {{ record.calculation_snapshot.counts.half_day|default:0 }}
-                                </td>
-                                <td class="numeric">
-                                    {{ record.calculation_snapshot.counts.absent|default:0 }}
-                                </td>
-                                <td class="numeric">
-                                    {{ record.calculation_snapshot.counts.unpaid_leave|default:0 }}
-                                </td>
-                                <td class="numeric">
-                                    {{ record.gross_earnings|money }}
-                                </td>
-                                <td class="numeric">
-                                    {{ record.total_deductions|money }}
-                                </td>
-                                <td class="numeric">
-                                    <strong>
-                                        {{ record.net_pay|money }}
-                                    </strong>
-                                </td>
-                                <td>
-                                    <a class="btn btn--quiet btn--sm" href="{% url 'payroll:payslip' record.pk %}">
-                                        Payslip
-                                    </a>
-                                </td>
+                                <td>{{ record.employee.full_name }}{% if record.calculation_snapshot.override %} <span class="ui-chip ui-chip--info" title="Present days set by hand">by hand</span>{% endif %}<span class="salary__code">{{ record.employee_assignment_at_period_end.employee_code }} · {{ record.employee_assignment_at_period_end.department.name }}</span></td>
+                                <td>{{ record.calculation_snapshot.pay_basis|title }}</td>
+                                <td class="numeric">{{ record.calculation_snapshot.base_rate|money }}</td>
+                                <td class="numeric">{{ record.calculation_snapshot.counts.present|default:0 }}</td>
+                                <td class="numeric">{{ record.calculation_snapshot.counts.half_day|default:0 }}</td>
+                                <td class="numeric">{{ record.calculation_snapshot.counts.absent|default:0 }}</td>
+                                <td class="numeric">{{ record.calculation_snapshot.counts.unpaid_leave|default:0 }}</td>
+                                <td class="numeric">{{ record.gross_earnings|money }}</td>
+                                <td class="numeric">{{ record.total_deductions|money }}</td>
+                                <td class="numeric"><strong>{{ record.net_pay|money }}</strong></td>
+                                <td><a class="ui-btn ui-btn--sm" href="{% url 'payroll:payslip' record.pk %}">Payslip</a></td>
                             </tr>
                         {% endfor %}
                     </tbody>
-                    <tfoot>
-                        <tr>
-                            <th colspan="7">
-                                {{ totals.employees }} employee(s), {{ records.0.currency }}{% if not company_wide %}, in your branches{% endif %}
-                            </th>
-                            <th class="numeric">
-                                {{ totals.gross|money }}
-                            </th>
-                            <th class="numeric">
-                                {{ totals.deductions|money }}
-                            </th>
-                            <th class="numeric">
-                                {{ totals.net|money }}
-                            </th>
-                            <th>
-                            </th>
-                        </tr>
-                    </tfoot>
+                    <tfoot><tr class="ui-total">
+                        <td colspan="7">{{ totals.employees }} employee(s), {{ currency }}{% if not company_wide %}, in your branches{% endif %}</td>
+                        <td class="numeric">{{ totals.gross|money }}</td>
+                        <td class="numeric">{{ totals.deductions|money }}</td>
+                        <td class="numeric">{{ totals.net|money }}</td>
+                        <td></td>
+                    </tr></tfoot>
                 </table>
             </div>
-        {% include "base_template/includes/table_pagination.html" %}
-        {% else %}
-            <div class="empty">
-                <div class="empty__title">
-                    No salary generated for {{ run_title }}
-                </div>
-                <div class="empty__text">
-                    Press Generate. Attendance for the month is calculated first, then
-                    each employee's salary.
-                </div>
-            </div>
+            {% include "base_template/includes/table_pagination.html" %}
         {% endif %}
     </div>
+</div>
 {% endblock %}

@@ -1,0 +1,135 @@
+/* Salary by month (2026-10-31 redesign): the app's own colours (tokens.css). */
+
+.salary .ui-head__actions { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.salary .ui-head__actions form { margin: 0; }
+
+/* More: the pages around the salary, out of the way */
+.salary__more { position: relative; }
+.salary__more > summary { list-style: none; cursor: pointer; }
+.salary__more > summary::-webkit-details-marker { display: none; }
+.salary__menu {
+    position: absolute;
+    right: 0;
+    z-index: 20;
+    min-width: 210px;
+    margin-top: 6px;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
+    animation: salary-drop .16s ease-out;
+}
+.salary__menu a {
+    display: block;
+    padding: 8px 10px;
+    border-radius: var(--r);
+    color: var(--text) !important;
+    text-decoration: none !important;
+    font-size: 14px;
+}
+.salary__menu a:hover { background: var(--row-hover); }
+.salary__menu .salary__menu-danger { color: var(--danger-ink) !important; }
+@keyframes salary-drop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+/* Where the month stands */
+.salary__steps { list-style: none; padding: 0; }
+.salary__steps .ui-steps__step { transition: background .3s ease, color .3s ease; font-size: 14px; }
+.salary__dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+    flex: 0 0 auto;
+}
+.ui-steps__step--done .salary__dot { background: var(--success); color: #fff; }
+.ui-steps__step--now .salary__dot { background: #fff; color: var(--action); }
+
+/* Needs attention: one panel instead of a stack of boxes */
+.salary__attention {
+    margin: 0 0 var(--s5);
+    padding: var(--s3) var(--s4);
+    border: 1px solid var(--warning-soft);
+    border-left: 3px solid var(--warning);
+    border-radius: 0;
+    background: var(--warning-soft);
+    color: var(--warning-ink);
+    animation: salary-rise .3s ease both;
+}
+.salary__attention-title { display: flex; align-items: center; gap: 6px; margin: 0 0 6px; font-size: 14px; }
+.salary__attention ul { margin: 0; padding-left: 18px; }
+.salary__attention li { margin: 3px 0; font-size: 14px; }
+.salary__attention li.is-info { color: var(--info-ink); }
+.salary__posted { margin: 0 0 var(--s4); color: var(--muted); font-size: 14px; }
+
+.salary__tiles .ui-tile { animation: salary-rise .35s ease both; }
+.salary__tiles .ui-tile:nth-child(2) { animation-delay: .04s; }
+.salary__tiles .ui-tile:nth-child(3) { animation-delay: .08s; }
+.salary__tiles .ui-tile:nth-child(4) { animation-delay: .12s; }
+@keyframes salary-rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* Filters, then People / By department and the downloads */
+.salary__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s2);
+    align-items: center;
+    padding: var(--s3) var(--s4);
+    border-bottom: 1px solid var(--border);
+}
+.salary__filters > .input,
+.salary__filters > .select2-container,
+.salary__filters > .cs { width: 180px !important; flex: 0 0 auto; }
+.salary__filters > .ui-btn { margin-left: auto; }
+.salary__bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--s2);
+    padding: var(--s3) var(--s4);
+}
+.salary__seg { display: inline-flex; padding: 3px; border-radius: var(--r); background: var(--tile); }
+.salary .salary__seg-item {
+    padding: 6px 14px;
+    border-radius: var(--r-sm);
+    color: var(--muted) !important;
+    text-decoration: none !important;
+    font-size: 14px;
+    transition: background var(--tr), color var(--tr), box-shadow var(--tr);
+}
+.salary .salary__seg-item:hover,
+.salary .salary__seg-item.is-on { color: var(--text) !important; }
+.salary .salary__seg-item.is-on { background: var(--surface); box-shadow: var(--shadow-sm); }
+.salary__downloads { display: inline-flex; gap: var(--s2); }
+.salary__code { display: block; font-size: 12px; color: var(--faint); }
+table.salary__table thead th, table.salary__table tbody td, table.salary__table tfoot td { padding-left: 8px; padding-right: 8px; }
+table.salary__table thead th { white-space: normal; line-height: 1.25; }
+
+/* By department: a row per department that opens to its people */
+.salary__group-row { cursor: pointer; transition: background var(--tr); }
+.salary__group-row:hover td { background: var(--row-hover); }
+.salary__chevron { width: 28px; color: var(--muted); font-size: 18px; transition: transform .2s ease; }
+.salary__group.is-open .salary__chevron { transform: rotate(90deg); }
+table.salary__departments .salary__people-row > td { padding: 0; border: 0; }
+.salary__people {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows .28s ease;
+}
+.salary__people-inner { min-height: 0; overflow: hidden; }
+.salary__group.is-open .salary__people { grid-template-rows: 1fr; }
+table.salary__inner { margin: 0; background: var(--surface-sunken); }
+table.salary__inner td { padding-left: 40px; font-size: 14px; }
+table.salary__inner td + td { padding-left: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+    .salary__menu, .salary__attention, .salary__tiles .ui-tile { animation: none; }
+    .salary__people, .salary__chevron { transition: none; }
+}
