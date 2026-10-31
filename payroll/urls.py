@@ -1,6 +1,6 @@
 from django.urls import path
 
-from payroll import lfa_views, paygroup_views, views
+from payroll import lfa_views, paygroup_views, summary_views, views
 
 app_name = "payroll"
 
@@ -14,6 +14,14 @@ urlpatterns = [
     path("finalise/undo/", views.payroll_reopen, name="payroll_reopen"),
     path("settings/", views.salary_settings, name="salary_settings"),
     path("pay-groups/", paygroup_views.pay_groups, name="pay_groups"),
+    # Attendance -> Summary: present days set by hand (2026-10-31).
+    path("attendance-summary/", summary_views.attendance_summary, name="attendance_summary"),
+    path("attendance-summary/<int:employee_id>/", summary_views.summary_person,
+         name="attendance_summary_person"),
+    path("attendance-summary/<int:employee_id>/save/", summary_views.summary_save,
+         name="attendance_summary_save"),
+    path("attendance-summary/<int:employee_id>/revert/", summary_views.summary_revert,
+         name="attendance_summary_revert"),
     path("components/", views.component_list, name="component_list"),
     path("components/<int:pk>/edit/", views.component_edit, name="component_edit"),
     path("components/<int:pk>/status/", views.component_status, name="component_status"),

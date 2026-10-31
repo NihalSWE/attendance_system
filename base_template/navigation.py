@@ -82,6 +82,9 @@ COMPANY_MENUS = (
         item("Daily list", "attendance:attendance_list"),
         item("Late entries", "attendance:attendance_late"),
         item("Calendar", "attendance:attendance_calendar", "attendance:attendance_day"),
+        # Present days set by hand for a salary month or week (2026-10-31).
+        item("Summary", "payroll:attendance_summary", "payroll:attendance_summary_person",
+             "payroll:attendance_summary_save", "payroll:attendance_summary_revert"),
         item("Days to review", "attendance:attendance_review", "attendance:attendance_day_fix",
              "attendance:attendance_correction_withdraw"),
         item("Missed scans", "attendance:missed_scan_list", "attendance:missed_scan_decide"),

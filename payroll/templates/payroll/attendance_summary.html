@@ -1,0 +1,121 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% comment %}
+    Attendance -> Summary (2026-10-31, payroll/summary_views.py): each person's
+    days for the salary month or week as the salary counts them; Change opens the
+    side panel (payroll/includes/summary_person.html) to set the present days.
+{% endcomment %}
+{% block title %}Attendance summary{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'payroll/css/summary.css' %}">
+{% endblock %}
+{% block extra_js %}
+    <script defer src="{% static 'payroll/js/summary.js' %}"></script>
+{% endblock %}
+{% block page %}
+<div class="ui-page summary">
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'attendance:attendance_list' %}">Attendance</a> / Summary</p>
+            <h1 class="ui-head__title">Attendance summary</h1>
+            <p class="ui-head__sub">{{ run_title }} · {{ first|date:"d M" }} – {{ last|date:"d M Y" }}{% if pay_group %} · {{ pay_group.name }}{% else %} · Monthly staff{% endif %}. The days as the salary counts them; change the present days where the scans are wrong.</p>
+        </div>
+        <div class="ui-head__actions">
+            <a class="ui-btn" href="{% url 'payroll:payroll_home' %}?{{ query }}">{% include "ui/icon.html" with name="coins" %} Go to salary</a>
+        </div>
+    </div>
+
+    <form class="ui-card summary__filters" method="get">
+        {% if pay_groups %}
+            <label class="sr-only" for="sum-group">Paid</label>
+            <select class="input select" id="sum-group" name="group" onchange="this.form.submit()">
+                <option value="">Monthly staff</option>
+                {% for option in pay_groups %}<option value="{{ option.pk }}"{% if option == pay_group %} selected{% endif %}>{{ option.name }} (weekly)</option>{% endfor %}
+            </select>
+        {% endif %}
+        <label class="sr-only" for="sum-month">Month</label>
+        <select class="input select" id="sum-month" name="month">
+            {% for number, name in months %}<option value="{{ number }}"{% if number == month %} selected{% endif %}>{{ name }}</option>{% endfor %}
+        </select>
+        <label class="sr-only" for="sum-year">Year</label>
+        <select class="input select" id="sum-year" name="year">
+            {% for option in years %}<option value="{{ option }}"{% if option == year %} selected{% endif %}>{{ option }}</option>{% endfor %}
+        </select>
+        {% if pay_group %}
+            <label class="sr-only" for="sum-week">Week</label>
+            <select class="input select" id="sum-week" name="week">
+                {% for week_start, week_end in weeks %}<option value="{{ week_start|date:'Y-m-d' }}"{% if week_start == week_first %} selected{% endif %}>{{ week_start|date:"d M" }} – {{ week_end|date:"d M" }}</option>{% endfor %}
+            </select>
+        {% endif %}
+        {% if branches|length > 1 %}
+            <label class="sr-only" for="sum-branch">Branch</label>
+            <select class="input select js-select" id="sum-branch" name="branch">
+                <option value="">All branches</option>
+                {% for option in branches %}<option value="{{ option.pk }}"{% if option.pk|stringformat:"s" == branch %} selected{% endif %}>{{ option.name }}</option>{% endfor %}
+            </select>
+        {% endif %}
+        <label class="sr-only" for="sum-department">Department</label>
+        <select class="input select js-select" id="sum-department" name="department">
+            <option value="">All departments</option>
+            {% for option in departments %}<option value="{{ option.pk }}"{% if option.pk|stringformat:"s" == department %} selected{% endif %}>{{ option.name }}{% if branches|length > 1 %} · {{ option.branch.name }}{% endif %}</option>{% endfor %}
+        </select>
+        <input type="hidden" name="show" value="{{ show }}">
+        <button class="ui-btn" type="submit">Show</button>
+    </form>
+
+    <div class="ui-tiles">
+        <div class="ui-tile"><p class="ui-tile__label">People</p><p class="ui-tile__value">{{ counts.all }}</p><p class="ui-tile__hint">with days in this period</p></div>
+        <div class="ui-tile{% if counts.need %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Need a look</p><p class="ui-tile__value">{{ counts.need }}</p><p class="ui-tile__hint">absent, half day or no check-out</p></div>
+        <div class="ui-tile"><p class="ui-tile__label">Changed by hand</p><p class="ui-tile__value">{{ counts.hand }}</p><p class="ui-tile__hint">salary uses the number set</p></div>
+        <div class="ui-tile{% if locked %} ui-tile--good{% endif %}"><p class="ui-tile__label">Salary</p><p class="ui-tile__value summary__state">{{ salary_state }}</p><p class="ui-tile__hint">{% if locked %}changes are closed{% else %}changes are open{% endif %}</p></div>
+    </div>
+
+    {% if locked %}
+        <div class="ui-message ui-message--info summary__note">This period's salary is {{ salary_state|lower }}: the days can be seen, not changed. Send it back or undo finalise on the Salary page to change them.</div>
+    {% endif %}
+
+    <div class="ui-card">
+        <div class="ui-card__head summary__tablehead">
+            <nav class="summary__seg" aria-label="Who to show">
+                {% for key, label in shows %}
+                    <a class="summary__seg-item{% if key == show %} is-on{% endif %}" href="?{{ query }}&amp;show={{ key }}">{{ label }} <span class="summary__count">{% if key == "all" %}{{ counts.all }}{% elif key == "need" %}{{ counts.need }}{% else %}{{ counts.hand }}{% endif %}</span></a>
+                {% endfor %}
+            </nav>
+            <span class="ui-card__note">Search, sort and pages below</span>
+        </div>
+        <div class="table-wrap">
+            <table class="table summary__table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                <thead><tr>
+                    <th>Employee</th><th>Department</th><th class="numeric" title="Working days">Work days</th><th class="numeric">Present</th>
+                    <th class="numeric">Half</th><th class="numeric" title="No check-out">No out</th><th class="numeric">Absent</th><th class="numeric">Leave</th><th class="numeric">Hours</th>
+                    <th class="no-sort">Source</th><th class="no-sort"><span class="sr-only">Change</span></th>
+                </tr></thead>
+                <tbody>
+                    {% for row in page %}
+                        <tr class="summary__row{% if row.11 %} is-hand{% endif %}{% if row.9|stringformat:'s' == changed %} is-changed{% endif %}">
+                            <td><a href="{% url 'organization:employee_detail' row.13 %}">{{ row.14 }}</a>{% if row.15 %}<span class="summary__code">{{ row.15 }}</span>{% endif %}</td>
+                            <td>{{ row.1 }}</td>
+                            <td class="numeric">{{ row.2 }}</td>
+                            <td class="numeric">{% if row.11 and row.11.present_days is not None %}<span class="summary__was" title="By the scans">{{ row.10.present }}</span> <strong>{{ row.3 }}</strong>{% else %}{{ row.3 }}{% endif %}</td>
+                            <td class="numeric">{{ row.4 }}</td>
+                            <td class="numeric{% if row.5 %} summary__warn{% endif %}">{{ row.5 }}</td>
+                            <td class="numeric">{{ row.6 }}</td>
+                            <td class="numeric">{{ row.7 }}</td>
+                            <td class="numeric">{% if row.11 and row.11.hours is not None %}<span class="summary__was" title="By the scans">{{ row.10.hours }}</span> <strong>{{ row.8 }}</strong>{% else %}{{ row.8 }}{% endif %}</td>
+                            <td>{% if row.11 %}<span class="ui-chip ui-chip--info" title="By {{ row.11.created_by.get_full_name|default:row.11.created_by.email }}, {{ row.11.created_at|date:'d M Y H:i' }}: {{ row.11.reason }}">By hand</span>{% else %}<span class="ui-chip">Scans</span>{% endif %}</td>
+                            <td><button class="ui-btn ui-btn--sm" type="button" data-summary-open="{% url 'payroll:attendance_summary_person' row.9 %}?{{ query }}">{% include "ui/icon.html" with name="edit" small=True %} {% if locked %}See{% else %}Change{% endif %}</button></td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="11">{% if show == "need" %}Nobody needs a look: every working day has its check-in and check-out.{% elif show == "hand" %}Nobody's days were changed by hand in this period.{% else %}Nobody has attendance days in this period.{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "base_template/includes/table_pagination.html" %}
+    </div>
+
+    <dialog class="summary__drawer" id="summary-drawer" aria-label="Change present days">
+        <div class="summary__drawer-body" data-summary-body><p class="ui-muted">Loading…</p></div>
+    </dialog>
+</div>
+{% endblock %}

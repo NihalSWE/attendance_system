@@ -769,7 +769,7 @@ def period_records(company_id, first, last, pay_group=None, employee_ids=None, g
     records_by_employee = {}
     with use_company(company_id):
         days = (AttendanceRecord.objects.select_related(
-            "employee", "employee_assignment", "leave_day", "shift")
+            "employee", "employee_assignment", "employee_assignment__department", "leave_day", "shift")
             .filter(work_date__gte=first, work_date__lte=last)
             .order_by("employee_id", "work_date"))
         if employee_ids is not None:
