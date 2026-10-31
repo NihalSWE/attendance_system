@@ -44,6 +44,7 @@ from organization.services import (
 )
 from scheduling.calendar import WorkCalendar
 from payroll.models import (
+    DaysOverride,
     PayrollAdjustment,
     PayrollLine,
     PenaltyAssessment,
@@ -54,7 +55,7 @@ from payroll.models import (
     PayrollRun,
     PayrollSettings,
 )
-from payroll import paygroups, periods
+from payroll import overrides, paygroups, periods
 from payroll.penalties import PayValue, assess, rules_in_force
 from payroll.policy import STANDARD_RULES, plain, rules_for
 
@@ -321,7 +322,8 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                   penalty_rules=(), waived=frozenset(), employee_key="", adjustments=(),
-                  employed_days=None, basic_segments=None, components=(), inactive_days=()):
+                  employed_days=None, basic_segments=None, components=(), inactive_days=(),
+                  worked_hours=None):
     """Lines and totals for one employee. Pure: no database writes.
 
     ``inactive_days`` are the employed days of the month they were inactive
@@ -341,6 +343,9 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     """
     rules = rules or STANDARD_RULES
     counts = summarise(records)
+    if worked_hours is not None:
+        # Hours set by hand for the period (payroll/overrides.py, 2026-10-31).
+        counts["worked_minutes"] = int(Decimal(worked_hours) * 60)
     rate = Decimal(rate)
     lines = []
     paid_off = [
@@ -753,6 +758,40 @@ def _bring_branches_up_to_date(company_id, year, month, branch_ids):
 
 
 @transaction.atomic
+def period_records(company_id, first, last, pay_group=None, employee_ids=None, groups=None):
+    """``({employee: [days]}, {employee_id: days paid weekly})``: the attendance
+    days a salary month - or, with ``pay_group``, its week - pays, read exactly as
+    ``generate_payroll`` reads them (the Attendance summary page counts the
+    same days, 2026-10-31). Only days inside the employment count; when pay
+    groups are in use, only the days the person is in this run's group."""
+    groups = groups or paygroups.Groups(company_id, first, last)
+    group_id = pay_group.pk if pay_group is not None else None
+    records_by_employee = {}
+    with use_company(company_id):
+        days = (AttendanceRecord.objects.select_related(
+            "employee", "employee_assignment", "leave_day", "shift")
+            .filter(work_date__gte=first, work_date__lte=last)
+            .order_by("employee_id", "work_date"))
+        if employee_ids is not None:
+            days = days.filter(employee_id__in=list(employee_ids))
+        for record in days:
+            records_by_employee.setdefault(record.employee, []).append(record)
+    weekly_days = {}
+    for employee, records in list(records_by_employee.items()):
+        start = max(first, employee.joining_date or first)
+        end = min(last, employee.leaving_date or last)
+        records = [r for r in records if start <= r.work_date <= end]
+        if groups.any:
+            # Only the days they are in this run's pay group (Monthly
+            # staff: none); the others are paid by the other run.
+            mine = [r for r in records if groups.group_id(
+                employee.pk, r.employee_assignment.department_id, r.work_date) == group_id]
+            weekly_days[employee.pk] = len(records) - len(mine)
+            records = mine
+        records_by_employee[employee] = records
+    return records_by_employee, weekly_days
+
+
 def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=None,
                      pay_group=None, week=None):
     """Recalculate the month's attendance, then (re)build its draft salary run.
@@ -805,7 +844,6 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
         full_days = calendar.monthrange(last.year, last.month)[1]
         period_name = paygroups.week_name(first, last)
     groups = paygroups.Groups(company_id, first, last)
-    group_id = pay_group.pk if pay_group is not None else None
     period_end = timezone.make_aware(
         datetime.datetime.combine(last, datetime.time.max)
     )
@@ -829,30 +867,7 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 "generating it again."
             )
 
-        records_by_employee = {}
-        for record in (
-            AttendanceRecord.objects.select_related(
-                "employee", "employee_assignment", "leave_day", "shift"
-            )
-            .filter(work_date__gte=first, work_date__lte=last)
-            .order_by("employee_id", "work_date")
-        ):
-            records_by_employee.setdefault(record.employee, []).append(record)
-        # Only days inside the employment count; a monthly salary is paid for
-        # the employed calendar days of the month.
-        weekly_days = {}
-        for employee, records in list(records_by_employee.items()):
-            start = max(first, employee.joining_date or first)
-            end = min(last, employee.leaving_date or last)
-            records = [r for r in records if start <= r.work_date <= end]
-            if groups.any:
-                # Only the days they are in this run's pay group (Monthly
-                # staff: none); the others are paid by the other run.
-                mine = [r for r in records if groups.group_id(
-                    employee.pk, r.employee_assignment.department_id, r.work_date) == group_id]
-                weekly_days[employee.pk] = len(records) - len(mine)
-                records = mine
-            records_by_employee[employee] = records
+        records_by_employee, weekly_days = period_records(company_id, first, last, pay_group, groups=groups)
         if branch_ids is not None:
             # A branch's own salary: the people placed there at the month's end.
             records_by_employee = {
@@ -915,6 +930,8 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 min(last, employee.leaving_date or last))
             for employee in records_by_employee if employee.pk in found
         }
+        # Present days (or hours) set by hand for this period (2026-10-31).
+        by_hand = overrides.active(company_id, first, last, [e.pk for e in records_by_employee])
         # Allowances and recurring deductions in force this month, per person.
         if pay_group is None:
             components_by_employee = employee_components(
@@ -951,6 +968,8 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 # month's basic would land in one week.
                 on_monthly[employee.pk] = employee.full_name
                 continue
+            override = by_hand.get(employee.pk)
+            records = overrides.apply(records, override)
             basic_segments = (
                 _monthly_segments(employee, start, end)
                 if compensation.pay_basis == EmployeeCompensation.PayBasis.MONTHLY else None
@@ -964,6 +983,7 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 employed_days=employed_days,
                 basic_segments=basic_segments,
                 inactive_days=sorted(inactive_by_employee.get(employee.pk, ())),
+                worked_hours=override.hours if override is not None and override.present_days is None else None,
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,
@@ -986,6 +1006,7 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                     "counts": result["counts"],
                     "rules": result["rules"],
                     "overtime": result["overtime"],
+                    "override": overrides.describe(override),
                 },
             )
             currency = compensation.currency or default_currency
@@ -1076,6 +1097,15 @@ def attendance_fingerprints(company_id, period, employee_ids=None):
         for values in days.values_list("employee_id", *FINGERPRINT_FIELDS):
             rows.setdefault(values[0], []).append(
                 "|".join(str(value) for value in values[1:]))
+        # Present days set by hand change the pay as a fixed day does (2026-10-31).
+        by_hand = DaysOverride.objects.filter(
+            start_date=period.start_date, end_date=period.end_date, status=DaysOverride.Status.ACTIVE)
+        if employee_ids is not None:
+            by_hand = by_hand.filter(employee_id__in=list(employee_ids))
+        for pk, employee_id, present_days, hours in by_hand.values_list(
+                "pk", "employee_id", "present_days", "hours"):
+            if employee_id in rows:
+                rows[employee_id].append(f"by hand|{pk}|{present_days}|{hours}")
     return {
         employee_id: hashlib.sha256("\n".join(lines).encode()).hexdigest()
         for employee_id, lines in rows.items()
