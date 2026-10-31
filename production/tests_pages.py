@@ -28,15 +28,18 @@ class ProductionPageTests(ProductionFixture, TestCase):
         assert_inventory_menu(self, page, MENU, menu="production")
 
     def test_the_links_shown_open(self):
-        # Scan and Labels (2026-10-25) and Production orders (2026-10-26) show;
-        # BOMs is not in the menu - the recipe is on the finished good's page.
-        shown = ("inventory:scan", "inventory:labels", "production:orders", "inventory:products")
+        # Scan and Labels (2026-10-25) show; BOMs is not in the menu - the
+        # recipe is on the finished good's page - nor, from 2026-10-31,
+        # Production orders (Make does it); its page still opens.
+        shown = ("inventory:scan", "inventory:labels", "inventory:products")
         for name in shown:
             page = self.client.get(reverse(name))
             self.assertEqual(page.status_code, 200, name)
             for link in shown:
                 self.assertContains(page, f'href="{reverse(link)}"', msg_prefix=name)
             self.assertNotContains(page, f'href="{reverse("production:boms")}"', msg_prefix=name)
+            self.assertNotContains(page, f'href="{reverse("production:orders")}"', msg_prefix=name)
+        self.assertEqual(self.client.get(reverse("production:orders")).status_code, 200)
         self.client.post(reverse("production:boms"), {"item": self.juice.pk, "batch_size": "1000",
                                                       "batch_uom": self.pcs.pk})
         with use_company(self.company):

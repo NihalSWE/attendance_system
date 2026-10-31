@@ -257,3 +257,20 @@ class PutItInStockTests(HubFixture, TestCase):
         form = self.client.get(stock_in)
         self.assertContains(form, f'<option value="{flour.pk}"', count=3)       # every line offers it
         self.assertContains(form, f'data-expiry="" selected>')                  # line 1 starts with it
+
+
+class MenuTests(TestCase):
+    """Items 13-14: the Inventory menu, one dropdown per kind of work."""
+
+    def test_the_dropdowns_in_order_and_no_duplicate_links(self):
+        from base_template.navigation import _inventory_menus
+
+        menus = {key: entries for key, label, entries in _inventory_menus()}
+        self.assertNotIn("production", menus)                      # Production orders: Make does it
+        groups = list(dict.fromkeys(entry["group"] for entry in menus["inventory"]))
+        self.assertEqual(groups, ["", "Setup", "Materials", "Products", "Stock", "Production", "Sales",
+                                  "Purchase", "Reports", "Tools"])
+        views = [entry["view"] for entry in menus["inventory"]]
+        for gone in ("inventory:stock", "inventory:items", "inventory:opening"):
+            self.assertNotIn(gone, views)
+        self.assertIn("inventory:reports", views)
