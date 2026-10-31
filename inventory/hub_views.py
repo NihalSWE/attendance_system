@@ -125,12 +125,15 @@ def material(request, pk):
     [line] = hub.lines(company_id, request.user, [item.kind], only=item.pk)
     used = hub.used_in(company_id, item)
     batches = hub.stock_by_batch(company_id, request.user, item)
-    if not used:
+    stock_in = reverse("inventory:stock_in_new") + f"?item={item.pk}"
+    # A new material is put in stock first (2026-10-31): the quantity and the
+    # buy price come in there, not on the material.
+    if not line.on_hand and not batches:
+        next_step = ("Put it in stock: the quantity and the buy price come in with Stock in.",
+                     stock_in, "Put it in stock")
+    elif not used:
         next_step = ("Add it to the recipe of a product that uses it.", reverse("inventory:products"),
                      "Products")
-    elif not line.on_hand:
-        next_step = ("Put it in stock: count what you have, or receive a purchase.",
-                     reverse("inventory:stock_in_new"), "Stock in")
     else:
         product = used[0].bom.item
         next_step = (f"See {product.name}, which uses it, and make it.",
@@ -199,8 +202,8 @@ def product(request, pk):
         next_step = ("Stock is below what you keep: plan a production.",
                      reverse("production:plan", args=[item.pk]), "Make")
     elif line.tone != "ok":
-        next_step = ("Stock is below what you keep: receive a purchase.", reverse("inventory:stock_in_new"),
-                     "Stock in")
+        next_step = ("Stock is below what you keep: receive a purchase.",
+                     reverse("inventory:stock_in_new") + f"?item={item.pk}", "Stock in")
     else:
         next_step = ("Sell it: deliver to a customer from stock.", reverse("inventory:sale_new"), "Sell")
     return render(request, "inventory/hub/product.html", {

@@ -9,7 +9,7 @@
         </div>
         <div class="ui-head__actions">
             {% include "inventory/hub/_head_actions.html" %}
-            <a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+            <a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
         </div>
     </div>
 
