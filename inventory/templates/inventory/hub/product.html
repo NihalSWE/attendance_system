@@ -12,7 +12,7 @@
             {% if makes and can_plan %}
                 <a class="ui-btn ui-btn--main" href="{% url 'production:plan' item.pk %}">{% include "ui/icon.html" with name="play" %} Make this</a>
             {% elif not makes %}
-                <a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+                <a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
             {% endif %}
         </div>
     </div>

@@ -279,7 +279,9 @@ def stock_in_new(request):
     return render(request, "inventory/hub/stock_in_new.html", {
         **_common(request, company_id, "stock_in"),
         "form": StockInForm(company_id=company_id, stores=stores, initial={"day": timezone.localdate()}),
-        "items": _item_options(company_id), "rows": range(1, ROWS_SHOWN + 1), "most": LINES})
+        "items": _item_options(company_id), "rows": range(1, ROWS_SHOWN + 1), "most": LINES,
+        # From a material's or product's "Put it in stock" (2026-10-31): on line 1.
+        "preselect": int(request.GET["item"]) if request.GET.get("item", "").isdigit() else None})
 
 
 # --- Move stock -------------------------------------------------------------------

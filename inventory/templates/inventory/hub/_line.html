@@ -10,7 +10,7 @@
             <label class="field__label" for="item_{{ i }}">Item</label>
             <select class="input select" id="item_{{ i }}" name="item_{{ i }}" data-line-item>
                 <option value="">Choose an item</option>
-                {% for option in items %}<option value="{{ option.item.pk }}" data-units="{{ option.units }}" data-batch="{{ option.batch }}" data-expiry="{{ option.expiry }}">{{ option.item.code }} · {{ option.item.name }}</option>{% endfor %}
+                {% for option in items %}<option value="{{ option.item.pk }}" data-units="{{ option.units }}" data-batch="{{ option.batch }}" data-expiry="{{ option.expiry }}"{% if i == 1 and option.item.pk == preselect %} selected{% endif %}>{{ option.item.code }} · {{ option.item.name }}</option>{% endfor %}
             </select>
             {% if mode != "in" %}<span class="field__help" data-line-have></span>{% endif %}
         </div>
