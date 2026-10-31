@@ -169,7 +169,7 @@ ITEM = Master(Item, (
     "track_expiry", "shelf_life_days", "qc_required", "min_stock", "reorder_point",
     "reorder_qty", "max_stock", "default_warehouse", "standard_cost", "sale_price",
     "vat_rate", "hs_code", "notes", "sourcing", "keep_by", "keep_days", "batch_per_mix",
-    "warranty_months", "serial_numbers",
+    "warranty_months", "guarantee_months", "serial_numbers",
 ), "inventory.item")
 WAREHOUSE = Master(Warehouse, ("branch", "code", "name", "kind", "notes"),
                    "inventory.warehouse", branch_path="branch")

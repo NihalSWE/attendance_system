@@ -85,12 +85,9 @@ def serial_lookup(request):
     if found["start"]:
         parts.append(f"{'delivered' if serial.delivered_on else 'received'} {found['start']:%d %b %Y}"
                      + (f" ({found['who']})" if found["who"] else ""))
-    if found["until"]:
-        parts.append(("covered until " if found["covered"] else "out of warranty since ")
-                     + f"{found['until']:%d %b %Y}")
-    else:
-        parts.append("no warranty")
-    return JsonResponse({"found": True, "covered": found["covered"], "text": " · ".join(parts)})
+    parts.append(found["words"] if found["until"] else "no warranty")
+    return JsonResponse({"found": True, "covered": found["covered"], "stage": found["stage"],
+                         "text": " · ".join(parts)})
 
 
 def _answer(call, message, redirect=None):

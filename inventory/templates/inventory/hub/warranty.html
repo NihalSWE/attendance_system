@@ -41,7 +41,7 @@
                                 <td>{{ claim.item.name }}<div class="ui-muted">{{ claim.problem }}</div></td>
                                 <td>{{ claim.serial.serial|default:"—" }}</td>
                                 <td>{{ claim.customer.name|default:"—" }}</td>
-                                <td>{% if claim.covered %}<span class="ui-chip ui-chip--ok">Covered{% if claim.covered_until %} to {{ claim.covered_until|date:"j M Y" }}{% endif %}</span>{% else %}<span class="ui-chip ui-chip--bad">Out of warranty</span>{% endif %}</td>
+                                <td>{% if claim.guarantee_until and claim.claim_date <= claim.guarantee_until %}<span class="ui-chip ui-chip--ok">In guarantee to {{ claim.guarantee_until|date:"j M Y" }}</span>{% elif claim.covered %}<span class="ui-chip ui-chip--ok">In warranty{% if claim.covered_until %} to {{ claim.covered_until|date:"j M Y" }}{% endif %}</span>{% else %}<span class="ui-chip ui-chip--bad">Out of warranty</span>{% endif %}</td>
                                 <td>{{ claim.get_outcome_display }}{% if claim.reason %}<div class="ui-muted">{{ claim.reason }}</div>{% endif %}</td>
                                 <td class="numeric">{% if sees_costs %}{{ claim.cost|floatformat:"2g" }}{% endif %}</td>
                             </tr>
@@ -79,7 +79,7 @@
                         {% for item in items %}
                             <tr>
                                 <td><a href="{% if item.kind == 'finished' %}{% url 'inventory:product' item.pk %}{% elif item.kind == 'raw' or item.kind == 'packaging' %}{% url 'inventory:material' item.pk %}{% else %}{% url 'inventory:item_detail' item.pk %}{% endif %}">{{ item.name }}</a></td>
-                                <td>{% if item.warranty_months %}{{ item.warranty_months }} month{{ item.warranty_months|pluralize }} from {% if item.kind == 'finished' %}delivery{% else %}receipt{% endif %}{% else %}<span class="ui-muted">none</span>{% endif %}</td>
+                                <td>{% if item.warranty_months %}{{ item.warranty_months }} month{{ item.warranty_months|pluralize }}{% if item.guarantee_months %} ({{ item.guarantee_months }} replace){% endif %} from {% if item.kind == 'finished' %}delivery{% else %}receipt{% endif %}{% else %}<span class="ui-muted">none</span>{% endif %}</td>
                                 <td>{% if item.serial_numbers %}<span class="ui-chip ui-chip--info">Each unit</span>{% else %}<span class="ui-muted">—</span>{% endif %}</td>
                                 <td class="numeric">{{ item.kept }}</td>
                                 <td class="numeric">{{ item.out }}</td>

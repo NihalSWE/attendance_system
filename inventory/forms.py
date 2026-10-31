@@ -193,7 +193,7 @@ class ItemForm(CompanyForm):
         fields = (
             "code", "name", "name_bn", "kind", "category", "base_uom", "barcode",
             "track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix",
-            "warranty_months", "serial_numbers", "sourcing", "keep_by", "min_stock", "keep_days", "reorder_point", "reorder_qty",
+            "warranty_months", "guarantee_months", "serial_numbers", "sourcing", "keep_by", "min_stock", "keep_days", "reorder_point", "reorder_qty",
             "max_stock", "default_warehouse", "standard_cost", "sale_price", "vat_rate", "hs_code",
             "notes",
         )
@@ -228,10 +228,12 @@ class ItemForm(CompanyForm):
         from inventory.warranty import warranty_on
 
         if not warranty_on(self.company_id):
-            del self.fields["warranty_months"], self.fields["serial_numbers"]
+            del self.fields["warranty_months"], self.fields["guarantee_months"], self.fields["serial_numbers"]
         else:
             self.fields["warranty_months"].help_text = ("From delivery for what you sell; from receipt "
                                                         "for what you buy (the supplier's).")
+            self.fields["guarantee_months"].help_text = ("The first months of the warranty: a faulty unit is "
+                                                         "replaced. After them it is repaired.")
             self.fields["serial_numbers"].help_text = "Each unit gets its own number, scanned at delivery."
         main = set(self.MAIN) | set(self.MAIN_FOR.get(kind, ())) | {"kind"}
         self.more_fields = [name for name in self.fields if name not in main]

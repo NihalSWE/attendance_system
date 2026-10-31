@@ -32,6 +32,7 @@ class Line:
     unit_cost: Decimal = None
     batch_no: str = ""
     expiry_date: object = None
+    mfg_date: object = None
     condition: str = "good"
     batch: object = None
     unit_price: Decimal = None
@@ -44,7 +45,7 @@ def _on_row(row, exc):
         found = {}
         for name, errors in exc.error_dict.items():
             box = {"qty_received": "qty", "unit_price": "price", "unit_cost": "cost", "batch_no": "batch",
-                   "expiry_date": "expiry", "uom": "unit"}.get(name, name)
+                   "expiry_date": "expiry", "mfg_date": "mfg", "uom": "unit"}.get(name, name)
             found[f"{box}_{row}" if name != "__all__" else "__all__"] = [
                 text for error in errors for text in error.messages]
         return ValidationError(found)
@@ -95,7 +96,8 @@ def stock_in(*, actor, company_id, source, store, day, lines, supplier=None, cus
                                                              "qty_received": line.qty, "qty_rejected": Decimal("0"),
                                                              "uom": line.uom, "unit_cost": line.unit_cost,
                                                              "batch_no": line.batch_no, "supplier_batch_no": "",
-                                                             "mfg_date": None, "expiry_date": line.expiry_date,
+                                                             "mfg_date": line.mfg_date,
+                                                             "expiry_date": line.expiry_date,
                                                              "packages": None, "note": ""}))
         receipts.post_receipt(actor=actor, company_id=company_id, receipt_id=receipt.pk)
         _set_prices(actor, company_id, lines, below_reason)
@@ -105,7 +107,8 @@ def stock_in(*, actor, company_id, source, store, day, lines, supplier=None, cus
         _each(lines, lambda line: opening.add_line(actor=actor, company_id=company_id, document_id=document.pk,
                                                    values={"warehouse": store, "location": None, "item": line.item,
                                                            "batch_no": line.batch_no, "supplier_batch_no": "",
-                                                           "mfg_date": None, "expiry_date": line.expiry_date,
+                                                           "mfg_date": line.mfg_date,
+                                                           "expiry_date": line.expiry_date,
                                                            "qty": line.qty, "uom": line.uom,
                                                            "unit_cost": line.unit_cost, "note": ""}))
         if access.may(actor, company_id, "inventory.adjust_approve", store.branch_id):
