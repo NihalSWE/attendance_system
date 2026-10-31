@@ -139,6 +139,10 @@ table.salary__departments td { padding: 12px 14px; vertical-align: middle; }
     transition: transform .2s ease;
 }
 .salary__group.is-open .salary__chevron { transform: rotate(90deg); }
+.salary__dept-tools { border-bottom: 1px solid var(--border); }
+.salary__dept-tools .dt-search input { width: 260px; }
+.salary__none { padding: 28px 14px !important; text-align: center; color: var(--muted); }
+.salary__group[hidden] { display: none; }
 .salary__open-hint { color: var(--faint); font-size: 12.5px; text-align: right; }
 .salary__person td { background: var(--surface-sunken); font-size: 14px; animation: salary-rise .22s ease both; }
 .salary__person-name { padding-left: 38px !important; }
