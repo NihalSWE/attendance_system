@@ -7,6 +7,8 @@ Adding and editing save with fetch (``base_template/fetch.py``): the answer
 shows just above the Save button and the page goes on without a reload.
 """
 
+from decimal import Decimal, InvalidOperation
+
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import Http404
@@ -205,6 +207,9 @@ def product(request, pk):
     if makes and recipe is None:
         next_step = ("Write its recipe: what one batch makes and the materials it uses.",
                      reverse("inventory:product", args=[item.pk]) + "#recipe", "Write the recipe")
+    elif not item.sale_price and parts["price_cost"] is not None:
+        next_step = ("The cost is known: set its sale price.", reverse("inventory:product", args=[item.pk]) + "#price",
+                     "Set the price")
     elif line.tone != "ok" and makes:
         next_step = ("Stock is below what you keep: plan a production.",
                      reverse("production:plan", args=[item.pk]), "Make")
@@ -295,10 +300,19 @@ def _item_parts(request, company_id, item):
             item.sale_price * pack.factor if item.sale_price else None)
     with use_company(company_id):
         moved = StockMove.objects.filter(item=item).exists()
+    # The sale price beside its cost (2026-10-31, inventory.pricing).
+    from inventory import pricing
+
+    cost = pricing.cost_per_unit(company_id, item)
+    margin = (item.sale_price - cost).quantize(pricing.CENT) if cost is not None and item.sale_price else None
+    price = {"price_cost": cost, "price_margin": margin, "can_price": can_manage,
+             "price_margin_pct": (margin / item.sale_price * 100).quantize(Decimal("0.1"))
+             if margin is not None else None}
     # Edit from a list's row (2026-10-31): the page opens with its Edit modal
     # open, and saving goes back to that list.
     back = request.GET.get("back", "")
     return {
+        **price,
         "item": item, "packs": packs, "list_url": _list_of(item), "moved": moved,
         "edit_open": can_manage and request.GET.get("edit") == "1",
         "edit_next": back if back in (reverse("inventory:materials"), reverse("inventory:products")) else "",
@@ -325,6 +339,33 @@ def _service_errors(form, exc):
     from common.forms import apply_service_errors
 
     apply_service_errors(form, exc)
+
+
+@login_required
+@require_POST
+def item_price(request, pk):
+    """Set the sale price of one base unit (2026-10-31): below the cost only
+    when "Sell below cost" is ticked with a reason."""
+    from inventory import pricing
+
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    item = _item(company_id, pk)
+    text = request.POST.get("price", "").replace(",", "").strip()
+    try:
+        price = Decimal(text) if text else None
+    except InvalidOperation:
+        price = None
+    below = request.POST.get("below_cost") == "on"
+    reason = request.POST.get("reason", "").strip() if below else ""
+    if below and not reason:
+        return fetch.refused_errors(ValidationError({"reason": "Say why it is sold below cost."}))
+    try:
+        pricing.set_price(actor=request.user, company_id=company_id, item=item, price=price, reason=reason)
+    except ValidationError as exc:
+        return fetch.refused_errors(exc)
+    return fetch.saved(f"{item.name}: {price:,.2f} per {item.base_uom.code}.", _page_of(item) + "#price")
 
 
 @login_required

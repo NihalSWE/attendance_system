@@ -176,6 +176,16 @@ def pack_unit_add(request, pk):
         return bail
     _, item = masters.get_for_edit(masters.ITEM, actor=request.user, company_id=company_id, pk=pk)
     form = forms.PackUnitForm(request.POST, company_id=company_id, item=item)
+    if form.is_valid() and form.cleaned_data.get("sale_price") is not None:
+        # Below its cost only on purpose (2026-10-31, inventory.pricing).
+        from inventory import pricing
+
+        below = request.POST.get("below_cost") == "on"
+        try:
+            pricing.check(company_id, item, form.cleaned_data["sale_price"], factor=form.cleaned_data["factor"],
+                          reason=request.POST.get("reason", "") if below else "", field="sale_price")
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
     if form.is_valid():
         try:
             pack = masters.add_pack_unit(actor=request.user, company_id=company_id, item_id=item.pk,

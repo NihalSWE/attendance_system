@@ -29,6 +29,8 @@
         <div class="ui-tile"><p class="ui-tile__label">Sold, last 30 days</p><p class="ui-tile__value">{{ sold|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ item.base_uom.code }} · {{ per_day|floatformat:"-2g" }} a day</p></div>
     </div>
 
+    {% include "inventory/hub/_price.html" %}
+
     {% if makes and has_recipe %}
         <div class="ui-card">
             <div class="ui-card__head">

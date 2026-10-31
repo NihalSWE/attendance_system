@@ -168,23 +168,26 @@ class MaterialsTests(HubFixture, TestCase):
 
 
 class ProductsTests(HubFixture, TestCase):
-    def test_adding_a_product_with_a_carton_at_its_own_price(self):
-        body = self.post("products", self.product(pack_uom=self.carton.pk, pack_factor="24",
-                                                  pack_price="450")).json()
+    def test_adding_a_product_with_a_carton(self):
+        # No price when it is added (2026-10-31): it is set once the cost is known.
+        body = self.post("products", self.product(sale_price="", pack_uom=self.carton.pk, pack_factor="24")).json()
         self.assertTrue(body["ok"], body)
         biscuit = Item.all_objects.get(company=self.company, name="Biscuit 100 g")
-        self.assertEqual((biscuit.code, biscuit.kind, biscuit.sourcing), ("FG-0002", ItemKind.FINISHED, "make"))
+        self.assertEqual((biscuit.code, biscuit.kind, biscuit.sourcing, biscuit.sale_price),
+                         ("FG-0002", ItemKind.FINISHED, "make", None))
         pack = ItemUom.all_objects.get(item=biscuit)
-        self.assertEqual((pack.factor, pack.sale_price), (D("24"), D("450")))
+        self.assertEqual((pack.factor, pack.sale_price), (D("24"), None))
         page = self.client.get(reverse("inventory:product", args=[biscuit.pk]))
-        self.assertContains(page, "450")
+        self.assertContains(page, "Not set yet")
         # No recipe yet: the page asks first what one batch makes (phase 5).
         self.assertContains(page, "how much <strong>one batch</strong> (one mix) makes")
 
-    def test_a_product_needs_its_price_and_a_price_needs_its_unit(self):
-        body = self.post("products", self.product(sale_price="", pack_price="450")).json()
-        self.assertIn("sale_price", body["errors"])
-        self.assertIn("pack_uom", body["errors"])
+    def test_the_add_product_form_asks_no_price(self):
+        page = self.client.get(reverse("inventory:products")).content.decode()
+        self.assertNotIn('name="sale_price"', page)
+        self.assertNotIn('name="pack_price"', page)
+        body = self.post("products", self.product(pack_factor="24")).json()
+        self.assertIn("pack_uom", body["errors"])          # a size needs its unit
 
     def test_the_list_shows_how_each_is_got_and_its_margin(self):
         Item.all_objects.filter(pk=self.juice.pk).update(sale_price=D("25"))

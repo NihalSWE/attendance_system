@@ -135,6 +135,11 @@ class Line:
     margin_pct: Decimal = None
 
     @property
+    def below_cost(self):
+        """Priced below what one costs (2026-10-31)."""
+        return self.margin is not None and self.margin < 0
+
+    @property
     def avg_cost(self):
         """What one unit in stock is worth; None with nothing in stock."""
         return (self.value / self.on_hand).quantize(Decimal("0.01")) if self.on_hand else None
@@ -168,6 +173,13 @@ def lines(company_id, actor, kinds, *, category="", store="", state="", today=No
             continue
         line = Line(item, have, kept.get(item.pk) or ZERO, value.get(item.pk, ZERO), tone, words,
                     packs.get(item.pk, []))
+        if item.kind != ItemKind.FINISHED and item.sale_price:
+            # A material that is also sold (2026-10-31): its margin, to show one
+            # priced below its cost.
+            line.cost = _unit_cost(item, have, value.get(item.pk), cost)
+            if line.cost:
+                line.margin = (item.sale_price - line.cost).quantize(Decimal("0.01"))
+                line.margin_pct = (line.margin / item.sale_price * 100).quantize(Decimal("0.1"))
         if item.kind == ItemKind.FINISHED:
             # Made here: what making one is expected to cost (plan §7.4); else
             # what the stock is worth per unit.
