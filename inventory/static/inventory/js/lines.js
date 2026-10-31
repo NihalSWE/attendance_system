@@ -117,8 +117,17 @@
             const lines = form.querySelectorAll("[data-line]");
             if (lines.length >= most) return;
             const copy = lines[lines.length - 1].cloneNode(true);
+            // A copied calendar has no life of its own: back to the plain
+            // date box, then a calendar of its own (datepicker.js).
+            copy.querySelectorAll(".dp").forEach(function (wrap) {
+                const input = wrap.querySelector("input");
+                input.classList.remove("dp__native");
+                input.removeAttribute("tabindex");
+                wrap.replaceWith(input);
+            });
             renumber(copy, lines.length + 1);
             lines[lines.length - 1].after(copy);
+            if (window.attachDatepicker) copy.querySelectorAll("input[data-datepicker]").forEach(window.attachDatepicker);
             follow(copy);
             if (lines.length + 1 >= most) add.hidden = true;
         });

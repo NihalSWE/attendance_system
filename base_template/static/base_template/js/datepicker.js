@@ -495,6 +495,12 @@
         paint();
     }
 
+    // For a date box added after the page loaded (a copied line, 2026-10-31):
+    // window.attachDatepicker(input). A box already given its calendar is left.
+    window.attachDatepicker = function (input) {
+        if (input && !input.closest(".dp")) initSingle(input);
+    };
+
     document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll("input[data-datepicker]").forEach(initSingle);
 

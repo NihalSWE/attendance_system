@@ -20,7 +20,7 @@
         {% include "inventory/hub/filters.html" %}
         <div class="table-wrap">
             <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
-                <thead><tr><th>Code</th><th>Name</th>{% if production %}<th>How you get it</th>{% endif %}<th class="numeric">In stock</th><th class="numeric">Price</th>{% if sees_costs %}<th class="numeric">Cost</th><th class="numeric">Margin</th>{% endif %}<th>Status</th></tr></thead>
+                <thead><tr><th>Code</th><th>Name</th>{% if production %}<th>How you get it</th>{% endif %}<th class="numeric">In stock</th><th class="numeric">Price</th>{% if sees_costs %}<th class="numeric">Cost</th><th class="numeric">Margin</th>{% endif %}<th>Status</th>{% if can_manage %}<th class="no-sort"><span class="sr-only">Edit</span></th>{% endif %}</tr></thead>
                 <tbody>
                     {% for row in rows %}{% with line=row.line %}
                         <tr>
@@ -34,6 +34,7 @@
                                 <td class="numeric{% if line.margin and line.margin < 0 %} ui-bad{% elif line.margin %} ui-good{% endif %}">{% if line.margin is not None %}{{ line.margin|floatformat:"2g" }} ({{ line.margin_pct }}%){% else %}<span class="ui-muted">—</span>{% endif %}</td>
                             {% endif %}
                             <td><span class="ui-chip ui-chip--{{ line.tone }}">{% if line.tone == "wait" %}Below stock to keep{% else %}{{ line.words }}{% endif %}</span></td>
+                            {% if can_manage %}<td><a class="ui-btn ui-btn--sm" href="{% url 'inventory:product' line.item.pk %}?edit=1&amp;back={% url 'inventory:products' %}">{% include "ui/icon.html" with name="edit" small=True %} Edit</a></td>{% endif %}
                         </tr>
                     {% endwith %}{% empty %}
                         <tr><td colspan="9">{% if filtered %}Nothing matches: try clearing the filters.{% else %}No products yet. Add the first one.{% endif %}</td></tr>
@@ -53,6 +54,6 @@
 
     {% if form %}
         {% url 'inventory:products' as add_url %}
-        {% include "inventory/hub/item_form.html" with id="product-dialog" title="Add product" action=add_url form=form submit="Add product" %}
+        {% include "inventory/hub/item_form.html" with id="product-dialog" title="Add product" sub="Something you sell. Quantity comes in with Stock in or Make." action=add_url form=form submit="Add product" %}
     {% endif %}
 {% endblock %}

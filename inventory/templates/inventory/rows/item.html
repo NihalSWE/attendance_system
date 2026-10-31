@@ -1,7 +1,6 @@
 <td><a href="{% url 'inventory:item_detail' row.pk %}">{{ row.code }}</a></td>
 <td>
     {{ row.name }}
-    {% if row.name_bn %}<div class="t-muted">{{ row.name_bn }}</div>{% endif %}
 </td>
 <td>{{ row.get_kind_display }}</td>
 <td>{{ row.category.name }}</td>

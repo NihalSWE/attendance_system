@@ -81,12 +81,12 @@ def start(request):
 
 # --- Materials --------------------------------------------------------------
 
-def _material_cells(sees_costs):
+def _material_cells(sees_costs, can_manage=False):
     def cells(line):
         row = [line.item.code, line.item.name, line.item.get_kind_display(), line.on_hand, line.keep]
         if sees_costs:
             row.append(line.value)
-        return row + [line.words]
+        return row + [line.words] + ([""] if can_manage else [])     # the Edit button's column
     return cells
 
 
@@ -103,7 +103,7 @@ def materials(request):
     found = hub.lines(company_id, request.user, hub.MATERIAL_KINDS, category=filters["category"],
                       store=filters["store"], state=filters["status"])
     every = found if not filters["filtered"] else hub.lines(company_id, request.user, hub.MATERIAL_KINDS)
-    table = _table(request, found, _material_cells(context["sees_costs"]))
+    table = _table(request, found, _material_cells(context["sees_costs"], context["can_manage"]))
     return render(request, "inventory/hub/materials.html", {
         **context, **filters, "rows": table, "count": len(every),
         "low": sum(1 for line in every if line.tone != "ok"),
@@ -143,7 +143,7 @@ def material(request, pk):
 
 # --- Products ---------------------------------------------------------------
 
-def _product_cells(production, sees_costs):
+def _product_cells(production, sees_costs, can_manage=False):
     def cells(line):
         row = [line.item.code, line.item.name]
         if production:
@@ -151,7 +151,7 @@ def _product_cells(production, sees_costs):
         row += [line.on_hand, line.item.sale_price or hub.ZERO]
         if sees_costs:
             row += [line.cost or hub.ZERO, line.margin or hub.ZERO]
-        return row + [line.words]
+        return row + [line.words] + ([""] if can_manage else [])
     return cells
 
 
@@ -167,7 +167,8 @@ def products(request):
     filters = _filters(request, company_id, [ItemKind.FINISHED])
     found = hub.lines(company_id, request.user, [ItemKind.FINISHED], category=filters["category"],
                       store=filters["store"], state=filters["status"])
-    table = _table(request, found, _product_cells(context["production"], context["sees_costs"]))
+    table = _table(request, found, _product_cells(context["production"], context["sees_costs"],
+                                                  context["can_manage"]))
     return render(request, "inventory/hub/products.html", {
         **context, **filters, "rows": table, "count": len(found),
         "form": ProductForm(company_id=company_id) if context["can_manage"] else None,
@@ -284,8 +285,13 @@ def _item_parts(request, company_id, item):
             item.sale_price * pack.factor if item.sale_price else None)
     with use_company(company_id):
         moved = StockMove.objects.filter(item=item).exists()
+    # Edit from a list's row (2026-10-31): the page opens with its Edit modal
+    # open, and saving goes back to that list.
+    back = request.GET.get("back", "")
     return {
         "item": item, "packs": packs, "list_url": _list_of(item), "moved": moved,
+        "edit_open": can_manage and request.GET.get("edit") == "1",
+        "edit_next": back if back in (reverse("inventory:materials"), reverse("inventory:products")) else "",
         "edit_form": form_for(item, company_id=company_id) if can_manage else None,
         "pack_form": forms.PackUnitForm(company_id=company_id, item=item) if can_manage else None,
     }
@@ -331,5 +337,8 @@ def item_save(request, pk):
     except ValidationError as exc:
         _service_errors(form, exc)
         return fetch.refused(form)
-    return fetch.saved(f"{item.code} {item.name} saved.", _page_of(item))
+    back = request.POST.get("next", "")
+    if back not in (reverse("inventory:materials"), reverse("inventory:products")):
+        back = _page_of(item)
+    return fetch.saved(f"{item.code} {item.name} saved.", back)
 

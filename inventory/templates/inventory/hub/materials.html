@@ -26,7 +26,7 @@
         {% include "inventory/hub/filters.html" %}
         <div class="table-wrap">
             <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
-                <thead><tr><th>Code</th><th>Name</th><th>Type</th><th class="numeric">In stock</th><th class="numeric">Keep</th>{% if sees_costs %}<th class="numeric">Value</th>{% endif %}<th>Status</th></tr></thead>
+                <thead><tr><th>Code</th><th>Name</th><th>Type</th><th class="numeric">In stock</th><th class="numeric">Keep</th>{% if sees_costs %}<th class="numeric">Value</th>{% endif %}<th>Status</th>{% if can_manage %}<th class="no-sort"><span class="sr-only">Edit</span></th>{% endif %}</tr></thead>
                 <tbody>
                     {% for row in rows %}{% with line=row.line %}
                         <tr>
@@ -37,6 +37,7 @@
                             <td class="numeric">{% if line.keep %}{{ line.keep|floatformat:"-2g" }} {{ line.item.base_uom.code }}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
                             {% if sees_costs %}<td class="numeric">{{ line.value|floatformat:"0g" }}</td>{% endif %}
                             <td><span class="ui-chip ui-chip--{{ line.tone }}">{{ line.words }}</span></td>
+                            {% if can_manage %}<td><a class="ui-btn ui-btn--sm" href="{% url 'inventory:material' line.item.pk %}?edit=1&amp;back={% url 'inventory:materials' %}">{% include "ui/icon.html" with name="edit" small=True %} Edit</a></td>{% endif %}
                         </tr>
                     {% endwith %}{% empty %}
                         <tr><td colspan="{% if sees_costs %}7{% else %}6{% endif %}">{% if filtered %}Nothing matches: try clearing the filters.{% else %}No materials yet. Add the first one: flour, sugar, wrappers, cartons.{% endif %}</td></tr>
@@ -52,6 +53,6 @@
 
     {% if form %}
         {% url 'inventory:materials' as add_url %}
-        {% include "inventory/hub/item_form.html" with id="material-dialog" title="Add material" action=add_url form=form submit="Add material" %}
+        {% include "inventory/hub/item_form.html" with id="material-dialog" title="Add material" sub="A raw material or packaging item. Quantity and price come in with Stock in." action=add_url form=form submit="Add material" %}
     {% endif %}
 {% endblock %}
