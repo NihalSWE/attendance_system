@@ -178,3 +178,36 @@ class OverrideTests(OvertimeBase):
         with use_company(self.company):
             hours = record.lines.get(code="HOURS")
         self.assertEqual((hours.quantity, hours.amount), (Decimal("40.00"), Decimal("8000.00")))
+
+
+class WeeklyOverrideTests(OverrideTests):
+    """A weekly group's week: generate, set the days by hand, generate again."""
+
+    def test_regenerating_a_week_pays_the_days_set(self):
+        from payroll import paygroups
+        from payroll.models import PayGroup
+
+        group = paygroups.create_group(actor=self.admin, company_id=self.company.pk, name="Weekly workers",
+                                       week_start=PayGroup.Weekday.SATURDAY)
+        with use_company(self.company):
+            EmployeeCompensation.objects.filter(employee=self.employee).update(
+                pay_basis="daily", base_rate=Decimal("1000"))
+        paygroups.set_member(actor=self.admin, company_id=self.company.pk, effective_from=D(2026, 8, 1),
+                             employee=self.employee, pay_group=group)
+        first, last = paygroups.week_of(group, D(2026, 8, 10))
+
+        def week():
+            run = generate_payroll(actor=self.admin, company_id=self.company.pk, pay_group=group,
+                                   week=D(2026, 8, 10))
+            with use_company(self.company):
+                return run, run.records.get(employee=self.employee)
+
+        run, scans = week()
+        overrides.set_override(actor=self.admin, company_id=self.company.pk, employee_id=self.employee.pk,
+                               first=first, last=last, pay_group=group, present_days=5, reason="Register")
+        self.assertEqual(attendance_changed_since(self.company.pk, run), 1)
+        run, by_hand = week()
+        self.assertEqual(by_hand.calculation_snapshot["override"]["present_days"], 5)
+        self.assertEqual(by_hand.gross_earnings, Decimal("5000.00"))
+        self.assertNotEqual(by_hand.gross_earnings, scans.gross_earnings)
+        self.assertEqual(attendance_changed_since(self.company.pk, run), 0)
