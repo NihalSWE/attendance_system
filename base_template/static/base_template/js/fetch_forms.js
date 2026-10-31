@@ -62,6 +62,21 @@
         }
     }
 
+    // Go on to the page the answer names. Back to this same page (the recipe
+    // card, #recipe) a plain assign() only scrolls to the anchor and never
+    // reloads, so the button kept saying "Saving…" though all was saved
+    // (2026-10-31): reload instead, keeping the anchor.
+    function goTo(address) {
+        const target = new URL(address, window.location.href);
+        const here = window.location;
+        if (target.origin === here.origin && target.pathname === here.pathname && target.search === here.search) {
+            if (target.hash !== here.hash) history.replaceState(history.state, "", target.hash || here.pathname + here.search);
+            here.reload();
+            return;
+        }
+        here.assign(target.href);
+    }
+
     // Mark each named box; return the reasons that have no box on the page.
     function markFields(form, errors) {
         const loose = [];
@@ -120,7 +135,7 @@
             show(box, "ok", reply.message || "Saved.");
             form.dispatchEvent(new CustomEvent("ui:saved", {bubbles: true, detail: reply}));
             if (reply.redirect) {
-                window.setTimeout(() => window.location.assign(reply.redirect), 700);
+                window.setTimeout(() => goTo(reply.redirect), 700);
                 return;
             }
             busy(button, false);
