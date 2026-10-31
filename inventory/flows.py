@@ -35,6 +35,7 @@ class Line:
     condition: str = "good"
     batch: object = None
     unit_price: Decimal = None
+    sale_price: Decimal = None       # Stock in: the item's (or pack's) new sale price
 
 
 def _on_row(row, exc):
@@ -65,8 +66,20 @@ def _need_lines(lines):
 
 # --- Stock in -----------------------------------------------------------------
 
+def _set_prices(actor, company_id, lines, below_reason):
+    """The sale prices given on Stock in lines, now that the buy price is in
+    (2026-10-31): below the new cost only with a reason (inventory.pricing)."""
+    from inventory import pricing
+
+    for line in lines:
+        if line.sale_price is not None:
+            pricing.set_price(actor=actor, company_id=company_id, item=line.item, price=line.sale_price,
+                              uom=line.uom, reason=below_reason, field=f"sale_{line.row}")
+
+
 @transaction.atomic
-def stock_in(*, actor, company_id, source, store, day, lines, supplier=None, customer=None, reason="", note=""):
+def stock_in(*, actor, company_id, source, store, day, lines, supplier=None, customer=None, reason="", note="",
+             below_reason=""):
     """``(document, posted, words)``: a purchase is received, a first count
     posted (or left for approval when the person may not post it), a customer
     return posted."""
@@ -85,6 +98,7 @@ def stock_in(*, actor, company_id, source, store, day, lines, supplier=None, cus
                                                              "mfg_date": None, "expiry_date": line.expiry_date,
                                                              "packages": None, "note": ""}))
         receipts.post_receipt(actor=actor, company_id=company_id, receipt_id=receipt.pk)
+        _set_prices(actor, company_id, lines, below_reason)
         return receipt, True, f"{receipt.number}: {len(lines)} line{'s' if len(lines) != 1 else ''} received into {store.name}."
     if source == "count":
         document = opening.create_document(actor=actor, company_id=company_id, values={"work_date": day, "note": note})
@@ -96,6 +110,7 @@ def stock_in(*, actor, company_id, source, store, day, lines, supplier=None, cus
                                                            "unit_cost": line.unit_cost, "note": ""}))
         if access.may(actor, company_id, "inventory.adjust_approve", store.branch_id):
             opening.post_document(actor=actor, company_id=company_id, document_id=document.pk)
+            _set_prices(actor, company_id, lines, below_reason)
             return document, True, f"{document.number}: the count is in stock in {store.name}."
         return document, False, (f"{document.number} saved: someone who may approve opening stock posts it "
                                  "(Opening stock).")
@@ -146,8 +161,27 @@ def receive_all(*, actor, company_id, transfer, day):
 
 # --- Sell ---------------------------------------------------------------------
 
+def _below_cost(company_id, customer, day, lines, below_reason):
+    """Each line's price against the cost of what goes out (2026-10-31): below
+    it only with a reason. True when any line is below cost."""
+    from inventory import masters, pricing
+    from sales.orders import price_for
+
+    below = False
+    for line in lines:
+        price = line.unit_price if line.unit_price is not None else price_for(
+            customer, line.item, line.uom, line.qty, day)
+        if price is None:
+            continue
+        factor = masters.units_for(line.item).get(line.uom.pk, Decimal("1"))
+        cost = pricing.check(company_id, line.item, price, factor=factor, reason=below_reason,
+                             field=f"price_{line.row}")
+        below = below or (cost is not None and price < cost)
+    return below
+
+
 @transaction.atomic
-def sell(*, actor, company_id, customer, store, day, lines, credit_note="", invoice=False):
+def sell(*, actor, company_id, customer, store, day, lines, credit_note="", invoice=False, below_reason=""):
     """``(order, delivery, invoice, words)``: the sale, its delivery from the
     store (the batch that expires first goes first) and, when asked, its
     invoice. Someone who may not confirm their own sale leaves it for the
@@ -155,9 +189,11 @@ def sell(*, actor, company_id, customer, store, day, lines, credit_note="", invo
     from sales import deliveries, orders
 
     _need_lines(lines)
+    below = _below_cost(company_id, customer, day, lines, below_reason)
     order = orders.create_order(actor=actor, company_id=company_id, values={
         "customer": customer, "warehouse": store, "order_date": day, "delivery_date": None, "source": "manual",
-        "customer_ref": "", "delivery_address": "", "note": ""})
+        "customer_ref": "", "delivery_address": "",
+        "note": f"Sold below cost: {below_reason.strip()}"[:500] if below else ""})
     _each(lines, lambda line: orders.add_line(actor=actor, company_id=company_id, order_id=order.pk, values={
         "item": line.item, "warehouse": None, "qty": line.qty, "uom": line.uom, "unit_price": line.unit_price,
         "discount_pct": None, "vat_rate": None, "note": ""}))

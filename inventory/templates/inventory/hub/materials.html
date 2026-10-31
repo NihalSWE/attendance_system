@@ -36,7 +36,7 @@
                             <td class="numeric">{{ line.stock_text }}</td>
                             <td class="numeric">{% if line.keep %}{{ line.keep|floatformat:"-2g" }} {{ line.item.base_uom.code }}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
                             {% if sees_costs %}<td class="numeric">{{ line.value|floatformat:"0g" }}</td>{% endif %}
-                            <td><span class="ui-chip ui-chip--{{ line.tone }}">{{ line.words }}</span></td>
+                            <td><span class="ui-chip ui-chip--{{ line.tone }}">{{ line.words }}</span>{% if line.below_cost %} <span class="ui-chip ui-chip--bad">Below cost</span>{% endif %}</td>
                             {% if can_manage %}<td><a class="ui-btn ui-btn--sm" href="{% url 'inventory:material' line.item.pk %}?edit=1&amp;back={% url 'inventory:materials' %}">{% include "ui/icon.html" with name="edit" small=True %} Edit</a></td>{% endif %}
                         </tr>
                     {% endwith %}{% empty %}

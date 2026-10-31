@@ -33,7 +33,7 @@
                                 <td class="numeric">{% if line.cost %}{{ line.cost|floatformat:"2g" }}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
                                 <td class="numeric{% if line.margin and line.margin < 0 %} ui-bad{% elif line.margin %} ui-good{% endif %}">{% if line.margin is not None %}{{ line.margin|floatformat:"2g" }} ({{ line.margin_pct }}%){% else %}<span class="ui-muted">—</span>{% endif %}</td>
                             {% endif %}
-                            <td><span class="ui-chip ui-chip--{{ line.tone }}">{% if line.tone == "wait" %}Below stock to keep{% else %}{{ line.words }}{% endif %}</span></td>
+                            <td><span class="ui-chip ui-chip--{{ line.tone }}">{% if line.tone == "wait" %}Below stock to keep{% else %}{{ line.words }}{% endif %}</span>{% if line.below_cost %} <span class="ui-chip ui-chip--bad">Below cost</span>{% endif %}</td>
                             {% if can_manage %}<td><a class="ui-btn ui-btn--sm" href="{% url 'inventory:product' line.item.pk %}?edit=1&amp;back={% url 'inventory:products' %}">{% include "ui/icon.html" with name="edit" small=True %} Edit</a></td>{% endif %}
                         </tr>
                     {% endwith %}{% empty %}

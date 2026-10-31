@@ -19,6 +19,8 @@
                 {% include "inventory/hub/field.html" with box=form.store %}
                 {% include "inventory/hub/field.html" with box=form.day %}
                 {% include "inventory/hub/field.html" with box=form.credit_note %}
+                    {% include "inventory/hub/field.html" with box=form.below_cost %}
+                    {% include "inventory/hub/field.html" with box=form.below_cost_reason %}
                 {% if form.invoice %}{% include "inventory/hub/field.html" with box=form.invoice %}{% endif %}
             </div></div>
         </div>

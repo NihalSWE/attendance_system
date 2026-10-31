@@ -26,6 +26,8 @@
         <div class="ui-tile"><p class="ui-tile__label">Used in</p><p class="ui-tile__value">{{ used|length }}</p><p class="ui-tile__hint">product{{ used|length|pluralize }}</p></div>
     </div>
 
+    {% include "inventory/hub/_price.html" %}
+
     {% if makes %}
         {# A material made here (2026-10-31): its own recipe and cost of one batch. #}
         {% include "inventory/hub/_recipe.html" %}

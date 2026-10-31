@@ -1,0 +1,62 @@
+{% comment %}
+    The sale price, set once the cost is known (2026-10-31, inventory/pricing.py):
+    the cost of one unit beside it, the margin, a price suggested for a margin,
+    and the below-cost guard. On the product and material pages.
+{% endcomment %}
+<div class="ui-card" id="price">
+    <div class="ui-card__head">
+        <h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Sale price</h2>
+        <span class="ui-card__note">{% if item.sale_price %}Now {{ item.sale_price|floatformat:"2g" }} per {{ item.base_uom.code }}{% else %}Not set yet{% endif %}</span>
+    </div>
+    <div class="ui-card__body">
+        {% if price_cost is None %}
+            <p class="ui-muted">The cost is not known yet: {% if makes %}write the recipe (and Stock in its materials){% else %}put it in stock with its buy price, or give an expected buy price (Edit){% endif %}, then set the price here.</p>
+        {% else %}
+            <p>Cost of one {{ item.base_uom.code }}: <strong>{{ price_cost|floatformat:"2g" }}</strong>{% if item.sale_price %} · margin <strong class="{% if price_margin < 0 %}ui-bad{% else %}ui-good{% endif %}">{{ price_margin|floatformat:"2g" }} ({{ price_margin_pct }}%)</strong>{% if price_margin < 0 %} <span class="ui-chip ui-chip--bad">Below cost</span>{% endif %}{% endif %}</p>
+        {% endif %}
+        {% if can_price %}
+            <form method="post" action="{% url 'inventory:item_price' item.pk %}" data-fetch data-price-form data-cost="{{ price_cost|default_if_none:'' }}" novalidate>
+                {% csrf_token %}
+                <div class="ui-grid-2">
+                    {% if price_cost is not None %}
+                        <div class="field"><label class="field__label" for="price-margin">Margin you want</label><div class="ui-unit"><input class="input" id="price-margin" type="number" step="any" min="0" max="99" placeholder="e.g. 30" data-price-margin><span class="ui-unit__label">%</span></div><span class="field__help">Fills the price for that margin.</span></div>
+                    {% endif %}
+                    <div class="field"><label class="field__label" for="price-value">Sale price <span class="field__req">*</span></label><div class="ui-unit"><input class="input" id="price-value" name="price" type="number" step="any" min="0" value="{{ item.sale_price|default_if_none:''|floatformat:'-2' }}" data-price-value><span class="ui-unit__label">Tk / {{ item.base_uom.code }}</span></div><span class="field__help" data-price-answer></span></div>
+                </div>
+                <div class="ui-grid-2">
+                    <div class="field"><label class="ui-switch" for="price-below"><span class="ui-switch__text"><span class="ui-switch__label">Sell below cost</span><span class="ui-switch__hint">Only on purpose, e.g. clearing stock that expires soon.</span></span><input class="check__input" id="price-below" type="checkbox" name="below_cost"></label></div>
+                    <div class="field" data-show-when="below_cost:on"><label class="field__label" for="price-reason">Why</label><input class="input" id="price-reason" name="reason" type="text" maxlength="200"></div>
+                </div>
+                <div class="ui-message" data-form-message role="status" hidden></div>
+                <div class="ui-form-actions"><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save price</button></div>
+            </form>
+        {% endif %}
+        {% if packs %}<p class="ui-muted">Pack prices (a carton's own price) are in Units and prices below.</p>{% endif %}
+    </div>
+</div>
+<script>
+    // The price for a margin, and the margin of a price, as you type (2026-10-31).
+    (function () {
+        const form = document.querySelector("[data-price-form]");
+        if (!form || !form.dataset.cost) return;
+        const cost = Number(form.dataset.cost);
+        const price = form.querySelector("[data-price-value]");
+        const margin = form.querySelector("[data-price-margin]");
+        const answer = form.querySelector("[data-price-answer]");
+        function say() {
+            const value = Number(price.value);
+            if (!price.value) { answer.textContent = ""; return; }
+            const left = value - cost;
+            answer.textContent = left < 0
+                ? "Below cost: a loss of " + (-left).toFixed(2) + " on each."
+                : "Margin " + left.toFixed(2) + " (" + (value ? (left / value * 100).toFixed(1) : "0") + "%).";
+            answer.style.color = left < 0 ? "var(--danger)" : "";
+        }
+        if (margin) margin.addEventListener("input", function () {
+            const pct = Number(margin.value);
+            if (margin.value && pct < 100) { price.value = (cost / (1 - pct / 100)).toFixed(2); say(); }
+        });
+        price.addEventListener("input", say);
+        say();
+    })();
+</script>

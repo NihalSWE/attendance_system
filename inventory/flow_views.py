@@ -79,7 +79,8 @@ def _number(text):
         raise ValueError from None
 
 
-def _lines(request, company_id, *, cost=False, price=False, batch_no=False, condition=False, batch=False):
+def _lines(request, company_id, *, cost=False, price=False, batch_no=False, condition=False, batch=False,
+           sale=False):
     """The lines typed on the page as ``flows.Line``, or the reasons by box."""
     from inventory.masters import units_for
 
@@ -95,7 +96,7 @@ def _lines(request, company_id, *, cost=False, price=False, batch_no=False, cond
             errors[f"item_{row}"] = ["Choose an item from the list."]
             continue
         values = {}
-        for box, wanted in (("qty", True), ("cost", cost), ("price", price)):
+        for box, wanted in (("qty", True), ("cost", cost), ("price", price), ("sale", sale)):
             if not wanted:
                 continue
             try:
@@ -108,7 +109,8 @@ def _lines(request, company_id, *, cost=False, price=False, batch_no=False, cond
         unit_id = post.get(f"unit_{row}", "")
         uom_id = int(unit_id) if unit_id.isdigit() and int(unit_id) in units else item.base_uom_id
         line = flows.Line(row=row, item=item, qty=values.get("qty"), uom=_uom(uom_id),
-                          unit_cost=values.get("cost"), unit_price=values.get("price"))
+                          unit_cost=values.get("cost"), unit_price=values.get("price"),
+                          sale_price=values.get("sale"))
         if batch_no:
             line.batch_no = post.get(f"batch_{row}", "").strip()
             expiry = post.get(f"expiry_{row}", "").strip()
@@ -212,6 +214,15 @@ class StockInForm(_HeadForm):
     supplier = django_forms.ModelChoiceField(queryset=Item.all_objects.none(), required=False, label="Supplier")
     customer = django_forms.ModelChoiceField(queryset=Item.all_objects.none(), required=False, label="Customer")
     reason = django_forms.CharField(label="Why it came back", required=False, max_length=255)
+    below_cost = django_forms.BooleanField(label="Sell below cost", required=False,
+                                           help_text="Only if a sale price below cost is meant.")
+    below_cost_reason = django_forms.CharField(label="Why below cost", required=False, max_length=200)
+
+    def clean(self):
+        data = super().clean()
+        if data.get("below_cost") and not (data.get("below_cost_reason") or "").strip():
+            self.add_error("below_cost_reason", "Say why it is sold below cost.")
+        return data
 
     def __init__(self, *args, company_id, **kwargs):
         from purchasing.models import Supplier
@@ -223,6 +234,7 @@ class StockInForm(_HeadForm):
         self.fields["supplier"].widget.attrs["data-show-when"] = "source:purchase"
         self.fields["customer"].widget.attrs["data-show-when"] = "source:return"
         self.fields["reason"].widget.attrs["data-show-when"] = "source:return"
+        self.fields["below_cost_reason"].widget.attrs["data-show-when"] = "below_cost:on"
 
 
 @login_required
@@ -265,7 +277,7 @@ def stock_in_new(request):
     stores = _stores(request, company_id, ("purchase.receive", "inventory.adjust", "sales.deliver"))
     if request.method == "POST":
         form = StockInForm(request.POST, company_id=company_id, stores=stores)
-        lines, errors = _lines(request, company_id, cost=True, batch_no=True, condition=True)
+        lines, errors = _lines(request, company_id, cost=True, batch_no=True, condition=True, sale=True)
         if not form.is_valid():
             return fetch.refused(form)
         if errors:
@@ -273,7 +285,8 @@ def stock_in_new(request):
         data = form.cleaned_data
         return _answer(lambda: flows.stock_in(
             actor=request.user, company_id=company_id, source=data["source"], store=data["store"], day=data["day"],
-            lines=lines, supplier=data["supplier"], customer=data["customer"], reason=data["reason"]),
+            lines=lines, supplier=data["supplier"], customer=data["customer"], reason=data["reason"],
+            below_reason=data["below_cost_reason"] if data["below_cost"] else ""),
             lambda done: done[2], reverse("inventory:stock_in"))
     access.require(request.user, company_id, ("purchase.receive", "inventory.adjust", "sales.deliver"))
     return render(request, "inventory/hub/stock_in_new.html", {
@@ -391,6 +404,15 @@ class SaleForm(_HeadForm):
     day = django_forms.DateField(label="Date", widget=date_widget())
     invoice = django_forms.BooleanField(label="Make the invoice now", required=False)
     credit_note = django_forms.CharField(label="Why, if over the credit limit", required=False, max_length=255)
+    below_cost = django_forms.BooleanField(label="Sell below cost", required=False,
+                                           help_text="Only if a price below cost is meant.")
+    below_cost_reason = django_forms.CharField(label="Why below cost", required=False, max_length=200)
+
+    def clean(self):
+        data = super().clean()
+        if data.get("below_cost") and not (data.get("below_cost_reason") or "").strip():
+            self.add_error("below_cost_reason", "Say why it is sold below cost.")
+        return data
 
     def __init__(self, *args, company_id, can_invoice, **kwargs):
         from sales.models import Customer
@@ -399,6 +421,7 @@ class SaleForm(_HeadForm):
         self.fields["customer"].queryset = Customer.all_objects.filter(company_id=company_id, status="active").order_by("name")
         if not can_invoice:
             del self.fields["invoice"]
+        self.fields["below_cost_reason"].widget.attrs["data-show-when"] = "below_cost:on"
 
 
 @login_required
@@ -453,7 +476,8 @@ def sale_new(request):
         data = form.cleaned_data
         return _answer(lambda: flows.sell(actor=request.user, company_id=company_id, customer=data["customer"],
                                           store=data["store"], day=data["day"], lines=lines,
-                                          credit_note=data["credit_note"], invoice=data.get("invoice", False)),
+                                          credit_note=data["credit_note"], invoice=data.get("invoice", False),
+                                          below_reason=data["below_cost_reason"] if data["below_cost"] else ""),
                        lambda done: done[3], reverse("inventory:sales"))
     access.require(request.user, company_id, "sales.order")
     return render(request, "inventory/hub/sale_new.html", {

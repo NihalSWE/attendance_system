@@ -54,6 +54,9 @@
         });
         // The product's own price as a hint only: left empty, the customer's
         // price list decides (then the pack's price, then the product's).
+        // Stock in's sale price box says what the price is now (2026-10-31).
+        const sale = line.querySelector("[data-line-sale]");
+        if (sale) sale.placeholder = unit && unit.dataset.price ? "now " + unit.dataset.price : "not set yet";
         const price = line.querySelector("[data-line-price]");
         if (price) price.placeholder = unit && unit.dataset.price ? unit.dataset.price + " (product price)" : "the customer's price";
         const batchBox = line.querySelector("[data-line-batch]");

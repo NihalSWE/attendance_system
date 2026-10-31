@@ -208,8 +208,8 @@ class ProductForm(_HubItemForm):
 
     SECTIONS = (
         ("Item", "What it is, and how you get it.", ("sourcing", "name", "code", "category")),
-        ("Units and price", "The unit you sell, its price, and a bigger pack.",
-         ("base_uom", "sale_price", "pack_uom", "pack_factor", "pack_price", "vat_rate")),
+        ("Units", "The unit you sell, and a bigger pack.",
+         ("base_uom", "pack_uom", "pack_factor", "vat_rate")),
         ("Stock control", "When it runs low, and where new stock goes.",
          ("keep_by", "min_stock", "keep_days", "reorder_qty", "default_warehouse")),
         ("Batches & expiry", "For food, medicine and anything that expires.",
@@ -226,18 +226,13 @@ class ProductForm(_HubItemForm):
         kwargs.pop("kind", None)
         super().__init__(*args, kind=ItemKind.FINISHED, **kwargs)
         if not self.instance.pk:
-            self.fields["pack_price"] = forms.DecimalField(
-                required=False, min_value=0, max_digits=18, decimal_places=4, label="Pack price",
-                help_text="Its own price: a carton need not cost 24 x the packet price.",
-                widget=forms.NumberInput(attrs={"class": "input", "step": "any"}))
-            self.fields["pack_price"].unit_from = "pack_uom"
             self.fields["pack_uom"].help_text = "Optional: a bigger unit you also sell, e.g. CARTON."
         self.fields["name"].label = "Product name"
         self.fields["base_uom"].label = "Base unit"
         self.fields["base_uom"].help_text = "The smallest unit you sell (packet, piece)."
-        self.fields["sale_price"].required = True
-        self.fields["sale_price"].label = "Sale price"
-        self.fields["sale_price"].help_text = "For one base unit."
+        # The price is set once the cost is known (2026-10-31): on the product's
+        # page, or on a Stock in line - never guessed when it is added.
+        self.fields.pop("sale_price", None)
         self.fields.pop("standard_cost", None)
         self.lay_out()
 
