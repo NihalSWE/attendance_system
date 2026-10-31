@@ -66,6 +66,12 @@ def build_payslip_pdf(context, *, company, by=""):
         attendance.append(["Late minutes", counts["late_minutes"]])
     if counts.get("overtime_minutes"):
         attendance.append(["Approved overtime minutes", counts["overtime_minutes"]])
+    by_hand = context.get("by_hand")
+    if by_hand:
+        attendance.append(["Set by hand", (
+            f"{by_hand['present_days']} present days (scans {by_hand['scan_present_days']})"
+            if by_hand.get("present_days") is not None
+            else f"{by_hand['hours']} hours (scans {by_hand['scan_hours']})")])
 
     penalties = [[p.penalty_rule.name if p.penalty_rule_id else "Penalty",
                   p.get_status_display(), _amount(p.amount, currency)]
