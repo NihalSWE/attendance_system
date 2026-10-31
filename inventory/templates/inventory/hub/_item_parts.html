@@ -33,7 +33,7 @@
 
 {% if edit_form %}
     {% url 'inventory:item_save' item.pk as save_url %}
-    {% include "inventory/hub/item_form.html" with id="edit-dialog" title="Edit "|add:item.code action=save_url form=edit_form submit="Save" %}
+    {% include "inventory/hub/item_form.html" with id="edit-dialog" title="Edit "|add:item.name sub=item.code action=save_url form=edit_form submit="Save changes" open=edit_open next=edit_next %}
 
     <dialog class="modal" id="pack-dialog" aria-labelledby="pack-dialog-title">
         <form class="modal__card" method="post" action="{% url 'inventory:pack_unit_add' item.pk %}" data-fetch novalidate>

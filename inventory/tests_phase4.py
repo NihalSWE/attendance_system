@@ -107,12 +107,37 @@ class MaterialsTests(HubFixture, TestCase):
         self.assertEqual((pack.uom_id, pack.factor), (self.bag.pk, D("50")))
 
     def test_the_add_form_asks_each_box_once_in_plain_words(self):
+        # In sections, with short standard words (2026-10-31).
         page = self.client.get(reverse("inventory:materials")).content.decode()
-        for label in ("Type", "Unit", "Bought in (optional)", "Stock to keep", "Quality check before use"):
+        for section in ("Item", "Units", "Stock control", "Batches &amp; expiry"):
+            self.assertIn(f'ui-form-section__title">{section}<', page)
+        for label in ("Type", "Material name", "Base unit", "Purchase unit", "Contains", "Minimum stock",
+                      "Default store", "Expected buy price", "Batch tracking", "Expiry tracking", "QC before use"):
             self.assertIn(f">{label}", page)
-        # Stock to keep is always there for a material (no days-of-sales choice).
+        # Minimum stock is always there for a material (no days-of-sales choice).
         self.assertNotIn('name="min_stock" data-show-when', page)
         self.assertNotIn('data-show-when="keep_by', page)
+        # Left off the screens (the columns stay for imports and the API).
+        for name in ("name_bn", "reorder_point", "max_stock", "hs_code"):
+            self.assertNotIn(f'name="{name}"', page)
+
+    def test_edit_from_a_row_opens_the_modal_and_goes_back_to_the_list(self):
+        page = self.client.get(reverse("inventory:materials"))
+        here = reverse("inventory:material", args=[self.pulp.pk])
+        self.assertContains(page, f"{here}?edit=1&amp;back={reverse('inventory:materials')}")
+        page = self.client.get(here, {"edit": "1", "back": reverse("inventory:materials")})
+        self.assertContains(page, 'data-open-on-load="edit-dialog"')
+        body = self.post("item_save", {"kind": "raw", "name": "Mango pulp", "code": "RM-0002",
+                                       "category": self.raw.pk, "base_uom": self.kg.pk, "track_batch": "on",
+                                       "track_expiry": "on", "shelf_life_days": "540",
+                                       "next": reverse("inventory:materials")}, self.pulp.pk).json()
+        self.assertEqual(body["redirect"], reverse("inventory:materials"))
+        # Only the lists: anywhere else is not followed.
+        body = self.post("item_save", {"kind": "raw", "name": "Mango pulp", "code": "RM-0002",
+                                       "category": self.raw.pk, "base_uom": self.kg.pk, "track_batch": "on",
+                                       "track_expiry": "on", "shelf_life_days": "540",
+                                       "next": "https://elsewhere.example/"}, self.pulp.pk).json()
+        self.assertEqual(body["redirect"], here)
 
     def test_a_refused_material_names_each_box(self):
         reply = self.post("materials", self.material(name="", pack_uom=self.bag.pk))
