@@ -3,6 +3,7 @@ company's salary settings."""
 
 import datetime
 from decimal import Decimal
+from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import messages
@@ -29,8 +30,9 @@ from organization.services import (
     STRUCTURE_ROLES,
     require_structure_manager,
 )
+from common import exports
 from common.choices import ActiveStatus
-from organization.models import Branch
+from organization.models import Branch, Department
 from organization.views import _company_or_redirect
 from payroll import overtime, paygroups, penalties, periods, policy
 from payroll.forms import (
@@ -96,16 +98,36 @@ def payroll_home(request):
         if view_branches is not ALL_BRANCHES:
             # A12 part 6: the payslips of people placed in their branches.
             shown = shown.filter(employee_assignment_at_period_end__branch_id__in=view_branches)
+        # Branch and department (2026-10-31): the payslips of the people placed
+        # there at the end of the period.
+        branch_list = Branch.objects.filter(status=ActiveStatus.ACTIVE).order_by("name")
+        if view_branches is not ALL_BRANCHES:
+            branch_list = branch_list.filter(pk__in=view_branches)
+        branch_list = list(branch_list)
+        departments = list(Department.objects.filter(branch__in=branch_list, status=ActiveStatus.ACTIVE)
+                           .select_related("branch").order_by("name"))
+        branch, department = request.GET.get("branch", ""), request.GET.get("department", "")
+        if branch.isdigit():
+            shown = shown.filter(employee_assignment_at_period_end__branch_id=int(branch))
+        if department.isdigit():
+            shown = shown.filter(employee_assignment_at_period_end__department_id=int(department))
+        view = "departments" if request.GET.get("view") == "departments" else "people"
         totals = shown.aggregate(employees=Count("pk"), gross=Sum("gross_earnings"),
                                  deductions=Sum("total_deductions"), net=Sum("net_pay"))
         shown_ids = list(shown.values_list("employee_id", flat=True))
+        by_department = _by_department(shown) if run else []
+        currency = shown.values_list("currency", flat=True).first() or ""
+        if request.GET.get("format") in (exports.XLSX, exports.PDF) and run:
+            return _salary_download(request, membership, run, pay, by_department, totals, currency)
         records = paginate(request,
-            shown.select_related("employee")
+            shown.select_related("employee", "employee_assignment_at_period_end__department")
             .annotate(table_rate=Cast(KT("calculation_snapshot__base_rate"), DecimalField(max_digits=18, decimal_places=2)),
                 **{f"table_{key}": Coalesce(Cast(KT(f"calculation_snapshot__counts__{key}"), IntegerField()), 0)
                    for key in ("present", "half_day", "absent", "unpaid_leave")})
             .order_by("employee__first_name", "employee__last_name"),
-            search=("employee__first_name", "employee__last_name", "calculation_snapshot__pay_basis"),
+            search=("employee__first_name", "employee__last_name", "calculation_snapshot__pay_basis",
+                    "employee_assignment_at_period_end__employee_code",
+                    "employee_assignment_at_period_end__department__name"),
             order=(("employee__first_name", "employee__last_name"), "calculation_snapshot__pay_basis", "table_rate",
                    "table_present", "table_half_day", "table_absent",
                    "table_unpaid_leave", "gross_earnings", "total_deductions", "net_pay", None))
@@ -129,6 +151,17 @@ def payroll_home(request):
         "run": run,
         "records": records,
         "totals": totals,
+        "currency": currency,
+        "view": view,
+        "by_department": by_department,
+        "branches": branch_list,
+        "departments": departments,
+        "branch": branch,
+        "department": department,
+        "filters": urlencode({key: value for key, value in (
+            ("month", month), ("year", year), ("group", pay["pay_group"].pk if pay["pay_group"] else ""),
+            ("week", pay["week_first"].isoformat() if pay["week_first"] else ""), ("branch", branch),
+            ("department", department)) if value}),
         "company_wide": company_wide,
         "can_manage": membership.role in STRUCTURE_ROLES,
         # Owner/admin generate the whole month; a branch its own people. A
@@ -160,6 +193,75 @@ def payroll_home(request):
             if run and run.status == PayrollRun.Status.DRAFT else 0
         ),
     })
+
+
+def _by_department(shown):
+    """The payslips grouped by the department each person was in at the end of
+    the period: ``[{name, branch, people, gross, deductions, net, records}]``."""
+    groups = {}
+    for record in (shown.select_related("employee", "employee_assignment_at_period_end__department",
+                                        "employee_assignment_at_period_end__branch")
+                   .order_by("employee__first_name", "employee__last_name")):
+        placement = record.employee_assignment_at_period_end
+        key = placement.department_id if placement else None
+        group = groups.setdefault(key, {
+            "id": key, "name": placement.department.name if placement else "No department",
+            "branch": placement.branch.name if placement else "", "people": 0,
+            "gross": Decimal("0"), "deductions": Decimal("0"), "net": Decimal("0"), "records": []})
+        group["people"] += 1
+        group["gross"] += record.gross_earnings
+        group["deductions"] += record.total_deductions
+        group["net"] += record.net_pay
+        group["records"].append(record)
+    return sorted(groups.values(), key=lambda group: (group["name"].casefold(), group["branch"]))
+
+
+SALARY_HEADERS = ["Department", "Employee", "Employee ID", "Pay basis", "Present", "Half day", "Absent",
+                  "Gross", "Deductions", "Net pay"]
+
+
+def _salary_download(request, membership, run, pay, by_department, totals, currency):
+    """The period's salary by department, a subtotal after each, then the total."""
+    fmt = request.GET["format"]
+    try:
+        exports.check_size(totals["employees"] + 2 * len(by_department) + 1, fmt)
+    except exports.TooManyRows as exc:
+        messages.error(request, str(exc))
+        query = request.GET.copy()
+        query.pop("format", None)
+        return redirect(f"{request.path}?{query.urlencode()}")
+    rows = []
+    for group in by_department:
+        for record in group["records"]:
+            snapshot = record.calculation_snapshot or {}
+            counts = snapshot.get("counts") or {}
+            placement = record.employee_assignment_at_period_end
+            rows.append([group["name"], record.employee.full_name, placement.employee_code if placement else "",
+                         snapshot.get("pay_basis", "").capitalize(),
+                         counts.get("present", 0), counts.get("half_day", 0), counts.get("absent", 0),
+                         record.gross_earnings, record.total_deductions, record.net_pay])
+        rows.append([f"{group['name']}: subtotal", f"{group['people']} people", "", "", "", "", "",
+                     group["gross"], group["deductions"], group["net"]])
+    rows.append(["Total", f"{totals['employees']} people", "", "", "", "", "",
+                 totals["gross"] or 0, totals["deductions"] or 0, totals["net"] or 0])
+    title = f"Salary by department · {pay['run_title']}"
+    period = run.payroll_period
+    lines = [f"{period.start_date:%d %b %Y} - {period.end_date:%d %b %Y}",
+             f"Status: {run.get_status_display()}" + (f" · {currency}" if currency else "")]
+    numeric = (4, 5, 6, 7, 8, 9)
+    if fmt == exports.XLSX:
+        content = exports.table_xlsx(title=title, lines=lines, headers=SALARY_HEADERS, rows=rows,
+                                     numeric=numeric)
+    else:
+        content = exports.table_pdf(title=title, lines=lines, headers=SALARY_HEADERS, rows=rows,
+                                    numeric=numeric, widths={0: 2, 1: 2.4, 7: 1.4, 8: 1.4, 9: 1.4})
+    exports.record(actor=request.user, membership=membership, page="salary-by-department", fmt=fmt,
+                   filters={key: request.GET.get(key, "") for key in
+                            ("month", "year", "group", "week", "branch", "department")},
+                   count=totals["employees"])
+    name = exports.filename("salary-by-department", membership.company.name,
+                            f"{period.start_date:%Y-%m-%d}", fmt)
+    return exports.response(content, fmt, name)
 
 
 def _pay_choice(company_id, source, year, month):
