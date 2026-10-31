@@ -61,3 +61,32 @@ class SalaryPageTests(OvertimeBase):
         self.assertIn("spreadsheet", reply["Content-Type"])
         self.assertTrue(AuditLog.objects.filter(action="export.downloaded",
                                                 after_data__page="salary-by-department").exists())
+
+
+class WeeklyTableTests(SalaryPageTests.__mro__[1]):
+    """The People table of a weekly group's week answers its own requests."""
+
+    def test_search_and_pages_of_a_week(self):
+        from employees.models import EmployeeCompensation
+        from payroll import paygroups
+        from payroll.models import PayGroup
+
+        group = paygroups.create_group(actor=self.admin, company_id=self.company.pk, name="Weekly workers",
+                                       week_start=PayGroup.Weekday.SATURDAY)
+        with use_company(self.company):
+            EmployeeCompensation.objects.filter(employee=self.employee).update(pay_basis="daily",
+                                                                               base_rate=Decimal("1000"))
+        paygroups.set_member(actor=self.admin, company_id=self.company.pk, effective_from=datetime.date(2026, 8, 1),
+                             employee=self.employee, pay_group=group)
+        generate_payroll(actor=self.admin, company_id=self.company.pk, pay_group=group,
+                         week=datetime.date(2026, 8, 8))
+        self.client.force_login(self.admin)
+        week = {**AUGUST, "group": group.pk, "week": "2026-08-08"}
+        page = self.client.get(reverse("payroll:payroll_home"), week)
+        self.assertContains(page, "Rahim")
+        for extra in ({"search[value]": "Rahim"}, {"order[0][column]": "9", "order[0][dir]": "desc"},
+                      {"start": "25"}):
+            reply = self.client.get(reverse("payroll:payroll_home"), {
+                **week, "table": "1", "draw": "2", "start": "0", "length": "25", **extra})
+            self.assertEqual(reply.status_code, 200, extra)
+            self.assertIn("data", reply.json())
