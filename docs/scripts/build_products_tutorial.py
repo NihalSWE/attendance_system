@@ -3,10 +3,11 @@
 
     venv/Scripts/python docs/scripts/build_products_tutorial.py
 
-writes docs/inventory/PRODUCTS-AND-STOCK-TUTORIAL.pdf. It follows the flow bar
-of the new pages - Start here, Materials, Products (recipe and cost), Stock in,
-Make, Stock, Move stock, Sell, Warranty - with every box: what to write and what
-the software does with it. Rebuild it when those screens or their rules change.
+writes docs/inventory/PRODUCTS-AND-STOCK-TUTORIAL.pdf. It follows the
+Inventory menu (2026-10-31: Setup, Materials, Products, Stock, Production,
+Sales, ...) - recipe and cost, Stock in, the sale price, Make, Sell, Warranty -
+with every box of each form: what to write and what the software does with it.
+Rebuild it when those screens or their rules change.
 The look is the one of build_inventory_tutorial.py (Part 1, the setting-up lists).
 """
 
@@ -139,9 +140,9 @@ def section(number, title, menu, what, before="", note=""):
 
 def flow_diagram():
     d = Drawing(170 * mm, 44 * mm)
-    labels = [("Start here", "checklist"), ("1 Materials", "what you use"), ("2 Products", "recipe, cost"),
-              ("3 Stock in", "buy, count"), ("4 Make", "plan, start, finish"), ("5 Stock", "where it is"),
-              ("6 Move", "store to store"), ("7 Sell", "deliver, invoice")]
+    labels = [("Setup", "units, stores"), ("1 Materials", "what you use"), ("2 Products", "what you sell"),
+              ("3 Recipe", "one batch, its cost"), ("4 Stock in", "buy price in"), ("5 Sale price", "cost + margin"),
+              ("6 Make", "plan, start, finish"), ("7 Sell", "deliver, invoice")]
     w, gap, rows = 38 * mm, 6 * mm, 2
     for i, (title, sub) in enumerate(labels):
         row, col = divmod(i, 4)
@@ -178,24 +179,20 @@ story = []
 # ------------------------------------------------------------------ cover
 story += [
     Spacer(1, 34 * mm), P("Products and stock", "title"),
-    P("From materials to a sale: adding materials and products, the recipe and what one batch costs, "
-      "stock in, making, stock, moving stock between stores, selling, and warranty.", "subtitle"),
+    P("From the first material to the sale, step by step: every screen, every box, and what the software does "
+      "with it.", "subtitle"),
     Spacer(1, 6 * mm),
-    P("For owners, store managers, store keepers, production and sales staff. Read it once from top to "
-      "bottom; after that, use each step while you work. Every page ends with a <b>Next step</b> box: "
-      "it always says what to do next."),
+    P("For owners, store keepers, production and sales staff. Read it once from top to bottom; after that, open the "
+      "step you need. Every page of the software ends with a <b>Next step</b> box that says what to do next."),
     Spacer(1, 6 * mm), flow_diagram(), Spacer(1, 6 * mm),
-    box("How every screen behaves", [
-        "&bull; <b>The flow bar</b> at the top of every page is the menu in the order of the work. "
-        "Materials and Make show only when your company has Production; Warranty only when it is on.",
-        "&bull; <b>Saving never reloads the page.</b> The answer appears just above the Save button: green "
-        "when saved, red when not - and each wrong box is outlined red with its reason under it. "
-        "What you typed stays.",
-        "&bull; <b>Each value is asked once.</b> The unit is set on the item; every quantity after that shows "
-        "it beside the box. Lists offer only what fits: a store's batches, an item's own units.",
-        "&bull; <b>Every list</b> has SL numbers, Show N, search and pages. Click a name to open it.",
-        "&bull; <b>Money</b> (costs, values, margins) shows only to people given \"See stock costs and "
-        "values\".",
+    box("How every screen works", [
+        "&bull; <b>The menu</b>: Inventory &rarr; Start here, then one dropdown per kind of work: Setup, Materials, "
+        "Products, Stock, Production, Sales, Purchase, Reports, Tools.",
+        "&bull; <b>Saving</b>: the answer shows just above the Save button - green when saved, red when not, with "
+        "each wrong box outlined red and its reason under it. What you typed stays.",
+        "&bull; <b>Dates</b>: every date box opens the same calendar. A date that cannot be right is refused.",
+        "&bull; <b>Lists</b>: SL numbers, Show N, search, pages, and an <b>Edit</b> button on each row.",
+        "&bull; <b>Money</b> (costs, values, margins) shows only to people given \"See stock costs and values\".",
     ]),
     PageBreak(),
 ]
@@ -204,31 +201,27 @@ story += [
 story += [
     P("Words used on the screens", "h1"),
     grid(("Word", "What it means"), [
-        ("Store", "A warehouse or room: raw store, packing store, main store, depot. A branch can have many."),
-        ("Material", "Something you buy and use up making products: flour, sugar, wrappers, cartons."),
-        ("Product", "Something you sell. It is bought ready, made here, or both."),
-        ("Unit", "What stock is counted in, set once per item: packet, kg, piece."),
-        ("Bigger unit", "1 carton = 24 packets; 1 bag = 50 kg. A carton can have its own price."),
-        ("Batch (one mix)", "The recipe is written for one batch: \"1 batch = 10 cartons\". Making 50 cartons "
-                            "is 5 batches."),
-        ("Batch number", "Stock that came in together (one delivery, one production), with its own dates, "
-                         "expiry and cost. The batch that expires first always goes first."),
-        ("Production", "One making of a product, in three steps: Plan, Start, Finish."),
-        ("Stock to keep", "Below it an item shows Low. A quantity, or (products) days of sales."),
-    ], (34, 136)),
+        ("Store", "A warehouse or room: raw store, packing store, main store, depot."),
+        ("Material", "Something you use up making products: flour, sugar, wrappers. Bought, made here, or both."),
+        ("Product", "Something you sell. Bought ready, made here, or both."),
+        ("Base unit", "What stock is counted in, set once per item: packet, kg, piece."),
+        ("Bigger unit", "1 bag = 50 kg; 1 carton = 24 packets. A pack can have its own price."),
+        ("Batch (one mix)", "The recipe is for one batch: \"1 batch = 240 packets\". 1,200 packets = 5 batches."),
+        ("Batch number", "Stock that came in together, with its own dates and cost. The one that expires "
+                         "first always goes out first."),
+        ("Cost of one", "What one unit really costs: the average buy price, or for a made item, its recipe "
+                        "and costs."),
+        ("Margin", "Sale price - cost of one. Below cost = a loss on each one sold."),
+        ("Guarantee / Warranty", "Guarantee: the first months, a faulty unit is replaced. Warranty: after that, "
+                                 "to its end, it is repaired."),
+    ], (36, 134)),
     Spacer(1, 6 * mm),
-    P("Before you start (once)", "h2"),
-    *steps([
-        "<b>Switches</b> (the platform owner): Store &amp; Inventory on; Production on for a company that makes "
-        "things. A company that only buys and sells never sees materials, recipes or production.",
-        "<b>Inventory settings</b>: average cost for the whole company or per store, expiry warning days, "
-        "label sizes, and <b>Warranty</b> (off by default).",
-        "<b>Units</b> (Add standard units adds KG, PCS, CARTON, BAG ...), <b>Item categories</b>, <b>Stores</b> "
-        "(each in a branch, with its type: raw, packaging, finished goods, quarantine, rejected), <b>Suppliers</b> "
-        "and <b>Customers</b>. These pages are in the Inventory menu.",
-        "<b>Access</b>: who may set up items, plan, start and finish production, receive goods, move stock, "
-        "sell, see costs, record warranty claims (Organisation &rarr; Access).",
-    ]),
+    box("The one rule about prices", [
+        "You do not type a buy price or a sale price when you add a material or a product. "
+        "The <b>buy price</b> comes from <b>Stock in</b> (what you really paid). The <b>sale price</b> is set once "
+        "the cost is known: on a Stock in line, or on the item's page, where the cost and the margin are shown. "
+        "A price below cost is refused unless you switch on <b>Sell below cost</b> and say why.",
+    ], "ok"),
 ]
 
 # ------------------------------------------------------------------ the whole workflow
@@ -238,297 +231,284 @@ def walk(rows):
 
 
 story += [
-    PageBreak(), P("The whole workflow, from the first material to the sale", "h1"),
-    P("One example from start to end: a biscuit factory. <b>One batch</b> (one mix) makes <b>240 packets = 10 "
-      "cartons</b> and uses flour 18 kg, sugar 5 kg, 240 wrappers and 10 cartons. The button names are the ones on "
-      "the screens. Part A is done <b>once</b>; Part B is what you do <b>every time</b> you buy, make and sell."),
-    box("Part A is once; Part B is every time", [
-        "The <b>Start here</b> checklist (4 / 7 steps ...) only tracks Part A and your first production and first sale. "
-        "Once those are ticked you never need it again: every day you go straight to Stock in, Make and Sell.",
-    ], "ok"),
+    PageBreak(), P("The whole workflow in one example", "h1"),
+    P("A biscuit factory. <b>One batch</b> makes <b>240 packets</b> and uses flour 18 kg, sugar 5 kg, 240 wrappers and "
+      "10 cartons. Part A is done <b>once</b>; Part B <b>every time</b> you buy, make and sell."),
 
     P("Part A &middot; Once: set up", "h2"),
     walk([
-        ("A1", "Inventory &rarr; <b>Units</b> &rarr; Add standard units. Inventory &rarr; <b>Stores</b> &rarr; Add store",
-         "Stores: Raw store (raw), Packing store (packaging), Main store (finished goods), each in its branch.",
+        ("A1", "Inventory &rarr; <b>Setup</b> &rarr; Units, Stores",
+         "Units: Add standard units. Stores: Raw store, Packing store, Main store, each in its branch.",
          "The units (KG, PCS, BAG, CARTON ...) and the rooms stock is kept in."),
-        ("A2", "Flow bar <b>1 Materials</b> &rarr; <b>Add material</b>",
-         "Type Raw material, name Flour, category, unit KG, Bought in BAG, One of those holds 50, stock to keep 200, "
-         "usual store Raw store, Keeps batches + Has an expiry date. Press <b>Add material</b>. "
-         "Do the same for Sugar (KG), Wrapper and Carton (type Packaging, unit PCS).",
-         "\"RM-0001 Flour added\" above the button; the material's page opens. Code left empty is given (RM-0001)."),
-        ("A3", "Flow bar <b>2 Products</b> &rarr; <b>Add product</b>",
-         "How you get it: Make it here. Name Biscuit 100 g, smallest unit you sell PCS (the packet), sale price 20; "
-         "also sold as CARTON, one holds 24, its sale price 450. Stock to keep 5,000 (or days of sales). Keeps batches, "
-         "expiry, shelf life 180 days, new stock goes to Main store. Press <b>Add product</b>.",
-         "The product page opens, asking for its recipe."),
-        ("A4", "On the product page, card <b>Recipe</b>",
-         "\"One batch makes\": 240 (PCS) &rarr; <b>Save</b>. Then <b>Add material</b>: Flour 18 (KG), wastage 2 %; "
-         "Sugar 5; Wrapper 240; Carton 10 - each <b>Add</b>.",
-         "\"Recipe: one batch makes 240 PCS\"; each line with its cost, what is in stock and \"enough for N batches\"."),
-        ("A5", "Inventory &rarr; <b>Cost rates</b> &rarr; <b>Add rate</b>; then the product &rarr; card <b>Cost of one batch</b> "
-               "&rarr; <b>Add cost</b> (optional, for the full cost)",
-         "Rates: Line worker, People, 75 per hour; Oven, Machine, 300 per hour. Costs: People 4 x 1.2 h x Line worker; "
-         "Machine 0.5 h x Oven; Fixed per batch: Gas 120.",
-         "Total for one batch, cost per PCS and per CARTON, margin per PCS. The Cost tile shows the expected cost."),
+        ("A2", "Inventory &rarr; <b>Materials</b> &rarr; Materials &rarr; <b>Add material</b>",
+         "How you get it: Bought. Type: Raw material. Name: Flour. Base unit KG; Purchase unit BAG, Contains 50. "
+         "Minimum stock 200. Batch tracking + Expiry tracking, shelf life 180 days. <b>No price.</b>",
+         "\"RM-0001 Flour added\". Next step: <b>Put it in stock</b>."),
+        ("A3", "Inventory &rarr; <b>Products</b> &rarr; Products &rarr; <b>Add product</b>",
+         "How you get it: Made here. Name: Biscuit 100 g. Base unit PCS; Selling pack CARTON, Contains 24. "
+         "Minimum stock 5,000. Shelf life 180 days. New stock goes to: Main store. <b>No price.</b>",
+         "The product page opens and asks for its recipe."),
+        ("A4", "Product page &rarr; card <b>Recipe</b>",
+         "One batch makes 240. Add material: Flour 18, Sugar 5, Wrapper 240, Carton 10.",
+         "\"Recipe: one batch makes 240 PCS\", each line with its cost and \"enough for N batches\"."),
+        ("A5", "Inventory &rarr; <b>Production</b> &rarr; Cost rates (optional)",
+         "Line worker 75 per hour; Oven 300 per hour. On the product: Add cost (people, machine, gas).",
+         "The full cost of one batch and of one packet."),
     ]),
 
-    P("Part B &middot; Every time: buy, make, sell", "h2"),
+    P("Part B &middot; Every time: buy, price, make, sell", "h2"),
     walk([
-        ("B1", "Flow bar <b>3 Stock in</b> &rarr; <b>Stock in</b>",
-         "Where it comes from: A purchase (the very first time: First count). Supplier, Into store: Raw store, date. "
-         "Lines: Flour 10 BAG, cost 2,600 per BAG, batch number, expiry; Sugar 50 KG ...; Wrapper 5,000; Carton 300. "
-         "<b>Add a line</b> for more. Press <b>Put in stock</b>.",
-         "\"GRN-...: 4 lines received into Raw store\". The list shows it; Materials show OK instead of Out."),
-        ("B2", "Product page &rarr; <b>Make this</b> (or <b>Make N batches</b> on the Suggested card, or flow bar "
-               "<b>4 Make</b>)",
-         "How many batches: 5; date; products go into Main store.",
-         "The materials table: needed (wastage included), usable in the branch, taken from which store, Enough or "
-         "<b>Short by</b>. Short: <b>Make fewer</b> or <b>Buy the rest</b>."),
-        ("B3", "Plan page &rarr; <b>Plan it</b>", "-",
-         "\"PRD-... planned: 5 batches.\" The production page opens at step 2 Start."),
-        ("B4", "Production page &rarr; <b>Start: materials out</b> (when the store gives the materials)",
-         "Change a \"Given\" quantity only if a store gave more or less (over 5 % needs a reason).",
-         "\"Started: the materials left the stores\"; Raw store stock goes down; the page moves to step 3 Finish."),
-        ("B5", "Production page &rarr; <b>Finish: into stock</b> (when the batches are done)",
-         "Good 1,180, Damaged 20 (PCS). Into Main store 1,180 (or split across stores). Leftover flour back 1 KG. "
-         "Other costs filled from the cost sheet x 5 - correct them if the day was different.",
-         "\"PRD-... finished: 1,180 PCS into stock as batch ...\". Cost per PCS against the expected cost; the batch is "
-         "in Main store."),
-        ("B6", "Flow bar <b>5 Stock</b>", "Filters if you like: store, type, status.",
-         "Biscuit 100 g: 1,180 PCS (49.17 CARTON) in Main store, its value, and what expires first."),
-        ("B7", "Flow bar <b>6 Move stock</b> &rarr; <b>Move stock</b> (only if it is sold from another store)",
-         "From Main store, To Depot, Biscuit 20 CARTON. <b>Send it</b>. At the depot: <b>Receive</b> on the list.",
-         "\"ST-... sent\" - in transit - then received in Depot."),
-        ("B8", "Flow bar <b>7 Sell</b> &rarr; <b>New sale</b>",
-         "Customer, From store Main store, date, tick Make the invoice now. Line: Biscuit 100 g, 10, unit CARTON; price "
-         "empty (the customer's price list, else 450). Press <b>Sell and deliver</b>.",
-         "\"SO-... delivered as DC-..., invoice INV-...\". Stock goes down from the batch that expires first. Done."),
+        ("B1", "Inventory &rarr; <b>Stock</b> &rarr; Stock in &rarr; <b>Stock in</b>",
+         "A purchase; supplier; Into store: Raw store; date. Line: Flour 10 BAG, cost 2,600 per BAG, "
+         "manufacture date and/or expiry. Sale price: empty (flour is not sold).",
+         "\"GRN-...: received into Raw store\". The buy price is now known; Flour shows OK."),
+        ("B2", "Product page &rarr; card <b>Sale price</b>",
+         "Cost of one PCS is shown (e.g. 14.20). Margin you want: 30 % &rarr; the price fills (20.29). "
+         "Change it to 20 and <b>Save price</b>.",
+         "\"Now 20.00 per PCS\" with its margin. The carton's own price: Units and prices &rarr; Add a unit."),
+        ("B3", "Product page &rarr; <b>Make this</b>",
+         "How many batches: 5; date; into Main store. <b>Plan it</b>.",
+         "Each material: needed, in stock, Enough or <b>Short by</b>."),
+        ("B4", "Production page &rarr; <b>Start: materials out</b>", "Change a quantity only if the store gave more or less.",
+         "The materials leave the stores."),
+        ("B5", "Production page &rarr; <b>Finish: into stock</b>",
+         "Good 1,180, Damaged 20, into Main store. Expiry empty: made date + shelf life.",
+         "A new batch in Main store, at its real cost per packet."),
+        ("B6", "Inventory &rarr; <b>Sales</b> &rarr; Sell &rarr; <b>New sale</b>",
+         "Customer, From store, date. Line: Biscuit 10 CARTON, price empty. <b>Sell and deliver</b>.",
+         "\"SO-... delivered as DC-...\". Stock goes down from the batch that expires first."),
     ]),
-    Spacer(1, 4),
-    box("Next time", [
-        "Only Part B: <b>Stock in</b> when materials arrive, <b>Make</b> (plan, start, finish) when you produce, "
-        "<b>Sell</b> when you sell. The product page tells you how many batches to make, and Start here lists what "
-        "is below stock to keep.",
-    ], "ok"),
+    box("Next time", ["Only Part B: Stock in when goods arrive, Make when you produce, Sell when you sell. Change "
+                      "a price whenever the cost changes - the item's page always shows the cost and the margin."], "ok"),
 ]
 
 # ------------------------------------------------------------------ start here
-story += section(0, "Start here", "Inventory &rarr; Start here (the flag in the flow bar)",
-                 "The first page: tiles (materials and products low or out, the value in stock, set-up steps "
-                 "done), the <b>What to do</b> checklist and the latest productions.")
+story += section(0, "Start here", "Inventory &rarr; Start here",
+                 "The first page: tiles (low or out, value in stock, set-up steps done), the <b>What to do</b> "
+                 "checklist and the latest productions.")
 story += [
-    P("The checklist is worked out from your own records, and each line opens the page where it is done:"),
-    *bullets(["Stores set up", "Materials added (Production)", "Products added", "Recipes saved (Production)",
-              "Stock in", "First production finished (Production)", "First sale delivered",
-              "Below stock to keep - the items to buy or make now"]),
-    box("Next step", ["The box at the bottom always names the first thing not done yet, with one button to it."], "ok"),
-    box("A one-time checklist", [
-        "The ticks and \"4 / 7 steps done\" are worked out from your records - nobody ticks them. They track setting "
-        "up and your first production and first sale; once done they stay done. You do <b>not</b> go through it each "
-        "time you produce: for that, use Stock in, Make and Sell (Part B of the workflow). Two lines can come back: "
-        "Recipes saved (a new product you make has no recipe yet) and Below stock to keep (an alert).",
-    ]),
+    P("The checklist is worked out from your own records - nobody ticks it - and each line opens its page: stores "
+      "set up, materials added, products added, recipes saved, stock in, first production finished, first sale "
+      "delivered. It is for setting up only: after that you go straight to Stock in, Make and Sell."),
 ]
+
+# ------------------------------------------------------------------ setup
+story += section(1, "Setup", "Inventory &rarr; Setup &rarr; Units / Item categories / Stores / Bins / Inventory settings",
+                 "The lists everything else uses. Done once; changed rarely.")
+story += [grid(("Page", "What you add"), [
+    ("Units", "<b>Add standard units</b> adds KG, PCS, BAG, CARTON ... ; or add your own (code, name, decimals)."),
+    ("Item categories", "Groups for lists and reports, one type each: Dry goods (raw), Wrappers (packaging), "
+                        "Biscuits (products)."),
+    ("Stores", "Each store: its branch, code, name and type - raw, packaging, finished goods, quarantine, rejected."),
+    ("Bins", "Optional shelves or racks inside a store."),
+    ("Inventory settings", "Average cost for the whole company or per store; expiry warning days; label sizes; "
+                           "<b>Warranty</b> on or off (off by default)."),
+], (36, 134))]
 
 # ------------------------------------------------------------------ materials
-story += section(1, "Materials", "Inventory &rarr; Materials (flow bar 1)",
-                 "What you buy and use up in production: raw materials and packaging. The list shows each one "
-                 "with what is in stock (in the stores you see), stock to keep, value and a status chip: "
-                 "<font color='#2f6b34'><b>OK</b></font>, <font color='#7d5510'><b>Low</b></font>, "
-                 "<font color='#a32a1e'><b>Out</b></font>. Filters: category, store, status.",
-                 "units, categories and stores.", "Only with Production on.")
-story += [P("Add material", "h2"), fields([
-    ("Type", "Yes", "Raw material or Packaging.", "Raw material", "Decides which categories are offered and where it shows."),
-    ("Name", "Yes", "What everyone calls it.", "Flour", "Shown on every list, document and label."),
-    ("Code", "No", "Leave it empty, or write your own.", "RM-0012",
-     "Empty: the next number is given (RM-0012 after RM-0011). Must be unique."),
+story += section(2, "Materials", "Inventory &rarr; Materials &rarr; Materials &rarr; Add material",
+                 "What you use up making products: raw materials and packaging. The list shows each one with what "
+                 "is in stock, minimum stock, value and a chip: <font color='#2f6b34'><b>OK</b></font>, "
+                 "<font color='#7d5510'><b>Low</b></font>, <font color='#a32a1e'><b>Out</b></font>, and "
+                 "<font color='#a32a1e'><b>Below cost</b></font> when it is sold for less than it costs.",
+                 "units, categories and stores (Setup).", "Only with Production on.")
+story += [P("Item", "h2"), fields([
+    ("How you get it", "Yes", "Bought, Made here, or Both.", "Bought",
+     "Made here or Both: it gets its own recipe and cost, and is made with Make (a cream made in-house)."),
+    ("Type", "Yes", "Raw material or Packaging.", "Raw material", "Decides the categories offered."),
+    ("Material name", "Yes", "What everyone calls it.", "Flour", "Shown on every list, document and label."),
+    ("Item code", "No", "Leave it empty, or write your own.", "RM-0012", "Empty: the next number is given."),
     ("Category", "Yes", "One of the material categories.", "Dry goods", "Groups it in lists and reports."),
-    ("Unit", "Yes", "What stock is counted in.", "KG",
-     "Every quantity of it is in this unit. It cannot change once stock has moved."),
-    ("Bought in / One of those holds", "No", "A bigger unit you buy it in, and its size.", "BAG, 50",
-     "Purchases can be entered in bags; the stock stays in kg."),
-    ("Stock to keep", "No", "The least you want in stock.", "200",
-     "Below it the material shows Low, is in the morning email and the reorder report."),
-    ("Usual store", "No", "Where it is normally kept.", "Raw store A",
-     "Production takes it from this store first, then the other stores of the branch."),
-    ("Keeps batches / Has an expiry date / Shelf life", "No", "Switch on for food, chemicals ...", "on, 180 days",
-     "Each delivery becomes a batch number with its dates; expired stock can never be used."),
-    ("Quality check before use", "No", "Switch on when new stock must be checked.", "",
-     "New stock waits in quarantine until it passes."),
-]), Spacer(1, 4), P("<b>Material page</b> (click its name): in stock, average cost, how many products use it; "
-                    "stock by store and batch; <b>Used in</b>; its units. <b>Edit</b> changes it; <b>Delete</b> "
-                    "appears only while it has never moved - after that it is <b>Deactivate</b>.")]
+]), P("Units", "h2"), fields([
+    ("Base unit", "Yes", "What stock is counted in.", "KG", "Fixed once stock has moved."),
+    ("Purchase unit / Contains", "No", "A bigger unit you buy in, and how many base units it holds.", "BAG, 50",
+     "Stock in can take bags; stock stays in kg."),
+]), P("Stock control", "h2"), fields([
+    ("Minimum stock", "No", "The least you want in stock.", "200", "Below it: Low, in the reorder report."),
+    ("Reorder quantity", "No", "How much you usually order at once.", "500", "Suggested on purchases."),
+    ("Default store", "No", "Where it is normally kept.", "Raw store", "Production takes from this store first."),
+    ("Expected buy price", "No", "Only an estimate, before the first purchase.", "52 per KG",
+     "Lets a product be costed early. The real price always comes from Stock in."),
+]), P("Batches &amp; expiry", "h2"), fields([
+    ("Batch tracking", "No", "On for food, chemicals ...", "on", "Each delivery gets its own batch number."),
+    ("Expiry tracking / Shelf life", "No", "On when it expires; the days it keeps.", "on, 180 days",
+     "Expired stock is never used. Shelf life fills the expiry from the manufacture date."),
+    ("QC before use", "No", "On when new stock must be checked.", "", "New stock waits until it passes."),
+]), P("Warranty (only when Warranty is on)", "h2"), fields([
+    ("Warranty (repair)", "No", "The supplier's warranty, in months.", "12", "Runs from the day it was received."),
+    ("Guarantee (replace)", "No", "Its first months, when the supplier replaces.", "3",
+     "Never longer than the warranty."),
+    ("Serial number per unit", "No", "On when each unit has its own number.", "", "Units are entered one by one."),
+]), Spacer(1, 4), box("After Add material", [
+    "The material's page opens with <b>Put it in stock</b>: Stock in, with this material already on line 1. "
+    "<b>Edit</b> (on its page or its row in the list) opens the same form again.",
+], "ok")]
 
 # ------------------------------------------------------------------ products
-story += section(2, "Products", "Inventory &rarr; Products (flow bar 2)",
-                 "What you sell. The list shows how you get each one (Buy / Make / Both), what is in stock (also in "
-                 "cartons), the sale price, the cost per unit, the margin and a status chip.")
-story += [P("Add product", "h2"), fields([
-    ("How you get it", "Some", "Make it here, Buy it ready, or Both.", "Make it here",
-     "Only with Production. Make and Both get a recipe, a cost of one batch and the Make button."),
-    ("Name, Code, Category", "Yes", "As for materials (code empty: FG-0001 ...).", "Biscuit 100 g", ""),
-    ("Smallest unit you sell", "Yes", "The unit stock is counted in.", "PCS (packet)", "Fixed once stock moves."),
-    ("Sale price", "Yes", "For one of that unit.", "20", "Used on sales unless the customer's price list says else."),
-    ("Also sold as / One of those holds / Its sale price", "No", "A bigger unit, its size and its own price.",
-     "CARTON, 24, 450", "A carton need not cost 24 x the packet price: sales use 450."),
-    ("Stock to keep as", "No", "A quantity, or days of sales.", "Days of sales: 15",
-     "Days: worked out from the last 30 days of deliveries (less returns). Used for Low and to suggest how much to make."),
-    ("New stock goes to", "No", "The finished goods store.", "Main store", "Offered first when planning a production."),
-    ("Keeps batches / expiry / shelf life", "No", "As for materials.", "on, 180 days",
-     "A made batch expires made date + shelf life."),
-    ("New batch number for every batch made", "No", "On: one batch number per mix.", "",
-     "Off: one batch number per production. On: one per mix, into one store."),
-    ("Warranty (months) / A serial number for each unit", "No", "Only when Warranty is on.", "12",
-     "See step 8."),
-]), Spacer(1, 4),
-    P("<b>Product page</b>: tiles (cost per unit - the expected one for a made product - sale price, margin, in "
-      "stock, sold in the last 30 days and per day); the suggestion how many batches to make; the recipe; the cost "
-      "of one batch; stock by store and batch; its productions (or purchases); units and prices."),
-]
+story += section(3, "Products", "Inventory &rarr; Products &rarr; Products &rarr; Add product",
+                 "What you sell. The list shows how you get each one, what is in stock (also in packs), the sale "
+                 "price, the cost of one, the margin and a chip - <font color='#a32a1e'><b>Below cost</b></font> "
+                 "when its price is under its cost.")
+story += [P("Item", "h2"), fields([
+    ("How you get it", "Some", "Made here, Bought ready, or Both.", "Made here",
+     "Only with Production. Made here and Both get a recipe, a cost of one batch and Make."),
+    ("Product name, Item code, Category", "Yes", "As for materials (code empty: FG-0001 ...).", "Biscuit 100 g", ""),
+]), P("Units", "h2"), fields([
+    ("Base unit", "Yes", "The smallest unit you sell.", "PCS (packet)", "Fixed once stock moves."),
+    ("Selling pack / Contains", "No", "A bigger unit you also sell, and its size.", "CARTON, 24",
+     "Its own price is set on the product's page (Units and prices)."),
+    ("VAT", "No", "The VAT %, if any.", "15", "Used on invoices."),
+]), P("Stock control", "h2"), fields([
+    ("Minimum stock as", "No", "A quantity, or days of sales.", "Days of sales", ""),
+    ("Minimum stock / Days of sales", "No", "The quantity, or how many days of sales to keep.", "5,000 / 15",
+     "Below it: Low; also used to suggest how many batches to make."),
+    ("Reorder quantity", "No", "How much you usually make or buy at once.", "", ""),
+    ("New stock goes to", "No", "The finished goods store.", "Main store", "Offered first when you make it."),
+]), P("Batches &amp; expiry", "h2"), fields([
+    ("Batch tracking / Expiry tracking / Shelf life", "No", "As for materials.", "on, on, 180 days",
+     "A made batch expires on the made date + shelf life (or earlier, never later)."),
+    ("QC before use", "No", "New stock is checked first.", "", ""),
+    ("Batch number per mix", "No", "Off: one batch number per production. On: one per mix.", "", ""),
+]), P("Warranty (only when Warranty is on)", "h2"), fields([
+    ("Warranty (repair)", "No", "Your warranty to the customer, in months.", "12", "Runs from the delivery date."),
+    ("Guarantee (replace)", "No", "Its first months, when a faulty unit is replaced.", "3",
+     "Never longer than the warranty. After it, to the warranty's end: repair."),
+    ("Serial number per unit", "No", "On when each unit is scanned out.", "", "See step 10."),
+]), Spacer(1, 4), P("<b>Product page</b>: tiles (cost of one, sale price, margin, in stock, sold per day); the "
+                    "<b>Sale price</b> card; how many batches to make; the recipe; the cost of one batch; stock by "
+                    "store and batch; units and prices.")]
 
 # ------------------------------------------------------------------ recipe and cost
-story += section("2b", "Recipe and cost of one batch", "Products &rarr; open the product &rarr; Recipe / Cost of one batch",
-                 "What one batch makes and uses, and what one batch costs: materials plus people, machines and "
-                 "other costs. It gives the expected cost per unit, per carton and the margin.",
-                 "the product (Make or Both) and its materials.")
+story += section(4, "Recipe and cost of one batch", "The product (or a made material) &rarr; Recipe / Cost of one batch",
+                 "What one batch makes and uses, and what it costs. It gives the cost of one unit.",
+                 "the product or material is Made here or Both.")
 story += steps([
-    "With no recipe yet the page asks <b>how much one batch makes</b> (in the product's unit): write it and Save.",
-    "<b>Add material</b>: one already added, a <b>new</b> one made right there (type, name, code, category, unit), "
-    "or a <b>product made here</b> (semi-finished, like cream for cream biscuits). Write how much <b>one batch</b> "
-    "uses - the material's own unit is shown - and its normal wastage %.",
-    "Each line shows its cost, what is in stock and how many batches that is enough for. <b>Remove</b> takes it off; "
-    "<b>Batch size</b> changes what one batch makes.",
-    "<b>Cost rates</b> (Inventory &rarr; Cost rates): what an hour costs - Line worker 75, Oven 300. "
-    "A change counts for productions after it.",
-    "<b>Add cost</b> on the product: people x hours x rate, machine hours x rate, a fixed amount per batch (gas), "
-    "or a % of the materials (rent share). Only the boxes of the chosen way show.",
+    "With no recipe yet the page asks <b>how much one batch makes</b>: write it and Save.",
+    "<b>Add material</b>: any material, a new one made right there, or something else made here (a cream). Write how "
+    "much <b>one batch</b> uses and its normal wastage %.",
+    "<b>Cost rates</b> (Inventory &rarr; Production &rarr; Cost rates): what an hour of a worker or a machine costs.",
+    "<b>Add cost</b>: people x hours x rate, machine hours x rate, a fixed amount per batch (gas), or a % of the "
+    "materials.",
 ])
 story += [box("What you read", [
-    "Materials (the recipe x each material's average cost, wastage included) + the costs = <b>one batch</b>; "
-    "divided by what one batch makes = <b>one unit</b>; x 24 = one carton. Margin = sale price - cost per unit.",
-    "A material with no cost yet is named in red: the total is short until it has one.",
-]), box("Refused", [
-    "The product itself, a product that is made with this one (a loop), a product bought ready, the same "
-    "material twice.",
-], "bad")]
+    "Materials (recipe x each material's average cost, or its expected buy price before the first purchase) + "
+    "the costs = <b>one batch</b>; divided by what one batch makes = <b>one unit</b>.",
+    "A material with no cost yet is named in red: buy it (Stock in) or give its expected buy price.",
+])]
 
 # ------------------------------------------------------------------ stock in
-story += section(3, "Stock in", "Inventory &rarr; Stock in (flow bar 3) &rarr; Stock in",
-                 "Everything that comes into a store. The list shows purchases, first counts and customer returns "
-                 "together; click a number to open the document.",
-                 "suppliers and customers; the items.")
-story += [P("The form", "h2"), fields([
-    ("Where it comes from", "Yes", "A purchase, the first count, or a customer return.", "A purchase",
-     "Decides the boxes below and the document it makes."),
-    ("Supplier / Customer", "Some", "Who it came from (purchase / return).", "Sweet Mills", ""),
-    ("Into store, Date", "Yes", "The store it arrived at, and the day.", "Raw store A", "A closed month is refused."),
+story += section(5, "Stock in", "Inventory &rarr; Stock &rarr; Stock in &rarr; Stock in",
+                 "Everything that comes into a store: a purchase, the first count, or a customer return.",
+                 "suppliers or customers, and the items.")
+story += [fields([
+    ("Where it comes from", "Yes", "A purchase, First count (opening stock), or A customer returned it.",
+     "A purchase", "Decides the boxes below."),
+    ("Supplier / Customer", "Some", "Who it came from.", "Sweet Mills", ""),
+    ("Into store, Date", "Yes", "The store and the day it arrived.", "Raw store", "A closed month is refused."),
     ("Why it came back", "Some", "For a return.", "Wrong order", ""),
-    ("Item, Quantity, Unit", "Yes", "One line per item; Add a line for more.", "Flour, 10, BAG",
-     "Only the item's own units are offered; stock is counted in its unit."),
-    ("Cost", "Some", "Purchase and count: per the unit chosen.", "2,600 per BAG", "Sets the average cost."),
-    ("Batch number, Expiry date", "Some", "Only for items that keep them.", "FL-231026, 1 Apr 2027",
-     "Batch empty: one is made. Expiry needed for items that expire."),
-    ("Condition", "Some", "Return: good or damaged.", "Damaged", "Good: back to stock. Damaged: the rejected store."),
-]), Spacer(1, 4), box("What happens on Put in stock", [
-    "A purchase is received and posted at once (items needing a quality check wait in quarantine). A first count is "
-    "posted when you may approve opening stock; otherwise it waits for whoever may. A return is posted. "
-    "If any line is refused, nothing is saved - the line and box are named.",
+    ("Item, Quantity, Unit", "Yes", "One line per item; <b>Add a line</b> for more.", "Flour, 10, BAG",
+     "Only the item's own units are offered."),
+    ("Cost", "Some", "What you paid, per the unit chosen.", "2,600 per BAG", "The buy price: sets the average cost."),
+    ("Sale price (optional)", "No", "A new sale price, now that the buy price is in. It shows the price now.",
+     "now 60", "Empty: the price stays. Below the new cost: refused unless Sell below cost."),
+    ("Batch number", "Some", "From the label (items with batches).", "FL-231026", "Empty: one is made."),
+    ("Manufacture date", "Some", "From the label (items that expire).", "1 Oct 2026",
+     "Not after the day it came in, and not a day still to come."),
+    ("Expiry date", "Some", "From the label.", "1 Apr 2027",
+     "Empty: manufacture date + shelf life. Never before the manufacture date."),
+    ("Condition", "Some", "Return: good or damaged.", "Damaged", "Damaged goes to the rejected store."),
+    ("Sell below cost / Why below cost", "No", "Only if a sale price below cost is meant.", "on, clearing old stock",
+     "Kept with the price change in the audit log."),
+]), Spacer(1, 4), box("On Put in stock", [
+    "A purchase is received and posted at once; a first count is posted if you may approve opening stock, otherwise "
+    "it waits; a return is posted. If any line is refused, nothing is saved - the line and the box are named.",
 ])]
+
+# ------------------------------------------------------------------ price
+story += section(6, "Sale price", "The item's page &rarr; card Sale price",
+                 "Set or change the price once the cost is known. The card shows the cost of one and the margin now.",
+                 "a cost: a Stock in (bought) or a recipe (made).")
+story += [fields([
+    ("Margin you want", "No", "A %.", "30", "Fills the sale price: cost / (1 - 30 %)."),
+    ("Sale price", "Yes", "For one base unit.", "20", "The margin shows as you type; below cost shows red."),
+    ("Sell below cost / Why", "Some", "Only when a loss is meant.", "on, expires next week",
+     "Without them a price below cost is refused. Kept in the audit log."),
+]), Spacer(1, 4), P("<b>A pack's own price</b> (a carton): Units and prices &rarr; Add a unit &rarr; Sale price of one "
+                    "pack - the same below-cost check, against the pack's cost.")]
 
 # ------------------------------------------------------------------ make
-story += section(4, "Make: Plan, Start, Finish", "Inventory &rarr; Make (flow bar 4), or <b>Make this</b> on the product",
-                 "A production makes a number of batches of a product. Plan it, Start it when the materials leave the "
-                 "stores, Finish it with what came out.", "the recipe, and the materials in stock.",
-                 "Only with Production on.")
-story += [P("Plan", "h2")] + steps([
-    "The product page suggests: <b>stock to keep - in stock - what is planned = batches wanted</b>, capped by what "
-    "the materials allow. <b>Make N batches</b> opens the plan with that number.",
-    "Write how many batches, the date and the store the products go into. The materials table follows as you type: "
-    "needed (wastage included), usable in the branch, taken from which stores (usual store first, the batch that "
-    "expires first), Enough or <b>Short by</b>.",
-    "Short: <b>Make fewer</b> sets the most the materials allow; <b>Buy the rest</b> makes a purchase requisition for "
-    "exactly what is missing; a semi-finished product offers <b>Make it first</b>. Another planned production needing "
-    "the same material is named.",
-    "<b>Plan it</b>. A short plan can be saved; it cannot start until the materials are in.",
-]) + [P("Start", "h2")] + steps([
-    "The production page lists what leaves each store. Change a quantity only if a store gave more or less; more "
-    "than 5 % over the plan needs a reason.",
-    "<b>Start: materials out</b>: stock goes down in each store at its real cost. Refused while anything is short.",
-]) + [P("Finish", "h2"), fields([
-    ("Good / Damaged", "Yes", "What came out.", "1,980 / 20",
-     "Good below 90 % or above 105 % of the plan needs a reason. 0 good = a failed production (reason; its cost is a loss)."),
-    ("Into which store", "Yes", "One store, or split.", "Main 1,950 + Depot 30", "Must add up to Good."),
-    ("Back to the store / Wasted / Why", "No", "Leftover material.", "Pulp 5 back; sugar 1 wasted, spilled",
-     "Back: into the store and batch it came from, at the cost used. Wasted needs a reason."),
-    ("Other costs", "No", "Filled from the cost of one batch x batches; correct them.", "Line worker 900, Gas 240",
-     "Added to the materials actually used."),
-    ("Batch number, Date, Why", "Some", "Batch empty: one is made.", "", ""),
-]), Spacer(1, 4), box("The result", [
-    "Cost per unit = (materials used + other costs) / good; damaged carry no cost of their own. The new batch is "
-    "valued at it; the page shows it against the expected cost.",
-    "<b>Reverse</b> (a reason) while nothing made was sold, moved or used: everything goes back. <b>Return the "
-    "materials and cancel</b> after Start. <b>Quality check</b> when the product needs one.",
+story += section(7, "Make: Plan, Start, Finish", "Inventory &rarr; Production &rarr; Make, or <b>Make this</b> on the item",
+                 "Making a number of batches: Plan it, Start it when the materials leave the stores, Finish it "
+                 "with what came out.", "the recipe, and the materials in stock.", "Only with Production on.")
+story += steps([
+    "<b>Plan</b>: how many batches, the date and the store. Each material shows needed, in stock, Enough or <b>Short "
+    "by</b>. Short: <b>Make fewer</b>, <b>Buy the rest</b>, or <b>Make it first</b> (something made here). "
+    "<b>Plan it</b>.",
+    "<b>Start: materials out</b>: change a quantity only if a store gave more or less (over 5 % needs a reason). "
+    "Stock goes down at its real cost.",
+    "<b>Finish: into stock</b>: Good and Damaged; the store (or a split); leftovers back; other costs (filled from "
+    "the cost of one batch). Batch number empty: one is made.",
+])
+story += [box("Dates of what is made", [
+    "The manufacture date is the day it is made - never a day still to come. Expiry empty: made date + shelf life; "
+    "typed: not before the made date and not after made date + shelf life.",
+]), box("The result", [
+    "Cost of one = (materials used + other costs) / good. <b>Reverse</b> (with a reason) while nothing made was sold, "
+    "moved or used.",
 ])]
 
-# ------------------------------------------------------------------ stock, move, sell
-story += section(5, "Stock", "Inventory &rarr; Stock (flow bar 5)",
-                 "Every item in stock: how much (also in cartons), in which stores, stock to keep, value and status; and "
-                 "the batches that expire first (within the warning days of Inventory settings). <b>By store, bin and "
-                 "batch</b> opens the detailed page.")
-story += section(6, "Move stock", "Inventory &rarr; Move stock (flow bar 6) &rarr; Move stock",
-                 "Stock sent from one store to another.", "the stores.")
+# ------------------------------------------------------------------ stock, move
+story += section(8, "Stock and Move stock", "Inventory &rarr; Stock &rarr; Stock / Move stock",
+                 "<b>Stock</b>: every item, how much, where, its value and status, and what expires first. "
+                 "<b>Move stock</b>: send stock from one store to another.")
 story += steps([
-    "From store, To store (never the same), date.",
-    "Each line: item, quantity, unit, and the batch if you want a given one (else the one that expires first). "
-    "\"In the store\" shows what the From store has.",
-    "<b>Send it</b>: the stock leaves and waits <b>in transit</b>.",
-    "When it arrives, the other store presses <b>Receive</b> on the Move stock list.",
+    "Move stock: From store, To store, date; each line item, quantity, unit and (if you want) the batch.",
+    "<b>Send it</b>: the stock waits <b>in transit</b>. The other store presses <b>Receive</b> on the Move stock list.",
 ])
-story += section(7, "Sell", "Inventory &rarr; Sell (flow bar 7) &rarr; New sale",
-                 "A sale to a customer, delivered at once from one store, and invoiced when asked.",
-                 "customers (and their price list, if any), stock in the store.")
-story += steps([
-    "Customer, From store, date. Tick <b>Make the invoice now</b> if you invoice.",
-    "Each line: product, quantity, unit (packet or carton). Price: leave it empty for the customer's price list (else "
-    "the carton's own price, else the product's price) - the product's price is shown as a hint.",
-    "<b>Sell and deliver</b>: the sale is confirmed and delivered, the batch that expires first going first. Over the "
-    "credit limit: say why in the box. More than the store has: refused, nothing saved.",
-    "Someone who may not confirm their own sales leaves it saved for whoever confirms.",
-])
+
+# ------------------------------------------------------------------ sell
+story += section(9, "Sell", "Inventory &rarr; Sales &rarr; Sell &rarr; New sale",
+                 "A sale, delivered at once from one store, invoiced when asked.", "customers, and stock in the store.")
+story += [fields([
+    ("Customer, From store, Date", "Yes", "Who, from where, when.", "City Shop, Main store", ""),
+    ("Make the invoice now", "No", "Tick to invoice at once.", "on", ""),
+    ("Item, Quantity, Unit", "Yes", "Packet or carton.", "Biscuit, 10, CARTON", ""),
+    ("Price", "No", "Empty: the customer's price list, else the pack's price, else the product's.", "",
+     "Below the cost of what goes out: refused unless Sell below cost."),
+    ("Why, if over the credit limit", "Some", "Only when the customer is over their limit.", "", ""),
+    ("Sell below cost / Why below cost", "No", "Only when a loss is meant.", "on, damaged boxes",
+     "The reason is written on the sale."),
+]), Spacer(1, 4), P("<b>Sell and deliver</b>: confirmed and delivered, the batch that expires first going first. More "
+                    "than the store has: refused, nothing saved.")]
 
 # ------------------------------------------------------------------ warranty
-story += section(8, "Warranty", "Inventory &rarr; Warranty (only when switched on)",
-                 "Items with a warranty, their serial numbers and claims.",
-                 "Inventory settings &rarr; Warranty on; Warranty (months) on the items.")
+story += section(10, "Warranty", "Inventory &rarr; Products &rarr; Warranty (only when switched on)",
+                 "Serial numbers and claims.", "Warranty on (Setup &rarr; Inventory settings), and months on the items.")
 story += steps([
-    "<b>Serial numbers</b>: made by themselves when a production of an item with serial numbers finishes "
-    "(Print serial labels on the production); <b>Serial numbers in</b> for units you received.",
-    "<b>Serial numbers out</b>: choose the delivery and scan each unit as it leaves - the warranty runs from that day "
-    "for that customer.",
-    "<b>New claim</b>: scan the serial - the form says <i>covered until ...</i> or <i>out of warranty since ...</i>. "
-    "Without a serial: the item and when it was delivered.",
-    "What you do: replace, repair (its cost), refund (the amount) or refuse (why). Covering one out of warranty needs a "
-    "reason. The faulty unit can go into the rejected store; a new unit leaves a store.",
+    "<b>Serial numbers</b>: made when a production finishes; <b>Serial numbers in</b> for units you received; "
+    "<b>Serial numbers out</b>: scan each unit on its delivery - the dates run from that day.",
+    "<b>New claim</b>: scan the serial (or choose the item and the delivery date). The form says which applies.",
 ])
-story += [box("Reports", [
-    "Inventory &rarr; Reports: <b>Production cost</b> (cost per unit against expected), <b>Material use</b>, "
-    "<b>Waste and failed productions</b>, <b>Shortages</b>, plus stock on hand, valuation, batch and expiry, reorder, "
-    "purchase and sales registers. Each with filters, Excel and PDF.",
-])]
+story += [grid(("The form says", "What you do"), [
+    ("In guarantee until ...: replace", "<b>Replace it</b>. Anything else (repair, refund) needs a reason."),
+    ("In warranty until ...: repair", "<b>Repair it</b> (its cost). Replace or refund needs a reason."),
+    ("Out of warranty since ...", "<b>Refuse</b> (say why), or cover it with a reason."),
+], (60, 110)), Spacer(1, 4), P("The faulty unit can go into the rejected store; a new unit leaves a store."),
+    box("Reports", ["Inventory &rarr; Reports: production cost, material use, waste, shortages, stock on hand, "
+                    "valuation, batch and expiry, reorder, purchase and sales registers - each with filters, "
+                    "Excel and PDF. Tools: Scan and Labels."]),
+]
 
 # ------------------------------------------------------------------ questions
 story += [CondPageBreak(80 * mm), Spacer(1, 6 * mm), P("Questions people ask", "h1"), grid(("When", "What happens"), [
-    ("A material is in two stores of the branch", "Production takes from both: the usual store first."),
+    ("I don't know the price when adding", "Right: no price is asked. Buy it (Stock in), then set the price."),
+    ("I typed a price below cost", "Refused, with the loss shown. Fix it, or Sell below cost with a reason."),
     ("A material is only in another branch", "It shows as short: move it first (Move stock)."),
-    ("Two plans need the same stock", "Both are warned; the first to start takes it."),
     ("A batch expires before Start", "It is not taken; the next batch is."),
-    ("A batch waits for its quality check", "It is never used or sold until it passes."),
     ("Nothing good came out", "Finish with 0 good and a reason: a failed production, its cost a loss."),
-    ("A mistake after Finish", "Reverse it (a reason) while nothing made was touched; else a stock adjustment."),
-    ("The rate of a worker changes", "Change it on Cost rates: future productions use it, finished ones keep theirs."),
+    ("A mistake after Finish", "Reverse it (a reason) while nothing made was touched."),
     ("Delete an item", "Only while it has never moved and is in no recipe; else Deactivate."),
-    ("Someone from another branch", "Sees and works only in their branches' stores."),
+    ("Where is Opening stock?", "Stock in &rarr; Where it comes from: First count (opening stock)."),
     ("No \"See costs\"", "Quantities only: no money on any screen."),
 ], (60, 110))]
 
@@ -536,7 +516,7 @@ story += [CondPageBreak(80 * mm), Spacer(1, 6 * mm), P("Questions people ask", "
 def build():
     doc = SimpleDocTemplate(OUT, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm,
                             bottomMargin=18 * mm, title="Products and stock - step by step", author="IGL Web Ltd.",
-                            subject="Materials, products, recipe and cost, stock in, make, stock, move, sell, warranty")
+                            subject="Materials, products, recipe and cost, stock in, sale price, make, stock, sell, warranty")
     doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
 
 
