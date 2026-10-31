@@ -35,6 +35,20 @@ class SummaryPageTests(OvertimeBase):
         # The menu has it.
         self.assertContains(page, f'href="{self.page}"')
 
+    def test_the_table_searches_sorts_and_pages(self):
+        # The table's own requests (search, sort, next page) answer with rows.
+        for extra in ({"search[value]": "Rahim"}, {"order[0][column]": "3", "order[0][dir]": "desc"},
+                      {"start": "25"}):
+            reply = self.client.get(self.page, {**AUGUST, "show": "all", "table": "1", "draw": "2", "start": "0",
+                                                "length": "25", **extra})
+            self.assertEqual(reply.status_code, 200, extra)
+            body = reply.json()
+            self.assertIn("data", body)
+        reply = self.client.get(self.page, {**AUGUST, "show": "all", "table": "1", "draw": "2", "start": "0",
+                                            "length": "25", "search[value]": "Rahim"})
+        self.assertEqual(reply.json()["recordsFiltered"], 1)
+        self.assertIn("Rahim", str(reply.json()["data"][0]))
+
     def test_save_mark_and_back_to_scans(self):
         back = f"{self.page}?year=2026&month=8&show=all"
         save = reverse("payroll:attendance_summary_save", args=[self.employee.pk])

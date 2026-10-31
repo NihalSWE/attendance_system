@@ -144,8 +144,8 @@ def attendance_summary(request):
               "hand": sum(1 for p in people if p["override"])}
     listed = [p for p in people if show == "all" or (show == "need" and p["need"])
               or (show == "hand" and p["override"])]
-    # Cells 0-8 are shown, searched and sorted (the ID is searched with the
-    # name and shown under it); the rest feed the row.
+    # Cells 0-10 are the columns, searched and sorted (the ID is searched with
+    # the name and shown under it); the rest feed the row.
     rows = []
     for p in listed:
         shown, scans, employee = p["shown"], p["scans"], p["employee"]
@@ -155,9 +155,12 @@ def attendance_summary(request):
             scans["working"], Sortable(str(shown["present"]), shown["present"]), shown["half_day"],
             shown["incomplete"], shown["absent"], scans["leave"],
             Sortable(f"{shown['hours']:.2f}", shown["hours"]),
+            "By hand" if p["override"] else "Scans", "",
             employee.pk, scans, p["override"], p["basis"], employee.public_id, employee.full_name, code,
         ])
-    page = paginate_rows(request, rows, columns=9)
+    # One cell per column on the page (11): the table's own requests - search,
+    # sort, the next page - are answered with exactly those cells.
+    page = paginate_rows(request, rows, columns=11)
     state, tone, locked = _salary_state(company_id, first, last, pay["pay_group"])
     return render(request, "payroll/attendance_summary.html", {
         **month_context(year, month), **pay, "first": first, "last": last, "page": page,

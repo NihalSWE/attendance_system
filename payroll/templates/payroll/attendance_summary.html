@@ -82,7 +82,7 @@
             <span class="ui-card__note">Search, sort and pages below</span>
         </div>
         <div class="table-wrap">
-            <table class="table summary__table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+            <table class="table summary__table" data-server-table data-orderable="0,1,2,3,4,5,6,7,8,9" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
                 <thead><tr>
                     <th>Employee</th><th>Department</th><th class="numeric" title="Working days">Work days</th><th class="numeric">Present</th>
                     <th class="numeric">Half</th><th class="numeric" title="No check-out">No out</th><th class="numeric">Absent</th><th class="numeric">Leave</th><th class="numeric">Hours</th>
@@ -90,18 +90,18 @@
                 </tr></thead>
                 <tbody>
                     {% for row in page %}
-                        <tr class="summary__row{% if row.11 %} is-hand{% endif %}{% if row.9|stringformat:'s' == changed %} is-changed{% endif %}">
-                            <td><a href="{% url 'organization:employee_detail' row.13 %}">{{ row.14 }}</a>{% if row.15 %}<span class="summary__code">{{ row.15 }}</span>{% endif %}</td>
+                        <tr class="summary__row{% if row.13 %} is-hand{% endif %}{% if row.11|stringformat:'s' == changed %} is-changed{% endif %}">
+                            <td><a href="{% url 'organization:employee_detail' row.15 %}">{{ row.16 }}</a>{% if row.17 %}<span class="summary__code">{{ row.17 }}</span>{% endif %}</td>
                             <td>{{ row.1 }}</td>
                             <td class="numeric">{{ row.2 }}</td>
-                            <td class="numeric">{% if row.11 and row.11.present_days is not None %}<span class="summary__was" title="By the scans">{{ row.10.present }}</span> <strong>{{ row.3 }}</strong>{% else %}{{ row.3 }}{% endif %}</td>
+                            <td class="numeric">{% if row.13 and row.13.present_days is not None %}<span class="summary__was" title="By the scans">{{ row.12.present }}</span> <strong>{{ row.3 }}</strong>{% else %}{{ row.3 }}{% endif %}</td>
                             <td class="numeric">{{ row.4 }}</td>
                             <td class="numeric{% if row.5 %} summary__warn{% endif %}">{{ row.5 }}</td>
                             <td class="numeric">{{ row.6 }}</td>
                             <td class="numeric">{{ row.7 }}</td>
-                            <td class="numeric">{% if row.11 and row.11.hours is not None %}<span class="summary__was" title="By the scans">{{ row.10.hours }}</span> <strong>{{ row.8 }}</strong>{% else %}{{ row.8 }}{% endif %}</td>
-                            <td>{% if row.11 %}<span class="ui-chip ui-chip--info" title="By {{ row.11.created_by.get_full_name|default:row.11.created_by.email }}, {{ row.11.created_at|date:'d M Y H:i' }}: {{ row.11.reason }}">By hand</span>{% else %}<span class="ui-chip">Scans</span>{% endif %}</td>
-                            <td><button class="ui-btn ui-btn--sm" type="button" data-summary-open="{% url 'payroll:attendance_summary_person' row.9 %}?{{ query }}">{% include "ui/icon.html" with name="edit" small=True %} {% if locked %}See{% else %}Change{% endif %}</button></td>
+                            <td class="numeric">{% if row.13 and row.13.hours is not None %}<span class="summary__was" title="By the scans">{{ row.12.hours }}</span> <strong>{{ row.8 }}</strong>{% else %}{{ row.8 }}{% endif %}</td>
+                            <td>{% if row.13 %}<span class="ui-chip ui-chip--info" title="By {{ row.13.created_by.get_full_name|default:row.13.created_by.email }}, {{ row.13.created_at|date:'d M Y H:i' }}: {{ row.13.reason }}">By hand</span>{% else %}<span class="ui-chip">Scans</span>{% endif %}</td>
+                            <td><button class="ui-btn ui-btn--sm" type="button" data-summary-open="{% url 'payroll:attendance_summary_person' row.11 %}?{{ query }}">{% include "ui/icon.html" with name="edit" small=True %} {% if locked %}See{% else %}Change{% endif %}</button></td>
                         </tr>
                     {% empty %}
                         <tr><td colspan="11">{% if show == "need" %}Nobody needs a look: every working day has its check-in and check-out.{% elif show == "hand" %}Nobody's days were changed by hand in this period.{% else %}Nobody has attendance days in this period.{% endif %}</td></tr>
