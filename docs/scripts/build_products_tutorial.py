@@ -186,8 +186,8 @@ story += [
       "step you need. Every page of the software ends with a <b>Next step</b> box that says what to do next."),
     Spacer(1, 6 * mm), flow_diagram(), Spacer(1, 6 * mm),
     box("How every screen works", [
-        "&bull; <b>The menu</b>: Inventory &rarr; Start here, then one dropdown per kind of work: Setup, Materials, "
-        "Products, Stock, Production, Sales, Purchase, Reports, Tools.",
+        "&bull; <b>The menu</b>: Inventory, then one dropdown per kind of work: Setup (Start here is its first "
+        "link), Materials, Products, Stock, Production, Sales, Purchase, Reports, Tools.",
         "&bull; <b>Saving</b>: the answer shows just above the Save button - green when saved, red when not, with "
         "each wrong box outlined red and its reason under it. What you typed stays.",
         "&bull; <b>Dates</b>: every date box opens the same calendar. A date that cannot be right is refused.",
@@ -251,7 +251,7 @@ story += [
         ("A4", "Product page &rarr; card <b>Recipe</b>",
          "One batch makes 240. Add material: Flour 18, Sugar 5, Wrapper 240, Carton 10.",
          "\"Recipe: one batch makes 240 PCS\", each line with its cost and \"enough for N batches\"."),
-        ("A5", "Inventory &rarr; <b>Production</b> &rarr; Cost rates (optional)",
+        ("A5", "Inventory &rarr; <b>Setup</b> &rarr; Cost rates (optional)",
          "Line worker 75 per hour; Oven 300 per hour. On the product: Add cost (people, machine, gas).",
          "The full cost of one batch and of one packet."),
     ]),
@@ -283,7 +283,7 @@ story += [
 ]
 
 # ------------------------------------------------------------------ start here
-story += section(0, "Start here", "Inventory &rarr; Start here",
+story += section(0, "Start here", "Inventory &rarr; Setup &rarr; Start here",
                  "The first page: tiles (low or out, value in stock, set-up steps done), the <b>What to do</b> "
                  "checklist and the latest productions.")
 story += [
@@ -293,7 +293,7 @@ story += [
 ]
 
 # ------------------------------------------------------------------ setup
-story += section(1, "Setup", "Inventory &rarr; Setup &rarr; Units / Item categories / Stores / Bins / Inventory settings",
+story += section(1, "Setup", "Inventory &rarr; Setup",
                  "The lists everything else uses. Done once; changed rarely.")
 story += [grid(("Page", "What you add"), [
     ("Units", "<b>Add standard units</b> adds KG, PCS, BAG, CARTON ... ; or add your own (code, name, decimals)."),
@@ -303,6 +303,9 @@ story += [grid(("Page", "What you add"), [
     ("Bins", "Optional shelves or racks inside a store."),
     ("Inventory settings", "Average cost for the whole company or per store; expiry warning days; label sizes; "
                            "<b>Warranty</b> on or off (off by default)."),
+    ("Suppliers, Customers", "Who you buy from and sell to (code, name, payment terms, credit limit)."),
+    ("Price lists", "Optional: a customer's own prices; Sell uses them first."),
+    ("Cost rates", "What an hour of a worker or a machine costs (Production)."),
 ], (36, 134))]
 
 # ------------------------------------------------------------------ materials
@@ -386,7 +389,7 @@ story += steps([
     "With no recipe yet the page asks <b>how much one batch makes</b>: write it and Save.",
     "<b>Add material</b>: any material, a new one made right there, or something else made here (a cream). Write how "
     "much <b>one batch</b> uses and its normal wastage %.",
-    "<b>Cost rates</b> (Inventory &rarr; Production &rarr; Cost rates): what an hour of a worker or a machine costs.",
+    "<b>Cost rates</b> (Inventory &rarr; Setup &rarr; Cost rates): what an hour of a worker or a machine costs.",
     "<b>Add cost</b>: people x hours x rate, machine hours x rate, a fixed amount per batch (gas), or a % of the "
     "materials.",
 ])
@@ -460,7 +463,8 @@ story += [box("Dates of what is made", [
 # ------------------------------------------------------------------ stock, move
 story += section(8, "Stock and Move stock", "Inventory &rarr; Stock &rarr; Stock / Move stock",
                  "<b>Stock</b>: every item, how much, where, its value and status, and what expires first. "
-                 "<b>Move stock</b>: send stock from one store to another.")
+                 "<b>Move stock</b>: send stock from one store to another. Adjustments and Stock counts (same "
+                 "dropdown) correct stock, with approval.")
 story += steps([
     "Move stock: From store, To store, date; each line item, quantity, unit and (if you want) the batch.",
     "<b>Send it</b>: the stock waits <b>in transit</b>. The other store presses <b>Receive</b> on the Move stock list.",
@@ -482,7 +486,7 @@ story += [fields([
                     "than the store has: refused, nothing saved.")]
 
 # ------------------------------------------------------------------ warranty
-story += section(10, "Warranty", "Inventory &rarr; Products &rarr; Warranty (only when switched on)",
+story += section(10, "Warranty", "Inventory &rarr; Tools &rarr; Warranty (only when switched on)",
                  "Serial numbers and claims.", "Warranty on (Setup &rarr; Inventory settings), and months on the items.")
 story += steps([
     "<b>Serial numbers</b>: made when a production finishes; <b>Serial numbers in</b> for units you received; "
@@ -496,7 +500,7 @@ story += [grid(("The form says", "What you do"), [
 ], (60, 110)), Spacer(1, 4), P("The faulty unit can go into the rejected store; a new unit leaves a store."),
     box("Reports", ["Inventory &rarr; Reports: production cost, material use, waste, shortages, stock on hand, "
                     "valuation, batch and expiry, reorder, purchase and sales registers - each with filters, "
-                    "Excel and PDF. Tools: Scan and Labels."]),
+                    "Excel and PDF; Month-end close beside it. Tools: Scan, Labels, Warranty."]),
 ]
 
 # ------------------------------------------------------------------ questions
