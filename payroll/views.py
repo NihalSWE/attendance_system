@@ -106,11 +106,13 @@ def payroll_home(request):
         branch_list = list(branch_list)
         departments = list(Department.objects.filter(branch__in=branch_list, status=ActiveStatus.ACTIVE)
                            .select_related("branch").order_by("name"))
-        branch, department = request.GET.get("branch", ""), request.GET.get("department", "")
-        if branch.isdigit():
-            shown = shown.filter(employee_assignment_at_period_end__branch_id=int(branch))
-        if department.isdigit():
-            shown = shown.filter(employee_assignment_at_period_end__department_id=int(department))
+        # Several of each may be chosen (2026-10-31).
+        branch = [int(v) for v in request.GET.getlist("branch") if v.isdigit()]
+        department = [int(v) for v in request.GET.getlist("department") if v.isdigit()]
+        if branch:
+            shown = shown.filter(employee_assignment_at_period_end__branch_id__in=branch)
+        if department:
+            shown = shown.filter(employee_assignment_at_period_end__department_id__in=department)
         view = "departments" if request.GET.get("view") == "departments" else "people"
         totals = shown.aggregate(employees=Count("pk"), gross=Sum("gross_earnings"),
                                  deductions=Sum("total_deductions"), net=Sum("net_pay"))
@@ -158,10 +160,10 @@ def payroll_home(request):
         "departments": departments,
         "branch": branch,
         "department": department,
-        "filters": urlencode({key: value for key, value in (
+        "filters": urlencode([(key, value) for key, value in (
             ("month", month), ("year", year), ("group", pay["pay_group"].pk if pay["pay_group"] else ""),
-            ("week", pay["week_first"].isoformat() if pay["week_first"] else ""), ("branch", branch),
-            ("department", department)) if value}),
+            ("week", pay["week_first"].isoformat() if pay["week_first"] else ""))
+            if value] + [("branch", v) for v in branch] + [("department", v) for v in department]),
         "company_wide": company_wide,
         "can_manage": membership.role in STRUCTURE_ROLES,
         # Owner/admin generate the whole month; a branch its own people. A
@@ -256,7 +258,7 @@ def _salary_download(request, membership, run, pay, by_department, totals, curre
         content = exports.table_pdf(title=title, lines=lines, headers=SALARY_HEADERS, rows=rows,
                                     numeric=numeric, widths={0: 2, 1: 2.4, 7: 1.4, 8: 1.4, 9: 1.4})
     exports.record(actor=request.user, membership=membership, page="salary-by-department", fmt=fmt,
-                   filters={key: request.GET.get(key, "") for key in
+                   filters={key: ",".join(request.GET.getlist(key)) for key in
                             ("month", "year", "group", "week", "branch", "department")},
                    count=totals["employees"])
     name = exports.filename("salary-by-department", membership.company.name,

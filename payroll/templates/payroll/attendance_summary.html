@@ -49,15 +49,13 @@
         {% endif %}
         {% if branches|length > 1 %}
             <label class="sr-only" for="sum-branch">Branch</label>
-            <select class="input select js-select" id="sum-branch" name="branch">
-                <option value="">All branches</option>
-                {% for option in branches %}<option value="{{ option.pk }}"{% if option.pk|stringformat:"s" == branch %} selected{% endif %}>{{ option.name }}</option>{% endfor %}
+            <select class="input select js-select2" id="sum-branch" name="branch" multiple data-placeholder="All branches">
+                {% for option in branches %}<option value="{{ option.pk }}"{% if option.pk in branch %} selected{% endif %}>{{ option.name }}</option>{% endfor %}
             </select>
         {% endif %}
         <label class="sr-only" for="sum-department">Department</label>
-        <select class="input select js-select" id="sum-department" name="department">
-            <option value="">All departments</option>
-            {% for option in departments %}<option value="{{ option.pk }}"{% if option.pk|stringformat:"s" == department %} selected{% endif %}>{{ option.name }}{% if branches|length > 1 %} · {{ option.branch.name }}{% endif %}</option>{% endfor %}
+        <select class="input select js-select2" id="sum-department" name="department" multiple data-placeholder="All departments">
+            {% for option in departments %}<option value="{{ option.pk }}"{% if option.pk in department %} selected{% endif %}>{{ option.name }}{% if branches|length > 1 %} · {{ option.branch.name }}{% endif %}</option>{% endfor %}
         </select>
         <input type="hidden" name="show" value="{{ show }}">
         <button class="ui-btn" type="submit">Show</button>

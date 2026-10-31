@@ -109,9 +109,9 @@ def _shown(person):
 
 
 def _query(request, **extra):
-    keep = {key: request.GET[key] for key in ("year", "month", "group", "week", "branch", "department", "show")
-            if request.GET.get(key)}
-    keep.update(extra)
+    keep = [(key, value) for key in ("year", "month", "group", "week", "branch", "department", "show")
+            for value in request.GET.getlist(key) if value and key not in extra]
+    keep += list(extra.items())
     return urlencode(keep)
 
 
@@ -132,13 +132,14 @@ def attendance_summary(request):
         branch_list = list(branch_list)
         departments = list(Department.objects.filter(branch__in=branch_list, status="active")
                            .select_related("branch").order_by("name"))
-    branch = request.GET.get("branch", "")
-    department = request.GET.get("department", "")
+    # Several of each may be chosen (2026-10-31).
+    branch = [int(v) for v in request.GET.getlist("branch") if v.isdigit()]
+    department = [int(v) for v in request.GET.getlist("department") if v.isdigit()]
     show = request.GET.get("show") if request.GET.get("show") in dict(SHOW) else "need"
-    if branch.isdigit():
-        people = [p for p in people if p["placement"].branch_id == int(branch)]
-    if department.isdigit():
-        people = [p for p in people if p["placement"].department_id == int(department)]
+    if branch:
+        people = [p for p in people if p["placement"].branch_id in branch]
+    if department:
+        people = [p for p in people if p["placement"].department_id in department]
     counts = {"all": len(people), "need": sum(1 for p in people if p["need"]),
               "hand": sum(1 for p in people if p["override"])}
     listed = [p for p in people if show == "all" or (show == "need" and p["need"])

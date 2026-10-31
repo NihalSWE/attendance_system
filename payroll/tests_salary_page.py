@@ -41,6 +41,12 @@ class SalaryPageTests(OvertimeBase):
         self.assertEqual(page.context["totals"]["employees"], 1)
         self.assertLess(page.context["totals"]["gross"], both)
         self.assertNotContains(page, "Rahim")
+        # Several departments at once (2026-10-31).
+        software = page.context["departments"][1] if page.context["departments"][0].pk == self.sewing.pk             else page.context["departments"][0]
+        page = self.client.get(self.page, {**AUGUST, "department": [self.sewing.pk, software.pk]})
+        self.assertEqual(page.context["totals"]["employees"], 2)
+        self.assertContains(page, f"department={self.sewing.pk}&amp;department={software.pk}")
+        page = self.client.get(self.page, {**AUGUST, "department": self.sewing.pk})
         # The next step is the one main button; the rest is under More.
         self.assertContains(page, "Submit August for approval")
         self.assertContains(page, "Salary settings")
