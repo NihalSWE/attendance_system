@@ -1201,13 +1201,20 @@ def payslip_context(record, *, for_employee=False):
         .exclude(status=PenaltyAssessment.Status.REVERSED)
         .order_by("period_start", "pk")
     )
+    # Present days set by hand (2026-10-31): the counts the pay was worked out
+    # from, not the scanned days, with who set them and why.
+    by_hand = (record.calculation_snapshot or {}).get("override")
+    counts = summarise(days)
+    if by_hand:
+        counts = {**counts, **(record.calculation_snapshot.get("counts") or {})}
     return {
         "record": record,
         "period": period,
         "assignment": record.employee_assignment_at_period_end,
         "earnings": [line for line in lines if line.line_type == "earning"],
         "deductions": [line for line in lines if line.line_type == "deduction"],
-        "counts": summarise(days),
+        "counts": counts,
+        "by_hand": by_hand,
         "days": days,
         "penalties": penalty_list,
         "can_waive": (

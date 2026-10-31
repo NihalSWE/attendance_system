@@ -150,6 +150,22 @@ class OverrideTests(OvertimeBase):
         with use_company(self.company):
             self.assertEqual(PayrollRun.objects.get().status, "submitted")
 
+    def test_the_payslip_says_so(self):
+        from django.urls import reverse
+
+        from common.tests_exports import pdf_text
+
+        self.generate()
+        self.set(present=20)
+        _run, record = self.generate()
+        self.client.force_login(self.admin)
+        page = self.client.get(reverse("payroll:payslip", args=[record.pk]))
+        self.assertContains(page, "Present days set by hand: 20")
+        self.assertContains(page, "Forgot to check out")
+        self.assertEqual(page.context["counts"]["present"], 20)
+        pdf = self.client.get(reverse("payroll:payslip", args=[record.pk]), {"format": "pdf"})
+        self.assertIn("Set by hand", pdf_text(pdf.content))
+
     def test_hourly_pay_takes_hours(self):
         with use_company(self.company):
             EmployeeCompensation.objects.filter(employee=self.employee).update(
