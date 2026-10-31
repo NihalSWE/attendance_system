@@ -1115,3 +1115,55 @@ class LfaClaim(TenantOwned, ActorTracked):
 
     def __str__(self):
         return f"LFA {self.employee_id} {self.cycle_start:%Y-%m-%d} {self.status}"
+
+
+class DaysOverride(TenantOwned, ActorTracked):
+    """Present days (or, for hourly pay, hours) set by hand for one person's
+    salary month or week (2026-10-31, payroll/overrides.py).
+
+    The attendance days are never rewritten: the salary applies this on top of
+    them, so "Back to scans" is exact. Every change is a new row; the one in
+    force is ``active``, the earlier ones ``replaced``, and going back to the
+    scans makes it ``reverted`` - the history stays.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "In force"
+        REPLACED = "replaced", "Changed again"
+        REVERTED = "reverted", "Back to scans"
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.PROTECT,
+                                 related_name="days_overrides")
+    # The period: a salary month of the Monthly staff (no pay group) or a
+    # weekly pay group's week.
+    pay_group = models.ForeignKey(PayGroup, null=True, blank=True, on_delete=models.PROTECT,
+                                  related_name="+")
+    start_date = models.DateField()
+    end_date = models.DateField()
+    present_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    hours = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    # What the scans said when it was set, for the history ("scans 15 -> 19").
+    scan_present_days = models.PositiveSmallIntegerField(null=True, blank=True)
+    scan_hours = models.DecimalField(max_digits=7, decimal_places=2, null=True, blank=True)
+    reason = models.CharField(max_length=255)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    ended_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                 on_delete=models.SET_NULL, related_name="+")
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "payroll_days_override"
+        ordering = ("-created_at", "-pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company", "employee", "start_date", "end_date"],
+                condition=models.Q(status="active"), name="uniq_active_days_override"),
+            models.CheckConstraint(
+                condition=models.Q(present_days__isnull=False) | models.Q(hours__isnull=False),
+                name="chk_days_override_has_value"),
+        ]
+        indexes = [models.Index(fields=["company", "start_date", "end_date"])]
+
+    def __str__(self):
+        value = self.present_days if self.present_days is not None else f"{self.hours} h"
+        return f"{self.employee_id} {self.start_date:%Y-%m-%d}..{self.end_date:%Y-%m-%d}: {value}"
