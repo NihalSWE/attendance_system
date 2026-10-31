@@ -115,6 +115,8 @@ def clean_line(document, values):
         errors["expiry_date"] = "The expiry date is before the manufacture date."
     if mfg and mfg > document.work_date:
         errors["mfg_date"] = "Made after the opening day?"
+    elif mfg and mfg > timezone.localdate():
+        errors["mfg_date"] = "That day has not come yet."
     if errors:
         raise ValidationError(errors)
     values = dict(values, batch_no=batch_no, expiry_date=expiry, factor=factors[uom.pk])

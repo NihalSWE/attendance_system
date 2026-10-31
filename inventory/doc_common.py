@@ -17,7 +17,7 @@ from inventory import access
 from inventory.masters import _writable, plain, units_for
 
 __all__ = ["_writable", "plain", "require", "get", "audit", "unit_factor", "check_qty",
-           "check_own_approval", "now", "local_today", "expiry_from"]
+           "check_own_approval", "now", "local_today", "expiry_from", "made_dates"]
 
 OWNER_ROLES = ("owner", "company_admin")
 
@@ -78,6 +78,28 @@ def local_today(company):
     from zoneinfo import ZoneInfo
 
     return timezone.now().astimezone(ZoneInfo(company.timezone or "Asia/Dhaka")).date()
+
+
+def made_dates(item, mfg, expiry, *, made_on=None, day_field="output_date"):
+    """The expiry of something made here on ``mfg`` (2026-10-31, list item 11):
+    not made on a day that has not come (nor after ``made_on``), the expiry
+    not before it and not after the made day + the shelf life (empty: that)."""
+    if mfg > timezone.localdate():
+        raise ValidationError({day_field: "That day has not come yet: give the day it was made."})
+    if made_on and mfg > made_on:
+        raise ValidationError({"mfg_date": "Made after the day it came out?"})
+    expiry = expiry_from(item, mfg, expiry)
+    if item.track_expiry and not expiry:
+        raise ValidationError({"expiry_date": f"{item.name} has an expiry date: give it (or set its shelf life)."})
+    if expiry and expiry < mfg:
+        raise ValidationError({"expiry_date": "The expiry date is before the day it was made."})
+    if expiry and item.shelf_life_days:
+        latest = mfg + datetime.timedelta(days=item.shelf_life_days)
+        if expiry > latest:
+            raise ValidationError({"expiry_date": (
+                f"{item.name} keeps {item.shelf_life_days} days: made on {mfg:%d %b %Y}, it expires on "
+                f"{latest:%d %b %Y} at the latest. Leave it empty to use that.")})
+    return expiry
 
 
 def expiry_from(item, mfg, expiry):

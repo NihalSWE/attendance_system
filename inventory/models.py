@@ -266,6 +266,10 @@ class Item(TenantOwned, ActorTracked):
     # for a material (the supplier's). Only with the company's warranty on.
     warranty_months = models.PositiveSmallIntegerField("Warranty (months)", null=True, blank=True,
                                                        validators=[MaxValueValidator(240)])
+    # Within the warranty, the first months in which a faulty unit is replaced
+    # (2026-10-31); after them, to the warranty's end, it is repaired.
+    guarantee_months = models.PositiveSmallIntegerField("Guarantee (months)", null=True, blank=True,
+                                                        validators=[MaxValueValidator(240)])
     serial_numbers = models.BooleanField("A serial number for each unit", default=False)
     min_stock = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
     reorder_point = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(ZERO)])
@@ -327,6 +331,11 @@ class Item(TenantOwned, ActorTracked):
         # store items are bought.
         if self.sourcing != Item.Sourcing.BUY and self.kind not in MADE_KINDS:
             errors["sourcing"] = "Only a product or a material is made here; this one is bought."
+        if self.guarantee_months and not self.warranty_months:
+            errors["guarantee_months"] = "Give the warranty too: the guarantee is its first months."
+        elif self.guarantee_months and self.guarantee_months > self.warranty_months:
+            errors["guarantee_months"] = (f"Longer than the warranty ({self.warranty_months} months): "
+                                          "the guarantee is part of it.")
         if self.keep_by == Item.KeepBy.DAYS and not self.keep_days:
             errors["keep_days"] = "Say how many days of sales to keep."
         if self.category_id:
@@ -861,6 +870,7 @@ class WarrantyClaim(TenantOwned, ActorTracked):
                                  related_name="+")
     sold_on = models.DateField("Delivered on", null=True, blank=True)
     covered_until = models.DateField(null=True, blank=True)
+    guarantee_until = models.DateField(null=True, blank=True)
     covered = models.BooleanField(default=False)
     problem = models.CharField(max_length=255)
     outcome = models.CharField(max_length=16, choices=Outcome.choices)

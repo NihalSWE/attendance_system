@@ -113,10 +113,11 @@ def _lines(request, company_id, *, cost=False, price=False, batch_no=False, cond
                           sale_price=values.get("sale"))
         if batch_no:
             line.batch_no = post.get(f"batch_{row}", "").strip()
-            expiry = post.get(f"expiry_{row}", "").strip()
-            line.expiry_date = parse_date(expiry) if expiry else None
-            if expiry and line.expiry_date is None:
-                errors[f"expiry_{row}"] = ["Pick a date."]
+            for box, name in (("expiry", "expiry_date"), ("mfg", "mfg_date")):
+                typed = post.get(f"{box}_{row}", "").strip()
+                setattr(line, name, parse_date(typed) if typed else None)
+                if typed and getattr(line, name) is None:
+                    errors[f"{box}_{row}"] = ["Pick a date."]
         if condition:
             line.condition = "damaged" if post.get(f"condition_{row}") == "damaged" else "good"
         if batch and post.get(f"batch_{row}", "").isdigit():

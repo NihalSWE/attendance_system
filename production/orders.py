@@ -37,8 +37,8 @@ from inventory.doc_common import (
     audit,
     check_own_approval,
     check_qty,
-    expiry_from,
     get,
+    made_dates,
     now,
     plain,
     require,
@@ -419,14 +419,14 @@ def post_output(*, actor, company_id, order_id, values):
         location = values.get("location")
         if location is not None and location.warehouse_id != order.output_warehouse_id:
             raise ValidationError({"location": f"Bin {location.code} is not in {order.output_warehouse.code}."})
-        mfg = values.get("mfg_date") or values.get("output_date")
+        typed = values.get("mfg_date")
+        mfg = typed or values.get("output_date")
         if values.get("output_date") is None or mfg is None:
             raise ValidationError({"output_date": "Give the date."})
         values["mfg_date"] = mfg
-        expiry = expiry_from(item, mfg, values.get("expiry_date"))
-        if item.track_expiry and not expiry:
-            raise ValidationError({"expiry_date": f"{item.code} has an expiry date: give it (or set its shelf life)."})
-        values["expiry_date"] = expiry
+        values["expiry_date"] = expiry = made_dates(
+            item, mfg, values.get("expiry_date"), made_on=values["output_date"],
+            day_field="mfg_date" if typed else "output_date")
         cost = material_cost(order)
         good_base = (values["qty_good"] * factor).quantize(FOUR)
         if cost <= 0:

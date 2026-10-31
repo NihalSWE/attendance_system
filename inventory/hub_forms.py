@@ -32,7 +32,8 @@ class _HubItemForm(ItemForm):
     UNIT_FROM = {"min_stock": "base_uom", "pack_factor": "base_uom", "sale_price": "base_uom",
                  "pack_price": "pack_uom"}
     #: ``{box: fixed words beside it}``.
-    UNIT_TEXT = {"shelf_life_days": "days", "keep_days": "days", "vat_rate": "%", "warranty_months": "months"}
+    UNIT_TEXT = {"shelf_life_days": "days", "keep_days": "days", "vat_rate": "%", "warranty_months": "months",
+                 "guarantee_months": "months"}
     BATCH_HINT = "Each delivery gets its own batch number."
     PACK_LABELS = {}
 
@@ -92,7 +93,8 @@ class _HubItemForm(ItemForm):
         "shelf_life_days": ("Shelf life", ""),
         "qc_required": ("QC before use", "New stock waits until it passes a quality check."),
         "batch_per_mix": ("Batch number per mix", "Off: one batch number per production."),
-        "warranty_months": ("Warranty", "From the delivery date (sold) or received date (bought)."),
+        "warranty_months": ("Warranty (repair)", "From the delivery date (sold) or received date (bought)."),
+        "guarantee_months": ("Guarantee (replace)", "The first months of the warranty; not longer than it."),
         "serial_numbers": ("Serial number per unit", "Each unit is scanned out on delivery."),
         "keep_by": ("Minimum stock as", ""),
         "keep_days": ("Days of sales", "From the average sold per day over the last 30 days."),
@@ -164,7 +166,8 @@ class MaterialForm(_HubItemForm):
          ("min_stock", "reorder_qty", "default_warehouse", "standard_cost")),
         ("Batches & expiry", "For food, chemicals and anything that expires.",
          ("track_batch", "track_expiry", "shelf_life_days", "qc_required")),
-        ("Warranty", "The supplier's warranty on what you buy.", ("warranty_months", "serial_numbers")),
+        ("Warranty", "The supplier's warranty on what you buy.",
+         ("warranty_months", "guarantee_months", "serial_numbers")),
     )
     PACK_LABELS = {"pack_uom": "Purchase unit", "pack_factor_help": ""}
 
@@ -214,7 +217,7 @@ class ProductForm(_HubItemForm):
          ("keep_by", "min_stock", "keep_days", "reorder_qty", "default_warehouse")),
         ("Batches & expiry", "For food, medicine and anything that expires.",
          ("track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix")),
-        ("Warranty", "Your warranty to the customer.", ("warranty_months", "serial_numbers")),
+        ("Warranty", "Your warranty to the customer.", ("warranty_months", "guarantee_months", "serial_numbers")),
     )
     BATCH_HINT = "Each production or delivery gets its own batch number."
     PACK_LABELS = {"pack_uom": "Selling pack", "pack_factor_help": ""}

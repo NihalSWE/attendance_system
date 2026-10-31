@@ -11,6 +11,10 @@
 - **Claims**: found by serial (or by item and the day it was delivered); the
   page says whether it is still covered. Replace, repair (cost), refund
   (amount) or refuse (reason). Covering one out of warranty needs a reason.
+- **Guarantee and warranty** (2026-10-31): the guarantee is the warranty's
+  first months. In guarantee a faulty unit is replaced; after it, in
+  warranty, it is repaired; anything else (a refund, a repair in guarantee,
+  a replacement after it) needs a reason.
   The faulty unit can go into a store (the rejected store); the new unit
   leaves one.
 
@@ -63,6 +67,25 @@ def covered_until(item, start):
     if not item.warranty_months or not start:
         return None
     return add_months(start, item.warranty_months)
+
+
+def guaranteed_until(item, start):
+    if not item.guarantee_months or not start:
+        return None
+    return add_months(start, item.guarantee_months)
+
+
+def stage(item, start, day):
+    """``(stage, words, guarantee_until, warranty_until)`` on ``day``: "guarantee"
+    (replace), "warranty" (repair), "out" or "none"."""
+    until, guarantee = covered_until(item, start), guaranteed_until(item, start)
+    if guarantee and day <= guarantee:
+        return "guarantee", f"In guarantee until {guarantee:%d %b %Y}: replace", guarantee, until
+    if until and day <= until:
+        return "warranty", f"In warranty until {until:%d %b %Y}: repair", guarantee, until
+    if until:
+        return "out", f"Out of warranty since {until:%d %b %Y}", guarantee, until
+    return "none", f"{item.name} carries no warranty", guarantee, until
 
 
 def codes(text):
@@ -181,9 +204,10 @@ def lookup(company_id, code, today=None):
     if row is None:
         return None
     start = row.delivered_on or row.received_on
-    until = covered_until(row.item, start)
-    return {"serial": row, "item": row.item, "start": start, "until": until,
-            "covered": bool(until and today <= until), "who": row.customer or row.supplier}
+    where, words, guarantee, until = stage(row.item, start, today)
+    return {"serial": row, "item": row.item, "start": start, "until": until, "guarantee_until": guarantee,
+            "covered": where in ("guarantee", "warranty"), "stage": where, "words": words,
+            "who": row.customer or row.supplier}
 
 
 # --- claims -------------------------------------------------------------------
@@ -227,15 +251,17 @@ def record_claim(*, actor, company_id, values):
         errors["outcome"] = "Choose what you do."
     if errors:
         raise ValidationError(errors)
-    until = covered_until(item, start)
-    covered = bool(until and day <= until)
+    where, words, guarantee, until = stage(item, start, day)
+    covered = where in ("guarantee", "warranty")
     reason = (values.get("reason") or "").strip()
     if outcome == Outcome.REFUSE and not reason:
         raise ValidationError({"reason": "Say why it is refused."})
-    if outcome != Outcome.REFUSE and not covered and not reason:
-        raise ValidationError({"reason": (f"Out of warranty since {until:%d %b %Y}" if until else
-                                          f"{item.name} carries no warranty")
-                               + ": refuse it, or say why you cover it."})
+    # Only what the date allows, unless a reason is given (2026-10-31).
+    matching = {"guarantee": Outcome.REPLACE, "warranty": Outcome.REPAIR}.get(where)
+    if outcome != Outcome.REFUSE and outcome != matching and not reason:
+        chosen = Outcome(outcome).label.lower()
+        raise ValidationError({"reason": words + (f": say why you {chosen} instead." if matching else
+                                                  ": refuse it, or say why you cover it.")})
     if serial is not None and WarrantyClaim.all_objects.filter(
             company_id=company_id, serial=serial, outcome__in=(Outcome.REPLACE, Outcome.REFUND)).exists():
         raise ValidationError({"serial": f"{serial.serial} was replaced or refunded already."})
@@ -247,7 +273,8 @@ def record_claim(*, actor, company_id, values):
     with use_company(company_id):
         claim = WarrantyClaim(
             company=membership.company, created_by=actor, updated_by=actor, claim_date=day, item=item,
-            serial=serial, customer=customer, sold_on=start, covered_until=until, covered=covered,
+            serial=serial, customer=customer, sold_on=start, covered_until=until, guarantee_until=guarantee,
+            covered=covered,
             problem=values["problem"].strip()[:255], outcome=outcome, cost=values.get("cost") or ZERO,
             reason=reason[:255], back_to=back_to, replaced_from=replaced_from,
             number=posting.next_number(company_id, WarrantyClaim.DOC_TYPE, WarrantyClaim.PREFIX, day.year))

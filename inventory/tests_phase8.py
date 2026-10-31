@@ -28,7 +28,9 @@ class WarrantyFixture(SalesFixture):
     def setUp(self):
         super().setUp()
         switch_on(self)
-        Item.all_objects.filter(pk=self.juice.pk).update(warranty_months=12, serial_numbers=True)
+        # 12 months' warranty, the first 3 a guarantee (replace; 2026-10-31).
+        Item.all_objects.filter(pk=self.juice.pk).update(warranty_months=12, guarantee_months=3,
+                                                         serial_numbers=True)
         self.juice.refresh_from_db()
         self.codes = ["JU-001", "JU-002", "JU-003", "JU-004"]
         warranty.register(**self.kw, item=self.juice, serials=self.codes, received_on=DAY)
@@ -44,8 +46,9 @@ class WarrantyFixture(SalesFixture):
         return delivery
 
     def claim(self, **values):
+        # After the guarantee, in warranty: a repair.
         return warranty.record_claim(**self.kw, values={"problem": "Leaks", "outcome": "repair",
-                                                        "claim_date": DAY + datetime.timedelta(days=30), **values})
+                                                        "claim_date": DAY + datetime.timedelta(days=120), **values})
 
 
 class SwitchTests(SalesFixture, TestCase):
@@ -99,14 +102,15 @@ class ClaimTests(WarrantyFixture, TestCase):
         self.assertEqual(found["until"], datetime.date(2027, 10, 1))
         before = StockBalance.all_objects.filter(item=self.juice, warehouse=self.fgw)
         before = sum(row.qty_on_hand for row in before)
-        claim = self.claim(serial="JU-001", outcome="replace", back_to=self.rejected, replaced_from=self.fgw)
+        claim = self.claim(serial="JU-001", outcome="replace", back_to=self.rejected, replaced_from=self.fgw,
+                           claim_date=DAY + datetime.timedelta(days=30))
         self.assertEqual((claim.covered, claim.customer), (True, self.customer))
         after = sum(row.qty_on_hand for row in StockBalance.all_objects.filter(item=self.juice, warehouse=self.fgw))
         self.assertEqual(after, before - 1)
         self.assertEqual(StockBalance.all_objects.get(item=self.juice, warehouse=self.rejected).qty_on_hand, D("1"))
         self.assertEqual(SerialNumber.all_objects.get(serial="JU-001").status, "returned")
         with self.assertRaisesMessage(ValidationError, "replaced or refunded already"):
-            self.claim(serial="JU-001", outcome="refund")
+            self.claim(serial="JU-001", outcome="refund", reason="Asked for the money")
 
     def test_out_of_warranty_needs_a_reason_to_cover_it(self):
         late = DAY + datetime.timedelta(days=400)
@@ -142,9 +146,9 @@ class PageTests(WarrantyFixture, TestCase):
         warranty.deliver(**self.kw, delivery=self.delivered("1"), serials=["JU-004"])
         body = self.client.get(reverse("inventory:serial_lookup"), {"serial": "ju-004"}).json()
         self.assertTrue(body["covered"])
-        self.assertIn("covered until 01 Oct 2027", body["text"])
+        self.assertIn("In guarantee until 01 Jan 2027: replace", body["text"])
         reply = self.client.post(reverse("inventory:claim_save"), {
-            "serial": "JU-004", "claim_date": "2026-11-01", "problem": "Cracked", "outcome": "repair",
+            "serial": "JU-004", "claim_date": "2027-02-01", "problem": "Cracked", "outcome": "repair",
             "cost": "120"}, **FETCH).json()
         self.assertTrue(reply["ok"], reply)
         self.assertEqual(WarrantyClaim.all_objects.get(company=self.company).cost, D("120"))

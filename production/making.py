@@ -29,7 +29,7 @@ from django.db import transaction
 
 from common.tenant import use_company
 from inventory import posting
-from inventory.doc_common import audit, expiry_from, now, plain, require
+from inventory.doc_common import audit, made_dates, now, plain, require
 from inventory.models import Batch, MoveType, StockMove
 from inventory.posting import UNUSABLE_STORES
 from production import orders, planning
@@ -306,9 +306,7 @@ def finish(*, actor, company_id, order_id, values):
         return order, None
 
     unit_cost = ((material + other) / good).quantize(FOUR, ROUND_HALF_UP)
-    expiry = expiry_from(item, day, values.get("expiry_date"))
-    if item.track_expiry and not expiry:
-        raise ValidationError({"expiry_date": f"{item.name} has an expiry date: give it (or set its shelf life)."})
+    expiry = made_dates(item, day, values.get("expiry_date"))
     status = Batch.Status.QUARANTINE if item.qc_required else Batch.Status.RELEASED
     batches = []
     with use_company(company_id):
