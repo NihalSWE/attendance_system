@@ -210,6 +210,16 @@
             </div>
         {% elif view == 'departments' %}
             {# One table: a row per department, its people in the same columns (opened with the row). #}
+            {# Search, Show N and pages work in the page (payroll/js/salary.js), with the lists' own controls. #}
+            <div data-dept-list>
+            <div class="dt-layout-row salary__dept-tools">
+                <div class="dt-length"><label for="dept-length">Show</label>
+                    <select class="dt-input" id="dept-length" data-dept-length>
+                        <option value="10">10</option><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option>
+                    </select></div>
+                <div class="dt-search"><label for="dept-search">Search all results:</label>
+                    <input class="dt-input" id="dept-search" type="search" data-dept-search placeholder="Department, branch, name or ID"></div>
+            </div>
             <div class="table-wrap">
                 <table class="table salary__departments">
                     <colgroup>
@@ -222,7 +232,7 @@
                         <th class="numeric">Net pay</th><th><span class="sr-only">Payslip</span></th>
                     </tr></thead>
                     {% for group in by_department %}
-                        <tbody class="salary__group">
+                        <tbody class="salary__group" data-search="{{ group.name|lower }} {{ group.branch|lower }}">
                             <tr class="salary__group-row" data-salary-toggle tabindex="0" aria-expanded="false">
                                 <td class="numeric salary__sl">{{ forloop.counter }}</td>
                                 <td><span class="salary__chevron" aria-hidden="true">›</span><strong>{{ group.name }}</strong></td>
@@ -235,7 +245,7 @@
                             </tr>
                             {% with outer=forloop.counter %}
                                 {% for record in group.records %}
-                                    <tr class="salary__person" hidden>
+                                    <tr class="salary__person" hidden data-search="{{ record.employee.full_name|lower }} {{ record.employee_assignment_at_period_end.employee_code|lower }}">
                                         <td class="numeric salary__sl">{{ outer }}.{{ forloop.counter }}</td>
                                         <td class="salary__person-name">{{ record.employee.full_name }}{% if record.calculation_snapshot.override %} <span class="ui-chip ui-chip--info" title="Present days set by hand">by hand</span>{% endif %}<span class="salary__code">{{ record.employee_assignment_at_period_end.employee_code }}</span></td>
                                         <td>{{ record.calculation_snapshot.pay_basis|title }}</td>
@@ -251,6 +261,7 @@
                     {% empty %}
                         <tbody><tr><td colspan="8">Nobody matches these filters.</td></tr></tbody>
                     {% endfor %}
+                    <tbody data-dept-none hidden><tr><td colspan="8" class="salary__none">No matching results.</td></tr></tbody>
                     <tfoot><tr class="salary__total">
                         <td></td>
                         <td>Total{% if not company_wide %} <span class="salary__code">in your branches</span>{% endif %}</td>
@@ -262,6 +273,11 @@
                         <td>{{ currency }}</td>
                     </tr></tfoot>
                 </table>
+            </div>
+            <div class="dt-layout-row">
+                <div class="dt-info" data-dept-info></div>
+                <div class="dt-paging"><nav aria-label="Pages" data-dept-pages></nav></div>
+            </div>
             </div>
         {% else %}
             <div class="table-wrap">
