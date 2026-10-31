@@ -51,19 +51,22 @@ def report_item(slug):
 # is shown). The menu tests follow this list. Hidden pages still open by
 # their address.
 INVENTORY_LINKS_SHOWN = {
+    # 2026-10-31 (list item 13): one link per job. Out: Stock on hand (Stock
+    # shows it), All items (Materials, Products, Spare parts, General items),
+    # Opening stock (Stock in → First count) and the Production menu's
+    # Production orders (Make); in: Reports.
     "inventory": (
-        "inventory:start", "inventory:materials", "inventory:products", "production:runs", "production:cost_rates", "inventory:stock_in", "inventory:stock_now",
-        "inventory:moves", "inventory:sales",
-        "inventory:warranty",
-        "inventory:settings", "inventory:units", "inventory:categories",
-        "inventory:stores", "inventory:bins", "inventory:items",
-        "inventory:spare_parts", "inventory:general_items",
-        "inventory:suppliers", "inventory:customers", "inventory:opening",
-        "inventory:stock", "inventory:scan", "inventory:labels",
+        "inventory:start",
+        "inventory:units", "inventory:categories", "inventory:stores", "inventory:bins", "inventory:settings",
+        "inventory:materials", "inventory:spare_parts", "inventory:general_items",
+        "inventory:products", "inventory:warranty",
+        "inventory:stock_now", "inventory:stock_in", "inventory:moves",
+        "production:runs", "production:cost_rates",
+        "inventory:sales", "inventory:customers",
+        "inventory:suppliers",
+        "inventory:reports",
+        "inventory:scan", "inventory:labels",
     ),
-    # 2026-10-26: Production orders shown; the recipe is on the finished
-    # good's own page now, so BOMs is not in the menu (its page still opens).
-    "production": ("production:orders",),
 }
 
 COMPANY_MENUS = (
@@ -152,52 +155,71 @@ INVENTORY_MENUS = (
     # Store & Inventory (docs/inventory/00-PLAN.md, Phase 1). Shown once the
     # platform owner enables the module, to those holding "View stock and items".
     ("inventory", "Inventory", (
-        # The work in its order first (2026-10-27, plan §3 and §15 1.5):
-        # Start here, Materials (only with Production), Products.
+        # One dropdown per kind of work (2026-10-31, list items 13-14): Setup,
+        # Materials, Products, Stock, Production, Sales, Purchase, Reports,
+        # Tools. A dropdown is the run of entries with the same ``group``.
         item("Start here", "inventory:start", needs="inventory.view"),
+        item("Units", "inventory:units", "inventory:units_edit", "inventory:units_status",
+             "inventory:standard_units", needs="inventory.view", group="Setup"),
+        item("Item categories", "inventory:categories", "inventory:categories_edit",
+             "inventory:categories_status", needs="inventory.view", group="Setup"),
+        item("Stores", "inventory:stores", "inventory:stores_edit", "inventory:stores_status",
+             needs="inventory.view", group="Setup"),
+        item("Bins", "inventory:bins", "inventory:bins_edit", "inventory:bins_status",
+             needs="inventory.view", group="Setup"),
+        item("Inventory settings", "inventory:settings", manage=True, needs="inventory.view", group="Setup"),
         item("Materials", "inventory:materials", "inventory:material", needs="inventory.view",
-             module="production"),
+             module="production", group="Materials"),
+        item("Spare parts", "inventory:spare_parts", "inventory:spare_parts_edit", "inventory:spare_parts_status",
+             needs="inventory.view", group="Materials"),
+        item("General items", "inventory:general_items", "inventory:general_items_edit",
+             "inventory:general_items_status", needs="inventory.view", group="Materials"),
         item("Products", "inventory:products", "inventory:product", "inventory:item_save",
-             needs="inventory.view"),
-        # Plan → Start → Finish (2026-10-27, plan §8).
-        item("Make", "production:runs", "production:run", "production:plan",
-             needs=("inventory.view", "production.plan", "production.execute"), module="production"),
+             needs="inventory.view", group="Products"),
         # Claims and serial numbers, once warranty is switched on (2026-10-27, plan §10).
         item("Warranty", "inventory:warranty", needs=("inventory.view", "inventory.warranty"),
-             module="warranty"),
-        # The everyday jobs in the new look (2026-10-28, plan §3, §15 9.4).
+             module="warranty", group="Products"),
+        item("Stock", "inventory:stock_now", needs="inventory.view", group="Stock"),
         item("Stock in", "inventory:stock_in", "inventory:stock_in_new",
-             needs=("inventory.view", "purchase.receive", "inventory.adjust")),
-        item("Stock", "inventory:stock_now", needs="inventory.view"),
-        item("Move stock", "inventory:moves", "inventory:move_new", needs=("inventory.view", "inventory.transfer")),
-        item("Sell", "inventory:sales", "inventory:sale_new",
-             needs=("inventory.view", "sales.order", "sales.deliver", "sales.invoice")),
+             needs=("inventory.view", "purchase.receive", "inventory.adjust"), group="Stock"),
+        item("Move stock", "inventory:moves", "inventory:move_new", needs=("inventory.view", "inventory.transfer"),
+             group="Stock"),
+        # Plan → Start → Finish (2026-10-27, plan §8).
+        item("Make", "production:runs", "production:run", "production:plan",
+             needs=("inventory.view", "production.plan", "production.execute"), module="production",
+             group="Production"),
         # What an hour of people or a machine costs (2026-10-27, plan §7.4).
         item("Cost rates", "production:cost_rates", "production:cost_rate_save",
              "production:cost_rate_status", needs=("inventory.view", "production.bom"),
-             module="production"),
+             module="production", group="Production"),
+        item("Sell", "inventory:sales", "inventory:sale_new",
+             needs=("inventory.view", "sales.order", "sales.deliver", "sales.invoice"), group="Sales"),
+        item("Customers", "inventory:customers", "inventory:customers_edit",
+             "inventory:customers_status", needs="inventory.view", group="Sales"),
+        item("Suppliers", "inventory:suppliers", "inventory:suppliers_edit",
+             "inventory:suppliers_status", needs="inventory.view", group="Purchase"),
+        item("Reports", "inventory:reports", *REPORT_URLS, needs=("inventory.view", *INVENTORY_REPORT_CODES),
+             group="Reports"),
+        item("Scan", "inventory:scan", needs="inventory.view", group="Tools"),
+        item("Labels", "inventory:labels", "inventory:label_print", "inventory:label_void",
+             "inventory:bin_labels_print", "inventory:package_labels", needs="inventory.view", group="Tools"),
+        # Not in the menu (2026-10-31: the same job has a page above); their
+        # pages still open by address and from the pages that need them.
         item("Dashboard", "inventory:dashboard", "inventory:home", needs="inventory.view"),
         item("Stock on hand", "inventory:stock", needs="inventory.view"),
-        item("Reports", "inventory:reports", *REPORT_URLS, needs=("inventory.view", *INVENTORY_REPORT_CODES)),
         item("Month-end close", "inventory:period_close", needs="inventory.period_close"),
         item("Go-live", "inventory:golive", "inventory:golive_count_sheet", "inventory:golive_compare",
              needs=("inventory.adjust", "inventory.adjust_approve")),
-        # One page per item type (2026-10-26), then every item together.
         # Raw materials, packaging and finished goods are Materials and
         # Products now (2026-10-27); their old pages still open by address.
         *[item(label, f"inventory:{key}", f"inventory:{key}_edit", f"inventory:{key}_status",
                needs="inventory.view", module=module)
           for key, label, module in (("raw_materials", "Raw materials", "production"),
                                      ("packaging", "Packaging", "production"),
-                                     ("finished_goods", "Finished goods", ""),
-                                     ("spare_parts", "Spare parts", ""),
-                                     ("general_items", "General items", ""))],
+                                     ("finished_goods", "Finished goods", ""))],
         item("All items", "inventory:items", "inventory:items_edit", "inventory:items_status",
              "inventory:item_detail", "inventory:pack_unit_add", "inventory:pack_unit_remove",
              needs="inventory.view"),
-        item("Scan", "inventory:scan", needs="inventory.view"),
-        item("Labels", "inventory:labels", "inventory:label_print", "inventory:label_void",
-             "inventory:bin_labels_print", "inventory:package_labels", needs="inventory.view"),
         item("Store requisitions", "inventory:store_requisitions", "inventory:store_requisitions_detail",
              needs=("inventory.issue", "inventory.issue_approve")),
         item("Store issues", "inventory:store_issues", "inventory:store_issues_detail",
@@ -214,19 +236,6 @@ INVENTORY_MENUS = (
              "inventory:opening_line_add", "inventory:opening_line_remove",
              "inventory:opening_post", "inventory:opening_cancel", "inventory:opening_reverse",
              needs="inventory.view"),
-        item("Stores", "inventory:stores", "inventory:stores_edit", "inventory:stores_status",
-             needs="inventory.view"),
-        item("Bins", "inventory:bins", "inventory:bins_edit", "inventory:bins_status",
-             needs="inventory.view"),
-        item("Units", "inventory:units", "inventory:units_edit", "inventory:units_status",
-             "inventory:standard_units", needs="inventory.view"),
-        item("Item categories", "inventory:categories", "inventory:categories_edit",
-             "inventory:categories_status", needs="inventory.view"),
-        item("Suppliers", "inventory:suppliers", "inventory:suppliers_edit",
-             "inventory:suppliers_status", needs="inventory.view"),
-        item("Customers", "inventory:customers", "inventory:customers_edit",
-             "inventory:customers_status", needs="inventory.view"),
-        item("Inventory settings", "inventory:settings", manage=True, needs="inventory.view"),
     )),
     # Purchase (Phase 3): requisition -> order -> goods receipt -> QC -> return.
     ("purchase", "Purchase", (
