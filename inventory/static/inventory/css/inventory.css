@@ -141,3 +141,17 @@
     background: var(--action-soft); color: var(--action-ink); font-size: 12px; font-weight: 600;
 }
 @keyframes purchase-guide-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* Adjust stock and Stock counts explained (2026-11-01, store/_guide.html) */
+.store-guide__steps { display: flex; flex-wrap: wrap; gap: var(--s2); margin: 10px 0 0; padding: 0; list-style: none; }
+.store-guide__steps li {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: var(--r);
+    background: var(--tile); color: var(--muted); font-size: 13px; transition: background .2s ease;
+}
+.store-guide__steps li span {
+    display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--surface); font-size: 11px; font-weight: 600;
+}
+.store-guide__steps li.is-done { background: var(--success-soft); color: var(--success-ink); }
+.store-guide__steps li.is-now { background: var(--action); color: #fff; }
+.store-guide__steps li.is-now span { color: var(--action); }
