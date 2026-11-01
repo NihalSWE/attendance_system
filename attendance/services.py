@@ -40,6 +40,7 @@ close has passed. A day inside a posted payroll run is never touched.
 """
 
 import calendar as month_calendar
+from contextlib import nullcontext
 import logging
 import datetime
 import threading
@@ -435,7 +436,7 @@ def _is_locked(day, ranges):
     return any(start <= day <= end for start, end in ranges)
 
 
-def recalculate(company_id, *, employee_ids=None, start, end, now=None):
+def recalculate(company_id, *, employee_ids=None, start, end, now=None, progress=None):
     """Rebuild attendance for a range of days. The one way in.
 
     Called by ingestion for the days a punch batch touched, by the screens for
@@ -449,6 +450,9 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
     Returns a summary dict. Safe to call with no shifts configured: it simply
     writes nothing rather than raising, because ingestion must never fail on
     a company that has not finished setting itself up.
+
+    ``progress(done, total)``, if given, is told after each person (salary
+    generation shows it, 2026-11-01).
     """
     from tenants.models import Company
 
@@ -566,7 +570,13 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
         stored_pairs = stored_pairings([row.pk for row in stored_days.values()])
         new_days = []
 
-        for employee_id, employee in employees.items():
+        for index, (employee_id, employee) in enumerate(employees.items()):
+            if progress is not None:
+                progress(index, len(employees))
+            if len(new_days) >= NEW_DAYS_BATCH:
+                # Thousands of people's first month: written as it goes.
+                touched_ids += _create_days(new_days)
+                new_days = []
             assignments = assignments_by_employee[employee_id]
             punches = sorted(
                 punches_by_employee[employee_id] + fixes.scans.get(employee_id, []),
@@ -645,6 +655,8 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                 day += datetime.timedelta(days=1)
 
         touched_ids += _create_days(new_days)
+        if progress is not None:
+            progress(len(employees), len(employees))
 
         # Days that no longer apply (before joining, no placement, no shift)
         # are removed so a recalculation leaves exactly the current answer.
@@ -908,6 +920,10 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
     )
     _write_pairing(record, paired, fresh=created)
     return record
+
+
+#: Days with nothing stored, written together once there are this many.
+NEW_DAYS_BATCH = 5000
 
 
 def _create_days(new_days):
@@ -1403,8 +1419,7 @@ def recalculate_for_punches(company_id, employee_days):
     return summary
 
 
-@transaction.atomic
-def calculate_attendance(*, actor, company_id, year, month, first=None, last=None):
+def calculate_attendance(*, actor, company_id, year, month, first=None, last=None, progress=None):
     """(Re)calculate one month. Kept for payroll generation.
 
     Attendance is live now — ``recalculate`` runs on its own when punches
@@ -1438,11 +1453,15 @@ def calculate_attendance(*, actor, company_id, year, month, first=None, last=Non
             "company shift. Attendance is measured against the shift."
         )
 
-    summary = recalculate(company_id, start=first, end=last)
-    summary["month"] = f"{year}-{month:02d}"
-    with use_company(company_id):
-        record_company_event(
-            actor=actor, membership=membership, company=membership.company,
-            action="attendance.calculated", obj=membership.company, after=summary,
-        )
+    # In one transaction, unless the background salary generation is showing
+    # its progress (2026-11-01): then each day is saved as it goes, as when
+    # scans arrive, so the progress written meanwhile can be seen.
+    with transaction.atomic() if progress is None else nullcontext():
+        summary = recalculate(company_id, start=first, end=last, progress=progress)
+        summary["month"] = f"{year}-{month:02d}"
+        with use_company(company_id):
+            record_company_event(
+                actor=actor, membership=membership, company=membership.company,
+                action="attendance.calculated", obj=membership.company, after=summary,
+            )
     return summary

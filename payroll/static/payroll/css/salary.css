@@ -160,3 +160,24 @@ table.salary__table .salary__total td { padding: 14px 8px !important; }
     .salary__chevron { transition: none; }
     .salary__person td { animation: none; }
 }
+
+/* Generating in the background (2026-11-01): the shared .job card, with its
+   two steps */
+.salary__job { margin-bottom: var(--s5); animation: salary-drop .2s ease-out; }
+.salary__job-steps { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 6px; }
+.salary__job-steps li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 14px;
+    transition: color .3s ease;
+}
+.salary__job-steps .salary__dot { background: var(--surface-sunken); transition: background .3s ease, color .3s ease; }
+.salary__job-steps [data-check] { display: none; }
+.salary__job-steps li.is-now { color: var(--text); font-weight: 600; }
+.salary__job-steps li.is-now .salary__dot { background: var(--action); color: #fff; }
+.salary__job-steps li.is-done .salary__dot { background: var(--success); color: #fff; }
+.salary__job-steps li.is-done [data-num] { display: none; }
+.salary__job-steps li.is-done [data-check] { display: inline-flex; }
+.salary__job-steps .job__count { margin-left: auto; font-weight: 400; }

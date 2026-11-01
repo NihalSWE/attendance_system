@@ -72,6 +72,7 @@ BRANCH_PAGES = {
     "payroll:lfa_paid": "salary.prepare",
     "payroll:lfa_document": "salary.prepare",
     "payroll:payroll_generate": "salary.prepare",
+    "payroll:generate_status": "salary.prepare",
     # Salary approval (A11): whoever prepares salary submits the month, and
     # can take it back; approving stays with the owner and company admin.
     "payroll:payroll_submit": "salary.prepare",

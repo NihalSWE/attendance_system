@@ -109,4 +109,55 @@
             document.querySelectorAll(".salary__more[open]").forEach(menu => menu.removeAttribute("open"));
         }
     });
+
+    // Generate runs in the background (2026-11-01): its progress, asked every
+    // second; when it has finished the page reloads with the payslips and
+    // what it did.
+    const generateForm = document.querySelector("[data-generate-form]");
+    if (generateForm) {
+        generateForm.addEventListener("submit", function () {
+            generateForm.querySelector("button").setAttribute("aria-busy", "true");
+        });
+    }
+    const job = document.querySelector("[data-generate-job]");
+    if (job) {
+        const elapsed = job.querySelector("[data-job-elapsed]");
+        const began = Date.now() - 1000 * Number(elapsed.dataset.seconds || 0);
+        const ago = function () {
+            const seconds = Math.round((Date.now() - began) / 1000);
+            if (seconds < 5) return "just now";
+            if (seconds < 60) return seconds + " s ago";
+            return Math.floor(seconds / 60) + " min " + (seconds % 60) + " s ago";
+        };
+        const show = function (state) {
+            job.querySelector("[data-job-percent]").textContent = state.percent;
+            job.querySelector("[data-job-bar]").style.width = state.percent + "%";
+            const steps = ["attendance", "salary"];
+            steps.forEach(function (name, index) {
+                const step = job.querySelector('[data-job-step="' + name + '"]');
+                const now = steps.indexOf(state.stage);
+                step.classList.toggle("is-done", index < now);
+                step.classList.toggle("is-now", index === now);
+                step.querySelector("[data-job-count]").textContent = index === now && state.total
+                    ? state.done.toLocaleString() + " of " + state.total.toLocaleString() + " people" : "";
+            });
+        };
+        const ask = function () {
+            fetch(job.dataset.generateJob, { headers: { Accept: "application/json" }, credentials: "same-origin" })
+                .then(function (reply) { return reply.ok ? reply.json() : Promise.reject(reply.status); })
+                .then(function (state) {
+                    if (!state.running) {
+                        show({ percent: 100, stage: "done" });
+                        window.location.reload();
+                        return;
+                    }
+                    show(state);
+                    window.setTimeout(ask, 1000);
+                })
+                .catch(function () { window.setTimeout(ask, 3000); });
+        };
+        elapsed.textContent = ago();
+        window.setInterval(function () { elapsed.textContent = ago(); }, 1000);
+        ask();
+    }
 })();
