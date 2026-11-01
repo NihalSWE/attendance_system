@@ -256,7 +256,7 @@ class PutItInStockTests(HubFixture, TestCase):
         self.assertContains(page, f'href="{stock_in}"')
         form = self.client.get(stock_in)
         self.assertContains(form, f'<option value="{flour.pk}"', count=3)       # every line offers it
-        self.assertContains(form, f'data-expiry="" selected>')                  # line 1 starts with it
+        self.assertContains(form, f'data-shelf="" selected>')                   # line 1 starts with it
 
 
 class MenuTests(TestCase):
