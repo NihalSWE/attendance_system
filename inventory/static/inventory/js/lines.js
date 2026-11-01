@@ -78,6 +78,70 @@
         }
     }
 
+    // Stock in fills the line from the item (2026-11-01): the unit it is
+    // bought in, its cost (the last price paid, else the expected buy price),
+    // and above, its usual store and last supplier; the expiry it will get
+    // from the shelf life is said under the box. Nothing typed is replaced.
+    function setSelect(box, value) {
+        if (!box || !value || box.value) return;
+        if (!Array.from(box.options).some(option => option.value === String(value))) return;
+        box.value = String(value);
+        if (window.jQuery) window.jQuery(box).trigger("change");
+        else box.dispatchEvent(new Event("change", {bubbles: true}));
+    }
+
+    function cost(line) {
+        const box = line.querySelector("[data-line-cost]");
+        if (!box) return;
+        const item = chosen(line.querySelector("[data-line-item]"));
+        const unit = chosen(line.querySelector("[data-line-unit]"));
+        const help = line.querySelector("[data-cost-help]");
+        if (!item || !item.value || !item.dataset.cost) {
+            if (help) help.textContent = "";
+            if (!box.dataset.typed) box.value = "";
+            return;
+        }
+        const value = Number(item.dataset.cost) * Number((unit && unit.dataset.factor) || 1);
+        if (!box.dataset.typed) box.value = String(Math.round(value * 100) / 100);
+        if (help) help.textContent = "From the " + item.dataset.costFrom + "; change it if the bill says otherwise.";
+    }
+
+    function expiry(line) {
+        const help = line.querySelector("[data-expiry-help]");
+        if (!help) return;
+        const item = chosen(line.querySelector("[data-line-item]"));
+        const days = item ? Number(item.dataset.shelf) : 0;
+        const made = line.querySelector('[name^="mfg_"]');
+        if (!days) {
+            help.textContent = "No shelf life on the item: give the expiry date.";
+            return;
+        }
+        if (made && made.value) {
+            const day = new Date(made.value + "T00:00:00");
+            day.setDate(day.getDate() + days);
+            help.textContent = "Empty: " + day.toLocaleDateString("en-GB", {day: "2-digit", month: "short", year: "numeric"})
+                + " (manufacture date + " + days + " days).";
+        } else {
+            help.textContent = "Empty: the manufacture date + " + days + " days.";
+        }
+    }
+
+    function fill(line) {
+        follow(line);
+        const item = chosen(line.querySelector("[data-line-item]"));
+        if (item && item.value) {
+            const unitBox = line.querySelector("[data-line-unit]");
+            if (item.dataset.buyUnit && Array.from(unitBox.options).some(option => option.value === item.dataset.buyUnit)) {
+                unitBox.value = item.dataset.buyUnit;
+                follow(line);
+            }
+            setSelect(form.querySelector('[name="store"]'), item.dataset.store);
+            if (source() === "purchase") setSelect(form.querySelector('[name="supplier"]'), item.dataset.supplier);
+        }
+        cost(line);
+        expiry(line);
+    }
+
     function showSource() {
         const now = source();
         form.querySelectorAll("[data-source-only]:not([data-needs-batch])").forEach(function (box) {
@@ -105,13 +169,21 @@
         const line = event.target.closest("[data-line]");
         if (event.target.matches('[name="source"]')) showSource();
         if (event.target.matches('[name="from_store"], [name="store"]')) form.querySelectorAll("[data-line]").forEach(follow);
-        if (line && event.target.matches("[data-line-item], [data-line-unit]")) follow(line);
+        if (line && event.target.matches("[data-line-item]")) fill(line);
+        else if (line && event.target.matches("[data-line-unit]")) { follow(line); cost(line); }
+        if (line && event.target.matches('[name^="mfg_"]')) expiry(line);
+    });
+    form.addEventListener("input", function (event) {
+        const line = event.target.closest("[data-line]");
+        if (event.isTrusted && event.target.matches("[data-line-cost]")) event.target.dataset.typed = "1";
+        if (line && event.target.matches('[name^="mfg_"]')) expiry(line);
     });
     if (window.jQuery) {
         window.jQuery(form).on("select2:select", function (event) {
             const line = event.target.closest("[data-line]");
             if (event.target.matches('[name="from_store"], [name="store"]')) form.querySelectorAll("[data-line]").forEach(follow);
-            if (line) follow(line);
+            if (line && event.target.matches("[data-line-item]")) fill(line);
+            else if (line) { follow(line); cost(line); }
         });
     }
     const add = form.querySelector("[data-add-line]");
@@ -131,10 +203,13 @@
             renumber(copy, lines.length + 1);
             lines[lines.length - 1].after(copy);
             if (window.attachDatepicker) copy.querySelectorAll("input[data-datepicker]").forEach(window.attachDatepicker);
-            follow(copy);
+            fill(copy);
             if (lines.length + 1 >= most) add.hidden = true;
         });
     }
     showSource();
-    form.querySelectorAll("[data-line]").forEach(follow);
+    form.querySelectorAll("[data-line]").forEach(function (line) {
+        const item = chosen(line.querySelector("[data-line-item]"));
+        if (item && item.value) fill(line); else follow(line);
+    });
 })();

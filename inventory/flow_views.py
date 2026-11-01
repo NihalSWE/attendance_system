@@ -54,6 +54,7 @@ def _item_options(company_id, kinds=None):
         packs = {}
         for pack in ItemUom.objects.filter(item__in=items).select_related("uom"):
             packs.setdefault(pack.item_id, []).append(pack)
+    bought = _last_bought(company_id, items)
     options = []
     for item in items:
         units = [{"id": item.base_uom_id, "code": item.base_uom.code, "factor": "1",
@@ -63,10 +64,45 @@ def _item_options(company_id, kinds=None):
                 item.sale_price * pack.factor if item.sale_price else None)
             units.append({"id": pack.uom_id, "code": pack.uom.code, "factor": format(pack.factor.normalize(), "f"),
                           "price": format(price.normalize(), "f") if price else ""})
+        last = bought.get(item.pk)
+        cost = last["cost"] if last else item.standard_cost
         options.append({"item": item, "units": json.dumps(units),
                         "batch": "1" if item.track_batch or item.track_expiry else "",
-                        "expiry": "1" if item.track_expiry else ""})
+                        "expiry": "1" if item.track_expiry else "",
+                        # Stock in fills the line from the item (2026-11-01): the
+                        # unit it is bought in, the cost of one base unit (the
+                        # last price paid, else the expected buy price), its
+                        # usual store, its last supplier, its shelf life.
+                        "buy_unit": (packs[item.pk][0].uom_id if item.kind in hub.MATERIAL_KINDS
+                                     and packs.get(item.pk) else ""),
+                        "cost": format(cost.normalize(), "f") if cost is not None else "",
+                        "cost_from": ("last price paid" if last else "expected buy price") if cost is not None else "",
+                        "store": item.default_warehouse_id or "",
+                        "supplier": last["supplier"] if last else "",
+                        "shelf": item.shelf_life_days or ""})
     return options
+
+
+def _last_bought(company_id, items):
+    """``{item_id: {"cost": per base unit, "supplier": id}}`` from each item's
+    latest posted goods receipt."""
+    from inventory.masters import units_for
+    from purchasing.models import GoodsReceipt, GoodsReceiptLine
+
+    by_id = {item.pk: item for item in items}
+    found = {}
+    with use_company(company_id):
+        lines = (GoodsReceiptLine.objects.filter(item_id__in=list(by_id), receipt__status=GoodsReceipt.Status.POSTED)
+                 .order_by("-receipt__received_date", "-pk")
+                 .values_list("item_id", "uom_id", "unit_cost", "receipt__supplier_id"))
+        for item_id, uom_id, unit_cost, supplier_id in lines.iterator():
+            if item_id in found or unit_cost is None:
+                continue
+            factor = units_for(by_id[item_id]).get(uom_id) or Decimal("1")
+            found[item_id] = {"cost": (unit_cost / factor).quantize(Decimal("0.0001")), "supplier": supplier_id}
+            if len(found) == len(by_id):
+                break
+    return found
 
 
 def _number(text):
