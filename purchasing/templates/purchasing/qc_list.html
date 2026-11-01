@@ -19,6 +19,7 @@
             <p class="page__sub">Received batches of items that need QC wait in quarantine: nobody can issue or use them until they pass. A failed batch is blocked; return it to the supplier.</p>
         </div>
     </div>
+    {% include "purchasing/includes/guide.html" with at="qc" %}
     <div class="card">
         <div class="card__head"><h2>Received lines</h2><span class="spacer"></span>
             <span class="t-muted"><span class="amount">{{ server_table.page.paginator.count }}</span> shown</span></div>

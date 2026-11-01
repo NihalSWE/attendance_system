@@ -46,6 +46,7 @@
             {% endif %}
         </div>
     </div>
+    {% include "purchasing/includes/guide.html" with at="return" doc=doc %}
     <div class="card">
         <div class="card__head"><h2>Going back</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
         {% if lines %}

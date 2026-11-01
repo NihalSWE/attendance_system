@@ -146,7 +146,7 @@ class PurchaseGateTests(PurchaseFixture, TestCase):
         self.client.force_login(user)
         page = self.client.get(reverse("purchasing:requisitions"))
         assert_inventory_menu(self, page, MENU, menu="purchase")
-        self.assertNotContains(page, "Quality check")
+        self.assertNotContains(page, f'href="{reverse("purchasing:qc")}"')      # not in the menu
         self.client.post(reverse("purchasing:requisitions"), {"branch": self.branch.pk,
                                                               "request_date": "2026-10-01"})
         requisition = PurchaseRequisition.all_objects.get()
