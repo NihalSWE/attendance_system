@@ -65,9 +65,15 @@ class SavedAttendanceCase(tests_live.LiveTestCase):
 
 class PageLoadTests(SavedAttendanceCase):
     def test_a_second_load_reads_what_is_saved(self):
-        first = self.load()
-        second = self.load()
-        self.assertGreater(first, 200)
+        # A finished month, so there are days to build whatever today is (on
+        # the 1st of a month the current one has none yet).
+        first = self.load(month=MONDAY.month, year=MONDAY.year)
+        second = self.load(month=MONDAY.month, year=MONDAY.year)
+        # The first load builds the month's days (in batches since 2026-11-01);
+        # the second only reads them.
+        with use_company(self.company):
+            self.assertTrue(AttendanceRecord.objects.exists())
+        self.assertGreater(first, second)
         self.assertLess(second, 60)
 
     def test_someone_hired_afterwards_gets_their_days(self):
