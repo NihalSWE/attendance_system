@@ -113,3 +113,16 @@ class StoreContentsTests(HubFixture, TestCase):
             self.assertTrue(reply.json()["data"])
         opened = self.client.get(reverse("inventory:stock_now"), {"store": self.rms.pk})
         self.assertContains(opened, f"What's in {self.rms.name}")
+
+
+class PurchaseGuideTests(HubFixture, TestCase):
+    """Every purchase page says where it sits in the flow and what it does."""
+
+    def test_the_guide_on_the_purchase_pages(self):
+        for name, words in (("purchasing:requisitions", "Ask to buy."), ("purchasing:orders", "Order from the supplier."),
+                            ("purchasing:receipts", "Receive what arrived."), ("purchasing:qc", "Check the quality."),
+                            ("purchasing:returns", "Send goods back.")):
+            page = self.client.get(reverse(name))
+            self.assertEqual(page.status_code, 200, name)
+            self.assertContains(page, words)
+            self.assertContains(page, 'aria-label="How a purchase goes"')

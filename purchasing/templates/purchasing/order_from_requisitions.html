@@ -19,6 +19,7 @@
             <p class="page__sub">Pick the supplier and the approved requisition lines it supplies. Each line is ordered for what is still open; prices start at the items' standard cost - change them on the order before sending it for approval.</p>
         </div>
     </div>
+    {% include "purchasing/includes/guide.html" with at="order" %}
     <div class="card">
         <form class="card__body stack" method="post" novalidate>
             {% csrf_token %}

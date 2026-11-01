@@ -1,0 +1,55 @@
+{% comment %}
+    The purchase flow on every purchase page (2026-11-01): where this page sits
+    (Ask -> Order -> Receive -> Quality check -> In stock), what it does, and
+    what to press next for the document's status. Params: at (ask, order,
+    receive, qc, return), doc (a document, optional).
+{% endcomment %}
+<nav class="ui-flow purchase-flow" aria-label="How a purchase goes">
+    <a class="ui-flow__item{% if at == 'ask' %} ui-flow__item--on{% endif %}" href="{% url 'purchasing:requisitions' %}"><span class="ui-flow__num">1</span>Ask <span class="purchase-flow__opt">optional</span></a>
+    <a class="ui-flow__item{% if at == 'order' %} ui-flow__item--on{% endif %}" href="{% url 'purchasing:orders' %}"><span class="ui-flow__num">2</span>Order</a>
+    <a class="ui-flow__item{% if at == 'receive' %} ui-flow__item--on{% endif %}" href="{% url 'purchasing:receipts' %}"><span class="ui-flow__num">3</span>Receive</a>
+    <a class="ui-flow__item{% if at == 'qc' %} ui-flow__item--on{% endif %}" href="{% url 'inventory:qc' %}"><span class="ui-flow__num">4</span>Quality check <span class="purchase-flow__opt">if needed</span></a>
+    <a class="ui-flow__item" href="{% url 'inventory:stock_now' %}"><span class="ui-flow__num">{% include "ui/icon.html" with name="check" small=True %}</span>In stock</a>
+    <a class="ui-flow__item purchase-flow__side{% if at == 'return' %} ui-flow__item--on{% endif %}" href="{% url 'purchasing:returns' %}"><span class="ui-flow__num">↩</span>Return to supplier</a>
+</nav>
+<div class="purchase-guide">
+    <p class="purchase-guide__what">
+        {% if at == "ask" %}
+            <strong>Ask to buy.</strong> A department lists what it needs; an approver says yes or no. Approved lines become a purchase order (Purchase orders → From requisitions). Skip this step when nobody needs to approve.
+        {% elif at == "order" %}
+            <strong>Order from the supplier.</strong> One order per supplier: the items, how many and the price. It is approved, then sent (Email to supplier or PDF). Nothing comes into stock yet.
+        {% elif at == "receive" %}
+            <strong>Receive what arrived.</strong> A goods receipt (GRN) says what came into which store, against an order or without one. Posting it puts the stock in; items with a quality check wait until they pass.
+        {% elif at == "qc" %}
+            <strong>Check the quality.</strong> Pass a batch and it can be used; fail it and it is blocked, then sent back with a purchase return.
+        {% elif at == "return" %}
+            <strong>Send goods back.</strong> Failed the check, damaged or the wrong item: posting a return takes it out of stock at the receipt's cost.
+        {% endif %}
+        <span class="ui-muted">Buying something small without an order? <a href="{% url 'inventory:stock_in_new' %}">Stock in → A purchase</a> receives it in one step.</span>
+    </p>
+    {% if doc %}
+        <p class="purchase-guide__next"><span class="purchase-guide__label">Next</span>
+            {% if at == "ask" %}
+                {% if doc.status == "draft" %}Add each item you need, then <strong>Submit</strong>: the approver decides.
+                {% elif doc.status == "submitted" %}Waiting for the approver: <strong>Approve</strong> or <strong>Reject</strong>.
+                {% elif doc.status == "approved" %}Turn it into a purchase order: <a href="{% url 'purchasing:order_from_requisitions' %}">Purchase orders → From requisitions</a>.
+                {% elif doc.status == "ordered" %}Done: a purchase order was made from it.
+                {% else %}Nothing more to do here.{% endif %}
+            {% elif at == "order" %}
+                {% if doc.status == "draft" %}Add a line for each item with its price, then <strong>Send for approval</strong>.
+                {% elif doc.status == "submitted" %}Waiting for approval: the approver presses <strong>Approve</strong> or <strong>Send back</strong>.
+                {% elif doc.status == "approved" %}<strong>Email to supplier</strong> (or print the PDF). When the goods arrive, press <strong>Receive goods</strong>: the receipt fills from this order.
+                {% elif doc.status == "partly_received" %}Part has arrived. <strong>Receive goods</strong> again for the rest, or <strong>Close</strong> it if the rest will not come.
+                {% elif doc.status == "received" or doc.status == "closed" %}Done: everything ordered is in (see its goods receipts below).
+                {% else %}Nothing more to do here.{% endif %}
+            {% elif at == "receive" %}
+                {% if doc.status == "draft" %}Check each line - received, refused at the gate, cost, batch and expiry - then <strong>Post</strong>: the stock goes into {{ doc.warehouse.name }}.
+                {% elif doc.status == "posted" %}In stock in {{ doc.warehouse.name }}. Items with a quality check wait on <a href="{% url 'inventory:qc' %}">Stock → Quality check</a>. Something wrong? Make a <a href="{% url 'purchasing:returns' %}">purchase return</a>.
+                {% else %}Nothing more to do here.{% endif %}
+            {% elif at == "return" %}
+                {% if doc.status == "draft" %}Add what goes back, then <strong>Post</strong>: it leaves the store.
+                {% else %}Nothing more to do here.{% endif %}
+            {% endif %}
+        </p>
+    {% endif %}
+</div>

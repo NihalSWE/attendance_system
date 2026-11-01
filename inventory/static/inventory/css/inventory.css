@@ -122,3 +122,22 @@
 .ui-facts dd { margin: 2px 0 0; font-weight: 500; }
 :target.ui-card { animation: ui-target 1.6s ease-out; }
 @keyframes ui-target { 0%, 25% { box-shadow: 0 0 0 3px var(--action-soft); } }
+
+/* The purchase flow on every purchase page (2026-11-01, purchasing/includes/guide.html) */
+.purchase-flow { margin: 0 0 var(--s3); }
+.purchase-flow a { text-decoration: none; }
+.purchase-flow__opt { margin-left: 4px; font-size: 11px; color: var(--faint); font-weight: 400; }
+.purchase-flow__side { margin-left: auto; }
+.purchase-guide {
+    margin: 0 0 var(--s4); padding: var(--s3) var(--s4);
+    border: 1px solid var(--border); border-left: 3px solid var(--action); border-radius: 0;
+    background: var(--surface); animation: purchase-guide-in .25s ease both;
+}
+.purchase-guide p { margin: 0; line-height: 1.55; }
+.purchase-guide .ui-muted { display: block; margin-top: 4px; font-size: 13px; }
+.purchase-guide__next { margin-top: 8px !important; padding-top: 8px; border-top: 1px solid var(--border); }
+.purchase-guide__label {
+    display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: var(--r-pill);
+    background: var(--action-soft); color: var(--action-ink); font-size: 12px; font-weight: 600;
+}
+@keyframes purchase-guide-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
