@@ -1,0 +1,46 @@
+{% comment %}
+    Adjust stock and Stock counts explained where they are used (2026-11-01):
+    which of the two you need, the steps with this one lit, and on a document
+    what to press next for its status. Params: doc (the page's Doc), row (a
+    document, optional).
+{% endcomment %}
+{% if doc.key == "adjustments" or doc.key == "counts" %}
+    <div class="purchase-guide store-guide">
+        <p class="purchase-guide__what">
+            {% if doc.key == "adjustments" %}
+                <strong>Adjust stock</strong> when you know the change for a few items: 5 damaged, 2 found, 10 expired. Each line is <strong>+ found</strong> or <strong>− written off</strong>, with a reason; someone with approval rights approves it and only then the stock changes.
+            {% else %}
+                <strong>Count a store</strong> when you want the software to match what is on the shelves. Starting the count freezes the software's quantities; you type (or scan) what you count; approving turns every difference into an adjustment.
+            {% endif %}
+            <span class="ui-muted">{% if doc.key == "adjustments" %}A whole store to check? <a href="{% url 'inventory:store_counts' %}">Use a stock count</a> instead.{% else %}Only a few items with a known change? <a href="{% url 'inventory:store_adjustments' %}">Adjust stock</a> is quicker.{% endif %}</span>
+        </p>
+        <ol class="store-guide__steps">
+            {% if doc.key == "adjustments" %}
+                <li class="{% if not row %}is-now{% else %}is-done{% endif %}"><span>1</span>New adjustment: store, date, reason</li>
+                <li class="{% if row.status == 'draft' %}is-now{% elif row %}is-done{% endif %}"><span>2</span>Add lines: item, + or − quantity</li>
+                <li class="{% if row.status == 'submitted' %}is-now{% elif row.status == 'posted' %}is-done{% endif %}"><span>3</span>Send for approval</li>
+                <li class="{% if row.status == 'posted' %}is-done{% endif %}"><span>4</span>Approved: the stock changes</li>
+            {% else %}
+                <li class="{% if not row %}is-now{% else %}is-done{% endif %}"><span>1</span>Start: choose the store</li>
+                <li class="{% if row.status == 'counting' %}is-now{% elif row %}is-done{% endif %}"><span>2</span>Count: type or scan each item</li>
+                <li class="{% if row.status == 'submitted' %}is-now{% elif row.status == 'approved' %}is-done{% endif %}"><span>3</span>Send for approval</li>
+                <li class="{% if row.status == 'approved' %}is-done{% endif %}"><span>4</span>Approved: differences posted</li>
+            {% endif %}
+        </ol>
+        {% if row %}
+            <p class="purchase-guide__next"><span class="purchase-guide__label">Next</span>
+                {% if doc.key == "adjustments" %}
+                    {% if row.status == "draft" %}{% if lines %}Check the <strong>After this</strong> column, then <strong>Send for approval</strong>.{% else %}Press <strong>Add</strong>: the item, then <strong>+</strong> what was found or <strong>−</strong> what goes out (for example −5).{% endif %}
+                    {% elif row.status == "submitted" %}Waiting for approval: the approver presses <strong>Approve and post</strong> or <strong>Reject</strong>. Nothing has changed in stock yet.
+                    {% elif row.status == "posted" %}Done: the stock has changed. A mistake? <strong>Reverse</strong> it (with a reason).
+                    {% else %}Nothing more to do here.{% endif %}
+                {% else %}
+                    {% if row.status == "counting" %}Type what you count on each line (or scan the labels) and <strong>Save</strong>. Items you could not find: <strong>Not found = 0</strong>. Then <strong>Send for approval</strong>.
+                    {% elif row.status == "submitted" %}Waiting for approval: every difference becomes an adjustment when it is approved.
+                    {% elif row.status == "approved" %}Done: the differences are posted{% if row.adjustment %} as {{ row.adjustment.number }}{% endif %}.
+                    {% else %}Nothing more to do here.{% endif %}
+                {% endif %}
+            </p>
+        {% endif %}
+    </div>
+{% endif %}

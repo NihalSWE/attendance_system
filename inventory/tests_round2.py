@@ -126,3 +126,29 @@ class PurchaseGuideTests(HubFixture, TestCase):
             self.assertEqual(page.status_code, 200, name)
             self.assertContains(page, words)
             self.assertContains(page, 'aria-label="How a purchase goes"')
+
+
+class AdjustGuideTests(HubFixture, TestCase):
+    """Adjust stock and Stock counts say what they are for and what is next."""
+
+    def test_an_adjustment_shows_its_effect_and_next_step(self):
+        import datetime
+        from decimal import Decimal
+
+        from inventory import adjustments
+        from inventory.models import Batch
+
+        row = adjustments.create_adjustment(**self.kw, values={
+            "warehouse": self.rms, "adjustment_date": datetime.date(2026, 10, 5), "reason": "damage", "note": ""})
+        batch = Batch.all_objects.get(item=self.pulp, batch_no="P1")
+        adjustments.add_line(**self.kw, adjustment_id=row.pk, values={
+            "item": self.pulp, "batch": batch, "qty_change": Decimal("-5"), "uom": self.kg, "note": ""})
+        page = self.client.get(reverse("inventory:store_detail", args=["adjustments", row.pk]))
+        self.assertContains(page, "Adjust stock")
+        self.assertContains(page, "In store now")
+        self.assertContains(page, "After this")
+        self.assertContains(page, "Send for approval")
+        self.assertEqual(page.context["lines"][0].after_qty, page.context["lines"][0].now_qty - 5)
+        for name, words in (("inventory:store_adjustments", "Use a stock count"),
+                            ("inventory:store_counts", "Count a store")):
+            self.assertContains(self.client.get(reverse(name)), words)

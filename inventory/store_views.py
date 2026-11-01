@@ -305,6 +305,20 @@ def _page(request, doc, pk, line_form=None, open_dialog="", extra=None):
             request.user, company_id, "inventory.transfer", row.to_warehouse.branch_id)
     if doc.key == "counts" and row.status == "submitted":
         context["moves_since"] = adjustments.moves_since_start(row)
+    if doc.key == "adjustments" and row.status in ("draft", "submitted"):
+        # In the store now and after this (2026-11-01): the effect, seen before it is sent.
+        from django.db.models import Sum
+
+        from inventory.models import StockBalance
+
+        for line in lines:
+            rows = StockBalance.all_objects.filter(company_id=company_id, warehouse_id=row.warehouse_id,
+                                                   item_id=line.item_id)
+            if line.batch_id:
+                rows = rows.filter(batch_id=line.batch_id)
+            line.now_qty = rows.aggregate(total=Sum("qty_on_hand"))["total"] or 0
+            line.after_qty = line.now_qty + line.qty_change_base
+        context["shows_effect"] = True
     context.update(extra or {})
     context["buttons"] = _buttons(request, doc, row, context)
     return render(request, "inventory/store/detail.html", context)
