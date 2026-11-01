@@ -142,9 +142,9 @@ PAGES = {
     )},
     "stores": MasterPage(
         "stores", masters.WAREHOUSE, forms.WarehouseForm, "Stores", "store",
-        "inventory/rows/store.html", ("Code", "Store", "Type", "Branch", "Bins", "Status"),
+        "inventory/rows/store.html", ("Code", "Store", "Type", "Branch", "Bins", "Items in it", "Status"),
         ("code", "name", "branch__name"),
-        ("code", "name", "kind", "branch__name", None, "status", None),
+        ("code", "name", "kind", "branch__name", None, "item_count", "status", None),
         lambda request, cid: _stores(request, cid), branch_scoped=True,
         about="Each store belongs to a branch; stock, issues and transfers follow its branch.",
         import_kind="stores",
@@ -195,9 +195,12 @@ def _items(request):
 
 
 def _stores(request, company_id):
-    from django.db.models import Count
+    from django.db.models import Count, Q
 
-    rows = Warehouse.objects.select_related("branch").annotate(bin_count=Count("locations"))
+    # What each store holds (2026-11-01): the items with stock in it.
+    rows = Warehouse.objects.select_related("branch").annotate(
+        bin_count=Count("locations", distinct=True),
+        item_count=Count("balances__item", filter=Q(balances__qty_on_hand__gt=0), distinct=True))
     return access.scope_warehouses(rows, request.user, company_id, "inventory.view")
 
 

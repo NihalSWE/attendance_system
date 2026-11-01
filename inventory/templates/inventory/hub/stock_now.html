@@ -4,8 +4,14 @@
     <div class="ui-head">
         <div>
             <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / Stock</p>
-            <h1 class="ui-head__title">Stock</h1>
-            <p class="ui-head__sub">What you have, where it is, and what runs low or expires first.</p>
+            {% for s in stores %}{% if s.pk|stringformat:"s" == store %}
+                <h1 class="ui-head__title">What's in {{ s.name }}</h1>
+                <p class="ui-head__sub">{{ s.get_kind_display }} store · {{ s.branch.name }}. Every item with stock in it; <a href="{% url 'inventory:stock_now' %}">all stores</a>.</p>
+            {% endif %}{% empty %}{% endfor %}
+            {% if not store %}
+                <h1 class="ui-head__title">Stock</h1>
+                <p class="ui-head__sub">What you have, where it is, and what runs low or expires first.</p>
+            {% endif %}
         </div>
         <div class="ui-head__actions">
             <a class="ui-btn" href="{% url 'inventory:stock' %}">By store, bin and batch</a>
