@@ -83,3 +83,10 @@
 .scan-answer .btn {
     align-self:flex-start;
 }
+
+/* Waiting for quality check (2026-11-01, hub/_qc_card.html) */
+.qc-card { margin-bottom: var(--s5); }
+.qc-card__code { display: block; font-size: 12px; color: var(--faint); }
+.qc-card__actions { display: flex; gap: 6px; align-items: center; justify-content: flex-end; white-space: nowrap; }
+.qc-card__actions form { margin: 0; }
+.qc-card__note { margin: 0; padding: var(--s3) var(--s4); }

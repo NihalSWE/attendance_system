@@ -11,6 +11,7 @@ from inventory import (
     label_views,
     opening_views,
     preview_views,
+    qc_views,
     report_views,
     stock_views,
     store_views,
@@ -100,6 +101,9 @@ urlpatterns += [
     path("stock-in/", flow_views.stock_in, name="stock_in"),
     path("stock-in/new/", flow_views.stock_in_new, name="stock_in_new"),
     path("stock/now/", flow_views.stock_now, name="stock_now"),
+    # Batches waiting for a quality check, from any source (2026-11-01).
+    path("stock/quality-check/", qc_views.qc_page, name="qc"),
+    path("stock/quality-check/<int:batch_id>/", qc_views.qc_decide, name="qc_decide"),
     path("move/", flow_views.moves, name="moves"),
     path("move/new/", flow_views.move_new, name="move_new"),
     path("move/<int:pk>/receive/", flow_views.move_receive, name="move_receive"),

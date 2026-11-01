@@ -337,6 +337,18 @@ def checklist(company_id, actor, today=None):
         "detail": "Stock has gone to customers." if sold_any else "Deliver to a customer from stock.",
         "url": reverse("inventory:sale_new"), "button": "Sell",
     })
+    # Stock waiting for a quality check cannot be used or sold (2026-11-01).
+    from inventory import qc
+
+    held = qc.waiting(company_id)
+    if held:
+        steps.append({
+            "done": False, "what": f"Waiting for quality check ({len(held)})",
+            "detail": ", ".join(f"{row.item.name} {row.qty.normalize():,f} {row.item.base_uom.code}"
+                                for row in held[:3]) + ("…" if len(held) > 3 else "")
+                      + ": it cannot be used or sold until it passes.",
+            "url": reverse("inventory:qc"), "button": "Check it",
+        })
     low = [line for line in lines(company_id, actor, list(MATERIAL_KINDS) + [ItemKind.FINISHED],
                                   today=today) if line.tone == "wait" or (line.tone == "bad" and line.keep)]
     if low and stocked:

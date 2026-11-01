@@ -207,8 +207,19 @@ def sell(*, actor, company_id, customer, store, day, lines, credit_note="", invo
     delivery = deliveries.create_delivery(actor=actor, company_id=company_id, values={
         "order": order, "delivery_date": day, "vehicle_no": "", "driver": "", "note": ""})
     if delivery.shortages:
-        raise ValidationError(["Not enough in " + store.name + ": " + "; ".join(delivery.shortages) + ".",
-                               "Sell less, or from another store."])
+        reasons = ["Not enough in " + store.name + ": " + "; ".join(delivery.shortages) + "."]
+        # Counted in stock but waiting for a quality check (2026-11-01): say so.
+        from inventory import qc
+
+        for line in lines:
+            held = sum((qty for row in qc.waiting(company_id, item=line.item)
+                        for name, qty in row.stores if name == store.name), Decimal("0"))
+            if held:
+                reasons.append(f"{held.normalize():,f} {line.item.base_uom.code} of {line.item.name} in "
+                               f"{store.name} waits for a quality check: pass it on Stock → Quality check, "
+                               "then sell.")
+        reasons.append("Sell less, or from another store.")
+        raise ValidationError(reasons)
     deliveries.post_delivery(actor=actor, company_id=company_id, delivery_id=delivery.pk)
     bill = None
     if invoice:

@@ -61,7 +61,7 @@ INVENTORY_LINKS_SHOWN = {
         "inventory:materials", "inventory:spare_parts", "inventory:general_items",
         "inventory:products",
         "inventory:stock_in", "inventory:stock_now", "inventory:moves", "inventory:store_adjustments",
-        "inventory:store_counts",
+        "inventory:store_counts", "inventory:qc",
         "production:runs",
         "inventory:sales", "sales:invoices", "sales:returns",
         "purchasing:requisitions", "purchasing:orders", "purchasing:receipts", "purchasing:qc",
@@ -247,6 +247,8 @@ INVENTORY_MENUS = (
              needs=("inventory.adjust", "inventory.adjust_approve"), group="Stock"),
         item("Stock counts", "inventory:store_counts", "inventory:store_counts_detail",
              needs=("inventory.adjust", "inventory.adjust_approve"), group="Stock"),
+        # Batches waiting for a quality check, made or bought (2026-11-01).
+        item("Quality check", "inventory:qc", "inventory:qc_decide", needs="inventory.view", group="Stock"),
         # Plan → Start → Finish (2026-10-27, plan §8).
         item("Make", "production:runs", "production:run", "production:plan",
              needs=("inventory.view", "production.plan", "production.execute"), module="production",
