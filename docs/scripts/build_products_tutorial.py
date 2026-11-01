@@ -381,6 +381,15 @@ story += [P("Item", "h2"), fields([
                     "<b>Sale price</b> card; how many batches to make; the recipe; the cost of one batch; stock by "
                     "store and batch; units and prices.")]
 
+story += [box("The product's page, step by step", [
+    "A bar at the top shows the steps in the order the work is done and stays in view as you scroll: "
+    "<b>1 Details and units</b> &rarr; <b>2 Recipe</b> &rarr; <b>3 Cost of one batch</b> &rarr; <b>4 Sale price</b> "
+    "&rarr; <b>5 Make</b> &rarr; <b>6 Stock and sell</b>. Done steps are green, the next one is blue; click a step "
+    "to jump to it. A product that is only bought: Details &rarr; Stock in &rarr; Sale price &rarr; Stock and sell.",
+    "A step that needs an earlier one says so and points to it: the <b>Sale price</b> waits until the cost is "
+    "known, <b>Make</b> waits for the recipe, and the recipe asks first what one batch makes, then its materials.",
+], "ok")]
+
 # ------------------------------------------------------------------ recipe and cost
 story += section(4, "Recipe and cost of one batch", "The product (or a made material) &rarr; Recipe / Cost of one batch",
                  "What one batch makes and uses, and what it costs. It gives the cost of one unit.",
@@ -427,6 +436,14 @@ story += [fields([
     "it waits; a return is posted. If any line is refused, nothing is saved - the line and the box are named.",
 ])]
 
+story += [box("The line fills itself", [
+    "Choose the item and the line is filled from what the software already knows: the <b>unit it is bought in</b> "
+    "(a bag, a carton), its <b>cost</b> - the last price paid, else its expected buy price, for that unit - and "
+    "above, its <b>usual store</b> and <b>last supplier</b>. Under the expiry box it says the date the shelf life "
+    "will give. Usually only the <b>quantity</b> is left to type. Change anything that differs on the bill: what "
+    "you type is never replaced.",
+], "ok")]
+
 # ------------------------------------------------------------------ price
 story += section(6, "Sale price", "The item's page &rarr; card Sale price",
                  "Set or change the price once the cost is known. The card shows the cost of one and the margin now.",
@@ -470,6 +487,9 @@ story += steps([
     "<b>Send it</b>: the stock waits <b>in transit</b>. The other store presses <b>Receive</b> on the Move stock list.",
 ])
 
+story += [P("<b>What is in a store:</b> Inventory &rarr; Setup &rarr; Stores shows how many items each store holds; "
+             "<b>What's in it</b> opens Stock for that store only (\"What's in Raw store\").")]
+
 # ------------------------------------------------------------------ sell
 story += section(9, "Sell", "Inventory &rarr; Sales &rarr; Sell &rarr; New sale",
                  "A sale, delivered at once from one store, invoiced when asked.", "customers, and stock in the store.")
@@ -502,6 +522,156 @@ story += [grid(("The form says", "What you do"), [
                     "valuation, batch and expiry, reorder, purchase and sales registers - each with filters, "
                     "Excel and PDF; Month-end close beside it. Tools: Scan, Labels, Warranty."]),
 ]
+
+# ------------------------------------------------------------------ quality check
+story += section(11, "Quality check", "Inventory &rarr; Stock &rarr; Quality check",
+                 "An item with <b>Quality check before use</b> puts every new batch - made or bought - in "
+                 "quarantine: it is counted in stock but cannot be used, moved or sold until it passes.",
+                 "an item with Quality check before use, and someone with \"Record quality checks\".")
+story += steps([
+    "Open <b>Stock &rarr; Quality check</b> (Start here and the item's page also show what waits). Each row: the "
+    "item, the batch, where it came from (Made &middot; PRD-... or Bought &middot; GRN-...), how much, the store and "
+    "the expiry.",
+    "<b>Pass</b>: the batch is released at once - it can be used and sold.",
+    "<b>Fail</b>: write what failed; the batch is blocked. Bought goods go back with a purchase return; made goods "
+    "are written off with a stock adjustment.",
+])
+story += [box("\"I have 500 in stock but cannot sell it\"", [
+    "That stock waits for its quality check. Sell says so: \"500 PCS of Orange juice in Main store waits for a "
+    "quality check\". Pass it on Stock &rarr; Quality check, then sell.",
+], "warn")]
+
+# ------------------------------------------------------------------ purchase
+story += section(12, "Buying with orders", "Inventory &rarr; Purchase &rarr; Requisitions / Purchase orders / "
+                 "Goods receipts / Quality check / Purchase returns",
+                 "For buying that needs approval and a paper trail. Every purchase page shows the flow at the top "
+                 "- <b>Ask (optional) &rarr; Order &rarr; Receive &rarr; Quality check &rarr; In stock</b>, and "
+                 "<b>Return to supplier</b> - with its own step lit and, on a document, the next thing to press.",
+                 "suppliers, items, stores.", "Small purchase, no approval? Stock in &rarr; A purchase is one step.")
+story += [P("1 &middot; Ask to buy (optional): New requisition", "h2"), fields([
+    ("Branch, Department", "Yes", "Who needs it.", "Head Office, Production", "The approver of that branch decides."),
+    ("Date, Needed by", "Some", "Today, and when it is needed.", "5 Nov", ""),
+    ("Why it is needed", "No", "One line.", "Stock below minimum", ""),
+    ("Lines: Item, Qty, Unit, Note", "Yes", "Add line for each item.", "Sugar 500 KG", ""),
+]), P("<b>Submit</b> &rarr; the approver presses <b>Approve</b> or <b>Reject</b>. Approved lines become an order: "
+      "Purchase orders &rarr; <b>From requisitions</b>."),
+    P("2 &middot; Order: New order", "h2"), fields([
+    ("Supplier", "Yes", "Who you buy from.", "Sweet Mills", "One order per supplier."),
+    ("For branch", "Yes", "Where it is delivered.", "Head Office", ""),
+    ("Order date, Expected date", "Some", "Today; when it should arrive.", "", "Late orders show as overdue."),
+    ("Terms, Note", "No", "Payment terms, anything for the supplier.", "30 days", "Printed on the order PDF."),
+    ("Lines: Item, Qty, Unit, Unit price, Discount %, VAT %, Note", "Yes", "Add line for each item.",
+     "Sugar, 500, KG, 125", "The total shows on the order."),
+]), P("<b>Send for approval</b> &rarr; <b>Approve</b> &rarr; <b>Email to supplier</b> (or the PDF). Nothing is in "
+      "stock yet. When the goods come: <b>Receive goods</b>."),
+    P("3 &middot; Receive: Goods receipt (GRN)", "h2"), fields([
+    ("Order", "No", "The order it comes against.", "PO-2026-00012", "Lines fill from the order; the order shows what is still due."),
+    ("Supplier, Store, Received on", "Yes", "Who sent it, into which store, the day.", "Raw store", ""),
+    ("Challan no, Invoice no, Vehicle no", "No", "From the supplier's papers.", "", "Kept with the receipt."),
+    ("Received / Refused at the gate", "Yes", "What came, what you sent back at once.", "500 / 10", "Only the accepted part goes in."),
+    ("Unit cost", "Yes", "What you pay per unit.", "125", "Sets the average cost."),
+    ("Batch no, Supplier batch no", "Some", "Items that keep batches.", "SG-1101", "Empty: one is made."),
+    ("Manufacture date, Expiry date", "Some", "From the label.", "", "Expiry empty: manufacture date + shelf life."),
+    ("Packages, Note", "No", "Bags or cartons; anything.", "10 bags", "Package labels can be printed."),
+]), P("<b>Post</b>: the stock goes into the store. Items with a quality check wait on Stock &rarr; Quality check."),
+    P("4 &middot; Send back: Purchase return", "h2"), fields([
+    ("Receipt, Supplier, Returned on", "Yes", "Which receipt it came on.", "GRN-2026-00007", ""),
+    ("Why it goes back", "Yes", "Failed check, damaged, wrong item.", "Damp bags", ""),
+    ("Lines: Received line, Item, Batch, Store, Bin, Qty, Unit, Note", "Yes", "What goes back.", "Sugar, 20 KG",
+     "Posting takes it out at the receipt's cost."),
+])]
+
+# ------------------------------------------------------------------ sales
+story += section(13, "Selling with orders", "Inventory &rarr; Sales &rarr; Sell / Customers / Price lists, and "
+                 "Sales orders, Deliveries, Invoices, Sales returns",
+                 "<b>Sell</b> (step 9) does order, delivery and invoice in one go. For an order that is delivered "
+                 "later or in parts, the documents one by one:", "customers, stock, prices.")
+story += [P("Sales order", "h2"), fields([
+    ("Customer, Store, Order date", "Yes", "Who, from where, when.", "City Shop, Main store", ""),
+    ("Delivery date, Source, Customer ref.", "No", "When to deliver, how it came, their PO number.", "PO-7781",
+     "The ref. prints on the invoice and challan."),
+    ("Delivery address", "No", "Where it goes.", "", "Empty: the customer's address."),
+    ("Lines: Item, Store, Qty, Unit, Unit price, Discount %, VAT %, Note", "Yes", "Add line for each item.",
+     "Juice, 10, CARTON", "Price empty: the customer's price list, else the item's price. Store empty: the order's."),
+]), P("<b>Confirm</b> (over the credit limit needs a reason) &rarr; <b>Deliver</b>."),
+    P("Delivery (challan)", "h2"), fields([
+    ("Order, Store, Delivery date", "Yes", "Filled from the order.", "", "One challan per store."),
+    ("Vehicle no, Driver, Note", "No", "Who carries it.", "Dhaka Metro-T 11-2233", "Printed on the challan."),
+    ("Lines: Batch, Bin, Qty", "Some", "Filled: the batch that expires first.", "", "Another batch needs a reason."),
+]), P("<b>Challan</b> prints the delivery challan; <b>Post</b> takes the stock out; <b>Invoice</b> makes the invoice."),
+    P("Invoice", "h2"),
+    P("Made from the delivery with its prices and VAT. <b>Issue</b> it, print the <b>PDF</b>, and mark it "
+      "<b>Paid</b> (date and reference) when the money comes."),
+    box("The invoice and the challan", [
+        "Both print on your letterhead: logo, name, address, phone, email, BIN/TIN and registration number "
+        "(Organisation &rarr; Company profile), the document's number, date and references in a box, Bill to and "
+        "Ship to (or Deliver to), and the lines.",
+        "The invoice adds the subtotal, VAT and the total, the <b>amount in words</b> (Taka ... in lakh and crore), "
+        "the payment terms and signature lines. A draft, cancelled or paid invoice says so across the page.",
+        "The challan adds batch and expiry, the total quantity and three signatures: store, driver and the "
+        "customer (with seal).",
+    ], "ok"),
+    P("Sales return", "h2"), fields([
+    ("Delivery, Customer, Store, Date, Reason", "Yes", "What it came on and why.", "Leaking", ""),
+    ("Lines: Delivery line, Item, Batch, Condition, Qty, Unit", "Yes", "Good or Damaged.", "Damaged, 2",
+     "Good goes back to stock; damaged to the rejected store."),
+]), P("Price lists", "h2"), fields([
+    ("Name, Valid from, Valid to", "Yes", "One list, for some customers.", "Wholesale 2026", ""),
+    ("Prices: Item, Unit, Price, Min qty", "Yes", "A price per unit, from a quantity.", "Juice, CARTON, 430, 10",
+     "Sell and sales orders take this price first."),
+])]
+
+# ------------------------------------------------------------------ adjust
+story += section(14, "Adjust stock", "Inventory &rarr; Stock &rarr; Adjustments &rarr; New",
+                 "When you know the change for a few items: 5 damaged, 2 found, 10 expired. Each page shows which "
+                 "one you need, the steps with the current one lit, and what to press next.",
+                 "someone else who may approve adjustments.")
+story += [fields([
+    ("Store, Date", "Yes", "Where and when.", "Raw store", ""),
+    ("Reason", "Yes", "Damaged, Expired, Found, Lost or stolen, Sample, Correction, Transfer shortage.", "Damaged", ""),
+    ("Note", "No", "Anything.", "Torn bags", ""),
+    ("Lines: Item, Batch, Bin", "Yes", "Which stock.", "Sugar, SG-1101", ""),
+    ("Change (+ found, - out)", "Yes", "Plus for found, minus for written off.", "-5", ""),
+    ("Unit, Unit cost (found stock), New batch no, Expiry", "Some", "For stock found: its cost and batch.", "",
+     "Empty cost: the average cost."),
+]), Spacer(1, 3), box("See the effect first", [
+    "While it is a draft or waiting, each line shows <b>In store now</b> and <b>After this</b> - for example 30 KG "
+    "&rarr; 25 KG. <b>Send for approval</b>; nothing changes until the approver presses <b>Approve and post</b>. "
+    "A mistake after that: <b>Reverse</b> it with a reason.",
+])]
+
+# ------------------------------------------------------------------ count
+story += section(15, "Stock count", "Inventory &rarr; Stock &rarr; Stock counts &rarr; New",
+                 "To make the software match the shelves of a whole store.", "the store.")
+story += steps([
+    "<b>Start</b>: the store and the date. The software's quantities are frozen on the lines.",
+    "<b>Count</b>: type the counted quantity on each line (in the base unit) or scan the labels; <b>Save</b>. "
+    "Found something not on the list: <b>Add</b> (item, batch, bin, counted).",
+    "<b>Not found = 0</b> sets every line not counted to zero.",
+    "<b>Send for approval</b>; the approver sees every difference and presses <b>Approve</b>: the differences are "
+    "posted as one stock adjustment.",
+])
+
+# ------------------------------------------------------------------ reports
+story += section(16, "Reports", "Inventory &rarr; Reports",
+                 "Every report has filters, Excel and PDF; money only with \"See stock costs and values\".")
+story += [grid(("Report", "What it shows"), [
+    ("Stock on hand", "What is in each store now, by item and batch."),
+    ("Stock ledger (item card)", "Every movement of one item in a period, with the running balance."),
+    ("Movement summary", "Opening, in, out and closing per item for a period."),
+    ("Stock valuation", "What the stock is worth on a date, at average cost."),
+    ("Batch and expiry", "Batches with their expiry; what expires soon."),
+    ("Stock aging", "How long stock has been sitting."),
+    ("Slow and non-moving stock", "Items that have not moved for a while."),
+    ("Reorder report", "Items below the stock to keep, and how much to buy or make."),
+    ("Purchase register / GRN register", "Orders and goods received in a period."),
+    ("Consumption by department", "What each department took from the stores."),
+    ("Production yield and wastage", "Planned against good and damaged."),
+    ("Production cost / Material use", "Cost per unit against expected; materials used against the recipe."),
+    ("Waste and failed productions", "What was lost, and its cost."),
+    ("Shortages", "Materials short for the planned productions."),
+    ("Sales register / Customer and item sales", "Invoices in a period; who bought what."),
+], (60, 110))]
 
 # ------------------------------------------------------------------ questions
 story += [CondPageBreak(80 * mm), Spacer(1, 6 * mm), P("Questions people ask", "h1"), grid(("When", "What happens"), [
