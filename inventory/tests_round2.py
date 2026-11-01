@@ -97,3 +97,19 @@ class ProductStepsTests(HubFixture, TestCase):
         html = page.content.decode()
         order = [html.index(f'id="{anchor}"') for anchor in ("details", "recipe", "price", "make", "stock")]
         self.assertEqual(order, sorted(order))
+
+
+class StoreContentsTests(HubFixture, TestCase):
+    """The stores list says what each store holds, and opens it."""
+
+    def test_items_in_each_store(self):
+        page = self.client.get(reverse("inventory:stores"))
+        self.assertContains(page, "Items in it")
+        self.assertContains(page, f'{reverse("inventory:stock_now")}?store={self.rms.pk}')
+        for extra in ({"search[value]": self.rms.name}, {"order[0][column]": "5", "order[0][dir]": "desc"}):
+            reply = self.client.get(reverse("inventory:stores"), {"table": "1", "draw": "2", "start": "0",
+                                                                  "length": "25", **extra})
+            self.assertEqual(reply.status_code, 200, extra)
+            self.assertTrue(reply.json()["data"])
+        opened = self.client.get(reverse("inventory:stock_now"), {"store": self.rms.pk})
+        self.assertContains(opened, f"What's in {self.rms.name}")
