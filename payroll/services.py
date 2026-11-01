@@ -733,7 +733,7 @@ def record_branch_id(record):
     return assignment.branch_id if assignment else None
 
 
-def _bring_branches_up_to_date(company_id, year, month, branch_ids):
+def _bring_branches_up_to_date(company_id, year, month, branch_ids, progress=None):
     """``calculate_attendance`` for the people placed in some branches, for a
     branch's own salary: the same checks, without recalculating the company."""
     first, last = periods.bounds(company_id, year, month)
@@ -754,7 +754,7 @@ def _bring_branches_up_to_date(company_id, year, month, branch_ids):
             .exclude(status="cancelled").values_list("employee_id", flat=True)
         )
     if employee_ids:
-        recalculate(company_id, employee_ids=employee_ids, start=first, end=last)
+        recalculate(company_id, employee_ids=employee_ids, start=first, end=last, progress=progress)
 
 
 @transaction.atomic
@@ -793,7 +793,7 @@ def period_records(company_id, first, last, pay_group=None, employee_ids=None, g
 
 
 def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=None,
-                     pay_group=None, week=None):
+                     pay_group=None, week=None, progress=None):
     """Recalculate the month's attendance, then (re)build its draft salary run.
 
     With ``pay_group`` and ``week`` (a day in it), the weekly pay group's run
@@ -805,7 +805,15 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
     people whose placement at the end of the month is in those branches are
     rebuilt; everybody else's draft payslip stays exactly as it was. The run
     stays one per month for the company, finalised once by the owner or admin.
+
+    ``progress(stage, done, total)``, if given, is told how far it is: stage
+    "attendance" per person recalculated, then "salary" per payslip
+    (payroll/generate_jobs.py shows it on the Salary page, 2026-11-01).
     """
+    def attendance_progress(done, total):
+        if progress is not None:
+            progress("attendance", done, total)
+
     if pay_group is not None:
         if branch_ids is not None:
             raise ValidationError("A weekly pay group's week is generated for the whole company.")
@@ -823,7 +831,8 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
         if pay_group is None:
             first, last = periods.bounds(company_id, year, month)
         calculate_attendance(actor=actor, company_id=company_id, year=year, month=month,
-                             first=first, last=last)
+                             first=first, last=last,
+                             progress=attendance_progress if progress is not None else None)
     else:
         membership = require_company_membership(actor, company_id)
         branch_ids = {int(branch_id) for branch_id in branch_ids}
@@ -831,7 +840,8 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
             can(actor, company_id, "salary.prepare", branch_id) for branch_id in branch_ids
         ):
             raise PermissionDenied("You can generate salary only for branches where you may prepare it.")
-        _bring_branches_up_to_date(company_id, year, month, branch_ids)
+        _bring_branches_up_to_date(company_id, year, month, branch_ids,
+                                   progress=attendance_progress if progress is not None else None)
     # The salary month's own dates: the calendar month, or e.g. 26 Sep - 25 Oct
     # for "October" (payroll/periods.py, 2026-10-24).
     if pay_group is None:
@@ -947,7 +957,9 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
         skipped = dict(previous_skipped)
         on_monthly = {}
         skipped_now = []
-        for employee, records in records_by_employee.items():
+        for index, (employee, records) in enumerate(records_by_employee.items()):
+            if progress is not None:
+                progress("salary", index, len(records_by_employee))
             if not records:
                 continue
             start = max(first, employee.joining_date or first)
@@ -1033,6 +1045,8 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 for index, (kind, code, label, quantity, rate, amount) in enumerate(result["lines"])
             ])
 
+        if progress is not None:
+            progress("salary", len(records_by_employee), len(records_by_employee))
         # Totals over the whole run: after a branch regenerates, the other
         # branches' payslips are still in it.
         totals = run.records.aggregate(

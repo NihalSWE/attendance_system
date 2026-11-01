@@ -93,7 +93,8 @@ class PenaltyRuleTests(SalaryApiTestCase):
         back = self.api("POST",
                         f"/api/v1/payroll/penalties/{payslip['penalties'][0]['id']}/unwaive")
         self.assertEqual(back.status_code, 200, back.content)
-        next_month = (datetime.date(self.year, self.month, 28) + datetime.timedelta(days=5))
+        # The month after today's, so it is upcoming whatever day the tests run.
+        next_month = timezone.localdate().replace(day=28) + datetime.timedelta(days=5)
         changed = self.api("POST", f"/api/v1/payroll/penalty-rules/{made.json()['id']}/change",
                            {"deduction_value": "200",
                             "applies_from": next_month.strftime("%Y-%m")})

@@ -62,8 +62,8 @@
                     <a class="ui-btn ui-btn--main" href="{% url 'payroll:payroll_finalise' %}?month={{ month }}&year={{ year }}{{ pay_query }}">{% include "ui/icon.html" with name="check" %} Approve {{ run_label }}</a>
                 {% endif %}
             {% endif %}
-            {% if can_generate and run.status != 'posted' and run.status != 'submitted' %}
-                <form method="post" action="{% url 'payroll:payroll_generate' %}">
+            {% if can_generate and run.status != 'posted' and run.status != 'submitted' and not generate_job %}
+                <form method="post" action="{% url 'payroll:payroll_generate' %}" data-generate-form>
                     {% csrf_token %}
                     <input type="hidden" name="month" value="{{ month }}">
                     <input type="hidden" name="year" value="{{ year }}">
@@ -74,7 +74,7 @@
                     <button class="ui-btn{% if not run %} ui-btn--main{% endif %}" type="submit">{% include "ui/icon.html" with name="play" small=True %} {% if run %}Regenerate{% else %}Generate{% endif %} {% if pay_group %}the week{% else %}{{ month_name }} {{ year }}{% if not company_wide %} for your branches{% endif %}{% endif %}</button>
                 </form>
             {% endif %}
-            {% if run.status == 'draft' and can_generate %}
+            {% if run.status == 'draft' and can_generate and not generate_job %}
                 <a class="ui-btn ui-btn--main" href="{% url 'payroll:payroll_submit' %}?month={{ month }}&year={{ year }}{{ pay_query }}">{% include "ui/icon.html" with name="arrow-right" %} Submit {{ run_label }} for approval</a>
             {% endif %}
         </div>
@@ -98,6 +98,32 @@
             <span class="salary__dot">4</span><span>Payslips out</span>
         </li>
     </ol>
+
+    {# Generating in the background (2026-11-01): how far it is, asked every second. #}
+    {% if generate_job %}
+        <section class="job job--running salary__job" aria-live="polite"
+                 data-generate-job="{% url 'payroll:generate_status' %}?job={{ generate_job.id }}">
+            <div class="job__head">
+                <span class="job__title">Generating {{ run_title }}</span>
+                <span class="job__count"><span data-job-percent>{{ generate_job.percent }}</span>%</span>
+            </div>
+            <div class="job__bar"><span data-job-bar style="width: {{ generate_job.percent }}%"></span></div>
+            <ol class="salary__job-steps">
+                <li class="{% if generate_job.stage == 'attendance' %}is-now{% else %}is-done{% endif %}" data-job-step="attendance">
+                    <span class="salary__dot"><span data-num>1</span><span data-check>{% include "ui/icon.html" with name="check" small=True %}</span></span>
+                    <span>Bringing attendance up to date</span>
+                    <span class="job__count" data-job-count>{% if generate_job.stage == 'attendance' and generate_job.total %}{{ generate_job.done }} of {{ generate_job.total }} people{% endif %}</span>
+                </li>
+                <li class="{% if generate_job.stage == 'salary' %}is-now{% endif %}" data-job-step="salary">
+                    <span class="salary__dot"><span data-num>2</span><span data-check>{% include "ui/icon.html" with name="check" small=True %}</span></span>
+                    <span>Calculating payslips</span>
+                    <span class="job__count" data-job-count>{% if generate_job.stage == 'salary' and generate_job.total %}{{ generate_job.done }} of {{ generate_job.total }} people{% endif %}</span>
+                </li>
+            </ol>
+            <p class="job__note muted">Started <span data-job-elapsed data-seconds="{{ generate_job.elapsed }}">just now</span>. It carries on if you
+                leave this page; the payslips appear here when it has finished.</p>
+        </section>
+    {% else %}
 
     {# Everything that needs a look, in one place. #}
     {% if period_preview or run.status == 'submitted' or run.return_reason and run.status == 'draft' or attendance_since_run or overtime_since_run or run and overtime_waiting or approval_blocked and can_manage %}
@@ -317,5 +343,6 @@
             {% include "base_template/includes/table_pagination.html" %}
         {% endif %}
     </div>
+    {% endif %}
 </div>
 {% endblock %}

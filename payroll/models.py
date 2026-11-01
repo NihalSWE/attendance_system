@@ -1167,3 +1167,48 @@ class DaysOverride(TenantOwned, ActorTracked):
     def __str__(self):
         value = self.present_days if self.present_days is not None else f"{self.hours} h"
         return f"{self.employee_id} {self.start_date:%Y-%m-%d}..{self.end_date:%Y-%m-%d}: {value}"
+
+
+class GenerateJob(TenantOwned):
+    """Generate salary, done in the background (2026-11-01): a month for 2,000
+    people takes minutes, past the server's time limit, with nothing on screen.
+
+    The button only writes this row; ``payroll.generate_jobs`` runs
+    ``generate_payroll`` in a thread and writes here how far it is (attendance,
+    then payslips), which the Salary page shows. A job stopped by a restart is
+    started again: generating replaces the draft, so running it twice is safe."""
+
+    class Status(models.TextChoices):
+        RUNNING = "running", "Generating"
+        DONE = "done", "Generated"
+        FAILED = "failed", "Stopped"
+
+    class Stage(models.TextChoices):
+        ATTENDANCE = "attendance", "Bringing attendance up to date"
+        SALARY = "salary", "Calculating payslips"
+
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name="+")
+    year = models.PositiveSmallIntegerField()
+    month = models.PositiveSmallIntegerField()
+    # A weekly pay group's week (its first day), or neither for the month.
+    pay_group = models.ForeignKey(PayGroup, null=True, blank=True, on_delete=models.CASCADE,
+                                  related_name="+")
+    week = models.DateField(null=True, blank=True)
+    branch_ids = models.JSONField(null=True, blank=True)   # a branch's own salary
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.RUNNING)
+    stage = models.CharField(max_length=16, choices=Stage.choices, default=Stage.ATTENDANCE)
+    done_count = models.PositiveIntegerField(default=0)
+    total = models.PositiveIntegerField(default=0)
+    message = models.TextField(blank=True)      # what it did, or why it stopped
+    announced = models.BooleanField(default=False)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "payroll_generate_job"
+        indexes = [models.Index(fields=["company", "status"])]
+
+    def __str__(self):
+        return f"generate {self.year}-{self.month:02d}: {self.stage} {self.done_count}/{self.total}"

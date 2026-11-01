@@ -6962,3 +6962,26 @@ Left in phase 9: 9.3 the tutorial from the new screens; then the full suite and 
 
 **The redesign (phases 0-9) is complete. Deploy everything together:** pull, migrate (devices
 0012/0013, tenants 0009, inventory 0005-0007, production 0002-0004), collectstatic, restart.
+
+### Generate salary in the background, with its progress — 2026-11-01
+
+- Generate ran inside the click: with 150+ people it took longer than a person will wait and
+  with 2,000+ it would pass the server's time limit, with nothing on screen meanwhile.
+- The click now writes a `GenerateJob` (payroll 0016) and returns at once
+  (`payroll/generate_jobs.py`). A thread runs `generate_payroll`, which reports
+  `progress(stage, done, total)`: attendance person by person (`recalculate(progress=...)`), then
+  the payslips. The Salary page shows the shared progress card - "Generating August 2026", a bar,
+  step 1 "Bringing attendance up to date: 640 of 2000 people", step 2 "Calculating payslips" -
+  asks `payroll:generate_status` every second and reloads with the result when it has finished.
+- While it runs, Generate and Submit are hidden and Submit/Approve are refused; a second click
+  returns the running job. Whoever started it sees what it did (or why it stopped) once.
+- A job whose thread stopped (deploy, restart) has a silent heartbeat; after 3 minutes the next
+  look at the Salary page starts it again (generating replaces the draft, so this is safe).
+- So the progress can be seen, the background run saves attendance days as it goes (like scans
+  arriving) instead of in one transaction; days with nothing stored are written 5,000 at a time.
+- The API's generate (`api/v1/payroll`) is unchanged: it still answers when done.
+- Supersedes the unmerged branch `fix/fast-salary-generation` (2026-10-26), whose migration
+  clashes with payroll 0015 and which showed no progress.
+- Tests: `payroll/tests_generate_jobs.py` (10).
+
+**Deploy:** pull, migrate (payroll 0016), collectstatic, restart.
