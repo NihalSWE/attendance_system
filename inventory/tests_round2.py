@@ -79,3 +79,21 @@ class StockInFillsTests(HubFixture, TestCase):
         page = self.client.get(reverse("inventory:stock_in_new"))
         self.assertContains(page, f'data-cost="52" data-cost-from="last price paid" data-store="{self.rms.pk}" '
                                   f'data-supplier="{supplier.pk}"')
+
+
+class ProductStepsTests(HubFixture, TestCase):
+    """The product page in the order the work is done; the price waits for the cost."""
+
+    def test_a_new_product_starts_at_its_recipe_and_its_price_waits(self):
+        body = self.client.post(reverse("inventory:products"), self.product(sale_price=""), **FETCH).json()
+        self.assertTrue(body["ok"], body)
+        product = Item.all_objects.get(company=self.company, name="Biscuit 100 g")
+        page = self.client.get(reverse("inventory:product", args=[product.pk]))
+        states = [(step["key"], step["state"]) for step in page.context["steps"]]
+        self.assertEqual(states[:3], [("details", "done"), ("recipe", "now"), ("cost", "later")])
+        self.assertContains(page, "Set the price once the cost is known.")
+        self.assertNotContains(page, f'action="{reverse("inventory:item_price", args=[product.pk])}"')
+        self.assertContains(page, "Write the recipe first.")
+        html = page.content.decode()
+        order = [html.index(f'id="{anchor}"') for anchor in ("details", "recipe", "price", "make", "stock")]
+        self.assertEqual(order, sorted(order))

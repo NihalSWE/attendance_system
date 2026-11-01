@@ -218,16 +218,43 @@ def product(request, pk):
                      reverse("inventory:stock_in_new") + f"?item={item.pk}", "Stock in")
     else:
         next_step = ("Sell it: deliver to a customer from stock.", reverse("inventory:sale_new"), "Sell")
+    productions = hub.productions(company_id, item) if makes else []
+    steps = _product_steps(item, makes, making.get("has_recipe", False), parts["price_cost"], line, productions,
+                           sold, context["sees_costs"])
     return render(request, "inventory/hub/product.html", {
-        **context, **parts, **making, "line": line, "makes": makes,
+        **context, **parts, **making, "line": line, "makes": makes, "steps": steps,
+        "step_no": {step["key"]: step["number"] for step in steps},
         "buys": buys, "recipe": recipe, "sold": sold, "per_day": per_day,
         "batches": hub.stock_by_batch(company_id, request.user, item),
-        "productions": hub.productions(company_id, item) if makes else [],
+        "productions": productions,
         "tones": hub.PRODUCTION_TONE,
         "received": hub.received(company_id, request.user, item) if buys else [],
         "can_plan": access.may(request.user, company_id, "production.plan"),
         "next_step": next_step,
     })
+
+
+def _product_steps(item, makes, has_recipe, cost, line, productions, sold, sees_costs):
+    """The product page in the order the work is done (2026-11-01): each step
+    done or not, the first not done marked "now", each with its section."""
+    made = any(p.good_qty_base for p in productions)
+    found = [("details", "Details and units", True, "#details")]
+    if makes:
+        found += [("recipe", "Recipe", has_recipe, "#recipe")]
+        if sees_costs:
+            found += [("cost", "Cost of one batch", cost is not None, "#costs")]
+        found += [("price", "Sale price", bool(item.sale_price), "#price"),
+                  ("make", "Make", made, "#make")]
+    else:
+        found += [("stock_in", "Stock in", bool(line.on_hand) or cost is not None, "#stock-in"),
+                  ("price", "Sale price", bool(item.sale_price), "#price")]
+    found += [("sell", "Stock and sell", bool(sold), "#stock")]
+    steps, now = [], False
+    for number, (key, title, done, anchor) in enumerate(found, 1):
+        state = "done" if done else ("later" if now else "now")
+        now = now or not done
+        steps.append({"key": key, "number": number, "title": title, "state": state, "anchor": anchor})
+    return steps
 
 
 def _making(request, company_id, item, recipe, packs):

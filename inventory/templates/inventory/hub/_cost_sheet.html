@@ -5,7 +5,7 @@
 {% endcomment %}
 <div class="ui-card" id="costs">
     <div class="ui-card__head">
-        <h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Cost of one batch</h2>
+        <h2 class="ui-card__title">{% if step %}<span class="ui-stepno">{{ step }}</span>{% endif %}{% include "ui/icon.html" with name="coins" %} Cost of one batch</h2>
         {% if cost_form and sheet %}<button class="ui-btn ui-btn--sm" type="button" data-open-dialog="cost-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add cost</button>{% endif %}
     </div>
     {% if sheet %}
