@@ -101,6 +101,10 @@ BRANCH_PAGES = {
     "attendance:attendance_day": "attendance.view",
     "attendance:attendance_now": ("employees.view", "attendance.view"),
     "attendance:attendance_review": "attendance.fix",
+    # Stock waiting for a quality check (2026-11-01): seen with the stock;
+    # deciding needs purchase.qc, checked by inventory/qc.py.
+    "inventory:qc": "inventory.view",
+    "inventory:qc_decide": ("purchase.qc",),
     # Present days set by hand (2026-10-31): the service also refuses a head
     # of department, who fixes days but not a period's count.
     "payroll:attendance_summary": "attendance.fix",

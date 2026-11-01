@@ -311,8 +311,13 @@ def _item_parts(request, company_id, item):
     # Edit from a list's row (2026-10-31): the page opens with its Edit modal
     # open, and saving goes back to that list.
     back = request.GET.get("back", "")
+    # Its batches waiting for a quality check (2026-11-01, inventory/qc.py).
+    from inventory import qc
+
     return {
         **price,
+        "qc_waiting": qc.waiting(company_id, item=item),
+        "can_qc": access.may(request.user, company_id, qc.CODE),
         "item": item, "packs": packs, "list_url": _list_of(item), "moved": moved,
         "edit_open": can_manage and request.GET.get("edit") == "1",
         "edit_next": back if back in (reverse("inventory:materials"), reverse("inventory:products")) else "",

@@ -1,0 +1,21 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Quality check{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:stock_now' %}">Stock</a> / Quality check</p>
+            <h1 class="ui-head__title">Quality check</h1>
+            <p class="ui-head__sub">Items with "Quality check before use" wait here after they are made or received. Pass a batch and it can be used and sold; fail it and it is blocked.</p>
+        </div>
+    </div>
+    <div class="ui-tiles">
+        <div class="ui-tile{% if waiting %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Batches waiting</p><p class="ui-tile__value">{{ waiting|length }}</p><p class="ui-tile__hint">made or received</p></div>
+        <div class="ui-tile"><p class="ui-tile__label">Made here</p><p class="ui-tile__value">{{ made }}</p><p class="ui-tile__hint">from production</p></div>
+        <div class="ui-tile"><p class="ui-tile__label">Bought</p><p class="ui-tile__value">{{ bought }}</p><p class="ui-tile__hint">from goods received</p></div>
+    </div>
+    {% if waiting %}
+        {% include "inventory/hub/_qc_card.html" with show_item=True %}
+    {% else %}
+        <div class="ui-card"><div class="ui-card__body"><p class="ui-muted">Nothing waits for a quality check. New batches of an item with "Quality check before use" will appear here.</p></div></div>
+    {% endif %}
+{% endblock %}

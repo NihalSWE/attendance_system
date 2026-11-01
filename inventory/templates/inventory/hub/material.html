@@ -26,6 +26,7 @@
         <div class="ui-tile"><p class="ui-tile__label">Used in</p><p class="ui-tile__value">{{ used|length }}</p><p class="ui-tile__hint">product{{ used|length|pluralize }}</p></div>
     </div>
 
+    {% include "inventory/hub/_qc_card.html" with waiting=qc_waiting %}
     {% include "inventory/hub/_price.html" %}
 
     {% if makes %}
