@@ -5,16 +5,20 @@
 {% endcomment %}
 <div class="ui-card" id="price">
     <div class="ui-card__head">
-        <h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Sale price</h2>
+        <h2 class="ui-card__title">{% if step %}<span class="ui-stepno">{{ step }}</span>{% endif %}{% include "ui/icon.html" with name="coins" %} Sale price</h2>
         <span class="ui-card__note">{% if item.sale_price %}Now {{ item.sale_price|floatformat:"2g" }} per {{ item.base_uom.code }}{% else %}Not set yet{% endif %}</span>
     </div>
     <div class="ui-card__body">
         {% if price_cost is None %}
-            <p class="ui-muted">The cost is not known yet: {% if makes %}write the recipe (and Stock in its materials){% else %}put it in stock with its buy price, or give an expected buy price (Edit){% endif %}, then set the price here.</p>
+            {# Locked until the cost is known (2026-11-01): a price set blind is how a loss starts. #}
+            <div class="ui-locked">
+                <p><strong>Set the price once the cost is known.</strong> {% if makes %}The cost comes from the recipe: what one batch makes, its materials (with a cost: Stock in or their expected buy price) and the other costs of a batch.{% else %}The cost comes from the buy price: put it in stock first{% if item.kind != "finished" %}, or give an expected buy price (Edit){% endif %}.{% endif %}</p>
+                {% if makes %}<a class="ui-btn ui-btn--sm" href="#recipe">Go to the recipe</a>{% else %}<a class="ui-btn ui-btn--sm" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">Stock in</a>{% endif %}
+            </div>
         {% else %}
             <p>Cost of one {{ item.base_uom.code }}: <strong>{{ price_cost|floatformat:"2g" }}</strong>{% if item.sale_price %} · margin <strong class="{% if price_margin < 0 %}ui-bad{% else %}ui-good{% endif %}">{{ price_margin|floatformat:"2g" }} ({{ price_margin_pct }}%)</strong>{% if price_margin < 0 %} <span class="ui-chip ui-chip--bad">Below cost</span>{% endif %}{% endif %}</p>
         {% endif %}
-        {% if can_price %}
+        {% if can_price and price_cost is not None %}
             <form method="post" action="{% url 'inventory:item_price' item.pk %}" data-fetch data-price-form data-cost="{{ price_cost|default_if_none:'' }}" novalidate>
                 {% csrf_token %}
                 <div class="ui-grid-2">

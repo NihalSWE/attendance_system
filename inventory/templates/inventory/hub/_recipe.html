@@ -6,7 +6,7 @@
 {% endcomment %}
 <div class="ui-card" id="recipe">
     <div class="ui-card__head">
-        <h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Recipe{% if recipe %}: one batch makes {{ recipe.bom.batch_size|floatformat:"-4g" }} {{ recipe.bom.batch_uom.code }}{% endif %}</h2>
+        <h2 class="ui-card__title">{% if step %}<span class="ui-stepno">{{ step }}</span>{% endif %}{% include "ui/icon.html" with name="list" %} Recipe{% if recipe %}: one batch makes {{ recipe.bom.batch_size|floatformat:"-4g" }} {{ recipe.bom.batch_uom.code }}{% endif %}</h2>
         {% if material_form and recipe %}
             <span>
                 <button class="ui-btn ui-btn--sm" type="button" data-open-dialog="batch-dialog">{% include "ui/icon.html" with name="edit" small=True %} Batch size</button>
@@ -44,7 +44,10 @@
     {% elif batch_form %}
         <form class="ui-card__body" method="post" action="{% url 'production:recipe_batch' item.pk %}" data-fetch novalidate>
             {% csrf_token %}
-            <p>Say first how much <strong>one batch</strong> (one mix) makes. Then add the materials it uses.</p>
+            <ol class="ui-substeps">
+                <li class="is-now"><strong>How much one batch makes</strong> <span class="ui-muted">· one mix, in {{ item.base_uom.code }}</span></li>
+                <li><strong>The materials one batch uses</strong> <span class="ui-muted">· opens once the batch size is saved</span></li>
+            </ol>
             <div class="ui-grid-2">{% include "inventory/hub/field.html" with box=batch_form.batch_size %}</div>
             <div class="ui-form-actions"><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save</button></div>
         </form>

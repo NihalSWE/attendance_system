@@ -180,7 +180,7 @@ class ProductsTests(HubFixture, TestCase):
         page = self.client.get(reverse("inventory:product", args=[biscuit.pk]))
         self.assertContains(page, "Not set yet")
         # No recipe yet: the page asks first what one batch makes (phase 5).
-        self.assertContains(page, "how much <strong>one batch</strong> (one mix) makes")
+        self.assertContains(page, "<strong>How much one batch makes</strong>")
 
     def test_the_add_product_form_asks_no_price(self):
         page = self.client.get(reverse("inventory:products")).content.decode()

@@ -90,3 +90,35 @@
 .qc-card__actions { display: flex; gap: 6px; align-items: center; justify-content: flex-end; white-space: nowrap; }
 .qc-card__actions form { margin: 0; }
 .qc-card__note { margin: 0; padding: var(--s3) var(--s4); }
+
+/* The product page in step order (2026-11-01) */
+.ui-stepno {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; margin-right: 8px; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 600;
+}
+.product-steps { position: sticky; top: calc(var(--topbar-h) + 8px); z-index: 5; padding: 6px; border-radius: var(--r-lg);
+                 background: var(--page); box-shadow: 0 0 0 1px var(--border); }
+.ui-page a.ui-steps__step { text-decoration: none !important; color: var(--muted) !important; transition: background .2s ease, transform .15s ease; }
+.ui-page a.ui-steps__step:hover { transform: translateY(-1px); }
+.ui-page a.ui-steps__step--done { color: var(--success-ink) !important; }
+.ui-page a.ui-steps__step--now { color: #fff !important; }
+.product-steps__no {
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    width: 22px; height: 22px; border-radius: 50%; background: var(--surface); font-size: 12px; font-weight: 600;
+}
+.ui-steps__step--now .product-steps__no { color: var(--action); }
+.ui-locked {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3);
+    padding: var(--s3) var(--s4); border: 1px dashed var(--field); border-radius: var(--r); background: var(--surface-sunken);
+}
+.ui-locked p { margin: 0; flex: 1 1 320px; color: var(--muted); }
+.ui-locked strong { color: var(--text); }
+.ui-substeps { margin: 0 0 var(--s3); padding-left: 20px; }
+.ui-substeps li { margin: 4px 0; color: var(--muted); }
+.ui-substeps li.is-now strong { color: var(--text); }
+.ui-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s3); margin: 0; padding: var(--s4); border-bottom: 1px solid var(--border); }
+.ui-facts dt { font-size: 12px; color: var(--muted); }
+.ui-facts dd { margin: 2px 0 0; font-weight: 500; }
+:target.ui-card { animation: ui-target 1.6s ease-out; }
+@keyframes ui-target { 0%, 25% { box-shadow: 0 0 0 3px var(--action-soft); } }

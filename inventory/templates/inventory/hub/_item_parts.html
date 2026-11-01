@@ -3,11 +3,24 @@
     the Units and prices card, and the Edit, Add unit, Delete / Deactivate
     modals. Every form saves with fetch and answers above its buttons.
 {% endcomment %}
-<div class="ui-card">
+<div class="ui-card" id="details">
     <div class="ui-card__head">
-        <h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Units{% if item.kind == "finished" %} and prices{% endif %}</h2>
-        {% if pack_form %}<button class="ui-btn ui-btn--sm" type="button" data-open-dialog="pack-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add a bigger unit</button>{% endif %}
+        <h2 class="ui-card__title">{% if step %}<span class="ui-stepno">{{ step }}</span>{% endif %}{% include "ui/icon.html" with name="list" %} {% if step %}Details and units{% else %}Units{% if item.kind == "finished" %} and prices{% endif %}{% endif %}</h2>
+        <span>
+            {% if edit_form and step %}<button class="ui-btn ui-btn--sm" type="button" data-open-dialog="edit-dialog">{% include "ui/icon.html" with name="edit" small=True %} Edit</button>{% endif %}
+            {% if pack_form %}<button class="ui-btn ui-btn--sm" type="button" data-open-dialog="pack-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add a bigger unit</button>{% endif %}
+        </span>
     </div>
+    {% if step %}
+        <dl class="ui-facts">
+            <div><dt>Code</dt><dd>{{ item.code }}</dd></div>
+            <div><dt>Category</dt><dd>{{ item.category.name|default:"—" }}</dd></div>
+            <div><dt>Minimum stock</dt><dd>{% if item.keep_by == "days" %}{{ item.keep_days }} days of sales{% elif item.min_stock %}{{ item.min_stock|floatformat:"-2g" }} {{ item.base_uom.code }}{% else %}—{% endif %}</dd></div>
+            <div><dt>New stock goes to</dt><dd>{{ item.default_warehouse.name|default:"—" }}</dd></div>
+            <div><dt>Batches and expiry</dt><dd>{% if item.track_expiry %}Expires · {{ item.shelf_life_days|default:"no" }} days shelf life{% elif item.track_batch %}Keeps batches{% else %}No{% endif %}</dd></div>
+            <div><dt>Quality check</dt><dd>{% if item.qc_required %}Before use: new batches wait{% else %}No{% endif %}</dd></div>
+        </dl>
+    {% endif %}
     <div class="table-wrap">
         <table class="table">
             <thead><tr><th>Unit</th><th class="numeric">Holds</th>{% if item.kind == "finished" %}<th class="numeric">Sale price</th>{% endif %}<th class="no-sort"><span class="sr-only">Remove</span></th></tr></thead>
