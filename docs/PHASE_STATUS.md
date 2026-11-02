@@ -7032,3 +7032,26 @@ Left in phase 9: 9.3 the tutorial from the new screens; then the full suite and 
 **Deploy:** pull, migrate (ai_assistant 0002), collectstatic, restart. Then, as the owner or company
 admin, Organisation › Ask settings: record the client's consent, save the key if it is not saved
 yet, switch Ask on.
+
+### Inventory menu dropdowns; supplier and customer forms — 2026-11-02
+
+- **Menu** (`base_template/navigation.py`): Units and Item categories, Stores and Bins, Suppliers,
+  and Customers left the Setup dropdown for dropdowns of their own, in this order after Setup:
+  **Stores & Bins**, **Categories & Units**, **Suppliers**, **Customers**. Setup keeps Start here,
+  Inventory settings, Price lists and Cost rates. `sidebar.html` unchanged.
+- **Add / Edit supplier** (`inventory/forms.py` `SupplierForm`): "Name" reads **Company / shop
+  name**; code, company / shop name, contact person, phone number, email, address and payment terms
+  must be filled. **Items supplied** is no longer on the form (a typed list of item codes confused
+  people; what a supplier brings shows on its stock in). The column stays in the database, the
+  Excel import and the API, so nothing saved is lost.
+- **Add / Edit customer** (`CustomerForm`): **Company / shop name**; code, company / shop name,
+  customer type, contact person and WhatsApp number must be filled, the rest is optional.
+- **New modal** for both (`inventory/includes/party_form.html`): a title and one line under it,
+  sections (Business, Contact, Terms and tax / Credit and prices, Notes), address and notes across
+  the whole row, "* must be filled" beside Cancel and Add. The other master pages keep their modal.
+- The required boxes are checked by the web forms; the Excel import and the API keep their own
+  rules (unchanged).
+- Tests: `inventory/tests_pages.py` (two new, one updated), `inventory/tests_update_list.py`
+  (the menu order).
+
+**Deploy:** pull, collectstatic, restart. No migration.

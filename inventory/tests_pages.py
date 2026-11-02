@@ -84,16 +84,52 @@ class MasterPageTests(InventoryFixture, TestCase):
                                                      "description": "Caps"})
         self.assertTrue(Location.all_objects.filter(warehouse=store, code="R1-S1").exists())
         self.client.post(reverse("inventory:suppliers"), {
-            "code": "SUP-1", "name": "Sugar Traders", "email": "sales@sugar.test",
-            "payment_terms_days": "30"})
+            "code": "SUP-1", "name": "Sugar Traders", "contact_person": "Rafiq", "phone": "01711000000",
+            "email": "sales@sugar.test", "address": "Khatunganj, Chattogram", "payment_terms_days": "30"})
         self.assertEqual(Supplier.all_objects.get(code="SUP-1").payment_terms_days, 30)
         self.client.post(reverse("inventory:customers"), {
-            "code": "CUS-1", "name": "Sylhet House", "customer_type": "distributor",
+            "code": "CUS-1", "name": "Sylhet House", "customer_type": "distributor", "contact_person": "Mitu",
             "whatsapp": "8801911000000", "credit_limit": "500000", "payment_terms_days": "30"})
         self.assertEqual(Customer.all_objects.get(code="CUS-1").customer_type, "distributor")
         self.client.post(reverse("inventory:units"), {"code": "tin", "name": "Tin", "kind": "count",
                                                       "decimals": "0"})
         self.assertTrue(Uom.all_objects.filter(company=self.company, code="TIN").exists())
+
+    def test_supplier_form_asks_for_what_is_needed(self):
+        # 2026-11-02: Company / shop name; code, name, contact, phone, email,
+        # address and terms required; "Items supplied" gone; a sectioned modal.
+        page = self.client.get(reverse("inventory:suppliers"))
+        self.assertContains(page, "Company / shop name")
+        self.assertContains(page, "ui-form-section__title")
+        self.assertContains(page, "A company or shop you buy from.")
+        self.assertNotContains(page, "items_supplied")
+        form = page.context["new_form"]
+        self.assertEqual([name for name, box in form.fields.items() if box.required],
+                         ["code", "name", "contact_person", "phone", "email", "address", "payment_terms_days"])
+        refused = self.client.post(reverse("inventory:suppliers"), {"code": "SUP-2", "name": "Half filled"})
+        self.assertContains(refused, 'data-open-on-load="new-dialog"')
+        self.assertEqual(set(refused.context["new_form"].errors),
+                         {"contact_person", "phone", "email", "address", "payment_terms_days"})
+        self.assertFalse(Supplier.all_objects.filter(code="SUP-2").exists())
+
+    def test_customer_form_asks_for_what_is_needed(self):
+        page = self.client.get(reverse("inventory:customers"))
+        self.assertContains(page, "Company / shop name")
+        self.assertContains(page, "Credit and prices")
+        form = page.context["new_form"]
+        self.assertEqual([name for name, box in form.fields.items() if box.required],
+                         ["code", "name", "customer_type", "contact_person", "whatsapp"])
+        refused = self.client.post(reverse("inventory:customers"), {"code": "CUS-2", "name": "Corner shop"})
+        self.assertEqual(set(refused.context["new_form"].errors), {"customer_type", "contact_person", "whatsapp"})
+        self.client.post(reverse("inventory:customers"), {
+            "code": "CUS-2", "name": "Corner shop", "customer_type": "retailer", "contact_person": "Babu",
+            "whatsapp": "8801811000000"})
+        saved = Customer.all_objects.get(code="CUS-2")
+        self.assertEqual((saved.credit_limit, saved.payment_terms_days, saved.email), (0, 0, ""))
+        # Editing opens the same sectioned modal.
+        page = self.client.get(reverse("inventory:customers"), {"edit": saved.pk})
+        self.assertContains(page, 'data-open-on-load="edit-dialog"')
+        self.assertContains(page, "Edit Corner shop")
 
     def test_pack_units_on_the_item_page(self):
         response = self.client.post(reverse("inventory:pack_unit_add", args=[self.sugar.pk]),

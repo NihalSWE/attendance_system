@@ -209,27 +209,29 @@ INVENTORY_MENUS = (
     # platform owner enables the module, to those holding "View stock and items".
     ("inventory", "Inventory", (
         # One dropdown per kind of work, as agreed (2026-10-29, list items 13-14):
-        # Setup, Materials, Products, Stock, Production, Sales, Purchase,
-        # Reports, Tools. A dropdown is the run of entries with the same ``group``.
+        # Setup, Stores & Bins, Categories & Units, Suppliers, Customers (their
+        # own dropdowns since 2026-11-02), Materials, Products, Stock,
+        # Production, Sales, Purchase, Reports, Tools. A dropdown is the run of
+        # entries with the same ``group``.
         item("Start here", "inventory:start", needs="inventory.view", group="Setup"),
         item("Inventory settings", "inventory:settings", manage=True, needs="inventory.view", group="Setup"),
-        item("Units", "inventory:units", "inventory:units_edit", "inventory:units_status",
-             "inventory:standard_units", needs="inventory.view", group="Setup"),
-        item("Item categories", "inventory:categories", "inventory:categories_edit",
-             "inventory:categories_status", needs="inventory.view", group="Setup"),
-        item("Stores", "inventory:stores", "inventory:stores_edit", "inventory:stores_status",
-             needs="inventory.view", group="Setup"),
-        item("Bins", "inventory:bins", "inventory:bins_edit", "inventory:bins_status",
-             needs="inventory.view", group="Setup"),
-        item("Suppliers", "inventory:suppliers", "inventory:suppliers_edit",
-             "inventory:suppliers_status", needs="inventory.view", group="Setup"),
-        item("Customers", "inventory:customers", "inventory:customers_edit",
-             "inventory:customers_status", needs="inventory.view", group="Setup"),
         *_in_group(SALES_ENTRIES, "Setup", ("sales:price_lists",)),
         # What an hour of people or a machine costs (2026-10-27, plan §7.4).
         item("Cost rates", "production:cost_rates", "production:cost_rate_save",
              "production:cost_rate_status", needs=("inventory.view", "production.bom"),
              module="production", group="Setup"),
+        item("Stores", "inventory:stores", "inventory:stores_edit", "inventory:stores_status",
+             needs="inventory.view", group="Stores & Bins"),
+        item("Bins", "inventory:bins", "inventory:bins_edit", "inventory:bins_status",
+             needs="inventory.view", group="Stores & Bins"),
+        item("Units", "inventory:units", "inventory:units_edit", "inventory:units_status",
+             "inventory:standard_units", needs="inventory.view", group="Categories & Units"),
+        item("Item categories", "inventory:categories", "inventory:categories_edit",
+             "inventory:categories_status", needs="inventory.view", group="Categories & Units"),
+        item("Suppliers", "inventory:suppliers", "inventory:suppliers_edit",
+             "inventory:suppliers_status", needs="inventory.view", group="Suppliers"),
+        item("Customers", "inventory:customers", "inventory:customers_edit",
+             "inventory:customers_status", needs="inventory.view", group="Customers"),
         item("Materials", "inventory:materials", "inventory:material", needs="inventory.view",
              module="production", group="Materials"),
         item("Spare parts", "inventory:spare_parts", "inventory:spare_parts_edit", "inventory:spare_parts_status",

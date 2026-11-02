@@ -4,7 +4,7 @@
     the unit chosen in that other box beside it (asked once), ``unit_text``
     fixed words beside it (days, %).
 {% endcomment %}
-<div class="field{% if box.field.widget.input_type == "checkbox" or box.field.widget.input_type == "radio" %} field--wide{% endif %}{% if box.errors %} ui-field--error{% endif %}">
+<div class="field{% if box.field.widget.input_type == "checkbox" or box.field.widget.input_type == "radio" or box.field.wide %} field--wide{% endif %}{% if box.errors %} ui-field--error{% endif %}">
     {% if box.field.widget.input_type == "checkbox" %}
         <label class="ui-switch" for="{{ box.id_for_label }}">
             <span class="ui-switch__text"><span class="ui-switch__label">{{ box.label }}</span>{% if box.help_text %}<span class="ui-switch__hint">{{ box.help_text }}</span>{% endif %}</span>
