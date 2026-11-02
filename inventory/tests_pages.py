@@ -137,10 +137,18 @@ class MasterPageTests(InventoryFixture, TestCase):
     def test_bangladeshi_numbers(self):
         from inventory.forms import bd_number
 
+        # The boxes take at most 11 digits and are checked as typed (bd_phone.js).
+        page = self.client.get(reverse("inventory:customers"))
+        self.assertContains(page, 'maxlength="11"', count=2)       # the Add modal's phone and WhatsApp
+        self.assertContains(page, "inventory/js/bd_phone.js")
+        refused = self.client.post(reverse("inventory:customers"), {
+            "code": "CUS-9", "customer_type": "retailer", "contact_person": "Zero", "whatsapp": "00000000000"})
+        self.assertContains(refused, "Write an 11-digit Bangladeshi number, e.g. 01711000000.")
+
         for typed in ("01711000000", "017-1100 0000", "+8801711000000", "8801711000000", "০১৭১১০০০০০০"):
             self.assertEqual(bd_number(typed), "01711000000", typed)
         self.assertEqual(bd_number(""), "")
-        for wrong in ("0171100000", "017110000000", "02711000000", "01211000000"):
+        for wrong in ("0171100000", "017110000000", "02711000000", "01211000000", "00000000000", "01011111111"):
             with self.assertRaises(Exception, msg=wrong):
                 bd_number(wrong)
         self.client.post(reverse("inventory:customers"), {

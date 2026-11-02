@@ -7051,7 +7051,9 @@ yet, switch Ask on.
 - **Phone numbers** (supplier phone; customer phone and WhatsApp): Bangladeshi mobile numbers of
   11 digits (01XXXXXXXXX, `inventory.forms.bd_number`). Spaces, dashes, Bangla digits and a +880
   prefix are tidied, and the number is saved as 11 digits. The AI order assistant still recognises
-  them (it compares the last 10 digits).
+  them (it compares the last 10 digits). The boxes take digits only and stop at 11, and say at once
+  when the number cannot be a BD mobile number (e.g. 11 zeros, or not starting 013-019):
+  `inventory/static/inventory/js/bd_phone.js`; the server checks again on save.
 - **New modal** for both (`inventory/includes/party_form.html`): a title and one line under it,
   sections (Business, Contact, Terms and tax / Credit and prices, Notes), address and notes across
   the whole row, "* must be filled" beside Cancel and Add. The other master pages keep their modal.
