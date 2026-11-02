@@ -309,7 +309,8 @@ def _making(request, company_id, item, recipe, packs):
             material_form.fields["new_uom"].widget.option_attrs = lambda rows: {
                 pk: {"data-unit": code} for pk, code in rows.values_list("pk", "code")}
         batch_form = production_forms.RecipeBatchForm(
-            initial={"batch_size": recipe["bom"].batch_size.normalize() if recipe else None})
+            # "500", never "5E+2" (normalize() alone writes round numbers in exponent form).
+            initial={"batch_size": format(recipe["bom"].batch_size.normalize(), "f") if recipe else None})
         batch_form.fields["batch_size"].unit_text = item.base_uom.code
         found.update({"material_form": material_form, "batch_form": batch_form,
                       "cost_form": production_forms.CostLineForm(company_id=company_id)})
