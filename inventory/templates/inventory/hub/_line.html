@@ -1,16 +1,17 @@
 {% comment %}
     One item line of Stock in / Move stock / Sell (static/inventory/js/lines.js):
     i (its number), items (flow_views._item_options), mode "in", "move" or "sell".
-    Plain selects: lines are copied by "Add a line".
+    The item and unit lists get a search box (searchable.js, data-searchable);
+    "Add a line" copies a line and sets its lists up again.
 {% endcomment %}
 <div class="ui-line" data-line="{{ i }}">
     <p class="ui-line__title" data-line-title>Line {{ i }}</p>
     <div class="ui-grid-2">
         <div class="field">
             <label class="field__label" for="item_{{ i }}">Item</label>
-            <select class="input select" id="item_{{ i }}" name="item_{{ i }}" data-line-item>
+            <select class="input select" id="item_{{ i }}" name="item_{{ i }}" data-line-item data-searchable>
                 <option value="">Choose an item</option>
-                {% for option in items %}<option value="{{ option.item.pk }}" data-units="{{ option.units }}" data-batch="{{ option.batch }}" data-expiry="{{ option.expiry }}" data-buy-unit="{{ option.buy_unit }}" data-cost="{{ option.cost }}" data-cost-from="{{ option.cost_from }}" data-store="{{ option.store }}" data-supplier="{{ option.supplier }}" data-shelf="{{ option.shelf }}"{% if i == 1 and option.item.pk == preselect %} selected{% endif %}>{{ option.item.code }} · {{ option.item.name }}</option>{% endfor %}
+                {% for option in items %}<option value="{{ option.item.pk }}" data-units="{{ option.units }}" data-kind="{{ option.kind }}" data-batch="{{ option.batch }}" data-expiry="{{ option.expiry }}" data-buy-unit="{{ option.buy_unit }}" data-cost="{{ option.cost }}" data-cost-from="{{ option.cost_from }}" data-store="{{ option.store }}" data-supplier="{{ option.supplier }}" data-shelf="{{ option.shelf }}"{% if i == 1 and option.item.pk == preselect %} selected{% endif %}>{{ option.item.code }} · {{ option.item.name }}</option>{% endfor %}
             </select>
             {% if mode != "in" %}<span class="field__help" data-line-have></span>{% endif %}
         </div>
@@ -20,10 +21,10 @@
         </div>
         <div class="field ui-line__unit" hidden>
             <label class="field__label" for="unit_{{ i }}">Unit</label>
-            <select class="input select" id="unit_{{ i }}" name="unit_{{ i }}" data-line-unit></select>
+            <select class="input select" id="unit_{{ i }}" name="unit_{{ i }}" data-line-unit data-searchable></select>
         </div>
         {% if mode == "in" %}
-            <div class="field" data-source-only="purchase,count"><label class="field__label" for="cost_{{ i }}">Cost</label><div class="ui-unit"><input class="input" id="cost_{{ i }}" name="cost_{{ i }}" type="number" step="any" min="0" inputmode="decimal" data-line-cost><span class="ui-unit__label">Tk&nbsp;<span data-per-unit>per —</span></span></div><span class="field__help" data-cost-help></span></div>
+            <div class="field" data-source-only="purchase,count"><label class="field__label" for="cost_{{ i }}">Cost</label><div class="ui-unit"><input class="input" id="cost_{{ i }}" name="cost_{{ i }}" type="number" step="any" min="0" inputmode="decimal" data-line-cost><span class="ui-unit__label">Tk&nbsp;<span data-per-unit>per —</span></span></div><span class="field__help" data-cost-help></span><span class="ui-line__total" data-line-total hidden></span></div>
             <div class="field" data-source-only="purchase,count"><label class="field__label" for="sale_{{ i }}">Sale price (optional)</label><div class="ui-unit"><input class="input" id="sale_{{ i }}" name="sale_{{ i }}" type="number" step="any" min="0" inputmode="decimal" data-line-sale><span class="ui-unit__label">Tk&nbsp;<span data-per-unit>per —</span></span></div><span class="field__help">Empty: the price stays as it is.</span></div>
             <div class="field" data-needs-batch="batch" hidden><label class="field__label" for="batch_{{ i }}">Batch number</label><input class="input" id="batch_{{ i }}" name="batch_{{ i }}" placeholder="From the label; empty: one is made"></div>
             <div class="field" data-needs-batch="expiry" data-source-only="purchase,count" hidden><label class="field__label" for="mfg_{{ i }}">Manufacture date</label><input class="input" id="mfg_{{ i }}" name="mfg_{{ i }}" type="date" data-datepicker><span class="field__help">From the label; not after the day it came in.</span></div>

@@ -77,7 +77,17 @@
             <div class="modal__body stack">
                 <p class="ui-muted">How much one batch ({{ recipe.bom.batch_size|floatformat:"-4g" }} {{ recipe.bom.batch_uom.code }}) uses.</p>
                 {% if material_form.source %}{% include "inventory/hub/field.html" with box=material_form.source %}{% endif %}
-                {% include "inventory/hub/field.html" with box=material_form.material %}
+                {# Several at once (2026-11-02): each chosen material gets its own quantity and wastage below (inventory.js). #}
+                <div class="field">
+                    <label class="field__label" for="recipe-materials">Materials <span class="field__req">*</span></label>
+                    <select class="input select js-select2" id="recipe-materials" name="materials" multiple data-pick-materials data-placeholder="Search and choose one or more"{% if material_form.source %} data-show-when="source:existing"{% endif %}>
+                        {% for row in material_form.fields.material.queryset %}<option value="{{ row.pk }}" data-unit="{{ row.base_uom.code }}">{{ row.code }} · {{ row.name }}{% if row.sourcing != "buy" %} (made here){% endif %}</option>{% endfor %}
+                    </select>
+                    <span class="field__help">{% if material_form.fields.material.queryset %}Choose all the materials one batch uses; each gets its own quantity and wastage below.{% else %}Every material you have is on the recipe already{% if material_form.source %}: add a new one above{% endif %}.{% endif %}</span>
+                </div>
+                <div class="field"{% if material_form.source %} data-show-when="source:existing"{% endif %}>
+                    <div class="ui-pick-rows" data-pick-rows></div>
+                </div>
                 {% if material_form.new_name %}
                     <div class="ui-grid-2">
                         {% include "inventory/hub/field.html" with box=material_form.new_kind %}
@@ -91,7 +101,7 @@
                         {% include "inventory/hub/field.html" with box=material_form.new_track_expiry %}
                     </div>
                 {% endif %}
-                <div class="ui-grid-2">
+                <div class="ui-grid-2"{% if not material_form.source %} hidden{% endif %}>
                     {% include "inventory/hub/field.html" with box=material_form.qty %}
                     {% include "inventory/hub/field.html" with box=material_form.scrap_pct %}
                 </div>

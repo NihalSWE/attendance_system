@@ -1,0 +1,15 @@
+{% comment %}
+    The bill of a purchase on Stock in (2026-11-02; lines.js): each line's
+    quantity × cost, the subtotal, the VAT (the % or the amount: either fills
+    the other) and the total to pay. Only for "A purchase".
+{% endcomment %}
+<div class="ui-bill" data-stock-total data-source-only="purchase">
+    <div class="ui-bill__row"><span>Subtotal <span class="ui-muted">· quantity × cost of each line</span></span><strong data-bill-subtotal>0.00</strong></div>
+    <div class="ui-bill__vat">
+        {% include "inventory/hub/field.html" with box=form.vat_rate %}
+        {% include "inventory/hub/field.html" with box=form.vat_amount %}
+    </div>
+    <div class="ui-bill__row"><span>VAT</span><strong data-bill-vat>0.00</strong></div>
+    <div class="ui-bill__row ui-bill__row--total"><span>Total to pay</span><strong><span data-bill-total>0.00</span> Tk</strong></div>
+    <p class="ui-muted ui-bill__note">The stock is costed at the price before VAT; the VAT is kept on the goods receipt.</p>
+</div>

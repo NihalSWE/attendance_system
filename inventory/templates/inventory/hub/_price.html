@@ -16,7 +16,7 @@
                 {% if makes %}<a class="ui-btn ui-btn--sm" href="#recipe">Go to the recipe</a>{% else %}<a class="ui-btn ui-btn--sm" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">Stock in</a>{% endif %}
             </div>
         {% else %}
-            <p>Cost of one {{ item.base_uom.code }}: <strong>{{ price_cost|floatformat:"2g" }}</strong>{% if item.sale_price %} · margin <strong class="{% if price_margin < 0 %}ui-bad{% else %}ui-good{% endif %}">{{ price_margin|floatformat:"2g" }} ({{ price_margin_pct }}%)</strong>{% if price_margin < 0 %} <span class="ui-chip ui-chip--bad">Below cost</span>{% endif %}{% endif %}</p>
+            <p>Cost of one {{ item.base_uom.code }}: <strong>{{ price_cost|floatformat:"2g" }}</strong> <span class="ui-muted">({% if price_cost_from == "average" %}average cost{% elif item.sourcing == "buy" %}the last price paid{% else %}what it cost the last time it was made or bought{% endif %})</span>{% if item.sale_price %} · margin <strong class="{% if price_margin < 0 %}ui-bad{% else %}ui-good{% endif %}">{{ price_margin|floatformat:"2g" }} ({{ price_margin_pct }}%)</strong>{% if price_margin < 0 %} <span class="ui-chip ui-chip--bad">Below cost</span>{% endif %}{% endif %}</p>
         {% endif %}
         {% if can_price and price_cost is not None %}
             <form method="post" action="{% url 'inventory:item_price' item.pk %}" data-fetch data-price-form data-cost="{{ price_cost|default_if_none:'' }}" novalidate>

@@ -4,6 +4,7 @@
     <div class="ui-card__body">
         {% for i in rows %}{% include "inventory/hub/_line.html" %}{% endfor %}
         <p><button class="ui-btn ui-btn--sm" type="button" data-add-line>{% include "ui/icon.html" with name="plus" small=True %} Add a line</button></p>
+        {% if mode == "in" %}{% include "inventory/hub/_stock_in_total.html" %}{% endif %}
         <div class="ui-message" data-form-message role="status" hidden></div>
         <div class="ui-form-actions">
             <a class="ui-btn" href="{{ cancel_url }}">Cancel</a>

@@ -1,5 +1,6 @@
 {% comment %}The filters above a Materials or Products list: category, store, status.{% endcomment %}
 <form class="toolbar" method="get">
+    {% if kind %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
     <label class="sr-only" for="f-category">Category</label>
     <select class="input select js-select" id="f-category" name="category">
         <option value="">All categories</option>

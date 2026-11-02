@@ -66,7 +66,7 @@ def _item_options(company_id, kinds=None):
                           "price": format(price.normalize(), "f") if price else ""})
         last = bought.get(item.pk)
         cost = last["cost"] if last else item.standard_cost
-        options.append({"item": item, "units": json.dumps(units),
+        options.append({"item": item, "units": json.dumps(units), "kind": item.kind,
                         "batch": "1" if item.track_batch or item.track_expiry else "",
                         "expiry": "1" if item.track_expiry else "",
                         # Stock in fills the line from the item (2026-11-01): the
@@ -163,6 +163,11 @@ def _lines(request, company_id, *, cost=False, price=False, batch_no=False, cond
     return found, errors
 
 
+def _store_kinds(stores):
+    """``{store id: kind}``: which items an item list offers once a store is chosen."""
+    return {str(store.pk): store.kind for store in stores}
+
+
 def _uom(pk):
     from inventory.models import Uom
 
@@ -254,6 +259,11 @@ class StockInForm(_HeadForm):
     below_cost = django_forms.BooleanField(label="Sell below cost", required=False,
                                            help_text="Only if a sale price below cost is meant.")
     below_cost_reason = django_forms.CharField(label="Why below cost", required=False, max_length=200)
+    # VAT paid on the bill (2026-11-02): either box; the other is worked out.
+    vat_rate = django_forms.DecimalField(label="VAT %", required=False, min_value=0, max_value=100, max_digits=5,
+                                         decimal_places=2, help_text="Optional: only if you paid VAT.")
+    vat_amount = django_forms.DecimalField(label="VAT amount", required=False, min_value=0, max_digits=18,
+                                           decimal_places=2, help_text="Tk. Write the % or the amount.")
 
     def clean(self):
         data = super().clean()
@@ -272,6 +282,8 @@ class StockInForm(_HeadForm):
         self.fields["customer"].widget.attrs["data-show-when"] = "source:return"
         self.fields["reason"].widget.attrs["data-show-when"] = "source:return"
         self.fields["below_cost_reason"].widget.attrs["data-show-when"] = "below_cost:on"
+        for name in ("vat_rate", "vat_amount"):
+            self.fields[name].widget.attrs.update({"data-vat": name, "placeholder": "0"})
 
 
 @login_required
@@ -323,13 +335,16 @@ def stock_in_new(request):
         return _answer(lambda: flows.stock_in(
             actor=request.user, company_id=company_id, source=data["source"], store=data["store"], day=data["day"],
             lines=lines, supplier=data["supplier"], customer=data["customer"], reason=data["reason"],
-            below_reason=data["below_cost_reason"] if data["below_cost"] else ""),
+            below_reason=data["below_cost_reason"] if data["below_cost"] else "",
+            vat_rate=data["vat_rate"], vat_amount=data["vat_amount"]),
             lambda done: done[2], reverse("inventory:stock_in"))
     access.require(request.user, company_id, ("purchase.receive", "inventory.adjust", "sales.deliver"))
     return render(request, "inventory/hub/stock_in_new.html", {
         **_common(request, company_id, "stock_in"),
         "form": StockInForm(company_id=company_id, stores=stores, initial={"day": timezone.localdate()}),
         "items": _item_options(company_id), "rows": range(1, ROWS_SHOWN + 1), "most": LINES,
+        "balances": _balances_json(request, company_id, stores), "store_kinds": _store_kinds(stores),
+        "source_help": flows.STOCK_IN_HELP,
         # From a material's or product's "Put it in stock" (2026-10-31): on line 1.
         "preselect": int(request.GET["item"]) if request.GET.get("item", "").isdigit() else None})
 
@@ -379,7 +394,9 @@ def _balances_json(request, company_id, stores):
     with use_company(company_id):
         rows = (StockBalance.objects.filter(qty_on_hand__gt=0, warehouse__in=stores)
                 .select_related("batch").order_by("batch__expiry_date"))
+        # "held": waiting for a quality check, so counted but not sold or moved (2026-11-02).
         found = [{"store": row.warehouse_id, "item": row.item_id, "batch": row.batch_id or "",
+                  "held": bool(row.batch_id and row.batch.status == Batch.Status.QUARANTINE),
                   "label": (f"{row.batch.batch_no}" + (f" · expires {row.batch.expiry_date:%d %b %Y}"
                                                        if row.batch.expiry_date else "") if row.batch_id else ""),
                   "qty": format(row.qty_on_hand.normalize(), "f")} for row in rows]
@@ -522,4 +539,4 @@ def sale_new(request):
         "form": SaleForm(company_id=company_id, stores=stores, can_invoice=can_invoice,
                          initial={"day": timezone.localdate()}),
         "items": _item_options(company_id), "balances": _balances_json(request, company_id, stores),
-        "rows": range(1, ROWS_SHOWN + 1), "most": LINES})
+        "rows": range(1, ROWS_SHOWN + 1), "most": LINES, "qc_url": reverse("inventory:qc")})

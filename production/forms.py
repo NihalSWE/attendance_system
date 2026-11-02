@@ -275,6 +275,10 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
             return
         self.fields["material"].label = "Which one"
         self.fields["material"].widget.attrs["data-show-when"] = "source:existing"
+        # Ones already added are chosen several at once, each with its own
+        # quantity (inventory/hub/_recipe.html); these two are for a new one.
+        for name in ("qty", "scrap_pct"):
+            self.fields[name].widget.attrs["data-show-when"] = "source:new"
         for name in self.NEW:
             self.fields[name].widget.attrs["data-show-when"] = "source:new"
         for name in ("new_code", "new_name", "new_category", "new_uom"):

@@ -237,6 +237,11 @@ class GoodsReceipt(TenantOwned, ActorTracked):
     invoice_no = models.CharField("Supplier invoice no.", max_length=64, blank=True)
     vehicle_no = models.CharField("Vehicle no.", max_length=32, blank=True)
     note = models.CharField(max_length=500, blank=True)
+    # 2026-11-02: VAT paid on the bill (Stock in), on top of the lines' cost.
+    vat_rate = models.DecimalField("VAT %", max_digits=5, decimal_places=2, default=ZERO,
+                                   validators=[MinValueValidator(ZERO)])
+    vat_amount = models.DecimalField("VAT", max_digits=18, decimal_places=2, default=ZERO,
+                                     validators=[MinValueValidator(ZERO)])
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     posted_at = models.DateTimeField(null=True, blank=True)
     posted_by = _user_fk()

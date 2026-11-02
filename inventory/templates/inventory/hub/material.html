@@ -21,7 +21,12 @@
     <div class="ui-tiles">
         <div class="ui-tile{% if line.tone == 'wait' %} ui-tile--warn{% elif line.tone == 'bad' %} ui-tile--bad{% endif %}"><p class="ui-tile__label">In stock</p><p class="ui-tile__value">{{ line.on_hand|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ item.base_uom.code }}{% if line.keep %} · keep {{ line.keep|floatformat:"-2g" }}{% endif %}</p></div>
         {% if sees_costs %}
-            <div class="ui-tile"><p class="ui-tile__label">Average cost</p><p class="ui-tile__value">{% if line.avg_cost is not None %}{{ line.avg_cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">Tk per {{ item.base_uom.code }} · value {{ line.value|floatformat:"0g" }}</p></div>
+            {% if price_cost_from == "last" %}
+                <div class="ui-tile"><p class="ui-tile__label">Last price paid</p><p class="ui-tile__value">{% if last_cost %}{{ last_cost|floatformat:"2g" }}{% elif item.standard_cost %}{{ item.standard_cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">Tk per {{ item.base_uom.code }}{% if not last_cost and item.standard_cost %} · expected buy price{% endif %} · prices and recipes use this</p></div>
+                <div class="ui-tile"><p class="ui-tile__label">Stock value</p><p class="ui-tile__value">{{ line.value|floatformat:"0g" }}</p><p class="ui-tile__hint">Tk · average {% if line.avg_cost is not None %}{{ line.avg_cost|floatformat:"2g" }}{% else %}—{% endif %} per {{ item.base_uom.code }} of all stock</p></div>
+            {% else %}
+                <div class="ui-tile"><p class="ui-tile__label">Average cost</p><p class="ui-tile__value">{% if line.avg_cost is not None %}{{ line.avg_cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">Tk per {{ item.base_uom.code }} · value {{ line.value|floatformat:"0g" }}</p></div>
+            {% endif %}
         {% endif %}
         <div class="ui-tile"><p class="ui-tile__label">Used in</p><p class="ui-tile__value">{{ used|length }}</p><p class="ui-tile__hint">product{{ used|length|pluralize }}</p></div>
     </div>

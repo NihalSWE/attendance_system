@@ -63,6 +63,16 @@ class InventorySettings(TenantOwned, ActorTracked):
         help_text="Fixed once stock has moved: changing it would rewrite every cost.",
     )
     # Warranty (2026-10-27, plan §10): off by default; a food company never sees it.
+    # 2026-11-02: the cost a sale price and a recipe are checked against. The
+    # stock's value stays at average cost; this is only what "cost of one" means.
+    class PriceCost(models.TextChoices):
+        LAST = "last", "The last price paid (or made at)"
+        AVERAGE = "average", "The average cost of what is in stock"
+
+    price_cost = models.CharField(
+        "Cost used for prices and recipes", max_length=8, choices=PriceCost.choices, default=PriceCost.LAST,
+        help_text="Last price paid: a new buy price counts at once. Average: old and new stock are averaged.",
+    )
     warranty_on = models.BooleanField(
         "Warranty", default=False,
         help_text="On: items can carry a warranty and serial numbers, and claims are recorded.")

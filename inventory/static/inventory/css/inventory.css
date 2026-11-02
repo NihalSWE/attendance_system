@@ -162,3 +162,47 @@
 /* A phone box with a number that cannot be a BD mobile number (bd_phone.js, 2026-11-02). */
 .bd-phone__error { font-size: 11.5px; font-weight: 500; color: var(--danger-ink); }
 .field.bd-phone--wrong .input { border-color: var(--danger) !important; box-shadow: 0 0 0 var(--ring-width) var(--ring-danger); }
+
+/* Stock in, 2026-11-02: what each "Where it comes from" means, each line's total, and the bill. */
+.ui-explain p { margin: 0; padding: 10px 12px; border-radius: var(--r); background: var(--tile); font-size: 13px; line-height: 1.5; }
+.ui-line__total { display: block; margin-top: 4px; font-size: 12.5px; font-weight: 600; color: var(--success-ink); }
+.ui-bill {
+    margin: var(--s3) 0 0 auto; max-width: 460px; padding: 14px 16px; border: 1px solid var(--border);
+    border-radius: var(--r); background: var(--tile);
+}
+.ui-bill__row { display: flex; justify-content: space-between; gap: var(--s3); padding: 6px 0; font-size: 14px; }
+.ui-bill__row strong { font-variant-numeric: tabular-nums; }
+.ui-bill__row--total { margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 16px; }
+.ui-bill__vat { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2); margin: 6px 0; }
+.ui-bill__note { margin: 8px 0 0; font-size: 12px; }
+
+/* Materials by type (2026-11-02, hub/materials.html). */
+.ui-kinds { display: flex; flex-wrap: wrap; gap: 8px; padding: var(--s3) var(--s4) 0; }
+.ui-kinds a {
+    display: inline-flex; align-items: center; gap: 8px; padding: 7px 14px; border: 1px solid var(--border);
+    border-radius: 999px; color: var(--text) !important; font-size: 13.5px; font-weight: 500; text-decoration: none !important;
+    background: var(--surface); transition: background .15s ease, border-color .15s ease;
+}
+.ui-kinds a:hover { border-color: var(--action); }
+.ui-kinds a.is-on { background: var(--action); border-color: var(--action); color: #fff !important; }
+.ui-kinds a span { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--tile); color: var(--muted); font-size: 12px; text-align: center; }
+.ui-kinds a.is-on span { background: rgba(255, 255, 255, .22); color: #fff; }
+.ui-kind-card .ui-card__title small { margin-left: 6px; font-weight: 500; color: var(--muted); }
+.ui-kind-card__about { margin: 0; padding: 0 var(--s4) var(--s2); font-size: 13px; color: var(--muted); }
+
+/* The cost of one batch, worked out (2026-11-02, hub/_cost_sheet.html). */
+.ui-cost-steps { margin: 0; padding: 12px var(--s4) 4px 34px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.ui-cost-steps strong { color: var(--text); }
+.ui-sub-row td { font-size: 13px; background: var(--surface); }
+.ui-sub-row td:first-child { padding-left: 28px; }
+.ui-cost-math { font-variant-numeric: tabular-nums; }
+
+/* Recipe: several materials at once (2026-11-02, hub/_recipe.html). */
+.ui-pick-rows { display: grid; gap: 8px; }
+.ui-pick-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 10px; align-items: end; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--tile); }
+.ui-pick-row__name { font-weight: 600; font-size: 13.5px; }
+.ui-pick-row__name small { display: block; font-weight: 400; color: var(--muted); }
+@media (max-width: 640px) { .ui-pick-row { grid-template-columns: 1fr 1fr; } .ui-pick-row__name { grid-column: 1 / -1; } }
+/* A page link's colour and underline (.ui-page a) would win without !important. */
+.ui-tile--link { color: inherit !important; text-decoration: none !important; transition: transform .15s ease, box-shadow .15s ease; }
+.ui-tile--link:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0, 0, 0, .06); }

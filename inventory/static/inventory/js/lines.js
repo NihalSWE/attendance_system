@@ -6,12 +6,63 @@
    hint), batch and expiry show only for an item that keeps
    them, and on Move / Sell the batch list and "in the store" follow the item
    and the store chosen above. "Add a line" copies the last line, empty.
-   Boxes marked data-source-only show only for that "Where it comes from". */
+   Boxes marked data-source-only show only for that "Where it comes from".
+
+   2026-11-02: once a store is chosen the item lists offer only what belongs
+   there - on Sell and Move what is in stock in it; on Stock in the items kept
+   in it (their usual store, else a store of their type, or stock already
+   there). A purchase shows each line's quantity x cost, the subtotal, the VAT
+   and the total. Stock waiting for a quality check is said apart: it cannot
+   be sold or moved until it passes. */
 (function () {
     const form = document.querySelector("form[data-lines-form]");
     if (!form) return;
     const balances = JSON.parse((document.getElementById("stock-rows") || {}).textContent || "[]");
     const most = Number(form.dataset.most || 30);
+    const mode = form.dataset.linesMode || "";
+    const storeKinds = JSON.parse((document.getElementById("store-kinds") || {}).textContent || "{}");
+    const TYPED_STORES = ["raw", "packaging", "finished", "spare"];
+    const firstItems = form.querySelector("[data-line-item]");
+    const allItems = firstItems ? Array.from(firstItems.options).map(option => option.cloneNode(true)) : [];
+    const $ = window.jQuery;
+
+    function refresh(select) {
+        if ($ && $.fn.select2 && $(select).data("select2")) $(select).trigger("change.select2");
+    }
+
+    function money(value) {
+        return value.toLocaleString("en-IN", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function fits(option, storeId) {
+        if (!option.value || !storeId) return true;
+        const there = balances.some(row => String(row.item) === option.value && String(row.store) === storeId);
+        if (mode !== "in") return there;
+        if (there) return true;
+        if (option.dataset.store) return option.dataset.store === storeId;
+        const kind = storeKinds[storeId];
+        return !TYPED_STORES.includes(kind) || kind === option.dataset.kind;
+    }
+
+    function onlyThisStore() {
+        if (!allItems.length || !mode) return;
+        const storeId = store();
+        form.querySelectorAll("[data-line-item]").forEach(function (select) {
+            const keep = select.value;
+            select.innerHTML = "";
+            allItems.forEach(function (option) {
+                // A line already filled keeps its item.
+                if (fits(option, storeId) || option.value === keep) select.appendChild(option.cloneNode(true));
+            });
+            select.value = keep;
+            refresh(select);
+        });
+        const note = form.querySelector("[data-store-note]");
+        if (note) {
+            const shown = allItems.filter(option => option.value && fits(option, storeId)).length;
+            note.textContent = storeId ? shown + " item" + (shown === 1 ? "" : "s") + " in the item lists for this store." : "";
+        }
+    }
 
     function chosen(select) {
         return select && select.options[select.selectedIndex];
@@ -41,6 +92,7 @@
         });
         if (units.some(unit => String(unit.id) === keep)) unitBox.value = keep;
         unitBox.closest(".ui-line__unit").hidden = units.length <= 1;
+        refresh(unitBox);
         const unit = chosen(unitBox);
         const code = unit ? unit.text : "—";
         line.querySelectorAll("[data-per-unit]").forEach(label => { label.textContent = "per " + code; });
@@ -73,9 +125,61 @@
         }
         const have = line.querySelector("[data-line-have]");
         if (have) {
-            const total = rows.reduce((sum, row) => sum + Number(row.qty), 0);
-            have.textContent = item && item.value ? "In the store: " + total.toLocaleString() + " " + (units[0] ? units[0].code : "") : "";
+            const base = units[0] ? " " + units[0].code : "";
+            const held = rows.filter(row => row.held).reduce((sum, row) => sum + Number(row.qty), 0);
+            const ready = rows.filter(row => !row.held).reduce((sum, row) => sum + Number(row.qty), 0);
+            have.textContent = "";
+            if (item && item.value && store()) {
+                have.append((mode === "sell" ? "Ready to sell: " : "In the store: ") + ready.toLocaleString() + base);
+                if (held) {
+                    // Made or bought stock not checked yet (2026-11-02): said here, not only when refused.
+                    have.append(" · " + held.toLocaleString() + base + " waits for a quality check: ");
+                    const qc = form.dataset.qcUrl;
+                    if (qc) {
+                        const link = document.createElement("a");
+                        link.href = qc;
+                        link.textContent = "pass it first";
+                        have.append(link);
+                    }
+                }
+            }
         }
+    }
+
+    // A purchase's bill (2026-11-02): each line, the subtotal, VAT and total.
+    let vatFrom = "";
+    function bill() {
+        const box = form.querySelector("[data-stock-total]");
+        let subtotal = 0;
+        form.querySelectorAll("[data-line]").forEach(function (line) {
+            const out = line.querySelector("[data-line-total]");
+            if (!out) return;
+            const item = chosen(line.querySelector("[data-line-item]"));
+            const unit = chosen(line.querySelector("[data-line-unit]"));
+            const qty = Number((line.querySelector('[name^="qty_"]') || {}).value || 0);
+            const cost = Number((line.querySelector("[data-line-cost]") || {}).value || 0);
+            const amount = item && item.value ? qty * cost : 0;
+            out.hidden = !(amount > 0) || source() !== "purchase";
+            out.textContent = "Line total: " + qty.toLocaleString() + " " + (unit ? unit.text : "") + " × " +
+                money(cost) + " = " + money(amount) + " Tk";
+            subtotal += amount;
+        });
+        if (!box) return;
+        const rate = form.querySelector('[data-vat="vat_rate"]');
+        const amount = form.querySelector('[data-vat="vat_amount"]');
+        let vat = 0;
+        if (vatFrom === "amount" && amount.value !== "") {
+            vat = Number(amount.value);
+            rate.value = subtotal ? String(Math.round(vat / subtotal * 10000) / 100) : "";
+        } else if (rate.value !== "") {
+            vat = subtotal * Number(rate.value) / 100;
+            amount.value = String(Math.round(vat * 100) / 100);
+        } else if (amount.value !== "") {
+            vat = Number(amount.value);
+        }
+        box.querySelector("[data-bill-subtotal]").textContent = money(subtotal);
+        box.querySelector("[data-bill-vat]").textContent = money(vat) + (rate.value ? " (" + rate.value + " %)" : "");
+        box.querySelector("[data-bill-total]").textContent = money(subtotal + vat);
     }
 
     // Stock in fills the line from the item (2026-11-01): the unit it is
@@ -136,10 +240,12 @@
                 follow(line);
             }
             setSelect(form.querySelector('[name="store"]'), item.dataset.store);
+            onlyThisStore();
             if (source() === "purchase") setSelect(form.querySelector('[name="supplier"]'), item.dataset.supplier);
         }
         cost(line);
         expiry(line);
+        bill();
     }
 
     function showSource() {
@@ -148,6 +254,7 @@
             box.hidden = now && !box.dataset.sourceOnly.split(",").includes(now);
         });
         form.querySelectorAll("[data-line]").forEach(follow);
+        bill();
     }
 
     function renumber(line, n) {
@@ -168,22 +275,31 @@
     form.addEventListener("change", function (event) {
         const line = event.target.closest("[data-line]");
         if (event.target.matches('[name="source"]')) showSource();
-        if (event.target.matches('[name="from_store"], [name="store"]')) form.querySelectorAll("[data-line]").forEach(follow);
+        if (event.target.matches('[name="from_store"], [name="store"]')) {
+            onlyThisStore();
+            form.querySelectorAll("[data-line]").forEach(follow);
+        }
         if (line && event.target.matches("[data-line-item]")) fill(line);
-        else if (line && event.target.matches("[data-line-unit]")) { follow(line); cost(line); }
+        else if (line && event.target.matches("[data-line-unit]")) { follow(line); cost(line); bill(); }
         if (line && event.target.matches('[name^="mfg_"]')) expiry(line);
     });
     form.addEventListener("input", function (event) {
         const line = event.target.closest("[data-line]");
         if (event.isTrusted && event.target.matches("[data-line-cost]")) event.target.dataset.typed = "1";
         if (line && event.target.matches('[name^="mfg_"]')) expiry(line);
+        if (event.target.matches('[data-vat="vat_rate"]')) vatFrom = "rate";
+        if (event.target.matches('[data-vat="vat_amount"]')) vatFrom = "amount";
+        if (event.target.matches('[name^="qty_"], [data-line-cost], [data-vat]')) bill();
     });
     if (window.jQuery) {
         window.jQuery(form).on("select2:select", function (event) {
             const line = event.target.closest("[data-line]");
-            if (event.target.matches('[name="from_store"], [name="store"]')) form.querySelectorAll("[data-line]").forEach(follow);
+            if (event.target.matches('[name="from_store"], [name="store"]')) {
+                onlyThisStore();
+                form.querySelectorAll("[data-line]").forEach(follow);
+            }
             if (line && event.target.matches("[data-line-item]")) fill(line);
-            else if (line) { follow(line); cost(line); }
+            else if (line) { follow(line); cost(line); bill(); }
         });
     }
     const add = form.querySelector("[data-add-line]");
@@ -192,6 +308,14 @@
             const lines = form.querySelectorAll("[data-line]");
             if (lines.length >= most) return;
             const copy = lines[lines.length - 1].cloneNode(true);
+            // A copied search list has no life of its own: back to the plain
+            // list, then a Select2 of its own (searchable.js).
+            copy.querySelectorAll(".select2-container").forEach(container => container.remove());
+            copy.querySelectorAll("select").forEach(function (select) {
+                select.classList.remove("select2-hidden-accessible");
+                ["data-select2-id", "aria-hidden", "tabindex"].forEach(name => select.removeAttribute(name));
+                select.querySelectorAll("option").forEach(option => option.removeAttribute("data-select2-id"));
+            });
             // A copied calendar has no life of its own: back to the plain
             // date box, then a calendar of its own (datepicker.js).
             copy.querySelectorAll(".dp").forEach(function (wrap) {
@@ -203,11 +327,13 @@
             renumber(copy, lines.length + 1);
             lines[lines.length - 1].after(copy);
             if (window.attachDatepicker) copy.querySelectorAll("input[data-datepicker]").forEach(window.attachDatepicker);
+            if (window.inventorySelect2) copy.querySelectorAll("select.js-select2").forEach(window.inventorySelect2);
             fill(copy);
             if (lines.length + 1 >= most) add.hidden = true;
         });
     }
     showSource();
+    onlyThisStore();
     form.querySelectorAll("[data-line]").forEach(function (line) {
         const item = chosen(line.querySelector("[data-line-item]"));
         if (item && item.value) fill(line); else follow(line);

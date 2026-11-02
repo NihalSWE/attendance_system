@@ -9,22 +9,30 @@
             <p class="ui-head__sub">What came in, into which store. Batch and expiry are asked only for items that keep them.</p>
         </div>
     </div>
-    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-most="{{ most }}" novalidate>
+    {{ balances|json_script:"stock-rows" }}
+    {{ store_kinds|json_script:"store-kinds" }}
+    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-lines-mode="in" data-most="{{ most }}" novalidate>
         {% csrf_token %}
         <div class="ui-card">
             <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Where it comes from</h2></div>
             <div class="ui-card__body stack">
                 {% include "inventory/hub/field.html" with box=form.source %}
+                <div class="ui-explain">
+                    <p data-source-only="purchase"><strong>A purchase:</strong> {{ source_help.purchase }}</p>
+                    <p data-source-only="count"><strong>First count:</strong> {{ source_help.count }}</p>
+                    <p data-source-only="return"><strong>A customer returned it:</strong> {{ source_help.return }}</p>
+                </div>
                 <div class="ui-grid-2">
                     {% include "inventory/hub/field.html" with box=form.supplier %}
                     {% include "inventory/hub/field.html" with box=form.customer %}
-                    {% include "inventory/hub/field.html" with box=form.store %}
+                    <div>{% include "inventory/hub/field.html" with box=form.store %}<p class="field__help" data-store-note></p></div>
                     {% include "inventory/hub/field.html" with box=form.day %}
                     {% include "inventory/hub/field.html" with box=form.reason %}
                     {% include "inventory/hub/field.html" with box=form.below_cost %}
                     {% include "inventory/hub/field.html" with box=form.below_cost_reason %}
                 </div>
                 <p class="ui-muted" data-source-only="count">A first count is posted at once when you may approve opening stock; otherwise it waits for whoever does.</p>
+                <p class="ui-muted">Choose the store first: the item lists then show only the items kept in it.</p>
             </div>
         </div>
         {% url 'inventory:stock_in' as cancel_url %}

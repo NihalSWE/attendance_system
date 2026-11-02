@@ -10,13 +10,13 @@
         </div>
     </div>
     {{ balances|json_script:"stock-rows" }}
-    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-most="{{ most }}" novalidate>
+    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-lines-mode="sell" data-qc-url="{{ qc_url }}" data-most="{{ most }}" novalidate>
         {% csrf_token %}
         <div class="ui-card">
             <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Customer and store</h2></div>
             <div class="ui-card__body"><div class="ui-grid-2">
                 {% include "inventory/hub/field.html" with box=form.customer %}
-                {% include "inventory/hub/field.html" with box=form.store %}
+                <div>{% include "inventory/hub/field.html" with box=form.store %}<p class="field__help" data-store-note>Choose the store: the item lists then show only what is in stock there.</p></div>
                 {% include "inventory/hub/field.html" with box=form.day %}
                 {% include "inventory/hub/field.html" with box=form.credit_note %}
                     {% include "inventory/hub/field.html" with box=form.below_cost %}

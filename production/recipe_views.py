@@ -73,6 +73,8 @@ def recipe_add(request, pk):
         return bail
     item = _item(company_id, pk)
     can_create = access.may(request.user, company_id, masters.CODE)
+    if request.POST.getlist("materials") and request.POST.get("source", "existing") != "new":
+        return _add_many(request, company_id, item, request.POST.getlist("materials"))
     form = forms.RecipeMaterialForm(request.POST, company_id=company_id, product=item,
                                     can_create=can_create)
     if form.is_valid():
@@ -97,6 +99,60 @@ def recipe_add(request, pk):
     if fetch.wants_json(request):
         return fetch.refused(form)
     return _back(request, item, "danger", _errors(form))
+
+
+def _number(text):
+    from decimal import Decimal, InvalidOperation
+
+    text = (text or "").replace(",", "").strip()
+    if not text:
+        return None
+    try:
+        return Decimal(text)
+    except InvalidOperation:
+        raise ValueError from None
+
+
+def _add_many(request, company_id, item, picked):
+    """Several materials at once (2026-11-02): each chosen one with its own
+    quantity (``qty_<id>``) and wastage (``scrap_<id>``); one refused, none added."""
+    from decimal import Decimal
+
+    offered = forms.RecipeMaterialForm(company_id=company_id, product=item).fields["material"].queryset
+    chosen = {str(row.pk): row for row in offered.filter(pk__in=[pk for pk in picked if pk.isdigit()])}
+    errors, rows = {}, []
+    for pk in dict.fromkeys(picked):
+        material = chosen.get(pk)
+        if material is None:
+            errors["materials"] = ["One of the chosen materials is not offered any more: choose again."]
+            continue
+        try:
+            qty, scrap = _number(request.POST.get(f"qty_{pk}")), _number(request.POST.get(f"scrap_{pk}"))
+        except ValueError:
+            errors[f"qty_{pk}"] = ["Write a number."]
+            continue
+        if qty is None or qty <= 0:
+            errors[f"qty_{pk}"] = [f"How much of {material.name} one batch uses, above 0."]
+        elif scrap is not None and not Decimal("0") <= scrap <= Decimal("100"):
+            errors[f"scrap_{pk}"] = ["Wastage is 0 to 100 %."]
+        else:
+            rows.append((material, qty, scrap))
+    if errors:
+        return fetch.refused_errors(ValidationError(errors)) if fetch.wants_json(request) else             _back(request, item, "danger", " ".join(text for texts in errors.values() for text in texts))
+    try:
+        with transaction.atomic():
+            for material, qty, scrap in rows:
+                try:
+                    recipes.add_material(actor=request.user, company_id=company_id, item=item, material=material,
+                                         qty=qty, scrap_pct=scrap)
+                except ValidationError as exc:
+                    raise ValidationError({f"qty_{material.pk}": [f"{material.name}: {text}"
+                                                                  for text in exc.messages]}) from None
+    except ValidationError as exc:
+        return fetch.refused_errors(exc) if fetch.wants_json(request) else             _back(request, item, "danger", " ".join(exc.messages))
+    names = ", ".join(f"{material.name} {qty.normalize():f} {material.base_uom.code}" for material, qty, _s in rows)
+    return _back(request, item, "success", f"Added {len(rows)} material{'s' if len(rows) != 1 else ''} per batch: "
+                                           f"{names}. The recipe is in use.")
 
 
 def _service_errors(form, exc):

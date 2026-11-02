@@ -19,6 +19,17 @@ from inventory.models import Batch
 
 STOCK_IN_SOURCES = (("purchase", "A purchase (goods received)"), ("count", "First count (opening stock)"),
                     ("return", "A customer returned it"))
+# What each one means, under its choice on Stock in (2026-11-02).
+STOCK_IN_HELP = {
+    "purchase": "You bought it from a supplier and it arrived today: choose the supplier, write what the bill "
+                "says it cost, and VAT if you paid it. It makes a goods receipt (GRN).",
+    "count": "Stock you already had on the first day you use this software, counted on the shelf. Use it once "
+             "per item to start; after that stock comes in by purchase or production.",
+    "return": "A customer sent back what you sold them. Good goods go back to stock; damaged ones go to the "
+              "rejected store. No cost is asked: it comes back at what it cost when it left.",
+}
+ZERO = Decimal("0")
+CENT = Decimal("0.01")
 
 
 @dataclass
@@ -78,19 +89,50 @@ def _set_prices(actor, company_id, lines, below_reason):
                               uom=line.uom, reason=below_reason, field=f"sale_{line.row}")
 
 
+def subtotal(lines):
+    """What the lines cost before VAT: quantity × cost, line by line."""
+    return sum(((line.qty or ZERO) * (line.unit_cost or ZERO) for line in lines), ZERO).quantize(CENT)
+
+
+def vat_of(lines, rate=None, amount=None):
+    """``(rate, amount)`` of the VAT on a Stock in (2026-11-02): either one
+    given fills the other from the lines' subtotal; neither is no VAT."""
+    base = subtotal(lines)
+    if amount is not None:
+        return ((amount / base * 100).quantize(CENT) if base else (rate or ZERO)), amount.quantize(CENT)
+    if rate is not None:
+        return rate, (base * rate / 100).quantize(CENT)
+    return ZERO, ZERO
+
+
+def _new_buy_prices(company_id, lines):
+    """The cost typed on a purchase line becomes the item's expected buy price
+    (2026-11-02): the next Stock in starts from it, and so do prices and recipes."""
+    from inventory.masters import units_for
+    from inventory.models import Item
+
+    for line in lines:
+        if line.unit_cost is None:
+            continue
+        factor = units_for(line.item).get(line.uom.pk) or Decimal("1")
+        Item.all_objects.filter(company_id=company_id, pk=line.item.pk).update(
+            standard_cost=(line.unit_cost / factor).quantize(Decimal("0.0001")))
+
+
 @transaction.atomic
 def stock_in(*, actor, company_id, source, store, day, lines, supplier=None, customer=None, reason="", note="",
-             below_reason=""):
+             below_reason="", vat_rate=None, vat_amount=None):
     """``(document, posted, words)``: a purchase is received, a first count
     posted (or left for approval when the person may not post it), a customer
-    return posted."""
+    return posted. A purchase keeps the VAT paid on the bill."""
     _need_lines(lines)
     if source == "purchase":
         from purchasing import receipts
 
+        rate, vat = vat_of(lines, vat_rate, vat_amount)
         receipt = receipts.create_receipt(actor=actor, company_id=company_id, fill_from_order=False, values={
             "order": None, "supplier": supplier, "warehouse": store, "received_date": day, "challan_no": "",
-            "invoice_no": "", "vehicle_no": "", "note": note})
+            "invoice_no": "", "vehicle_no": "", "note": note, "vat_rate": rate, "vat_amount": vat})
         _each(lines, lambda line: receipts.add_line(actor=actor, company_id=company_id, receipt_id=receipt.pk,
                                                      values={"order_line": None, "item": line.item, "location": None,
                                                              "qty_received": line.qty, "qty_rejected": Decimal("0"),
@@ -100,8 +142,12 @@ def stock_in(*, actor, company_id, source, store, day, lines, supplier=None, cus
                                                              "expiry_date": line.expiry_date,
                                                              "packages": None, "note": ""}))
         receipts.post_receipt(actor=actor, company_id=company_id, receipt_id=receipt.pk)
+        _new_buy_prices(company_id, lines)
         _set_prices(actor, company_id, lines, below_reason)
-        return receipt, True, f"{receipt.number}: {len(lines)} line{'s' if len(lines) != 1 else ''} received into {store.name}."
+        total = subtotal(lines) + vat
+        money = f" Total {total:,.2f} Tk" + (f" with VAT {vat:,.2f}" if vat else "") + "." if total else ""
+        return receipt, True, (f"{receipt.number}: {len(lines)} line{'s' if len(lines) != 1 else ''} received into "
+                               f"{store.name}.{money}")
     if source == "count":
         document = opening.create_document(actor=actor, company_id=company_id, values={"work_date": day, "note": note})
         _each(lines, lambda line: opening.add_line(actor=actor, company_id=company_id, document_id=document.pk,
