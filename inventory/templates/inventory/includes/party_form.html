@@ -4,6 +4,7 @@
     inventory.forms.PartyForm.SECTIONS. Starred boxes must be filled.
     id, title, action, form, submit; optional sub (one line under the title).
 {% endcomment %}
+{% load static %}
 <dialog class="modal modal--wide ui-modal" id="{{ id }}" aria-labelledby="{{ id }}-title">
     <form class="modal__card" method="post" action="{{ action }}" novalidate>
         {% csrf_token %}
@@ -38,3 +39,4 @@
         </div>
     </form>
 </dialog>
+<script defer src="{% static 'inventory/js/bd_phone.js' %}"></script>

@@ -420,7 +420,11 @@ class PartyForm(CompanyForm):
             box.wide = name in self.WIDE
         for name in self.PHONES:
             if name in self.fields:
-                self.fields[name].widget.attrs.update(inputmode="tel", placeholder="01XXXXXXXXX", maxlength=17)
+                # 11 digits and the BD format, checked as it is typed
+                # (inventory/js/bd_phone.js); bd_number checks again on save.
+                self.fields[name].widget.attrs.update(
+                    inputmode="numeric", placeholder="01XXXXXXXXX", maxlength=11, pattern="01[3-9][0-9]{8}",
+                    autocomplete="tel", **{"data-bd-phone": ""})
                 self.fields[name].help_text = "11 digits, e.g. 01711000000."
 
     #: Phone boxes: Bangladeshi mobile numbers, kept as 11 digits (2026-11-02).

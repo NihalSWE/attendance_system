@@ -158,3 +158,7 @@
 
 /* The supplier and customer modal (2026-11-02): "* must be filled" on the left of the buttons. */
 .party-form__note { margin-right: auto; align-self: center; font-size: 12.5px; }
+
+/* A phone box with a number that cannot be a BD mobile number (bd_phone.js, 2026-11-02). */
+.bd-phone__error { font-size: 11.5px; font-weight: 500; color: var(--danger-ink); }
+.field.bd-phone--wrong .input { border-color: var(--danger) !important; box-shadow: 0 0 0 var(--ring-width) var(--ring-danger); }
