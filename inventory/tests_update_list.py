@@ -268,8 +268,17 @@ class MenuTests(TestCase):
         menus = {key: entries for key, label, entries in _inventory_menus()}
         self.assertNotIn("production", menus)                      # Production orders: Make does it
         groups = list(dict.fromkeys(entry["group"] for entry in menus["inventory"]))
-        self.assertEqual(groups, ["Setup", "Materials", "Products", "Stock", "Production", "Sales",
+        self.assertEqual(groups, ["Setup", "Stores & Bins", "Categories & Units", "Suppliers", "Customers",
+                                  "Materials", "Products", "Stock", "Production", "Sales",
                                   "Purchase", "Reports", "Tools"])
+        # 2026-11-02: units, categories, stores, bins, suppliers and customers
+        # each sit in a dropdown of their own, not under Setup.
+        by_group = {entry["view"]: entry["group"] for entry in menus["inventory"]}
+        self.assertEqual([by_group[view] for view in (
+            "inventory:units", "inventory:categories", "inventory:stores", "inventory:bins",
+            "inventory:suppliers", "inventory:customers")],
+            ["Categories & Units", "Categories & Units", "Stores & Bins", "Stores & Bins", "Suppliers",
+             "Customers"])
         views = [entry["view"] for entry in menus["inventory"]]
         for gone in ("inventory:stock", "inventory:items", "inventory:opening"):
             self.assertNotIn(gone, views)

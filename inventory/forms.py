@@ -383,20 +383,77 @@ class LocationForm(CompanyForm):
         self.fields["warehouse"].queryset = stores.order_by("name")
 
 
-class SupplierForm(CompanyForm):
+class PartyForm(CompanyForm):
+    """A supplier or customer, drawn in sections (inventory/includes/party_form.html,
+    2026-11-02). ``REQUIRED`` boxes must be filled here, on top of what the model
+    asks; ``SECTIONS`` is ``(title, hint, names)``; ``WIDE`` boxes take a whole row."""
+
+    REQUIRED = ()
+    SECTIONS = ()
+    WIDE = ("address", "notes")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name, box in self.fields.items():
+            # Everything not listed is optional; a number left empty takes
+            # the model's default (0 days, no credit limit).
+            box.required = name in self.REQUIRED
+            box.wide = name in self.WIDE
+
+    def clean(self):
+        data = super().clean()
+        for name in self.fields:
+            if name not in self.REQUIRED and data.get(name) is None and name in data:
+                data[name] = self._meta.model._meta.get_field(name).get_default()
+        return data
+
+    @property
+    def sections(self):
+        return [{"title": title, "hint": hint, "boxes": [self[name] for name in names if name in self.fields]}
+                for title, hint, names in self.SECTIONS]
+
+
+class SupplierForm(PartyForm):
+    # "Items supplied" left the form (2026-11-02): a typed list of codes
+    # confused people, and what a supplier brings shows on its stock in.
+    REQUIRED = ("code", "name", "contact_person", "phone", "email", "address", "payment_terms_days")
+    SECTIONS = (
+        ("Business", "Who they are.", ("code", "name")),
+        ("Contact", "Who to call or email about orders and deliveries.",
+         ("contact_person", "phone", "email", "address")),
+        ("Terms and tax", "BIN and TIN are optional.", ("payment_terms_days", "bin", "tin")),
+        ("Notes", "", ("notes",)),
+    )
+
     class Meta:
         model = Supplier
-        fields = ("code", "name", "contact_person", "phone", "email", "address", "bin", "tin",
-                  "payment_terms_days", "items_supplied", "notes")
+        fields = ("code", "name", "contact_person", "phone", "email", "address", "payment_terms_days",
+                  "bin", "tin", "notes")
+        labels = {"name": "Company / shop name", "contact_person": "Contact person",
+                  "phone": "Phone number"}
+        help_texts = {"code": "Your own short code, e.g. SUP-001."}
+        widgets = {"address": forms.Textarea(attrs={"rows": 2})}
 
 
-class CustomerForm(CompanyForm):
+class CustomerForm(PartyForm):
+    REQUIRED = ("code", "name", "customer_type", "contact_person", "whatsapp")
+    SECTIONS = (
+        ("Business", "Who they are.", ("code", "name", "customer_type", "territory")),
+        ("Contact", "The WhatsApp number and email let the AI order assistant recognise them.",
+         ("contact_person", "whatsapp", "phone", "email", "address")),
+        ("Credit and prices", "Optional.", ("credit_limit", "payment_terms_days", "price_list_name")),
+        ("Notes", "", ("notes",)),
+    )
+
     class Meta:
         model = Customer
-        fields = ("code", "name", "customer_type", "contact_person", "phone", "whatsapp", "email",
-                  "address", "territory", "credit_limit", "payment_terms_days", "price_list_name",
-                  "notes")
-        labels = {"customer_type": "Customer type"}
+        fields = ("code", "name", "customer_type", "territory", "contact_person", "whatsapp", "phone",
+                  "email", "address", "credit_limit", "payment_terms_days", "price_list_name", "notes")
+        labels = {"name": "Company / shop name", "customer_type": "Customer type",
+                  "contact_person": "Contact person", "phone": "Phone number"}
+        help_texts = {"code": "Your own short code, e.g. CUS-001.",
+                      "whatsapp": "With the country code, e.g. 8801711000000."}
+        widgets = {"address": forms.Textarea(attrs={"rows": 2})}
 
 
 class StatusForm(StyledFormMixin, forms.Form):

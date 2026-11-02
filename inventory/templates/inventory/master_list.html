@@ -197,10 +197,19 @@
         {% include "inventory/includes/print_dialog.html" %}
     {% endif %}
     {% if can_manage %}
-        {% include "organization/profile/modal_form.html" with id="new-dialog" title="Add "|add:page_def.singular action=page_def.url form=new_form submit="Add" wide=True %}
+        {% if new_form.sections %}
+            {# Suppliers and customers (2026-11-02): the sectioned modal. #}
+            {% include "inventory/includes/party_form.html" with id="new-dialog" title="Add "|add:page_def.singular sub=party_sub action=page_def.url form=new_form submit="Add "|add:page_def.singular %}
+        {% else %}
+            {% include "organization/profile/modal_form.html" with id="new-dialog" title="Add "|add:page_def.singular action=page_def.url form=new_form submit="Add" wide=True %}
+        {% endif %}
         {% if edit_form %}
             {% url edit_view edit_row.pk as edit_url %}
-            {% include "organization/profile/modal_form.html" with id="edit-dialog" title="Edit "|add:edit_row.code action=edit_url form=edit_form submit="Save" wide=True %}
+            {% if edit_form.sections %}
+                {% include "inventory/includes/party_form.html" with id="edit-dialog" title="Edit "|add:edit_row.name sub=edit_row.code action=edit_url form=edit_form submit="Save changes" %}
+            {% else %}
+                {% include "organization/profile/modal_form.html" with id="edit-dialog" title="Edit "|add:edit_row.code action=edit_url form=edit_form submit="Save" wide=True %}
+            {% endif %}
         {% endif %}
     {% endif %}
 {% endblock %}

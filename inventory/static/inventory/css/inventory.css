@@ -155,3 +155,6 @@
 .store-guide__steps li.is-done { background: var(--success-soft); color: var(--success-ink); }
 .store-guide__steps li.is-now { background: var(--action); color: #fff; }
 .store-guide__steps li.is-now span { color: var(--action); }
+
+/* The supplier and customer modal (2026-11-02): "* must be filled" on the left of the buttons. */
+.party-form__note { margin-right: auto; align-self: center; font-size: 12.5px; }

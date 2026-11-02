@@ -1,0 +1,40 @@
+{% comment %}
+    The Add / Edit modal of a supplier or customer (2026-11-02), in sections:
+    Business, Contact, Terms (or Credit and prices), Notes - the boxes of
+    inventory.forms.PartyForm.SECTIONS. Starred boxes must be filled.
+    id, title, action, form, submit; optional sub (one line under the title).
+{% endcomment %}
+<dialog class="modal modal--wide ui-modal" id="{{ id }}" aria-labelledby="{{ id }}-title">
+    <form class="modal__card" method="post" action="{{ action }}" novalidate>
+        {% csrf_token %}
+        <div class="modal__head ui-modal__head">
+            <div>
+                <h2 id="{{ id }}-title">{{ title }}</h2>
+                {% if sub %}<p class="ui-modal__sub">{{ sub }}</p>{% endif %}
+            </div>
+            <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+        </div>
+        <div class="modal__body ui-modal__body">
+            {% if form.non_field_errors %}<div class="ui-message ui-message--error">{{ form.non_field_errors }}</div>{% endif %}
+            {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+            {% for section in form.sections %}
+                <section class="ui-form-section">
+                    <header class="ui-form-section__head">
+                        <h3 class="ui-form-section__title">{{ section.title }}</h3>
+                        {% if section.hint %}<p class="ui-form-section__hint">{{ section.hint }}</p>{% endif %}
+                    </header>
+                    <div class="ui-grid-2">
+                        {% for box in section.boxes %}{% include "inventory/hub/field.html" %}{% endfor %}
+                    </div>
+                </section>
+            {% endfor %}
+        </div>
+        <div class="ui-modal__foot">
+            <div class="ui-form-actions">
+                <span class="ui-muted party-form__note"><span class="field__req">*</span> must be filled</span>
+                <button class="ui-btn" type="button" data-close-dialog>Cancel</button>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} {{ submit }}</button>
+            </div>
+        </div>
+    </form>
+</dialog>

@@ -89,6 +89,11 @@ class MasterPage:
         return reverse(f"inventory:{self.key}")
 
 
+#: The line under the title of the supplier and customer modals (2026-11-02).
+PARTY_SUB = {"suppliers": "A company or shop you buy from.",
+             "customers": "A distributor, dealer, shop or company you sell to."}
+
+
 def _status_filter(request, rows):
     status = request.GET.get("status", "").strip()
     if status in ActiveStatus.values:
@@ -238,6 +243,7 @@ def _list(request, page, *, new_form=None, edit_form=None, edit_row=None, open_d
         "page_def": page, "rows": table, "status": status, "statuses": ActiveStatus.choices,
         "kind": request.GET.get("kind", ""), "kinds": ItemKind.choices if page.key == "items" else (),
         "can_manage": can_manage, "new_form": new_form, "edit_form": edit_form,
+        "party_sub": PARTY_SUB.get(page.key, ""),
         "edit_row": edit_row, "open_dialog": open_dialog,
         "edit_view": f"inventory:{page.key}_edit", "status_view": f"inventory:{page.key}_status",
         "delete_view": f"inventory:{page.key}_delete" if page.master is masters.ITEM else "",
