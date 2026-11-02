@@ -4,6 +4,7 @@ Database-backed choices start empty (the default managers are
 tenant-scoped); each form is given the company and fills its own lists.
 """
 
+import re
 from decimal import Decimal
 
 from django import forms
@@ -383,6 +384,24 @@ class LocationForm(CompanyForm):
         self.fields["warehouse"].queryset = stores.order_by("name")
 
 
+BD_MOBILE = re.compile(r"01[3-9]\d{8}")
+
+
+def bd_number(value):
+    """A Bangladeshi mobile number as 11 digits (01XXXXXXXXX), from what was
+    typed: spaces, dashes, Bangla digits and a +880 / 880 prefix are tidied.
+    Empty stays empty."""
+    text = str(value or "").translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789"))
+    number = re.sub(r"\D", "", text)
+    if not number:
+        return ""
+    if number.startswith("880") and len(number) == 13:
+        number = number[2:]
+    if not BD_MOBILE.fullmatch(number):
+        raise forms.ValidationError("Write an 11-digit Bangladeshi number, e.g. 01711000000.")
+    return number
+
+
 class PartyForm(CompanyForm):
     """A supplier or customer, drawn in sections (inventory/includes/party_form.html,
     2026-11-02). ``REQUIRED`` boxes must be filled here, on top of what the model
@@ -399,6 +418,19 @@ class PartyForm(CompanyForm):
             # the model's default (0 days, no credit limit).
             box.required = name in self.REQUIRED
             box.wide = name in self.WIDE
+        for name in self.PHONES:
+            if name in self.fields:
+                self.fields[name].widget.attrs.update(inputmode="tel", placeholder="01XXXXXXXXX", maxlength=17)
+                self.fields[name].help_text = "11 digits, e.g. 01711000000."
+
+    #: Phone boxes: Bangladeshi mobile numbers, kept as 11 digits (2026-11-02).
+    PHONES = ("phone", "whatsapp")
+
+    def clean_phone(self):
+        return bd_number(self.cleaned_data.get("phone"))
+
+    def clean_whatsapp(self):
+        return bd_number(self.cleaned_data.get("whatsapp"))
 
     def clean(self):
         data = super().clean()
@@ -436,7 +468,10 @@ class SupplierForm(PartyForm):
 
 
 class CustomerForm(PartyForm):
-    REQUIRED = ("code", "name", "customer_type", "contact_person", "whatsapp")
+    # Company / shop name is optional (2026-11-02): someone may buy in their
+    # own name. Left empty, the contact person's name is saved as the
+    # customer's name, so orders, invoices and lists still name them.
+    REQUIRED = ("code", "customer_type", "contact_person", "whatsapp")
     SECTIONS = (
         ("Business", "Who they are.", ("code", "name", "customer_type", "territory")),
         ("Contact", "The WhatsApp number and email let the AI order assistant recognise them.",
@@ -452,8 +487,14 @@ class CustomerForm(PartyForm):
         labels = {"name": "Company / shop name", "customer_type": "Customer type",
                   "contact_person": "Contact person", "phone": "Phone number"}
         help_texts = {"code": "Your own short code, e.g. CUS-001.",
-                      "whatsapp": "With the country code, e.g. 8801711000000."}
+                      "name": "Leave empty if they buy in their own name."}
         widgets = {"address": forms.Textarea(attrs={"rows": 2})}
+
+    def clean(self):
+        data = super().clean()
+        if not (data.get("name") or "").strip() and data.get("contact_person"):
+            data["name"] = data["contact_person"]
+        return data
 
 
 class StatusForm(StyledFormMixin, forms.Form):

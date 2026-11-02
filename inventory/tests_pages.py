@@ -118,9 +118,31 @@ class MasterPageTests(InventoryFixture, TestCase):
         self.assertContains(page, "Credit and prices")
         form = page.context["new_form"]
         self.assertEqual([name for name, box in form.fields.items() if box.required],
-                         ["code", "name", "customer_type", "contact_person", "whatsapp"])
+                         ["code", "customer_type", "contact_person", "whatsapp"])
         refused = self.client.post(reverse("inventory:customers"), {"code": "CUS-2", "name": "Corner shop"})
         self.assertEqual(set(refused.context["new_form"].errors), {"customer_type", "contact_person", "whatsapp"})
+        # Buying in their own name: no shop name, the contact person's is saved.
+        self.client.post(reverse("inventory:customers"), {
+            "code": "CUS-3", "name": "", "customer_type": "retailer", "contact_person": "Abdul Karim",
+            "whatsapp": "8801911222333"})
+        self.assertEqual(Customer.all_objects.get(code="CUS-3").name, "Abdul Karim")
+        # Phone and WhatsApp: Bangladeshi 11-digit numbers, kept as 11 digits.
+        self.assertEqual(Customer.all_objects.get(code="CUS-3").whatsapp, "01911222333")
+        refused = self.client.post(reverse("inventory:customers"), {
+            "code": "CUS-4", "customer_type": "retailer", "contact_person": "Rana", "whatsapp": "0171100",
+            "phone": "12345678901"})
+        self.assertEqual(set(refused.context["new_form"].errors), {"whatsapp", "phone"})
+        self.assertContains(refused, "Write an 11-digit Bangladeshi number, e.g. 01711000000.")
+
+    def test_bangladeshi_numbers(self):
+        from inventory.forms import bd_number
+
+        for typed in ("01711000000", "017-1100 0000", "+8801711000000", "8801711000000", "০১৭১১০০০০০০"):
+            self.assertEqual(bd_number(typed), "01711000000", typed)
+        self.assertEqual(bd_number(""), "")
+        for wrong in ("0171100000", "017110000000", "02711000000", "01211000000"):
+            with self.assertRaises(Exception, msg=wrong):
+                bd_number(wrong)
         self.client.post(reverse("inventory:customers"), {
             "code": "CUS-2", "name": "Corner shop", "customer_type": "retailer", "contact_person": "Babu",
             "whatsapp": "8801811000000"})

@@ -7044,8 +7044,14 @@ yet, switch Ask on.
   must be filled. **Items supplied** is no longer on the form (a typed list of item codes confused
   people; what a supplier brings shows on its stock in). The column stays in the database, the
   Excel import and the API, so nothing saved is lost.
-- **Add / Edit customer** (`CustomerForm`): **Company / shop name**; code, company / shop name,
-  customer type, contact person and WhatsApp number must be filled, the rest is optional.
+- **Add / Edit customer** (`CustomerForm`): **Company / shop name**, optional (someone may buy in
+  their own name: left empty, the contact person's name is saved as the customer's name, so orders,
+  invoices and lists still name them); code, customer type, contact person and WhatsApp number must
+  be filled, the rest is optional.
+- **Phone numbers** (supplier phone; customer phone and WhatsApp): Bangladeshi mobile numbers of
+  11 digits (01XXXXXXXXX, `inventory.forms.bd_number`). Spaces, dashes, Bangla digits and a +880
+  prefix are tidied, and the number is saved as 11 digits. The AI order assistant still recognises
+  them (it compares the last 10 digits).
 - **New modal** for both (`inventory/includes/party_form.html`): a title and one line under it,
   sections (Business, Contact, Terms and tax / Credit and prices, Notes), address and notes across
   the whole row, "* must be filled" beside Cancel and Add. The other master pages keep their modal.
