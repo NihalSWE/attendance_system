@@ -115,7 +115,8 @@ def create_from_form(form, *, user, company_id, membership, branch_ids, pay):
             created_by=user,
         )
     except (ValidationError, IntegrityError) as exc:
-        _apply_errors(form, exc)
+        _apply_errors(form, exc, company=membership.company, code=data["employee_code"],
+                      starts=data["effective_from"])
         return None
 
 
@@ -244,11 +245,50 @@ CONSTRAINT_MESSAGES = {
 }
 
 
-def _apply_errors(form, exc):
+def code_holder_message(company, code, starts):
+    """Who holds Employee ID ``code`` at ``starts``, in plain words, or "".
+
+    The ID is free again the day after its last holder's final day; the bare
+    "held by someone whose placement has not ended" read as if a left
+    employee's ID were stuck (2026-10-19: a new hire was given the ID of a
+    test record that had ended, with a joining date before that end).
+    """
+    import datetime
+    from zoneinfo import ZoneInfo
+
+    from django.db.models import Q
+
+    from employees.models import EmployeeAssignment
+
+    holder = (
+        EmployeeAssignment.all_objects.select_related("employee")
+        .filter(company=company, employee_code=code)
+        .exclude(status=EmployeeAssignment.Status.CANCELLED)
+        .filter(Q(effective_to__isnull=True) | Q(effective_to__gt=starts))
+        .order_by("effective_from").first()
+    )
+    if holder is None:
+        return ""
+    zone = ZoneInfo(company.timezone or "UTC")
+    name = holder.employee.full_name
+    if holder.effective_to is None:
+        since = holder.effective_from.astimezone(zone).date()
+        return (f"Employee ID {code} is in use by {name} (since {since:%d %b %Y}). "
+                "Use another ID, or end their employment first.")
+    last_day = holder.effective_to.astimezone(zone).date() - datetime.timedelta(days=1)
+    free_from = last_day + datetime.timedelta(days=1)
+    return (f"Employee ID {code} belonged to {name} until {last_day:%d %b %Y}. "
+            f"It is free from {free_from:%d %b %Y}: choose a joining date on or after "
+            "that, or another ID.")
+
+
+def _apply_errors(form, exc, company=None, code=None, starts=None):
     """Map a service failure onto the field the reader needs to change."""
     text = str(getattr(exc, "message_dict", "")) or str(exc)
     for name, (field, message) in CONSTRAINT_MESSAGES.items():
         if name in text:
+            if name == "excl_employee_code_overlap_per_company" and company and code and starts:
+                message = code_holder_message(company, code, starts) or message
             form.add_error(field, message)
             return
 

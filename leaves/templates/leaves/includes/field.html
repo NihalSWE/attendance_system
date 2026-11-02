@@ -8,7 +8,7 @@
     {% else %}
         <label class="field__label" for="{{ field.id_for_label }}">
             {{ field.label }}
-            {% if field.field.required %}
+            {% if field.field.required or field.field.show_required %}
                 <span class="field__req">
                     *
                 </span>

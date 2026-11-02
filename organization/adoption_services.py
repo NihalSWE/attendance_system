@@ -20,6 +20,7 @@ from django.db import models, transaction
 
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
+from common.exceptions import NotInThisCompany
 from common.services import create_validated
 from common.tenant import use_company
 from organization.models import Department, Designation
@@ -62,7 +63,7 @@ def get_adoption_for_edit(*, actor, company_id, adoption_id):
             Department.objects.select_related("branch").filter(pk=adoption_id).first()
         )
         if department is None:
-            raise PermissionDenied("Department not found in this company.")
+            raise NotInThisCompany("Department not found in this company.")
         assert_branch_in_scope(membership, department.branch)
     return membership, department
 
@@ -206,7 +207,7 @@ def get_designation_for_edit(*, actor, company_id, designation_id):
             .filter(pk=designation_id).first()
         )
         if designation is None:
-            raise PermissionDenied("Designation not found in this company.")
+            raise NotInThisCompany("Designation not found in this company.")
         assert_branch_in_scope(membership, designation.department.branch)
     return membership, designation
 
@@ -279,7 +280,7 @@ def set_designation_status(*, actor, company_id, designation_id, status):
             .filter(pk=designation_id).first()
         )
         if designation is None:
-            raise PermissionDenied("Designation not found in this company.")
+            raise NotInThisCompany("Designation not found in this company.")
         assert_branch_in_scope(membership, designation.department.branch)
         if status == ActiveStatus.INACTIVE and designation.assignments.exists():
             raise ValidationError({

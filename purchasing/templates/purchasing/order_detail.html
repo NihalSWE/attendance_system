@@ -60,13 +60,14 @@
             {% endif %}
         </div>
     </div>
+    {% include "purchasing/includes/guide.html" with at="order" doc=doc %}
 
     <div class="card">
         <div class="card__head"><h2>Ordered</h2><span class="spacer"></span>
             <span class="t-muted">Amount <span class="amount">{{ totals.amount|floatformat:2 }}</span> · VAT <span class="amount">{{ totals.vat|floatformat:2 }}</span> · Total <strong class="amount">{{ totals.total|floatformat:2 }}</strong></span></div>
         {% if lines %}
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Item</th><th class="numeric">Quantity</th><th class="numeric">Unit price</th><th class="numeric">Disc %</th><th class="numeric">VAT %</th><th class="numeric">Amount</th><th class="numeric">Received</th><th class="numeric">Open</th><th><span class="sr-only">Actions</span></th></tr></thead>
                     <tbody>
                         {% for line in lines %}
@@ -102,7 +103,7 @@
         <div class="card">
             <div class="card__head"><h2>Goods receipts</h2></div>
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Number</th><th>Received</th><th>Store</th><th>Status</th></tr></thead>
                     <tbody>
                         {% for r in receipts %}

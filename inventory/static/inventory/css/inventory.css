@@ -83,3 +83,75 @@
 .scan-answer .btn {
     align-self:flex-start;
 }
+
+/* Waiting for quality check (2026-11-01, hub/_qc_card.html) */
+.qc-card { margin-bottom: var(--s5); }
+.qc-card__code { display: block; font-size: 12px; color: var(--faint); }
+.qc-card__actions { display: flex; gap: 6px; align-items: center; justify-content: flex-end; white-space: nowrap; }
+.qc-card__actions form { margin: 0; }
+.qc-card__note { margin: 0; padding: var(--s3) var(--s4); }
+
+/* The product page in step order (2026-11-01) */
+.ui-stepno {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; margin-right: 8px; border-radius: 50%;
+    background: var(--accent); color: var(--on-accent); font-size: 12px; font-weight: 600;
+}
+.product-steps { position: sticky; top: calc(var(--topbar-h) + 8px); z-index: 5; padding: 6px; border-radius: var(--r-lg);
+                 background: var(--page); box-shadow: 0 0 0 1px var(--border); }
+.ui-page a.ui-steps__step { text-decoration: none !important; color: var(--muted) !important; transition: background .2s ease, transform .15s ease; }
+.ui-page a.ui-steps__step:hover { transform: translateY(-1px); }
+.ui-page a.ui-steps__step--done { color: var(--success-ink) !important; }
+.ui-page a.ui-steps__step--now { color: #fff !important; }
+.product-steps__no {
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    width: 22px; height: 22px; border-radius: 50%; background: var(--surface); font-size: 12px; font-weight: 600;
+}
+.ui-steps__step--now .product-steps__no { color: var(--action); }
+.ui-locked {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3);
+    padding: var(--s3) var(--s4); border: 1px dashed var(--field); border-radius: var(--r); background: var(--surface-sunken);
+}
+.ui-locked p { margin: 0; flex: 1 1 320px; color: var(--muted); }
+.ui-locked strong { color: var(--text); }
+.ui-substeps { margin: 0 0 var(--s3); padding-left: 20px; }
+.ui-substeps li { margin: 4px 0; color: var(--muted); }
+.ui-substeps li.is-now strong { color: var(--text); }
+.ui-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--s3); margin: 0; padding: var(--s4); border-bottom: 1px solid var(--border); }
+.ui-facts dt { font-size: 12px; color: var(--muted); }
+.ui-facts dd { margin: 2px 0 0; font-weight: 500; }
+:target.ui-card { animation: ui-target 1.6s ease-out; }
+@keyframes ui-target { 0%, 25% { box-shadow: 0 0 0 3px var(--action-soft); } }
+
+/* The purchase flow on every purchase page (2026-11-01, purchasing/includes/guide.html) */
+.purchase-flow { margin: 0 0 var(--s3); }
+.purchase-flow a { text-decoration: none; }
+.purchase-flow__opt { margin-left: 4px; font-size: 11px; color: var(--faint); font-weight: 400; }
+.purchase-flow__side { margin-left: auto; }
+.purchase-guide {
+    margin: 0 0 var(--s4); padding: var(--s3) var(--s4);
+    border: 1px solid var(--border); border-left: 3px solid var(--action); border-radius: 0;
+    background: var(--surface); animation: purchase-guide-in .25s ease both;
+}
+.purchase-guide p { margin: 0; line-height: 1.55; }
+.purchase-guide .ui-muted { display: block; margin-top: 4px; font-size: 13px; }
+.purchase-guide__next { margin-top: 8px !important; padding-top: 8px; border-top: 1px solid var(--border); }
+.purchase-guide__label {
+    display: inline-block; margin-right: 8px; padding: 1px 8px; border-radius: var(--r-pill);
+    background: var(--action-soft); color: var(--action-ink); font-size: 12px; font-weight: 600;
+}
+@keyframes purchase-guide-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* Adjust stock and Stock counts explained (2026-11-01, store/_guide.html) */
+.store-guide__steps { display: flex; flex-wrap: wrap; gap: var(--s2); margin: 10px 0 0; padding: 0; list-style: none; }
+.store-guide__steps li {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: var(--r);
+    background: var(--tile); color: var(--muted); font-size: 13px; transition: background .2s ease;
+}
+.store-guide__steps li span {
+    display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+    border-radius: 50%; background: var(--surface); font-size: 11px; font-weight: 600;
+}
+.store-guide__steps li.is-done { background: var(--success-soft); color: var(--success-ink); }
+.store-guide__steps li.is-now { background: var(--action); color: #fff; }
+.store-guide__steps li.is-now span { color: var(--action); }

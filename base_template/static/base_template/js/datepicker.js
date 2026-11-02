@@ -54,8 +54,9 @@
         return c;
     }
 
-    /* One calendar surface, reused by both the single and range pickers. */
-    function Calendar(onPick) {
+    /* One calendar surface, reused by both the single and range pickers.
+       ``limits`` (optional) returns {min, max}: days outside are greyed out. */
+    function Calendar(onPick, limits) {
         var cal = document.createElement("div");
         cal.className = "dp__cal";
         var head = document.createElement("div");
@@ -126,6 +127,7 @@
             var lead = (first.getDay() + 6) % 7;
             var cursor = addDays(first, -lead);
             var today = startOfDay(new Date());
+            var bounds = limits ? limits() : {};
 
             for (var i = 0; i < 42; i++) {
                 var d = new Date(cursor.getTime());
@@ -135,6 +137,10 @@
                 btn.textContent = d.getDate();
                 if (d.getMonth() !== view.getMonth()) btn.classList.add("dp__day--muted");
                 if (sameDay(d, today)) btn.classList.add("dp__day--today");
+                if ((bounds.min && d < bounds.min) || (bounds.max && d > bounds.max)) {
+                    btn.disabled = true;
+                    btn.classList.add("dp__day--off");
+                }
 
                 if (state.single && sameDay(d, state.single)) btn.classList.add("dp__day--on");
                 if (state.start && sameDay(d, state.start)) {
@@ -299,6 +305,9 @@
             calendar.setState({single: selected});
             calendar.render();
             closeOpen();
+        }, function () {
+            // The input's own min/max (2026-10-26), read each time: a script may move them.
+            return {min: parseIso(input.min), max: parseIso(input.max)};
         });
         shell.panel.appendChild(calendar.el);
 
@@ -337,7 +346,8 @@
             closeOpen();
             if (isOpen) return;
             calendar.setState({single: selected});
-            calendar.focusOn(selected || new Date());
+            var max = parseIso(input.max), min = parseIso(input.min), now = startOfDay(new Date());
+            calendar.focusOn(selected || (max && now > max ? max : (min && now < min ? min : now)));
             calendar.render();
             placePanel(shell);
             shell.panel.classList.add("dp__panel--open");
@@ -484,6 +494,12 @@
 
         paint();
     }
+
+    // For a date box added after the page loaded (a copied line, 2026-10-31):
+    // window.attachDatepicker(input). A box already given its calendar is left.
+    window.attachDatepicker = function (input) {
+        if (input && !input.closest(".dp")) initSingle(input);
+    };
 
     document.addEventListener("DOMContentLoaded", function () {
         document.querySelectorAll("input[data-datepicker]").forEach(initSingle);

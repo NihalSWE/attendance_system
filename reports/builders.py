@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from django.db.models import Q
 from django.utils import timezone
 
+from reports.filters import who
+
 from attendance import access
 from attendance.models import AttendanceRecord
 from attendance.services import refresh
@@ -156,12 +158,9 @@ def records(ctx, **where):
         # "Hide from reports" on the profile: their days still count, just not
         # in the reports. Their own profile calls these builders with it on.
         queryset = queryset.exclude(employee__hide_from_reports=True)
-    if f.branch:
-        queryset = queryset.filter(branch_id=int(f.branch))
-    if f.department:
-        queryset = queryset.filter(employee_assignment__department_id=int(f.department))
-    if f.employee:
-        queryset = queryset.filter(employee_id=int(f.employee))
+    queryset = queryset.filter(who(f, branch="branch_id",
+                                   department="employee_assignment__department_id",
+                                   employee="employee_id"))
     return queryset.order_by("employee__first_name", "employee__last_name",
                              "employee_id", "work_date")
 
@@ -537,13 +536,10 @@ def leave(ctx):
     segments = access.scope(
         segments, ctx.scope, field="leave_request__submission_assignment__branch",
         department_field="leave_request__submission_assignment__department")
-    if f.branch:
-        segments = segments.filter(leave_request__submission_assignment__branch_id=int(f.branch))
-    if f.department:
-        segments = segments.filter(
-            leave_request__submission_assignment__department_id=int(f.department))
-    if f.employee:
-        segments = segments.filter(leave_request__employee_id=int(f.employee))
+    segments = segments.filter(who(
+        f, branch="leave_request__submission_assignment__branch_id",
+        department="leave_request__submission_assignment__department_id",
+        employee="leave_request__employee_id"))
     if f.extra.get("leave_type", "").isdigit():
         segments = segments.filter(leave_type_id=int(f.extra["leave_type"]))
     segments = segments.order_by("leave_request__employee__first_name", "start_date")
@@ -597,12 +593,11 @@ def entry_logs(ctx):
         if ctx.scope.departments:
             mine |= Q(employee_id__in=people(ctx.scope).values("pk"))
         punches = punches.filter(mine)
-    if f.branch:
-        punches = punches.filter(branch_id=int(f.branch))
-    if f.employee:
-        punches = punches.filter(employee_id=int(f.employee))
-    if f.department:
-        punches = punches.filter(employee__assignments__department_id=int(f.department)).distinct()
+    punches = punches.filter(who(f, branch="branch_id",
+                                 department="employee__assignments__department_id",
+                                 employee="employee_id"))
+    if f.departments:
+        punches = punches.distinct()
     rows, counted = [], 0
     A, D = PunchEvent.AuthorizationStatus, PunchEvent.DedupeStatus
     for p in punches.order_by("punched_at_utc", "pk"):

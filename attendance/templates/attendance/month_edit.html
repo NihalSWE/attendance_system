@@ -1,0 +1,150 @@
+{% extends "base_template/base.html" %}
+{% load tz %}
+{% block title %}
+    Edit {{ month_name }} {{ year }} · {{ employee.full_name }} · Attendance
+{% endblock %}
+{% block page %}
+{% timezone company_tz %}
+    <div class="crumbs">
+        <a href="{% url 'attendance:attendance_list' %}">Attendance</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        <a href="{{ calendar_url }}">Calendar</a>
+        <span class="crumbs__sep" aria-hidden="true">/</span>
+        Edit month
+    </div>
+    <div class="page__head">
+        <div>
+            <h1 class="page__title">
+                {{ employee.full_name }} · {{ month_name }} {{ year }}
+            </h1>
+            <p class="page__sub">
+                Change any working day to present, half day or absent, and approve late arrivals.
+                The totals are worked out from the days. Every change keeps its reason and can be
+                undone on the day's Fix page.
+            </p>
+        </div>
+        <div class="page__actions">
+            <a class="btn btn--ghost" href="{{ previous_url }}">&larr; Previous month</a>
+            <a class="btn btn--ghost" href="{{ next_url }}">Next month &rarr;</a>
+            <a class="btn btn--ghost" href="{{ calendar_url }}">Back to calendar</a>
+        </div>
+    </div>
+
+    {# The month in numbers, from its days. #}
+    <div class="card">
+        <div class="card__body">
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th class="numeric">Working days</th>
+                            <th class="numeric">Present</th>
+                            <th class="numeric">Late</th>
+                            <th class="numeric">Half day</th>
+                            <th class="numeric">Absent</th>
+                            <th class="numeric">Leave</th>
+                            {% if totals.incomplete %}<th class="numeric">Incomplete</th>{% endif %}
+                            <th class="numeric">Weekly off / holiday</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="numeric"><strong>{{ totals.working }}</strong></td>
+                            <td class="numeric">{{ totals.present }}</td>
+                            <td class="numeric">{{ totals.late }}</td>
+                            <td class="numeric">{{ totals.half_day }}</td>
+                            <td class="numeric">{{ totals.absent }}</td>
+                            <td class="numeric">{{ totals.leave }}</td>
+                            {% if totals.incomplete %}<td class="numeric">{{ totals.incomplete }}</td>{% endif %}
+                            <td class="numeric">{{ totals.off }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" class="card" novalidate>
+        {% csrf_token %}
+        <div class="card__head">
+            <h2>Days</h2>
+        </div>
+        {% if has_errors %}
+            <div class="card__body">
+                <div class="alert alert--danger">
+                    Nothing was saved. {% if reason_error %}{{ reason_error }}{% else %}The days marked below were refused; fix them or put them back, then save again.{% endif %}
+                </div>
+            </div>
+        {% endif %}
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>SL</th>
+                        <th>Date</th>
+                        <th>In</th>
+                        <th>Out</th>
+                        <th class="numeric">Late (min)</th>
+                        <th>Status</th>
+                        <th>Late</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>
+                                <a href="{% url 'attendance:attendance_day_fix' employee.pk row.day|date:'Y-m-d' %}">{{ row.day|date:"D d M" }}</a>
+                            </td>
+                            <td>{{ row.record.first_in_at|time:"H:i"|default:"—" }}</td>
+                            <td>{{ row.record.last_out_at|time:"H:i"|default:"—" }}</td>
+                            <td class="numeric">{% if row.record.late_minutes %}{{ row.record.late_minutes }}{% else %}<span class="t-faint">0</span>{% endif %}</td>
+                            <td>
+                                {% if row.editable %}
+                                    <select class="input select js-select" name="status_{{ row.day|date:'Y-m-d' }}" aria-label="Status on {{ row.day|date:'d M' }}">
+                                        {% if row.status == "incomplete" %}<option value="incomplete" selected>Incomplete - choose</option>{% endif %}
+                                        {% for value, label in choices %}
+                                            <option value="{{ value }}" {% if row.status == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    {% if row.error %}<span class="field__error">{{ row.error }}</span>{% endif %}
+                                {% elif row.record %}
+                                    {{ row.record.get_attendance_status_display }}
+                                    {% if row.why_not %}<span class="t-faint"> · {{ row.why_not }}</span>{% endif %}
+                                {% else %}
+                                    <span class="t-faint">{{ row.why_not }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if row.excused %}
+                                    <span class="badge badge--success">Approved</span>
+                                {% elif row.late and row.editable %}
+                                    <label class="check">
+                                        <input class="check__input" type="checkbox" name="excuse_{{ row.day|date:'Y-m-d' }}" {% if row.excuse_ticked %}checked{% endif %}>
+                                        <span>Approve late</span>
+                                    </label>
+                                {% elif row.late %}
+                                    <span class="badge badge--warning">Late</span>
+                                {% else %}
+                                    <span class="t-faint">—</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card__body stack">
+            <div class="field">
+                <label class="field__label" for="month-reason">Reason <span class="field__req">*</span></label>
+                <input class="input" id="month-reason" name="reason" maxlength="500" value="{{ reason }}" placeholder="e.g. Checked with the attendance register">
+                <span class="field__help">Kept with every change saved now.</span>
+                {% if reason_error %}<span class="field__error">{{ reason_error }}</span>{% endif %}
+            </div>
+        </div>
+        <div class="card__foot">
+            <button class="btn btn--primary" type="submit">Save changes</button>
+        </div>
+    </form>
+{% endtimezone %}
+{% endblock %}

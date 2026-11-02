@@ -15,6 +15,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from access_control.branch_access import grant_access
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from employees.models import Employee
 from inventory import periods, posting, valuation
@@ -146,7 +147,7 @@ class ReportPageTests(LedgerFixture, TestCase):
                 self.assertIn(kind, download["Content-Type"], (report.slug, fmt))
         index = self.client.get(reverse("inventory:reports"))
         self.assertContains(index, "Stock valuation")
-        self.assertContains(index, 'data-menu="inventory"')
+        assert_inventory_menu(self, index, 'data-menu="inventory"')
 
     def test_item_card_runs_the_balance(self):
         page = self.client.get(reverse("inventory:report_item_card"),

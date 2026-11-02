@@ -7,9 +7,11 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import F, OuterRef, Subquery
 from django.shortcuts import redirect
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from access_control.branch_access import ALL_BRANCHES, branches_for
+from base_template import fetch
 from base_template.tables import paginate, render
 from common.forms import apply_service_errors
 from common.tenant import use_company
@@ -82,6 +84,14 @@ def stock(request):
     })
 
 
+#: Each item type's own page (inventory/views.py PAGES), for an item's page.
+TYPE_PAGES = {ItemKind.RAW: ("raw_materials", "Raw materials"),
+              ItemKind.PACKAGING: ("packaging", "Packaging"),
+              ItemKind.FINISHED: ("finished_goods", "Finished goods"),
+              ItemKind.SPARE: ("spare_parts", "Spare parts"),
+              ItemKind.GENERAL: ("general_items", "General items")}
+
+
 def _item_context(request, company_id, item, *, pack_form=None, open_dialog=""):
     costs_in = _valuation_branches(request.user, company_id)
     with use_company(company_id):
@@ -101,8 +111,18 @@ def _item_context(request, company_id, item, *, pack_form=None, open_dialog=""):
         cost = ItemCost.objects.filter(item=item, warehouse__isnull=True).first()
     can_manage = access.may(request.user, company_id, masters.CODE)
     if can_manage and pack_form is None:
-        pack_form = forms.PackUnitForm(company_id=company_id)
+        pack_form = forms.PackUnitForm(company_id=company_id, item=item)
+    # The page of the item's own type (2026-10-26), for the crumbs and Edit.
+    type_page = TYPE_PAGES.get(item.kind, ("items", "Items"))
+    # Made here, with Production on: the recipe is on the product's page (2026-10-27).
+    makes_here = (item.kind == ItemKind.FINISHED and item.sourcing != Item.Sourcing.BUY
+                  and access.production_on(company_id))
     return {
+        "makes_here": makes_here,
+        "type_url": reverse(f"inventory:{type_page[0]}"), "type_label": type_page[1],
+        # Never moved: it can be deleted (masters.delete_item).
+        "delete_url": (reverse(f"inventory:{type_page[0]}_delete", args=[item.pk])
+                       if can_manage and not masters._item_has_moved(item) else ""),
         "item": item, "balances": balances, "moves": moves, "packs": packs,
         "on_hand": sum((b.qty_on_hand for b in balances), Decimal("0")),
         "cost": cost, "sees_costs": costs_in is ALL_BRANCHES,
@@ -128,6 +148,12 @@ def _printed(company_id, item, balances):
         }
 
 
+def item_page(request, company_id, item, **kwargs):
+    """The item's page; ``kwargs`` as ``_item_context`` (a refused form, its modal)."""
+    return render(request, "inventory/item_detail.html",
+                  _item_context(request, company_id, item, **kwargs))
+
+
 @login_required
 def item_detail(request, pk):
     company_id, bail = company_or_bail(request)
@@ -149,16 +175,32 @@ def pack_unit_add(request, pk):
     if bail:
         return bail
     _, item = masters.get_for_edit(masters.ITEM, actor=request.user, company_id=company_id, pk=pk)
-    form = forms.PackUnitForm(request.POST, company_id=company_id)
+    form = forms.PackUnitForm(request.POST, company_id=company_id, item=item)
+    if form.is_valid() and form.cleaned_data.get("sale_price") is not None:
+        # Below its cost only on purpose (2026-10-31, inventory.pricing).
+        from inventory import pricing
+
+        below = request.POST.get("below_cost") == "on"
+        try:
+            pricing.check(company_id, item, form.cleaned_data["sale_price"], factor=form.cleaned_data["factor"],
+                          reason=request.POST.get("reason", "") if below else "", field="sale_price")
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
     if form.is_valid():
         try:
-            masters.add_pack_unit(actor=request.user, company_id=company_id, item_id=item.pk,
-                                  values=form.cleaned_data)
+            pack = masters.add_pack_unit(actor=request.user, company_id=company_id, item_id=item.pk,
+                                         values=form.cleaned_data)
         except ValidationError as exc:
             apply_service_errors(form, exc)
         else:
+            if fetch.wants_json(request):
+                # From the material page or the product hub (2026-10-27).
+                return fetch.saved(f"1 {pack.uom.code} = {pack.factor.normalize():f} {item.base_uom.code} added.",
+                                   _back_to(request, item))
             messages.success(request, "Pack unit added.")
             return redirect("inventory:item_detail", pk=item.pk)
+    if fetch.wants_json(request):
+        return fetch.refused(form)
     return render(request, "inventory/item_detail.html",
                   _item_context(request, company_id, item, pack_form=form, open_dialog="pack-dialog"))
 
@@ -169,6 +211,22 @@ def pack_unit_remove(request, pk, pack_pk):
     company_id, bail = company_or_bail(request)
     if bail:
         return bail
-    masters.remove_pack_unit(actor=request.user, company_id=company_id, item_id=pk, pack_id=pack_pk)
+    try:
+        masters.remove_pack_unit(actor=request.user, company_id=company_id, item_id=pk, pack_id=pack_pk)
+    except ValidationError as exc:
+        if fetch.wants_json(request):
+            return fetch.refused(message="; ".join(exc.messages))
+        raise
+    if fetch.wants_json(request):
+        with use_company(company_id):
+            item = Item.objects.get(pk=pk)
+        return fetch.saved("Unit removed.", _back_to(request, item))
     messages.success(request, "Pack unit removed.")
     return redirect("inventory:item_detail", pk=pk)
+
+
+def _back_to(request, item):
+    """The page the form came from: the item's own new page (hub_views)."""
+    from inventory.hub_views import _page_of
+
+    return _page_of(item)

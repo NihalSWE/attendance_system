@@ -504,6 +504,19 @@ def _company_zone(device):
         return ZoneInfo("UTC")
 
 
+def _update_device_users(device, message):
+    """A user, template or photo upload reaches the device's user list now
+    (``devices/services/device_users.py``). Best effort: the upload is already
+    stored, and the next reader catches up whatever this misses."""
+    from devices.services import device_users
+
+    try:
+        device_users.record_message(device, message)
+    except Exception:  # noqa: BLE001 - evidence is already durable
+        logger.exception("Device %s: user list not updated from message %s",
+                         device.pk, message.pk)
+
+
 def ingest(*, device, parsed, raw_body, source_ip=None, headers=None,
            content_type="", encoding="utf-8"):
     """Capture one message durably, then best-effort extract its punches.
@@ -576,6 +589,7 @@ def ingest(*, device, parsed, raw_body, source_ip=None, headers=None,
             error_message=extraction_error,
         )
 
+    _update_device_users(device, message)
     _recalculate_attendance(device, extraction)
 
     return IngestionResult(

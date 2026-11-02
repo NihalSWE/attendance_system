@@ -17,7 +17,7 @@ INVENTORY_REPORT_CODES = tuple(dict.fromkeys(
 
 
 def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, record=False,
-         salary=False, group="", report_kind="", people="", needs=""):
+         salary=False, group="", report_kind="", people="", needs="", module=""):
     # record: shown to people who may record leave (HR as well as administrators).
     # salary: shown to people who see pay (the payroll manager as well; not HR).
     # group: the dropdown inside its menu the item sits in (Reports: "Attendance
@@ -27,10 +27,11 @@ def item(label, view, *aliases, fragment="", manage=False, unrestricted=False, r
     # edits employees in every branch (Ajay, 2026-09-27).
     # needs: a module permission the viewer must hold somewhere (Store &
     # Inventory); such an entry is hidden when the company lacks the module.
+    # module: a module of its own the company must have (Production).
     return {"label": label, "view": view, "aliases": aliases, "fragment": fragment,
             "manage": manage, "unrestricted": unrestricted, "record": record,
             "salary": salary, "group": group, "report_kind": report_kind, "people": people,
-            "needs": needs}
+            "needs": needs, "module": module}
 
 
 def report_item(slug):
@@ -40,6 +41,34 @@ def report_item(slug):
     report = BY_SLUG[slug]
     return item(report.menu, report.url_name, group=report.group, report_kind=report.kind)
 
+
+# Which Store & Inventory links the sidebar shows (2026-10-18): the client
+# sees the module grow in the order it was built. Phase 1 - the lists,
+# opening stock and stock on hand; 2026-10-25: Phase 2 (Scan, Labels) and,
+# ahead of its phase because finished goods need their recipe, BOMs. Add a
+# menu or a link name here to show it; a menu not listed is hidden. None
+# shows every link (for local work - do not push None until the whole module
+# is shown). The menu tests follow this list. Hidden pages still open by
+# their address.
+INVENTORY_LINKS_SHOWN = {
+    # 2026-10-31 (list items 13-14, as agreed on 2026-10-29): one link per job.
+    # Out: Stock on hand (Stock shows it), All items, Opening stock (Stock in →
+    # First count), the old per-type pages and the Production menu (Make).
+    "inventory": (
+        "inventory:start", "inventory:settings", "inventory:units", "inventory:categories", "inventory:stores",
+        "inventory:bins", "inventory:suppliers", "inventory:customers", "sales:price_lists",
+        "production:cost_rates",
+        "inventory:materials", "inventory:spare_parts", "inventory:general_items",
+        "inventory:products",
+        "inventory:stock_in", "inventory:stock_now", "inventory:moves", "inventory:store_adjustments",
+        "inventory:store_counts", "inventory:qc",
+        "production:runs",
+        "inventory:sales", "sales:invoices", "sales:returns",
+        "purchasing:requisitions", "purchasing:orders", "purchasing:receipts", "purchasing:qc",
+        "inventory:reports", "inventory:period_close",
+        "inventory:scan", "inventory:labels", "inventory:warranty",
+    ),
+}
 
 COMPANY_MENUS = (
     ("employees", "Employees", (
@@ -53,9 +82,14 @@ COMPANY_MENUS = (
         item("Daily list", "attendance:attendance_list"),
         item("Late entries", "attendance:attendance_late"),
         item("Calendar", "attendance:attendance_calendar", "attendance:attendance_day"),
+        # Present days set by hand for a salary month or week (2026-10-31).
+        item("Summary", "payroll:attendance_summary", "payroll:attendance_summary_person",
+             "payroll:attendance_summary_save", "payroll:attendance_summary_revert"),
         item("Days to review", "attendance:attendance_review", "attendance:attendance_day_fix",
              "attendance:attendance_correction_withdraw"),
         item("Missed scans", "attendance:missed_scan_list", "attendance:missed_scan_decide"),
+        # The one-time fix for people added from a device (2026-10-26).
+        item("Fix setup", "attendance:setup_fix", manage=True),
     )),
     ("leave", "Leave", (
         item("Leave list", "leaves:leave_list", "leaves:leave_cancel"),
@@ -76,6 +110,8 @@ COMPANY_MENUS = (
              "payroll:payroll_submit", "payroll:payroll_finalise", "payroll:payroll_return",
              "payroll:payroll_reopen", salary=True),
         item("Salary settings", "payroll:salary_settings", manage=True),
+        # Who is paid weekly (2026-10-25).
+        item("Pay groups", "payroll:pay_groups", manage=True),
         item("Penalty rules", "payroll:salary_settings", "payroll:penalty_rule_create",
              "payroll:penalty_rule_change", "payroll:penalty_rule_stop",
              fragment="penalty-rules", manage=True),
@@ -98,6 +134,8 @@ COMPANY_MENUS = (
         item("Holidays", "scheduling:holiday_list", "scheduling:holiday_create",
              "scheduling:holiday_edit", "scheduling:holiday_cancel"),
         item("Holiday calendar", "scheduling:holiday_year", manage=True),
+        # Weekly-off dates worked as normal days (2026-10-17); seen like Holidays.
+        item("Working days", "scheduling:working_day_list", "scheduling:working_day_cancel"),
         item("Attendance settings", "scheduling:attendance_settings_edit", manage=True),
     )),
     ("reports", "Reports", (
@@ -115,21 +153,136 @@ COMPANY_MENUS = (
         report_item("overtime"),
         report_item("entry-logs"),
     )),
+)
+
+#: The Purchase and Sales menu entries (hidden menus today), also offered in
+#: the Inventory menu's Purchase and Sales dropdowns (2026-10-31).
+PURCHASE_ENTRIES = (
+    item("Requisitions", "purchasing:requisitions", "purchasing:requisition_detail",
+         "purchasing:requisition_line_add", "purchasing:requisition_line_remove",
+         "purchasing:requisition_submit", "purchasing:requisition_decide",
+         "purchasing:requisition_cancel", needs=("purchase.request", "purchase.approve")),
+    item("Purchase orders", "purchasing:orders", "purchasing:order_detail",
+         "purchasing:order_from_requisitions", "purchasing:order_line_add",
+         "purchasing:order_line_remove", "purchasing:order_email", "purchasing:order_action",
+         needs=("purchase.order", "purchase.approve", "purchase.receive")),
+    item("Goods receipts", "purchasing:receipts", "purchasing:receipt_detail",
+         "purchasing:receipt_line_add", "purchasing:receipt_line_remove",
+         "purchasing:receipt_action", "purchasing:receipt_labels",
+         needs=("purchase.receive", "inventory.view")),
+    item("Quality check", "purchasing:qc", "purchasing:qc_record", needs="purchase.qc"),
+    item("Purchase returns", "purchasing:returns", "purchasing:return_detail",
+         "purchasing:return_line_add", "purchasing:return_line_remove",
+         "purchasing:return_action", needs=("purchase.receive", "purchase.approve")),
+    item("Suppliers", "inventory:suppliers", needs="inventory.view"),
+)
+SALES_ENTRIES = (
+    item("Sales orders", "sales:orders", "sales:order_detail", "sales:order_line_add",
+         "sales:order_line_remove", "sales:order_action",
+         needs=("sales.order", "sales.approve", "sales.deliver", "inventory.view")),
+    item("Deliveries", "sales:deliveries", "sales:delivery_detail", "sales:delivery_line_add",
+         "sales:delivery_line_remove", "sales:delivery_scan", "sales:delivery_action", "sales:delivery_pdf",
+         needs=("sales.deliver", "inventory.view")),
+    item("Invoices", "sales:invoices", "sales:invoice_detail", "sales:invoice_action", "sales:invoice_pdf",
+         needs=("sales.invoice", "inventory.view")),
+    item("Sales returns", "sales:returns", "sales:return_detail", "sales:return_line_add",
+         "sales:return_line_remove", "sales:return_action", needs=("sales.deliver", "inventory.view")),
+    item("Customers", "inventory:customers", needs="inventory.view"),
+    item("Price lists", "sales:price_lists", "sales:price_list_detail", "sales:price_remove",
+         needs=("sales.order", "inventory.view")),
+    # Phase 8: orders read by the AI into drafts; a person confirms each.
+    item("AI order inbox", "ai_assistant:inbox", "ai_assistant:message", "ai_assistant:message_action",
+         needs=("sales.order", "sales.approve")),
+    item("AI assistant settings", "ai_assistant:settings", "ai_assistant:recipient_add",
+         "ai_assistant:recipient_remove", manage=True, needs=("sales.order", "inventory.view")),
+)
+
+
+def _in_group(entries, group, views):
+    """``views`` of ``entries``, in that order, inside the dropdown ``group``."""
+    by_view = {entry["view"]: entry for entry in entries}
+    return tuple({**by_view[view], "group": group} for view in views)
+
+
+INVENTORY_MENUS = (
     # Store & Inventory (docs/inventory/00-PLAN.md, Phase 1). Shown once the
     # platform owner enables the module, to those holding "View stock and items".
     ("inventory", "Inventory", (
+        # One dropdown per kind of work, as agreed (2026-10-29, list items 13-14):
+        # Setup, Materials, Products, Stock, Production, Sales, Purchase,
+        # Reports, Tools. A dropdown is the run of entries with the same ``group``.
+        item("Start here", "inventory:start", needs="inventory.view", group="Setup"),
+        item("Inventory settings", "inventory:settings", manage=True, needs="inventory.view", group="Setup"),
+        item("Units", "inventory:units", "inventory:units_edit", "inventory:units_status",
+             "inventory:standard_units", needs="inventory.view", group="Setup"),
+        item("Item categories", "inventory:categories", "inventory:categories_edit",
+             "inventory:categories_status", needs="inventory.view", group="Setup"),
+        item("Stores", "inventory:stores", "inventory:stores_edit", "inventory:stores_status",
+             needs="inventory.view", group="Setup"),
+        item("Bins", "inventory:bins", "inventory:bins_edit", "inventory:bins_status",
+             needs="inventory.view", group="Setup"),
+        item("Suppliers", "inventory:suppliers", "inventory:suppliers_edit",
+             "inventory:suppliers_status", needs="inventory.view", group="Setup"),
+        item("Customers", "inventory:customers", "inventory:customers_edit",
+             "inventory:customers_status", needs="inventory.view", group="Setup"),
+        *_in_group(SALES_ENTRIES, "Setup", ("sales:price_lists",)),
+        # What an hour of people or a machine costs (2026-10-27, plan §7.4).
+        item("Cost rates", "production:cost_rates", "production:cost_rate_save",
+             "production:cost_rate_status", needs=("inventory.view", "production.bom"),
+             module="production", group="Setup"),
+        item("Materials", "inventory:materials", "inventory:material", needs="inventory.view",
+             module="production", group="Materials"),
+        item("Spare parts", "inventory:spare_parts", "inventory:spare_parts_edit", "inventory:spare_parts_status",
+             needs="inventory.view", group="Materials"),
+        item("General items", "inventory:general_items", "inventory:general_items_edit",
+             "inventory:general_items_status", needs="inventory.view", group="Materials"),
+        item("Products", "inventory:products", "inventory:product", "inventory:item_save",
+             needs="inventory.view", group="Products"),
+        item("Stock in", "inventory:stock_in", "inventory:stock_in_new",
+             needs=("inventory.view", "purchase.receive", "inventory.adjust"), group="Stock"),
+        item("Stock", "inventory:stock_now", needs="inventory.view", group="Stock"),
+        item("Move stock", "inventory:moves", "inventory:move_new", needs=("inventory.view", "inventory.transfer"),
+             group="Stock"),
+        item("Adjustments", "inventory:store_adjustments", "inventory:store_adjustments_detail",
+             needs=("inventory.adjust", "inventory.adjust_approve"), group="Stock"),
+        item("Stock counts", "inventory:store_counts", "inventory:store_counts_detail",
+             needs=("inventory.adjust", "inventory.adjust_approve"), group="Stock"),
+        # Batches waiting for a quality check, made or bought (2026-11-01).
+        item("Quality check", "inventory:qc", "inventory:qc_decide", needs="inventory.view", group="Stock"),
+        # Plan → Start → Finish (2026-10-27, plan §8).
+        item("Make", "production:runs", "production:run", "production:plan",
+             needs=("inventory.view", "production.plan", "production.execute"), module="production",
+             group="Production"),
+        item("Sell", "inventory:sales", "inventory:sale_new",
+             needs=("inventory.view", "sales.order", "sales.deliver", "sales.invoice"), group="Sales"),
+        *_in_group(SALES_ENTRIES, "Sales", ("sales:invoices", "sales:returns")),
+        *_in_group(PURCHASE_ENTRIES, "Purchase",
+                   ("purchasing:requisitions", "purchasing:orders", "purchasing:receipts", "purchasing:qc")),
+        item("Reports", "inventory:reports", *REPORT_URLS, needs=("inventory.view", *INVENTORY_REPORT_CODES),
+             group="Reports"),
+        item("Month-end close", "inventory:period_close", needs="inventory.period_close", group="Reports"),
+        item("Scan", "inventory:scan", needs="inventory.view", group="Tools"),
+        item("Labels", "inventory:labels", "inventory:label_print", "inventory:label_void",
+             "inventory:bin_labels_print", "inventory:package_labels", needs="inventory.view", group="Tools"),
+        # Claims and serial numbers, once warranty is switched on (2026-10-27, plan §10).
+        item("Warranty", "inventory:warranty", needs=("inventory.view", "inventory.warranty"),
+             module="warranty", group="Tools"),
+        # Not in the menu (2026-10-31: the same job has a page above); their
+        # pages still open by address and from the pages that need them.
         item("Dashboard", "inventory:dashboard", "inventory:home", needs="inventory.view"),
         item("Stock on hand", "inventory:stock", needs="inventory.view"),
-        item("Reports", "inventory:reports", *REPORT_URLS, needs=("inventory.view", *INVENTORY_REPORT_CODES)),
-        item("Month-end close", "inventory:period_close", needs="inventory.period_close"),
         item("Go-live", "inventory:golive", "inventory:golive_count_sheet", "inventory:golive_compare",
              needs=("inventory.adjust", "inventory.adjust_approve")),
-        item("Items", "inventory:items", "inventory:items_edit", "inventory:items_status",
+        # Raw materials, packaging and finished goods are Materials and
+        # Products now (2026-10-27); their old pages still open by address.
+        *[item(label, f"inventory:{key}", f"inventory:{key}_edit", f"inventory:{key}_status",
+               needs="inventory.view", module=module)
+          for key, label, module in (("raw_materials", "Raw materials", "production"),
+                                     ("packaging", "Packaging", "production"),
+                                     ("finished_goods", "Finished goods", ""))],
+        item("All items", "inventory:items", "inventory:items_edit", "inventory:items_status",
              "inventory:item_detail", "inventory:pack_unit_add", "inventory:pack_unit_remove",
              needs="inventory.view"),
-        item("Scan", "inventory:scan", needs="inventory.view"),
-        item("Labels", "inventory:labels", "inventory:label_print", "inventory:label_void",
-             "inventory:bin_labels_print", "inventory:package_labels", needs="inventory.view"),
         item("Store requisitions", "inventory:store_requisitions", "inventory:store_requisitions_detail",
              needs=("inventory.issue", "inventory.issue_approve")),
         item("Store issues", "inventory:store_issues", "inventory:store_issues_detail",
@@ -138,47 +291,14 @@ COMPANY_MENUS = (
              needs=("inventory.issue", "inventory.view")),
         item("Transfers", "inventory:store_transfers", "inventory:store_transfers_detail",
              needs=("inventory.transfer", "inventory.view")),
-        item("Adjustments", "inventory:store_adjustments", "inventory:store_adjustments_detail",
-             needs=("inventory.adjust", "inventory.adjust_approve")),
-        item("Stock counts", "inventory:store_counts", "inventory:store_counts_detail",
-             needs=("inventory.adjust", "inventory.adjust_approve")),
         item("Opening stock", "inventory:opening", "inventory:opening_detail",
              "inventory:opening_line_add", "inventory:opening_line_remove",
              "inventory:opening_post", "inventory:opening_cancel", "inventory:opening_reverse",
              needs="inventory.view"),
-        item("Stores", "inventory:stores", "inventory:stores_edit", "inventory:stores_status",
-             needs="inventory.view"),
-        item("Bins", "inventory:bins", "inventory:bins_edit", "inventory:bins_status",
-             needs="inventory.view"),
-        item("Units", "inventory:units", "inventory:units_edit", "inventory:units_status",
-             "inventory:standard_units", needs="inventory.view"),
-        item("Item categories", "inventory:categories", "inventory:categories_edit",
-             "inventory:categories_status", needs="inventory.view"),
-        item("Suppliers", "inventory:suppliers", "inventory:suppliers_edit",
-             "inventory:suppliers_status", needs="inventory.view"),
-        item("Customers", "inventory:customers", "inventory:customers_edit",
-             "inventory:customers_status", needs="inventory.view"),
-        item("Inventory settings", "inventory:settings", manage=True, needs="inventory.view"),
     )),
     # Purchase (Phase 3): requisition -> order -> goods receipt -> QC -> return.
     ("purchase", "Purchase", (
-        item("Requisitions", "purchasing:requisitions", "purchasing:requisition_detail",
-             "purchasing:requisition_line_add", "purchasing:requisition_line_remove",
-             "purchasing:requisition_submit", "purchasing:requisition_decide",
-             "purchasing:requisition_cancel", needs=("purchase.request", "purchase.approve")),
-        item("Purchase orders", "purchasing:orders", "purchasing:order_detail",
-             "purchasing:order_from_requisitions", "purchasing:order_line_add",
-             "purchasing:order_line_remove", "purchasing:order_email", "purchasing:order_action",
-             needs=("purchase.order", "purchase.approve", "purchase.receive")),
-        item("Goods receipts", "purchasing:receipts", "purchasing:receipt_detail",
-             "purchasing:receipt_line_add", "purchasing:receipt_line_remove",
-             "purchasing:receipt_action", "purchasing:receipt_labels",
-             needs=("purchase.receive", "inventory.view")),
-        item("Quality check", "purchasing:qc", "purchasing:qc_record", needs="purchase.qc"),
-        item("Purchase returns", "purchasing:returns", "purchasing:return_detail",
-             "purchasing:return_line_add", "purchasing:return_line_remove",
-             "purchasing:return_action", needs=("purchase.receive", "purchase.approve")),
-        item("Suppliers", "inventory:suppliers", needs="inventory.view"),
+        *PURCHASE_ENTRIES,
     )),
     # Production (Phase 5): recipes, runs, and what each run cost.
     ("production", "Production", (
@@ -186,32 +306,38 @@ COMPANY_MENUS = (
              "production:order_labels", "production:order_action", "production:consumption_detail",
              "production:consumption_line_add", "production:consumption_line_remove",
              "production:consumption_scan", "production:consumption_action",
-             needs=("production.plan", "production.execute", "inventory.view")),
+             needs=("production.plan", "production.execute", "inventory.view"), module="production"),
         item("BOMs", "production:boms", "production:bom_detail", "production:bom_line_add",
-             "production:bom_line_remove", "production:bom_action", needs=("production.bom", "inventory.view")),
-        item("Production report", "production:report", needs="inventory.view"),
+             "production:bom_line_remove", "production:bom_action", needs=("production.bom", "inventory.view"),
+             module="production"),
+        item("Production report", "production:report", needs="inventory.view", module="production"),
     )),
     # Sales (Phase 6): order, reserve, deliver, invoice, return.
     ("sales", "Sales", (
-        item("Sales orders", "sales:orders", "sales:order_detail", "sales:order_line_add",
-             "sales:order_line_remove", "sales:order_action",
-             needs=("sales.order", "sales.approve", "sales.deliver", "inventory.view")),
-        item("Deliveries", "sales:deliveries", "sales:delivery_detail", "sales:delivery_line_add",
-             "sales:delivery_line_remove", "sales:delivery_scan", "sales:delivery_action", "sales:delivery_pdf",
-             needs=("sales.deliver", "inventory.view")),
-        item("Invoices", "sales:invoices", "sales:invoice_detail", "sales:invoice_action", "sales:invoice_pdf",
-             needs=("sales.invoice", "inventory.view")),
-        item("Sales returns", "sales:returns", "sales:return_detail", "sales:return_line_add",
-             "sales:return_line_remove", "sales:return_action", needs=("sales.deliver", "inventory.view")),
-        item("Customers", "inventory:customers", needs="inventory.view"),
-        item("Price lists", "sales:price_lists", "sales:price_list_detail", "sales:price_remove",
-             needs=("sales.order", "inventory.view")),
-        # Phase 8: orders read by the AI into drafts; a person confirms each.
-        item("AI order inbox", "ai_assistant:inbox", "ai_assistant:message", "ai_assistant:message_action",
-             needs=("sales.order", "sales.approve")),
-        item("AI assistant settings", "ai_assistant:settings", "ai_assistant:recipient_add",
-             "ai_assistant:recipient_remove", manage=True, needs=("sales.order", "inventory.view")),
+        *SALES_ENTRIES,
     )),
+)
+
+def inventory_menu_shown(key):
+    """Whether the Store & Inventory menu ``key`` shows (``INVENTORY_LINKS_SHOWN``)."""
+    return INVENTORY_LINKS_SHOWN is None or key in INVENTORY_LINKS_SHOWN
+
+
+def inventory_link_shown(key, view):
+    return INVENTORY_LINKS_SHOWN is None or view in INVENTORY_LINKS_SHOWN.get(key, ())
+
+
+def _inventory_menus():
+    """The Store & Inventory menus with only the links shown today."""
+    kept = []
+    for key, label, entries in INVENTORY_MENUS:
+        entries = tuple(entry for entry in entries if inventory_link_shown(key, entry["view"]))
+        if entries:
+            kept.append((key, label, entries))
+    return tuple(kept)
+
+
+COMPANY_MENUS += _inventory_menus() + (
     ("organisation", "Organisation", (
         item("Branches", "organization:branch_list", "organization:branch_create",
              "organization:branch_edit", "organization:branch_status"),
@@ -222,6 +348,7 @@ COMPANY_MENUS = (
              "organization:designation_edit", "organization:designation_status"),
         item("Company profile", "organization:company_profile", manage=True),
         item("Email settings", "organization:mail_settings", manage=True),
+        item("Ask settings", "ask:settings", manage=True),
         item("ERP webhook", "webhooks:settings", "webhooks:guide", manage=True),
         item("Access", "organization:access", "organization:access_person", manage=True),
     )),
@@ -263,6 +390,9 @@ def company_menus(request, *, can_manage, can_manage_devices, can_record_leave=N
             # company lacks the module - its entries are then never shown.
             needs = entry["needs"]
             if needs and not module_codes.intersection((needs,) if isinstance(needs, str) else needs):
+                continue
+            # A module of its own (Production, 2026-10-27): hidden while it is off.
+            if entry["module"] and f"module:{entry['module']}" not in module_codes:
                 continue
             if allowed is not None:
                 if not allowed(entry["view"]):

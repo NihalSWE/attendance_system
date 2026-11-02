@@ -1,0 +1,103 @@
+{% comment %}
+    The recipe on the product's page (plan §7.3; production.recipes): what one
+    batch makes, and each material it uses in that material's own unit, with
+    its wastage, cost, what is in stock and how many batches that is enough for.
+    Every change saves with fetch.
+{% endcomment %}
+<div class="ui-card" id="recipe">
+    <div class="ui-card__head">
+        <h2 class="ui-card__title">{% if step %}<span class="ui-stepno">{{ step }}</span>{% endif %}{% include "ui/icon.html" with name="list" %} Recipe{% if recipe %}: one batch makes {{ recipe.bom.batch_size|floatformat:"-4g" }} {{ recipe.bom.batch_uom.code }}{% endif %}</h2>
+        {% if material_form and recipe %}
+            <span>
+                <button class="ui-btn ui-btn--sm" type="button" data-open-dialog="batch-dialog">{% include "ui/icon.html" with name="edit" small=True %} Batch size</button>
+                <button class="ui-btn ui-btn--main ui-btn--sm" type="button" data-open-dialog="recipe-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add material</button>
+            </span>
+        {% endif %}
+    </div>
+    {% if recipe %}
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Material</th><th class="numeric">One batch uses</th><th class="numeric">Wastage</th>{% if sees_costs %}<th class="numeric">Cost</th>{% endif %}<th class="numeric">In stock</th><th>Enough for</th>{% if material_form %}<th class="no-sort"><span class="sr-only">Remove</span></th>{% endif %}</tr></thead>
+                <tbody>
+                    {% for row in recipe.lines %}
+                        <tr>
+                            <td><a href="{% if row.item.kind == 'finished' %}{% url 'inventory:product' row.item_id %}{% else %}{% url 'inventory:material' row.item_id %}{% endif %}">{{ row.item.name }}</a>{% if row.item.kind == "finished" %} <span class="ui-chip ui-chip--info">Made here</span>{% endif %}{% if row.item.status != "active" %} <span class="ui-chip ui-chip--bad">Switched off: replace it</span>{% endif %}</td>
+                            <td class="numeric">{{ row.qty|floatformat:"-4g" }} {{ row.uom.code }}</td>
+                            <td class="numeric">{{ row.scrap_pct|floatformat:"-2" }} %</td>
+                            {% if sees_costs %}<td class="numeric">{% if row.cost_row.missing %}<span class="ui-chip ui-chip--wait">No cost yet</span>{% elif row.cost_row %}{{ row.cost_row.amount|floatformat:"2g" }}{% endif %}</td>{% endif %}
+                            <td class="numeric">{{ row.in_stock|floatformat:"-2g" }} {{ row.item.base_uom.code }}</td>
+                            <td><span class="ui-chip ui-chip--{% if row.enough < 1 %}bad{% elif row.enough < 3 %}wait{% else %}ok{% endif %}">{{ row.enough }} batch{{ row.enough|pluralize:"es" }}</span></td>
+                            {% if material_form %}<td>
+                                <form method="post" action="{% url 'production:recipe_remove' item.pk row.item_id %}" data-fetch>
+                                    {% csrf_token %}
+                                    <button class="ui-btn ui-btn--danger ui-btn--sm" type="submit">{% include "ui/icon.html" with name="trash" small=True %} Remove</button>
+                                </form>
+                            </td>{% endif %}
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="7">No materials yet: add what one batch uses.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if recipe.lines %}<div class="ui-card__foot"><span class="ui-muted">The materials in stock are enough for</span> <strong>{{ recipe.enough }} batch{{ recipe.enough|pluralize:"es" }}</strong>.</div>{% endif %}
+    {% elif batch_form %}
+        <form class="ui-card__body" method="post" action="{% url 'production:recipe_batch' item.pk %}" data-fetch novalidate>
+            {% csrf_token %}
+            <ol class="ui-substeps">
+                <li class="is-now"><strong>How much one batch makes</strong> <span class="ui-muted">· one mix, in {{ item.base_uom.code }}</span></li>
+                <li><strong>The materials one batch uses</strong> <span class="ui-muted">· opens once the batch size is saved</span></li>
+            </ol>
+            <div class="ui-grid-2">{% include "inventory/hub/field.html" with box=batch_form.batch_size %}</div>
+            <div class="ui-form-actions"><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save</button></div>
+        </form>
+    {% else %}
+        <div class="ui-card__body"><p>No recipe yet.</p></div>
+    {% endif %}
+</div>
+
+{% if material_form and recipe %}
+    <dialog class="modal" id="batch-dialog" aria-labelledby="batch-dialog-title">
+        <form class="modal__card" method="post" action="{% url 'production:recipe_batch' item.pk %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="modal__head"><h2 id="batch-dialog-title">How much one batch makes</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <div class="modal__body stack">
+                {% include "inventory/hub/field.html" with box=batch_form.batch_size %}
+                <p class="ui-muted">Productions already made keep the recipe they used.</p>
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Save</button></div>
+        </form>
+    </dialog>
+
+    <dialog class="modal modal--wide" id="recipe-dialog" aria-labelledby="recipe-dialog-title">
+        <form class="modal__card" method="post" action="{% url 'production:recipe_add' item.pk %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="modal__head"><h2 id="recipe-dialog-title">Add to the recipe</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <div class="modal__body stack">
+                <p class="ui-muted">How much one batch ({{ recipe.bom.batch_size|floatformat:"-4g" }} {{ recipe.bom.batch_uom.code }}) uses.</p>
+                {% if material_form.source %}{% include "inventory/hub/field.html" with box=material_form.source %}{% endif %}
+                {% include "inventory/hub/field.html" with box=material_form.material %}
+                {% if material_form.new_name %}
+                    <div class="ui-grid-2">
+                        {% include "inventory/hub/field.html" with box=material_form.new_kind %}
+                        {% include "inventory/hub/field.html" with box=material_form.new_name %}
+                        {% include "inventory/hub/field.html" with box=material_form.new_code %}
+                        {% include "inventory/hub/field.html" with box=material_form.new_category %}
+                        {% include "inventory/hub/field.html" with box=material_form.new_uom %}
+                    </div>
+                    <div>
+                        {% include "inventory/hub/field.html" with box=material_form.new_track_batch %}
+                        {% include "inventory/hub/field.html" with box=material_form.new_track_expiry %}
+                    </div>
+                {% endif %}
+                <div class="ui-grid-2">
+                    {% include "inventory/hub/field.html" with box=material_form.qty %}
+                    {% include "inventory/hub/field.html" with box=material_form.scrap_pct %}
+                </div>
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Add</button></div>
+        </form>
+    </dialog>
+{% endif %}

@@ -39,6 +39,7 @@ def shell(request):
     unrestricted_admin = False
     branch_menus = []
     leave_approver = False
+    ask_box = False
     module_codes = _module_codes(user, company_id) if membership else frozenset()
     if membership and not self_service:
         unrestricted_admin = may_manage_devices(user, company_id)
@@ -57,10 +58,13 @@ def shell(request):
     elif membership and self_service:
         # A12: the company pages this branch manager / person given access may
         # open (access_control.page_access), under "Company" in their sidebar.
+        allowed = opener(user, company_id)
         branch_menus = company_menus(
             request, can_manage=False, can_manage_devices=False,
-            allowed=opener(user, company_id), module_codes=module_codes,
+            allowed=allowed, module_codes=module_codes,
         )
+        # Ask in the top bar (2026-11-02), once they may see something it answers.
+        ask_box = allowed("ask:ask")
         # The approval inbox: a branch manager, or someone given "Approve leave".
         leave_approver = membership.role == "manager" or can(user, company_id, "leave.approve")
 
@@ -74,7 +78,11 @@ def shell(request):
         "branch_menus": branch_menus,
         "sidebar_unrestricted_admin": unrestricted_admin,
         "sidebar_branch_manager": bool(membership and membership.role == 'manager'),
+        # The modules on and the module permissions held (the Products and stock
+        # flow bar shows Warranty only while it is on).
+        "module_codes": module_codes,
         "sidebar_leave_approver": leave_approver,
+        "ask_box": ask_box,
         # "My LFA", once the company has switched LFA on (2026-09-28).
         "sidebar_lfa": bool(self_service and company_id and _lfa_on(company_id)),
         # Developer's API: the owner and administrator of a company the platform
@@ -101,16 +109,25 @@ def developer_api_on(company_id):
 
 
 def _module_codes(user, company_id):
-    """The Store & Inventory permissions ``user`` holds somewhere - none when
-    the company does not have the module (its menu then stays hidden)."""
-    from inventory.access import inventory_on
+    """The Store & Inventory (and Production) permissions ``user`` holds
+    somewhere, plus "module:<code>" for each of the two the company has - none
+    when it lacks Inventory (its menus then stay hidden). A menu entry marked
+    with a module shows only while that module is on (2026-10-27)."""
+    from inventory.access import inventory_on, production_on
 
     if not inventory_on(company_id):
         return frozenset()
     from access_control.branch_access import FEATURE_OF
 
-    return frozenset(code for code, feature in FEATURE_OF.items()
-                     if feature == "inventory" and can(user, company_id, code))
+    from inventory.warranty import warranty_on
+
+    modules = {"inventory"} | ({"production"} if production_on(company_id) else set())
+    # Warranty is a company switch inside Store & Inventory (2026-10-27).
+    markers = {f"module:{module}" for module in modules} | (
+        {"module:warranty"} if warranty_on(company_id) else set())
+    return frozenset(markers | {
+        code for code, feature in FEATURE_OF.items()
+        if feature in modules and can(user, company_id, code)})
 
 
 def _lfa_on(company_id):

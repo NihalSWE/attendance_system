@@ -126,29 +126,24 @@
                     {% endfor %}
                 </select>
             {% endif %}
+            {# Several of each (2026-10-26): the departments' people plus each person picked. #}
             <label class="sr-only" for="report-department">
-                Department
+                Departments
             </label>
-            <select class="input select js-select2" id="report-department" name="department">
-                <option value="">
-                    All departments
-                </option>
+            <select class="input select js-select2" id="report-department" name="department" multiple data-placeholder="All departments" data-search="always">
                 {% for department in departments %}
-                    <option value="{{ department.pk }}" {% if f.department == department.pk|stringformat:"s" %}selected{% endif %}>
+                    <option value="{{ department.pk }}" {% if department.pk|stringformat:"s" in f.departments %}selected{% endif %}>
                         {{ department.name }}{% if branches|length > 1 %} · {{ department.branch.name }}{% endif %}
                     </option>
                 {% endfor %}
             </select>
             <label class="sr-only" for="report-employee">
-                Employee
+                Employees
             </label>
-            <select class="input select js-select2" id="report-employee" name="employee">
-                <option value="">
-                    All employees
-                </option>
+            <select class="input select js-select2" id="report-employee" name="employee" multiple data-placeholder="{% if f.departments %}Add people from other departments{% else %}All employees{% endif %}" data-search="always">
                 {% for employee in employees %}
-                    <option value="{{ employee.pk }}" {% if f.employee == employee.pk|stringformat:"s" %}selected{% endif %}>
-                        {% if employee.table_code %}{{ employee.table_code }} · {% endif %}{{ employee.full_name }}
+                    <option value="{{ employee.pk }}" data-code="{{ employee.table_code|default:'' }}" {% if employee.pk|stringformat:"s" in f.employees %}selected{% endif %}>
+                        {{ employee.full_name }}{% if employee.table_code %} · {{ employee.table_code }}{% endif %}
                     </option>
                 {% endfor %}
             </select>
@@ -217,6 +212,13 @@
                 Clear
             </a>
         </form>
+        {% if f.departments or f.employees %}
+            {# Who is in the report, in words: departments and people add up. #}
+            <p class="t-faint">
+                {% for line in described %}{% if forloop.counter > 2 %}{{ line }}{% if not forloop.last %} · {% endif %}{% endif %}{% endfor %}.
+                Everyone in the chosen departments, plus each person picked, wherever they work.
+            </p>
+        {% endif %}
         {% if f.errors %}
             <div class="alert alert--warning" role="alert">
                 {% for error in f.errors %}

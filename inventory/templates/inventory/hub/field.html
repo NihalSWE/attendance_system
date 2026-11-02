@@ -1,0 +1,27 @@
+{% comment %}
+    One box of a real form in the new look: ``box`` is a bound field. A yes/no
+    is a switch; a list of options is radio rows; a box with ``unit_from`` shows
+    the unit chosen in that other box beside it (asked once), ``unit_text``
+    fixed words beside it (days, %).
+{% endcomment %}
+<div class="field{% if box.field.widget.input_type == "checkbox" or box.field.widget.input_type == "radio" %} field--wide{% endif %}{% if box.errors %} ui-field--error{% endif %}">
+    {% if box.field.widget.input_type == "checkbox" %}
+        <label class="ui-switch" for="{{ box.id_for_label }}">
+            <span class="ui-switch__text"><span class="ui-switch__label">{{ box.label }}</span>{% if box.help_text %}<span class="ui-switch__hint">{{ box.help_text }}</span>{% endif %}</span>
+            {{ box }}
+        </label>
+    {% else %}
+        <label class="field__label" for="{{ box.id_for_label }}">{{ box.label }}{% if box.field.required or box.field.show_required %} <span class="field__req">*</span>{% endif %}</label>
+        {% if box.field.widget.input_type == "radio" %}
+            <div class="check-list">
+                {% for option in box %}<label class="check" for="{{ option.id_for_label }}">{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}
+            </div>
+        {% elif box.field.unit_from or box.field.unit_text %}
+            <div class="ui-unit">{{ box }}<span class="ui-unit__label"{% if box.field.unit_from %} data-unit-from="{{ box.field.unit_from }}"{% endif %}>{{ box.field.unit_text|default:"—" }}</span></div>
+        {% else %}
+            {{ box }}
+        {% endif %}
+        {% if box.help_text %}<span class="field__help">{{ box.help_text }}</span>{% endif %}
+    {% endif %}
+    {% for error in box.errors %}<span class="field__error">{{ error }}</span>{% endfor %}
+</div>

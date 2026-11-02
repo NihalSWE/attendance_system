@@ -4,20 +4,27 @@ from django.urls import path
 from django.views.generic import RedirectView
 
 from inventory import (
+    flow_views,
     golive_views,
+    hub_views,
     import_views,
     label_views,
     opening_views,
+    preview_views,
+    qc_views,
     report_views,
     stock_views,
     store_views,
     views,
+    warranty_views,
 )
 from inventory.reports import REPORTS
 
 app_name = "inventory"
 
-MASTERS = ("units", "categories", "items", "stores", "bins", "suppliers", "customers")
+MASTERS = ("units", "categories", "items", "stores", "bins", "suppliers", "customers",
+           # One page per item type (2026-10-26).
+           "raw_materials", "packaging", "finished_goods", "spare_parts", "general_items")
 
 urlpatterns = [
     path("", RedirectView.as_view(pattern_name="inventory:dashboard"), name="home"),
@@ -81,9 +88,66 @@ urlpatterns = [
     path("import/<slug:kind>/template/", import_views.template_download, name="import_template"),
 ]
 
+# The redesigned screens on real records (plan §15 phase 4).
+urlpatterns += [
+    path("start/", hub_views.start, name="start"),
+    path("materials/", hub_views.materials, name="materials"),
+    path("materials/<int:pk>/", hub_views.material, name="material"),
+    path("products/", hub_views.products, name="products"),
+    path("products/<int:pk>/", hub_views.product, name="product"),
+    path("items/<int:pk>/save/", hub_views.item_save, name="item_save"),
+    path("items/<int:pk>/price/", hub_views.item_price, name="item_price"),
+    # Stock in, Stock, Move stock and Sell in the new look (2026-10-28, plan §15 9.4).
+    path("stock-in/", flow_views.stock_in, name="stock_in"),
+    path("stock-in/new/", flow_views.stock_in_new, name="stock_in_new"),
+    path("stock/now/", flow_views.stock_now, name="stock_now"),
+    # Batches waiting for a quality check, from any source (2026-11-01).
+    path("stock/quality-check/", qc_views.qc_page, name="qc"),
+    path("stock/quality-check/<int:batch_id>/", qc_views.qc_decide, name="qc_decide"),
+    path("move/", flow_views.moves, name="moves"),
+    path("move/new/", flow_views.move_new, name="move_new"),
+    path("move/<int:pk>/receive/", flow_views.move_receive, name="move_receive"),
+    path("sell/", flow_views.sales, name="sales"),
+    path("sell/new/", flow_views.sale_new, name="sale_new"),
+    # Warranty (2026-10-27, plan §10).
+    path("warranty/", warranty_views.warranty_page, name="warranty"),
+    path("warranty/serial/", warranty_views.serial_lookup, name="serial_lookup"),
+    path("warranty/claims/", warranty_views.claim_save, name="claim_save"),
+    path("warranty/serials/", warranty_views.serials_add, name="serials_add"),
+    path("warranty/serials/delivered/", warranty_views.serials_deliver, name="serials_deliver"),
+    path("warranty/serials/labels/", warranty_views.serial_labels, name="serial_labels"),
+]
+
+# The redesigned screens on sample data, for approval (plan §15 phase 2).
+urlpatterns += [
+    path("preview/", preview_views.home, name="preview_home"),
+    path("preview/materials/", preview_views.materials, name="preview_materials"),
+    path("preview/materials/<str:code>/", preview_views.material, name="preview_material"),
+    path("preview/products/", preview_views.products, name="preview_products"),
+    path("preview/products/<str:code>/", preview_views.product, name="preview_product"),
+    path("preview/make/", preview_views.make, name="preview_make"),
+    path("preview/make/new/", preview_views.plan, name="preview_plan"),
+    path("preview/make/<str:number>/", preview_views.production, name="preview_production"),
+    path("preview/stock-in/", preview_views.stock_in, name="preview_stock_in"),
+    path("preview/stock-in/new/", preview_views.stock_in_new, name="preview_stock_in_new"),
+    path("preview/stock/", preview_views.stock, name="preview_stock"),
+    path("preview/move/", preview_views.moves, name="preview_moves"),
+    path("preview/move/new/", preview_views.move_new, name="preview_move_new"),
+    path("preview/sell/", preview_views.sales, name="preview_sales"),
+    path("preview/sell/new/", preview_views.sale_new, name="preview_sale_new"),
+    path("preview/warranty/", preview_views.warranty, name="preview_warranty"),
+    path("preview/save/<slug:screen>/", preview_views.save, name="preview_save"),
+]
+
 for key in MASTERS:
     urlpatterns += [
-        path(f"{key}/", views.master_list, {"key": key}, name=key),
-        path(f"{key}/<int:pk>/edit/", views.master_edit, {"key": key}, name=f"{key}_edit"),
-        path(f"{key}/<int:pk>/status/", views.master_status, {"key": key}, name=f"{key}_status"),
+        path(f"{key.replace('_', '-')}/", views.master_list, {"key": key}, name=key),
+        path(f"{key.replace('_', '-')}/<int:pk>/edit/", views.master_edit, {"key": key},
+             name=f"{key}_edit"),
+        path(f"{key.replace('_', '-')}/<int:pk>/status/", views.master_status, {"key": key},
+             name=f"{key}_status"),
     ]
+# Delete an item nothing uses yet (2026-10-26), from the item pages.
+for key in ("items", "raw_materials", "packaging", "finished_goods", "spare_parts", "general_items"):
+    urlpatterns.append(path(f"{key.replace('_', '-')}/<int:pk>/delete/", views.item_delete,
+                            {"key": key}, name=f"{key}_delete"))

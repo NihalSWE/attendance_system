@@ -1,0 +1,36 @@
+{% extends "base_template/base.html" %}
+{% block title %}Ask settings{% endblock %}
+{% block page %}
+<div class="ui-page">
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'organization:company_profile' %}">Organisation</a> / Ask settings</p>
+            <h1 class="ui-head__title">Ask settings</h1>
+            <p class="ui-head__sub">Questions typed in the top search bar ("who was late today"), answered from your own data. Each login sees only what it may see on the pages themselves.</p>
+        </div>
+    </div>
+    <div class="ui-message">Questions and employee names are sent to Anthropic, the AI provider, to understand what is asked; salaries and attendance are not. Switch Ask on only after the client's written consent is received and recorded below. The key is shared with the AI order assistant, stored encrypted and never shown again.</div>
+    <form class="ui-card" method="post" novalidate>
+        {% csrf_token %}
+        <div class="ui-card__body stack">
+            {% if form.non_field_errors %}<div class="alert alert--danger">{{ form.non_field_errors }}</div>{% endif %}
+            <p class="ui-muted">Key: {% if own.has_key %}saved{% else %}not saved{% endif %} · today's AI cost about US$ {{ spent|floatformat:2 }} (all AI calls)</p>
+            <div class="grid grid--2">
+                {% for field in form.visible_fields %}
+                    {% include "leaves/includes/field.html" %}
+                {% endfor %}
+            </div>
+        </div>
+        <div class="ui-card__foot"><button class="ui-btn ui-btn--main" type="submit">Save</button></div>
+    </form>
+    {% if calls %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">Latest questions</h2></div>
+            <div class="table-wrap"><table class="table" data-local-table>
+                <thead><tr><th>When</th><th>Model</th><th class="numeric">Cost (US$)</th><th>Result</th></tr></thead>
+                <tbody>{% for call in calls %}<tr><td>{{ call.created_at|date:"d M Y H:i" }}</td><td>{{ call.served_by|default:call.model }}</td><td class="numeric">{{ call.cost|floatformat:4 }}</td><td>{% if call.error %}<span class="badge badge--danger">{{ call.error }}</span>{% else %}<span class="badge badge--success">OK</span>{% endif %}</td></tr>{% endfor %}</tbody>
+            </table></div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

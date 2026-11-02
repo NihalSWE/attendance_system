@@ -37,7 +37,8 @@ class ProductionFixture(InventoryFixture):
         self.bottle = self.item("PM-0001", "PET bottle 250 ml", ItemKind.PACKAGING, packing, self.pcs)
         self.cap = self.item("PM-0002", "Cap 28 mm", ItemKind.PACKAGING, packing, self.pcs)
         self.juice = self.item("FG-0001", "Mango juice 250 ml", ItemKind.FINISHED, juice, self.pcs,
-                               track_batch=True, track_expiry=True, shelf_life_days=270)
+                               track_batch=True, track_expiry=True, shelf_life_days=270,
+                               sourcing="make")
         self.pks = self.store("PKS", "Packaging store", Warehouse.Kind.PACKAGING)
         # Materials in stock: pulp in two batches (FEFO), sugar, bottles, caps.
         self.p1 = Batch.all_objects.create(company=self.company, item=self.pulp, batch_no="P1", source="opening",
@@ -112,7 +113,7 @@ class DoneWhenTests(ProductionFixture, TestCase):
         usage = {row["item"].code: row for row in orders.usage(order)}
         self.assertEqual((usage["PM-0001"]["planned"], usage["PM-0001"]["used"]), (D("1015"), D("1015")))
         self.assertEqual(posting.ledger_differences(self.company.pk), [])
-        with self.assertRaisesMessage(ValidationError, "is completed"):
+        with self.assertRaisesMessage(ValidationError, "is finished"):
             orders.start_consumption(**self.kw, order_id=order.pk)
         orders.close(**self.kw, order_id=order.pk)
 
@@ -138,21 +139,29 @@ class DoneWhenTests(ProductionFixture, TestCase):
 class RuleTests(ProductionFixture, TestCase):
     def test_bom_versions(self):
         v1 = self.recipe()
+        line = {"item": self.bearing, "qty": D("1"), "uom": self.pcs, "scrap_pct": None,
+                "is_packaging": False, "note": ""}
+        # In use but no production order yet: it still changes in place (2026-10-26).
+        added = boms.add_line(**self.kw, bom_id=v1.pk, values=line)
+        boms.remove_line(**self.kw, bom_id=v1.pk, line_id=added.pk)
+        orders.create_order(**self.kw, values={
+            "item": self.juice, "bom": None, "planned_qty": D("1000"), "uom": self.pcs, "planned_date": DAY,
+            "material_warehouse": self.rms, "output_warehouse": self.fgw, "line_name": "",
+            "shift_name": "", "note": ""})
+        # Production has used it: a change is a new version.
         with self.assertRaisesMessage(ValidationError, "start a new version"):
-            boms.add_line(**self.kw, bom_id=v1.pk, values={"item": self.bearing, "qty": D("1"),
-                                                           "uom": self.pcs, "scrap_pct": None,
-                                                           "is_packaging": False, "note": ""})
+            boms.add_line(**self.kw, bom_id=v1.pk, values=line)
         v2 = boms.new_version(**self.kw, bom_id=v1.pk)
         with use_company(self.company):
             self.assertEqual((v2.version, v2.lines.count()), (2, 4))
         boms.activate(**self.kw, bom_id=v2.pk)
         self.assertEqual(Bom.all_objects.get(pk=v1.pk).status, "archived")
-        with self.assertRaisesMessage(ValidationError, "is not a finished product"):
+        with self.assertRaisesMessage(ValidationError, "it has no recipe"):
             boms.create_bom(**self.kw, values={"item": self.sugar, "batch_size": D("1"), "batch_uom": self.kg,
                                                "effective_from": None, "note": ""})
 
     def test_no_active_bom_no_order(self):
-        with self.assertRaisesMessage(ValidationError, "has no active BOM"):
+        with self.assertRaisesMessage(ValidationError, "has no materials yet"):
             orders.create_order(**self.kw, values={
                 "item": self.juice, "bom": None, "planned_qty": D("10"), "uom": self.pcs, "planned_date": DAY,
                 "material_warehouse": self.rms, "output_warehouse": self.fgw, "line_name": "", "shift_name": "",
@@ -170,7 +179,7 @@ class RuleTests(ProductionFixture, TestCase):
             "item": self.juice, "bom": None, "planned_qty": D("100"), "uom": self.pcs, "planned_date": DAY,
             "material_warehouse": self.rms, "output_warehouse": self.fgw, "line_name": "", "shift_name": "",
             "note": ""})
-        with self.assertRaisesMessage(ValidationError, "only on a released order"):
+        with self.assertRaisesMessage(ValidationError, "only on a started production"):
             orders.start_consumption(**mine, order_id=order.pk)
         with self.assertRaisesMessage(PermissionDenied, "someone else approves it"):
             orders.release(**mine, order_id=order.pk)

@@ -10,7 +10,8 @@ from django.utils import timezone
 from attendance.views import MONTHS
 from common.forms import StyledFormMixin, TIME_INPUT_FORMATS, date_widget, time_widget
 from payroll import penalties
-from payroll.models import AttendancePenaltyRule, PayrollPolicyVersion, SalaryComponent
+from payroll.models import (AttendancePenaltyRule, PayGroup, PayrollPolicyVersion,
+                            SalaryComponent)
 from payroll.policy import plain
 
 Version = PayrollPolicyVersion
@@ -305,6 +306,99 @@ class GeneralSettingsForm(StyledFormMixin, forms.Form):
         label="Pay day", required=False, min_value=1, max_value=31,
         help_text="Day of the month salary is usually paid. Optional.",
     )
+
+
+def _ordinal(day):
+    suffix = "th" if 10 <= day % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{day}{suffix}"
+
+
+class SalaryMonthForm(StyledFormMixin, forms.Form):
+    """When a salary month starts (payroll/periods.py, 2026-10-24). One box
+    (2026-10-26): the month a change starts from is the first with no salary."""
+
+    start_day = forms.TypedChoiceField(
+        label="Salary month starts on", coerce=int,
+        choices=[(1, "1st - the calendar month (1st to the last day)")] + [
+            (day, f"{_ordinal(day)} - from the {_ordinal(day)} to the {_ordinal(day - 1)} of the next month")
+            for day in range(2, 29)],
+    )
+
+
+class PayGroupForm(StyledFormMixin, forms.Form):
+    """A weekly pay group (payroll/paygroups.py, 2026-10-24)."""
+
+    name = forms.CharField(label="Name", max_length=120,
+                           help_text="For example Weekly workers or Factory floor.")
+    week_start = forms.TypedChoiceField(label="Week starts on", choices=PayGroup.Weekday.choices,
+                                        coerce=int, initial=PayGroup.Weekday.SATURDAY,
+                                        help_text="Saturday: each week is Saturday to Friday. It "
+                                                  "can change only while the group is unused.")
+
+
+def _day_field(label, days, help_text=""):
+    """A choice of the group's start days (paygroups.start_days), this week's
+    first and chosen: never a date the service would refuse."""
+    # Added after StyledFormMixin styled the declared fields: styled here.
+    return forms.TypedChoiceField(
+        label=label, choices=[(day.isoformat(), text) for day, text in days],
+        coerce=datetime.date.fromisoformat, initial=days[0][0].isoformat() if days else None,
+        help_text=help_text, widget=forms.Select(attrs={"class": "input select js-select"}))
+
+
+class PayGroupMemberForm(StyledFormMixin, forms.Form):
+    """Put departments and people in a pay group (2026-10-26: several of each
+    at once; the start day chosen from a list)."""
+
+    departments = forms.ModelMultipleChoiceField(
+        queryset=PayGroup.all_objects.none(), required=False, label="Departments",
+        help_text="Everyone in them, including people who join the department later.")
+    employees = forms.ModelMultipleChoiceField(
+        queryset=PayGroup.all_objects.none(), required=False, label="People",
+        help_text="Single people, from any department. A person's own choice wins over their "
+                  "department's.")
+
+    def __init__(self, *args, departments, employees, days, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["departments"].queryset = departments.select_related("branch")
+        # Two branches can both have "Software": the branch tells them apart.
+        self.fields["departments"].label_from_instance = lambda d: f"{d.name} · {d.branch.name}"
+        self.fields["employees"].queryset = employees
+        self.fields["employees"].label_from_instance = lambda person: person.full_name
+        self.fields["effective_from"] = _day_field(
+            "Paid weekly from", days, "The first day of a week. Days before it stay monthly.")
+        for name, placeholder in (("departments", "Choose departments"), ("employees", "Choose people")):
+            self.fields[name].widget.attrs.update({"data-placeholder": placeholder,
+                                                   "data-search": "always"})
+
+    def clean(self):
+        data = super().clean()
+        if not data.get("departments") and not data.get("employees"):
+            raise forms.ValidationError("Choose at least one department or one person.")
+        return data
+
+
+class KeepMonthlyForm(StyledFormMixin, forms.Form):
+    """People who stay monthly although their department is in the group."""
+
+    employees = forms.ModelMultipleChoiceField(queryset=PayGroup.all_objects.none(), label="People")
+
+    def __init__(self, *args, employees, days, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["employees"].queryset = employees
+        self.fields["employees"].label_from_instance = lambda person: person.full_name
+        self.fields["employees"].widget.attrs.update({"data-placeholder": "Choose people",
+                                                      "data-search": "always"})
+        self.fields["effective_from"] = _day_field("Monthly from", days)
+
+
+class EndMemberForm(StyledFormMixin, forms.Form):
+    """Back to monthly from a start day of the group's weeks."""
+
+    def __init__(self, *args, days, label="Monthly again from", **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["effective_to"] = _day_field(
+            label, days, "Choosing the day it started removes it, as if never saved.")
 
 
 class SalaryComponentForm(StyledFormMixin, forms.ModelForm):

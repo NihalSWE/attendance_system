@@ -1,0 +1,75 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Stock{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / Stock</p>
+            {% for s in stores %}{% if s.pk|stringformat:"s" == store %}
+                <h1 class="ui-head__title">What's in {{ s.name }}</h1>
+                <p class="ui-head__sub">{{ s.get_kind_display }} store · {{ s.branch.name }}. Every item with stock in it; <a href="{% url 'inventory:stock_now' %}">all stores</a>.</p>
+            {% endif %}{% empty %}{% endfor %}
+            {% if not store %}
+                <h1 class="ui-head__title">Stock</h1>
+                <p class="ui-head__sub">What you have, where it is, and what runs low or expires first.</p>
+            {% endif %}
+        </div>
+        <div class="ui-head__actions">
+            <a class="ui-btn" href="{% url 'inventory:stock' %}">By store, bin and batch</a>
+            <a class="ui-btn ui-btn--main" href="{% url 'inventory:move_new' %}">{% include "ui/icon.html" with name="arrow-right" %} Move stock</a>
+        </div>
+    </div>
+    <div class="ui-tiles">
+        {% if sees_costs %}<div class="ui-tile"><p class="ui-tile__label">Value</p><p class="ui-tile__value">{{ value|floatformat:"0g" }}</p><p class="ui-tile__hint">Tk, at average cost</p></div>{% endif %}
+        <div class="ui-tile{% if low %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Low or out</p><p class="ui-tile__value">{{ low }}</p><p class="ui-tile__hint">below stock to keep</p></div>
+        <div class="ui-tile{% if expiring %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Expiring</p><p class="ui-tile__value">{{ expiring|length }}</p><p class="ui-tile__hint">batches within {{ days }} days</p></div>
+    </div>
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Everything in stock</h2></div>
+        <form class="toolbar" method="get">
+            <select class="input select js-select" name="store" aria-label="Store"><option value="">All stores</option>{% for s in stores %}<option value="{{ s.pk }}"{% if s.pk|stringformat:"s" == store %} selected{% endif %}>{{ s.name }}</option>{% endfor %}</select>
+            <select class="input select js-select" name="kind" aria-label="Item type"><option value="">All item types</option>{% for value, label in kinds %}<option value="{{ value }}"{% if value == kind %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            <select class="input select js-select" name="status" aria-label="Status"><option value="">Any status</option>{% for value, label in statuses %}<option value="{{ value }}"{% if value == status %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+            <button class="ui-btn ui-btn--sm" type="submit">Apply</button>
+            {% if filtered %}<a class="ui-btn ui-btn--sm" href="{{ request.path }}">Clear</a>{% endif %}
+        </form>
+        <div class="table-wrap">
+            <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                <thead><tr><th>Code</th><th>Item</th><th>Type</th><th class="numeric">In stock</th><th>Where</th><th class="numeric">Keep</th>{% if sees_costs %}<th class="numeric">Value</th>{% endif %}<th>Status</th></tr></thead>
+                <tbody>
+                    {% for cells in rows %}{% with line=cells.line %}
+                        <tr>
+                            <td>{{ line.item.code }}</td>
+                            <td><a href="{% if line.item.kind == 'finished' %}{% url 'inventory:product' line.item.pk %}{% elif line.item.kind == 'raw' or line.item.kind == 'packaging' %}{% url 'inventory:material' line.item.pk %}{% else %}{% url 'inventory:item_detail' line.item.pk %}{% endif %}">{{ line.item.name }}</a></td>
+                            <td>{{ line.item.get_kind_display }}</td>
+                            <td class="numeric">{{ line.stock_text }}</td>
+                            <td>{{ line.where }}</td>
+                            <td class="numeric">{% if line.keep %}{{ line.keep|floatformat:"-2g" }}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
+                            {% if sees_costs %}<td class="numeric">{{ line.value|floatformat:"0g" }}</td>{% endif %}
+                            <td><span class="ui-chip ui-chip--{{ line.tone }}">{{ line.words }}</span></td>
+                        </tr>
+                    {% endwith %}{% empty %}
+                        <tr><td colspan="8">{% if filtered %}Nothing matches: clear the filters.{% else %}Nothing in stock yet.{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "base_template/includes/table_pagination.html" %}
+    </div>
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="alert" %} Expires first</h2><span class="ui-card__note">Within {{ days }} days (Inventory settings)</span></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Batch</th><th>Item</th><th>Store</th><th>Expiry</th><th class="numeric">Quantity</th></tr></thead>
+                <tbody>
+                    {% for row in expiring %}
+                        <tr><td>{{ row.batch.batch_no }}</td><td>{{ row.item.name }}</td><td>{{ row.warehouse.name }}</td><td>{% if row.batch.expiry_date < today %}<span class="ui-chip ui-chip--bad">Expired {{ row.batch.expiry_date|date:"j M Y" }}</span>{% else %}{{ row.batch.expiry_date|date:"j M Y" }}{% endif %}</td><td class="numeric">{{ row.qty_on_hand|floatformat:"-2g" }} {{ row.item.base_uom.code }}</td></tr>
+                    {% empty %}
+                        <tr><td colspan="5">Nothing expires within {{ days }} days.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% url 'inventory:sales' as sell_url %}
+    {% include "ui/next_step.html" with what="Sell what you have, the batch that expires first going first." url=sell_url button="Sell" %}
+{% endblock %}

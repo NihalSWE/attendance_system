@@ -31,6 +31,7 @@ from accounts.models import CompanyMembership
 from common.choices import ActiveStatus
 from accounts.services import get_active_memberships
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from employees.models import Employee
 from organization.models import Branch
@@ -74,6 +75,9 @@ BRANCH_PERMISSIONS = (
     ("inventory.adjust_approve", "Approve and post adjustments and opening stock", "inventory", "approve"),
     ("inventory.valuation", "See stock costs and values", "inventory", "view"),
     ("inventory.period_close", "Close a stock month", "inventory", "manage"),
+    # Warranty (2026-10-27, plan §10): serial numbers and claims, once the
+    # company switches warranty on.
+    ("inventory.warranty", "Record warranty claims and serial numbers", "inventory", "create"),
     # Purchase (Phase 3), part of the same module: requisition -> order ->
     # goods receipt -> quality check -> return. Each follows the document's
     # branch (the requisition's or order's branch, the receiving store's).
@@ -84,9 +88,9 @@ BRANCH_PERMISSIONS = (
     ("purchase.qc", "Quality check received goods", "inventory", "approve"),
     # Production (Phase 5): BOMs are the company's (held in any branch);
     # orders, consumption and output follow the finished-goods store's branch.
-    ("production.bom", "Set up BOMs (recipes)", "inventory", "edit"),
-    ("production.plan", "Plan and release production orders", "inventory", "create"),
-    ("production.execute", "Use materials and record production output", "inventory", "create"),
+    ("production.bom", "Set up BOMs (recipes)", "production", "edit"),
+    ("production.plan", "Plan and release production orders", "production", "create"),
+    ("production.execute", "Use materials and record production output", "production", "create"),
     # Sales (Phase 6): orders, confirming them, delivering and invoicing,
     # each in the branch of the store the order is delivered from.
     ("sales.order", "Enter sales orders and price lists", "inventory", "create"),
@@ -99,7 +103,10 @@ CODES = tuple(code for code, *_ in BRANCH_PERMISSIONS)
 LABELS = {code: label for code, label, *_ in BRANCH_PERMISSIONS}
 #: Features a company has only once the platform owner enables them: their
 #: permissions are not offered (Access page, API) to a company without them.
-GATED_FEATURES = frozenset({"inventory"})
+GATED_FEATURES = frozenset({"inventory", "production"})
+#: A feature that works only on top of another (2026-10-27): Production needs
+#: Store & Inventory - a company that only buys and sells has Inventory alone.
+REQUIRES = {"production": "inventory"}
 FEATURE_OF = {code: feature for code, _label, feature, _action in BRANCH_PERMISSIONS}
 
 
@@ -107,6 +114,8 @@ def feature_on(company_id, feature_code):
     """Whether the company has this feature (always, for an ungated one)."""
     if feature_code not in GATED_FEATURES:
         return True
+    if feature_code in REQUIRES and not feature_on(company_id, REQUIRES[feature_code]):
+        return False
     from access_control.services import is_feature_enabled
 
     feature = Feature.objects.filter(code=feature_code, is_active=True).first()
@@ -365,10 +374,10 @@ def _checked(actor, company_id, employee_id, code, branch_ids):
     if not branch_ids:
         raise ValidationError({"branches": "Choose at least one branch."})
     if set(Branch.objects.filter(pk__in=branch_ids).values_list("pk", flat=True)) != branch_ids:
-        raise PermissionDenied("Branch not found in this company.")
+        raise NotInThisCompany("Branch not found in this company.")
     employee = Employee.objects.filter(pk=employee_id).first()
     if employee is None:
-        raise PermissionDenied("Employee not found in this company.")
+        raise NotInThisCompany("Employee not found in this company.")
     if employee.user_id and employee.user_id == actor.pk:
         raise PermissionDenied("You cannot change your own access.")
     for branch_id in branch_ids:

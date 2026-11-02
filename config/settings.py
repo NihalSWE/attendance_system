@@ -97,6 +97,8 @@ INSTALLED_APPS = [
     'sales',
     # Phase 8: the AI sales order assistant (off per company until consent is recorded).
     'ai_assistant',
+    # Ask: questions in the top search bar, answered from our own data.
+    'ask',
     # The REST API (docs/api/00-PLAN.md): the panels' functions for apps,
     # frontends and the ERP. Calls the same services the panels use.
     'rest_framework',
@@ -120,6 +122,8 @@ MIDDLEWARE = [
     'common.middleware.TenantMiddleware',
     # Employees and branch managers stay on their own pages (common/middleware.py).
     'common.middleware.SelfServiceGate',
+    # Another company's row is "not found" on the panel, not "refused".
+    'common.middleware.NotFoundOutsideCompany',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -157,9 +161,14 @@ WEBHOOK_SEND_IN_BACKGROUND = sys.argv[1:2] != ['test']
 # "Load employees onto this device" prepares people in a background thread
 # (250+ in one request ran past the server's time limit). Tests run it inline.
 DEVICE_LOAD_IN_BACKGROUND = sys.argv[1:2] != ['test']
+# Attendance -> Fix setup jobs (devices/services/setup_fix.py), inline in tests.
+SETUP_FIX_IN_BACKGROUND = sys.argv[1:2] != ['test']
 # Today and yesterday are brought up to date in the background when a device
 # checks in, so the attendance screens only read (2026-10-06). Tests run it inline.
 ATTENDANCE_SETTLE_IN_BACKGROUND = sys.argv[1:2] != ['test']
+# Generate salary runs in the background with its progress on the Salary page
+# (2026-11-01: thousands of people take minutes). Tests run it inline.
+PAYROLL_GENERATE_IN_BACKGROUND = sys.argv[1:2] != ['test']
 
 
 WSGI_APPLICATION = 'config.wsgi.application'

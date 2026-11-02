@@ -19,7 +19,7 @@
     <div class="card">
         <div class="card__head"><h2>Prices</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }}</span></div>
         {% if lines %}
-            <div class="table-wrap"><table class="table">
+            <div class="table-wrap"><table class="table" data-local-table>
                 <thead><tr><th>Item</th><th>Unit</th><th class="numeric">From quantity</th><th class="numeric">Price</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                     {% for line in lines %}

@@ -6,6 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from access_control.branch_access import grant_access
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from employees.models import Employee
 from inventory import labels
@@ -26,7 +27,7 @@ class SalesPageTests(SalesFixture, TestCase):
         for name in ("orders", "deliveries", "invoices", "returns", "price_lists"):
             page = self.client.get(reverse(f"sales:{name}"))
             self.assertEqual(page.status_code, 200, name)
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="sales")
 
     def test_order_to_return_through_the_pages(self):
         c = self.client
@@ -43,7 +44,13 @@ class SalesPageTests(SalesFixture, TestCase):
         delivery = Delivery.all_objects.get()
         self.assertRedirects(r, reverse("sales:delivery_detail", args=[delivery.pk]))
         self.assertContains(c.get(reverse("sales:delivery_detail", args=[delivery.pk])), "Scan a carton label")
-        self.assertEqual(c.get(reverse("sales:delivery_pdf", args=[delivery.pk]))["Content-Type"], "application/pdf")
+        challan = c.get(reverse("sales:delivery_pdf", args=[delivery.pk]))
+        self.assertEqual(challan["Content-Type"], "application/pdf")
+        from common.tests_exports import pdf_text
+
+        text = pdf_text(challan.content)
+        for words in ("DELIVERY CHALLAN", delivery.number, "DELIVER TO", "Total quantity", "Received by"):
+            self.assertIn(words, text)
         c.post(reverse("sales:delivery_action", args=[delivery.pk, "post"]))
         self.assertEqual(SalesOrder.all_objects.get().status, "delivered")
         r = c.post(reverse("sales:delivery_action", args=[delivery.pk, "invoice"]))
@@ -51,7 +58,12 @@ class SalesPageTests(SalesFixture, TestCase):
         self.assertRedirects(r, reverse("sales:invoice_detail", args=[invoice.pk]))
         self.assertEqual(invoice.total, D("3036"))          # 120 x 22 = 2,640 + 15 % VAT
         c.post(reverse("sales:invoice_action", args=[invoice.pk, "issue"]))
-        self.assertEqual(c.get(reverse("sales:invoice_pdf", args=[invoice.pk]))["Content-Type"], "application/pdf")
+        bill = c.get(reverse("sales:invoice_pdf", args=[invoice.pk]))
+        self.assertEqual(bill["Content-Type"], "application/pdf")
+        text = pdf_text(bill.content)
+        for words in ("TAX INVOICE", invoice.number, "BILL TO", "SHIP TO", "AMOUNT IN WORDS", "Taka Three Thousand",
+                      "3,036.00", "Prepared by"):
+            self.assertIn(words, text)
         c.post(reverse("sales:invoice_action", args=[invoice.pk, "paid"]), {"paid_on": "2026-10-20", "note": "Cheque 991"})
         self.assertEqual(SalesInvoice.all_objects.get().status, "paid")
 
@@ -131,6 +143,16 @@ class SalesGateTests(SalesFixture, TestCase):
                      code="sales.deliver", branch_ids=[self.branch.pk])
         self.client.force_login(user)
         page = self.client.get(reverse("sales:order_detail", args=[order.pk]))
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="sales")
         self.assertEqual(self.client.post(reverse("sales:order_action", args=[order.pk, "confirm"])).status_code, 403)
         self.assertEqual(StockBalance.all_objects.get(batch=self.j1).qty_reserved, D("0"))
+
+
+
+class AmountInWordsTests(TestCase):
+    def test_lakh_crore_and_paisa(self):
+        from sales.invoice_pdf import in_words
+
+        self.assertEqual(in_words(D("3036")), "Taka Three Thousand Thirty-Six Only")
+        self.assertEqual(in_words(D("12500000.50")), "Taka One Crore Twenty-Five Lakh and Paisa Fifty Only")
+        self.assertEqual(in_words(D("0")), "Taka Zero Only")

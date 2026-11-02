@@ -26,17 +26,19 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Sum
 
+from accounts.models import CompanyMembership
 from common.choices import ActiveStatus
 from common.tenant import use_company
 from inventory import fefo, posting
 from inventory import labels as label_service
 from inventory.doc_common import (
+    OWNER_ROLES,
     _writable,
     audit,
     check_own_approval,
     check_qty,
-    expiry_from,
     get,
+    made_dates,
     now,
     plain,
     require,
@@ -71,7 +73,7 @@ def create_order(*, actor, company_id, values):
         if bom is None:
             bom = values["bom"] = Bom.objects.filter(item=item, status=Bom.Status.ACTIVE).first()
     if bom is None:
-        raise ValidationError({"item": f"{item.code} has no active BOM: activate its recipe first."})
+        raise ValidationError({"item": f"{item.code} has no materials yet: add them on its page first."})
     if bom.item_id != item.pk or bom.status != Bom.Status.ACTIVE:
         raise ValidationError({"bom": "Choose the product's active BOM version."})
     factor = unit_factor(item, values.get("uom"))
@@ -95,6 +97,15 @@ def create_order(*, actor, company_id, values):
               after={"number": order.number, "item": item.code, "qty": plain(order.planned_base),
                      "bom": bom.version})
     return order
+
+
+def may_release(actor, order):
+    """The planner releases their own order only as an owner (check_own_approval)."""
+    if order.created_by_id != actor.pk:
+        return True
+    membership = CompanyMembership.all_objects.filter(user=actor, company_id=order.company_id,
+                                                      status="active").first()
+    return bool(membership and membership.role in OWNER_ROLES)
 
 
 @transaction.atomic
@@ -185,7 +196,7 @@ def material_cost(order):
 def _running(order):
     if order.status != Status.RELEASED:
         raise ValidationError(f"{order.number} is {order.get_status_display().lower()}: materials are used "
-                              "only on a released order before its output.")
+                              "only on a started production, before it is finished.")
 
 
 def get_consumption(*, actor, company_id, pk):
@@ -408,14 +419,14 @@ def post_output(*, actor, company_id, order_id, values):
         location = values.get("location")
         if location is not None and location.warehouse_id != order.output_warehouse_id:
             raise ValidationError({"location": f"Bin {location.code} is not in {order.output_warehouse.code}."})
-        mfg = values.get("mfg_date") or values.get("output_date")
+        typed = values.get("mfg_date")
+        mfg = typed or values.get("output_date")
         if values.get("output_date") is None or mfg is None:
             raise ValidationError({"output_date": "Give the date."})
         values["mfg_date"] = mfg
-        expiry = expiry_from(item, mfg, values.get("expiry_date"))
-        if item.track_expiry and not expiry:
-            raise ValidationError({"expiry_date": f"{item.code} has an expiry date: give it (or set its shelf life)."})
-        values["expiry_date"] = expiry
+        values["expiry_date"] = expiry = made_dates(
+            item, mfg, values.get("expiry_date"), made_on=values["output_date"],
+            day_field="mfg_date" if typed else "output_date")
         cost = material_cost(order)
         good_base = (values["qty_good"] * factor).quantize(FOUR)
         if cost <= 0:
@@ -483,9 +494,13 @@ def record_qc(*, actor, company_id, order_id, passed, notes=""):
         notes = (notes or "").strip()
         if not passed and not notes:
             raise ValidationError({"notes": "Say what failed."})
-        output.batch.status = Batch.Status.RELEASED if passed else Batch.Status.BLOCKED
-        output.batch.updated_by = actor
-        output.batch.save(update_fields=["status", "updated_by", "updated_at"])
+        # Every batch it made: one per mix when the product says so (2026-10-27).
+        from production.making import made_batches
+
+        for batch in made_batches(output) or [output.batch]:
+            batch.status = Batch.Status.RELEASED if passed else Batch.Status.BLOCKED
+            batch.updated_by = actor
+            batch.save(update_fields=["status", "updated_by", "updated_at"])
         audit(actor, membership, f"production.qc.{'passed' if passed else 'failed'}", order,
               after={"batch": output.batch.batch_no, "notes": notes})
     return output

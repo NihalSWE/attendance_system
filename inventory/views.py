@@ -19,6 +19,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from access_control.branch_access import ALL_BRANCHES, branches_for
+from base_template import fetch
 from base_template.tables import paginate, render
 from common.choices import ActiveStatus
 from common.forms import apply_service_errors
@@ -30,6 +31,7 @@ from inventory.models import (
     ItemCategory,
     ItemKind,
     Location,
+    StockMove,
     Uom,
     Warehouse,
 )
@@ -78,6 +80,9 @@ class MasterPage:
     branch_scoped: bool = False
     filters: dict = field(default_factory=dict)
     import_kind: str = ""
+    #: An item type's own page (2026-10-26): its items only, its Add form
+    #: without an Item type box.
+    kind: str = ""
 
     @property
     def url(self):
@@ -101,7 +106,7 @@ PAGES = {
     ),
     "categories": MasterPage(
         "categories", masters.CATEGORY, forms.CategoryForm, "Item categories", "category",
-        "inventory/rows/category.html", ("Code", "Category", "Item type", "Inside", "Status"),
+        "inventory/rows/category.html", ("Code", "Category", "Item type", "Parent", "Status"),
         ("code", "name", "kind", "parent__name"),
         ("code", "name", "kind", "parent__name", "status", None),
         lambda request, cid: ItemCategory.objects.select_related("parent"),
@@ -115,11 +120,31 @@ PAGES = {
         lambda request, cid: _items(request),
         about="Everything the factory buys, makes, stores or sells.", import_kind="items",
     ),
+    **{key: MasterPage(
+        key, masters.ITEM, forms.ItemForm, title, singular, "inventory/rows/item.html",
+        ("Code", "Item", "Type", "Category", "Unit", "Batches", "Status"),
+        ("code", "name", "name_bn", "barcode", "category__name"),
+        ("code", "name", "kind", "category__name", "base_uom__code", "track_batch", "status", None),
+        (lambda k: lambda request, cid: _with_moved(Item.objects.select_related("category", "base_uom")
+         .filter(kind=k)))(kind),
+        about=about, import_kind="items", kind=kind,
+    ) for key, kind, title, singular, about in (
+        ("raw_materials", ItemKind.RAW, "Raw materials", "raw material",
+         "What you buy to make your products: ingredients, components, parts."),
+        ("packaging", ItemKind.PACKAGING, "Packaging", "packaging item",
+         "Bottles, cartons, labels, boxes: what a product is packed in."),
+        ("finished_goods", ItemKind.FINISHED, "Finished goods", "finished good",
+         "What you make and sell. Open one to set the materials it is made from."),
+        ("spare_parts", ItemKind.SPARE, "Spare parts", "spare part",
+         "Parts kept for machines and maintenance."),
+        ("general_items", ItemKind.GENERAL, "General items", "general item",
+         "Office, cleaning and other general store items."),
+    )},
     "stores": MasterPage(
         "stores", masters.WAREHOUSE, forms.WarehouseForm, "Stores", "store",
-        "inventory/rows/store.html", ("Code", "Store", "Type", "Branch", "Bins", "Status"),
+        "inventory/rows/store.html", ("Code", "Store", "Type", "Branch", "Bins", "Items in it", "Status"),
         ("code", "name", "branch__name"),
-        ("code", "name", "kind", "branch__name", None, "status", None),
+        ("code", "name", "kind", "branch__name", None, "item_count", "status", None),
         lambda request, cid: _stores(request, cid), branch_scoped=True,
         about="Each store belongs to a branch; stock, issues and transfers follow its branch.",
         import_kind="stores",
@@ -153,8 +178,16 @@ PAGES = {
 }
 
 
+def _with_moved(rows):
+    """Items marked ``moved`` when stock of them ever moved: only the others
+    show Delete (masters.delete_item, 2026-10-26)."""
+    from django.db.models import Exists, OuterRef
+
+    return rows.annotate(moved=Exists(StockMove.objects.filter(item=OuterRef("pk"))))
+
+
 def _items(request):
-    rows = Item.objects.select_related("category", "base_uom")
+    rows = _with_moved(Item.objects.select_related("category", "base_uom"))
     kind = request.GET.get("kind", "").strip()
     if kind in ItemKind.values:
         rows = rows.filter(kind=kind)
@@ -162,14 +195,19 @@ def _items(request):
 
 
 def _stores(request, company_id):
-    from django.db.models import Count
+    from django.db.models import Count, Q
 
-    rows = Warehouse.objects.select_related("branch").annotate(bin_count=Count("locations"))
+    # What each store holds (2026-11-01): the items with stock in it.
+    rows = Warehouse.objects.select_related("branch").annotate(
+        bin_count=Count("locations", distinct=True),
+        item_count=Count("balances__item", filter=Q(balances__qty_on_hand__gt=0), distinct=True))
     return access.scope_warehouses(rows, request.user, company_id, "inventory.view")
 
 
 def _form(page, request, company_id, *, data=None, instance=None):
     kwargs = {"company_id": company_id, "instance": instance}
+    if page.kind:
+        kwargs["kind"] = page.kind
     if page.branch_scoped:
         kwargs["branch_ids"] = branch_ids(request.user, company_id, masters.CODE)
     return page.form(data, **kwargs)
@@ -202,6 +240,7 @@ def _list(request, page, *, new_form=None, edit_form=None, edit_row=None, open_d
         "can_manage": can_manage, "new_form": new_form, "edit_form": edit_form,
         "edit_row": edit_row, "open_dialog": open_dialog,
         "edit_view": f"inventory:{page.key}_edit", "status_view": f"inventory:{page.key}_status",
+        "delete_view": f"inventory:{page.key}_delete" if page.master is masters.ITEM else "",
         "sees_costs": access.sees_costs(request.user, company_id),
         "can_print_labels": access.may(request.user, company_id, "inventory.labels"),
         "print_form": forms.PrintForm(),
@@ -263,21 +302,58 @@ def master_status(request, key, pk):
         return bail
     form = forms.StatusForm(request.POST)
     if not form.is_valid():
+        if fetch.wants_json(request):
+            return fetch.refused(message="Choose a valid status.")
         messages.error(request, "Choose a valid status.")
         return redirect(page.url)
     try:
         row = masters.set_status(page.master, actor=request.user, company_id=company_id, pk=pk,
                                  status=form.cleaned_data["status"])
     except ValidationError as exc:
+        if fetch.wants_json(request):
+            return fetch.refused(message="; ".join(exc.messages))
         messages.error(request, "; ".join(exc.messages))
     else:
-        messages.success(request, f"“{row}” is now {row.get_status_display().lower()}.")
+        done = f"“{row}” is now {row.get_status_display().lower()}."
+        if fetch.wants_json(request):
+            # The new pages (2026-10-27) answer in place, then show the row again.
+            return fetch.saved(done, _safe_next(request) or page.url)
+        messages.success(request, done)
     return redirect(request.POST.get("next") or page.url)
+
+
+@require_POST
+def item_delete(request, key, pk):
+    page = PAGES[key]
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    try:
+        code = masters.delete_item(actor=request.user, company_id=company_id, pk=pk)
+    except ValidationError as exc:
+        if fetch.wants_json(request):
+            return fetch.refused(message="; ".join(exc.messages))
+        messages.error(request, "; ".join(exc.messages))
+        return redirect(request.POST.get("next") or page.url)
+    if fetch.wants_json(request):
+        # From the material page or the product hub: back to its list.
+        return fetch.saved(f"{code} is deleted.", _safe_next(request, "done") or page.url)
+    messages.success(request, f"{code} is deleted.")
+    return redirect(page.url)
+
+
+def _safe_next(request, name="next"):
+    """A page of this site to go on to, from the form; empty otherwise."""
+    from django.utils.http import url_has_allowed_host_and_scheme
+
+    target = request.POST.get(name, "")
+    return target if url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}) else ""
 
 
 master_list = login_required(master_list)
 master_edit = login_required(master_edit)
 master_status = login_required(master_status)
+item_delete = login_required(item_delete)
 
 
 @login_required

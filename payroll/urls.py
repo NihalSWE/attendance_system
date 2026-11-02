@@ -1,18 +1,28 @@
 from django.urls import path
 
-from payroll import lfa_views, views
+from payroll import lfa_views, paygroup_views, summary_views, views
 
 app_name = "payroll"
 
 urlpatterns = [
     path("", views.payroll_home, name="payroll_home"),
     path("generate/", views.payroll_generate, name="payroll_generate"),
+    path("generate/status/", views.generate_status, name="generate_status"),
     # Draft -> submit -> approve (finalise) -> undo; or send a submitted month back.
     path("submit/", views.payroll_submit, name="payroll_submit"),
     path("finalise/", views.payroll_finalise, name="payroll_finalise"),
     path("return/", views.payroll_return, name="payroll_return"),
     path("finalise/undo/", views.payroll_reopen, name="payroll_reopen"),
     path("settings/", views.salary_settings, name="salary_settings"),
+    path("pay-groups/", paygroup_views.pay_groups, name="pay_groups"),
+    # Attendance -> Summary: present days set by hand (2026-10-31).
+    path("attendance-summary/", summary_views.attendance_summary, name="attendance_summary"),
+    path("attendance-summary/<int:employee_id>/", summary_views.summary_person,
+         name="attendance_summary_person"),
+    path("attendance-summary/<int:employee_id>/save/", summary_views.summary_save,
+         name="attendance_summary_save"),
+    path("attendance-summary/<int:employee_id>/revert/", summary_views.summary_revert,
+         name="attendance_summary_revert"),
     path("components/", views.component_list, name="component_list"),
     path("components/<int:pk>/edit/", views.component_edit, name="component_edit"),
     path("components/<int:pk>/status/", views.component_status, name="component_status"),

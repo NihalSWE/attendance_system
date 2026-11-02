@@ -2,10 +2,11 @@
     One profile modal around one form (Ajay, 2026-09-27: every edit opens in a modal).
     id, title, action, form, submit; optional: section (Edit employee's card name), multipart,
     row / row_name (a hidden id), note, wide, dependent (branch -> department ->
-    designation selects), danger (a red submit button).
+    designation selects), danger (a red submit button), fetch (saves without reloading:
+    base_template/js/fetch_forms.js; the result shows just above the buttons).
 {% endcomment %}
 <dialog class="modal{% if wide %} modal--wide{% endif %}" id="{{ id }}" aria-labelledby="{{ id }}-title">
-    <form class="modal__card" method="post" action="{{ action }}" novalidate{% if multipart %} enctype="multipart/form-data"{% endif %}{% if dependent %}
+    <form class="modal__card" method="post" action="{{ action }}" novalidate{% if fetch %} data-fetch{% endif %}{% if multipart %} enctype="multipart/form-data"{% endif %}{% if dependent %}
           data-departments-url="{% url 'organization:employee_branch_departments' %}"
           data-designations-url="{% url 'organization:employee_department_designations' %}"{% endif %}>
         {% csrf_token %}
@@ -24,11 +25,28 @@
                 {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                 <div class="grid grid--2">
                     {% for field in form.visible_fields %}
-                        {% include "leaves/includes/field.html" %}
+                        {# A form without more_fields shows every field ("in" on a missing name is false). #}
+                        {% if not form.more_fields or field.name not in form.more_fields %}
+                            {% include "leaves/includes/field.html" %}
+                        {% endif %}
                     {% endfor %}
                 </div>
+                {% if form.more_fields %}
+                    {# Rarely needed fields, folded (2026-10-26); open when one has an error. #}
+                    <details class="more-details"{% if form.more_has_errors %} open{% endif %}>
+                        <summary>More details (optional)</summary>
+                        <div class="grid grid--2">
+                            {% for field in form.visible_fields %}
+                                {% if field.name in form.more_fields %}
+                                    {% include "leaves/includes/field.html" %}
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </details>
+                {% endif %}
             {% endif %}
         </div>
+        {% if fetch %}<div class="ui-message" data-form-message role="status" hidden></div>{% endif %}
         <div class="modal__foot">
             <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
             <button class="btn {% if danger %}btn--danger{% else %}btn--primary{% endif %}" type="submit">{{ submit }}</button>

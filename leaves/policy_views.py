@@ -299,7 +299,7 @@ def balance_list(request):
                     Sortable(f"{row['given'].normalize():f}", row["given"]),
                     Sortable(f"{row['taken'].normalize():f}", row["taken"]),
                     Sortable(f"{row['left'].normalize():f}", row["left"]),
-                    employee.pk,
+                    employee.public_id,     # the profile link (random id, 2026-10-18)
                 ])
     page = paginate_rows(request, rows, columns=8)
     return render(request, "leaves/balance_list.html", {

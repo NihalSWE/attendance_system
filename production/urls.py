@@ -2,11 +2,31 @@
 
 from django.urls import path
 
-from production import views
+from production import cost_views, plan_views, recipe_views, run_views, views
 
 app_name = "production"
 
 urlpatterns = [
+    # Cost rates and a product's costs of one batch (2026-10-27, plan §7.4).
+    path("cost-rates/", cost_views.cost_rates, name="cost_rates"),
+    path("cost-rates/<int:pk>/", cost_views.cost_rate_save, name="cost_rate_save"),
+    path("cost-rates/<int:pk>/status/", cost_views.cost_rate_status, name="cost_rate_status"),
+    # Plan a production from the product's page (2026-10-27, plan §8.2).
+    path("products/<int:pk>/make/", plan_views.plan_page, name="plan"),
+    # Productions in the new look: Plan → Start → Finish (2026-10-27, plan §8.3-8.6).
+    path("runs/", run_views.runs, name="runs"),
+    path("runs/<int:pk>/", run_views.run, name="run"),
+    path("runs/<int:pk>/start/", run_views.run_start, name="run_start"),
+    path("runs/<int:pk>/finish/", run_views.run_finish, name="run_finish"),
+    path("runs/<int:pk>/<slug:action>/", run_views.run_action, name="run_action"),
+    path("products/<int:pk>/costs/", cost_views.cost_line_add, name="cost_line_add"),
+    path("products/<int:pk>/costs/<int:line_pk>/remove/", cost_views.cost_line_remove,
+         name="cost_line_remove"),
+    # The Materials card on a finished good's page (2026-10-26).
+    path("recipes/<int:pk>/batch/", recipe_views.recipe_batch, name="recipe_batch"),
+    path("recipes/<int:pk>/materials/", recipe_views.recipe_add, name="recipe_add"),
+    path("recipes/<int:pk>/materials/<int:material_pk>/remove/", recipe_views.recipe_remove,
+         name="recipe_remove"),
     path("boms/", views.bom_list, name="boms"),
     path("boms/<int:pk>/", views.bom_detail, name="bom_detail"),
     path("boms/<int:pk>/lines/", views.bom_line_add, name="bom_line_add"),

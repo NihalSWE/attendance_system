@@ -63,6 +63,15 @@ class AiSettings(TenantOwned, ActorTracked):
     imap_folder = models.CharField(max_length=128, default="INBOX")
     last_inbox_check = models.DateTimeField(null=True, blank=True)
     last_inbox_error = models.CharField(max_length=500, blank=True)
+    # Ask (2026-11-02): questions typed in the top search bar. Its own switch
+    # and consent: the question and employee names go to Anthropic; salaries,
+    # attendance and every answer stay here (ask/).
+    ask_enabled = models.BooleanField("Ask questions in the search bar", default=False)
+    ask_consent_received = models.BooleanField(
+        "The client's written consent for Ask is received", default=False,
+        help_text="Questions and employee names are sent to Anthropic; salaries and attendance are not.")
+    ask_consent_date = models.DateField("Ask consent date", null=True, blank=True)
+    ask_model = models.CharField("Ask model", max_length=32, choices=Model.choices, default=Model.HAIKU)
 
     class Meta:
         db_table = "ai_settings"
@@ -167,6 +176,7 @@ class AiCall(TenantOwned):
     class Kind(models.TextChoices):
         EXTRACT = "extract", "Read an order"
         SUMMARY = "summary", "Report summary"
+        ASK = "ask", "A question (Ask)"
 
     kind = models.CharField(max_length=8, choices=Kind.choices)
     message = models.ForeignKey(InboundMessage, null=True, blank=True, on_delete=models.SET_NULL, related_name="calls")

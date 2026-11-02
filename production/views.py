@@ -7,7 +7,6 @@ from decimal import Decimal
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.db.models import Count
 from django.http import HttpResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -18,9 +17,10 @@ from common.forms import apply_service_errors
 from common.tenant import use_company
 from inventory import access
 from inventory.forms import PrintForm
-from inventory.views import branch_ids, company_or_bail
+from inventory.views import branch_ids
 from production import boms, forms, orders
-from production.models import Bom, Consumption, Output, ProductionOrder
+from production.gate import company_or_bail
+from production.models import Consumption, Output, ProductionOrder
 
 
 def _act(request, run, success, target, *args):
@@ -42,51 +42,39 @@ def _act(request, run, success, target, *args):
 
 @login_required
 def bom_list(request):
+    """The old BOMs page (2026-10-26): a finished good's materials are on its
+    own page, with no versions on screen, so this goes to Finished goods. A
+    recipe started here (an old form, a bookmark) lands on its product's page."""
     company_id, bail = company_or_bail(request)
     if bail:
         return bail
     access.require_module(request.user, company_id)
-    can_edit = access.may(request.user, company_id, boms.CODE)
-    new_form = None
     if request.method == "POST":
         access.require(request.user, company_id, boms.CODE)
-        new_form = forms.BomForm(request.POST, company_id=company_id)
-        if new_form.is_valid():
+        form = forms.BomForm(request.POST, company_id=company_id)
+        if form.is_valid():
             try:
-                bom = boms.create_bom(actor=request.user, company_id=company_id, values=new_form.cleaned_data)
+                bom = boms.create_bom(actor=request.user, company_id=company_id, values=form.cleaned_data)
             except ValidationError as exc:
-                apply_service_errors(new_form, exc)
+                messages.error(request, " ".join(exc.messages))
             else:
-                messages.success(request, f"{bom} started. Add the materials, then activate it.")
-                return redirect("production:bom_detail", pk=bom.pk)
-    with use_company(company_id):
-        rows = Bom.objects.select_related("item", "batch_uom").annotate(line_count=Count("lines"))
-        status = request.GET.get("status", "")
-        if status in Bom.Status.values:
-            rows = rows.filter(status=status)
-        table = paginate(request, rows, search=("item__code", "item__name", "note"),
-                         order=("item__code", "item__name", "version", "batch_size", "line_count", "status", None))
-    return render(request, "production/bom_list.html", {
-        "rows": table, "status": status, "statuses": Bom.Status.choices, "can_edit": can_edit,
-        "new_form": new_form or (forms.BomForm(company_id=company_id) if can_edit else None),
-        "open_dialog": "new-dialog" if new_form is not None else "",
-    })
+                return _to_product(bom)
+        else:
+            messages.error(request, " ".join(e for errors in form.errors.values() for e in errors))
+    return redirect("inventory:products")
+
+
+def _to_product(bom):
+    return redirect(reverse("inventory:product", args=[bom.item_id]) + "#recipe")
 
 
 def _bom_page(request, pk, line_form=None, open_dialog=""):
-    company_id = request.company_id
-    _, bom = boms.get_bom(actor=request.user, company_id=company_id, pk=pk, code="inventory.view")
-    with use_company(company_id):
-        lines = list(bom.lines.select_related("item__base_uom", "uom").order_by("is_packaging", "pk"))
-        versions = list(Bom.objects.filter(item=bom.item).order_by("-version"))
-    can_edit = access.may(request.user, company_id, boms.CODE)
-    return render(request, "production/bom_detail.html", {
-        "bom": bom, "lines": lines, "versions": versions, "can_edit": can_edit,
-        "is_draft": bom.status == Bom.Status.DRAFT,
-        "line_form": line_form or (forms.BomLineForm(company_id=company_id)
-                                   if can_edit and bom.status == Bom.Status.DRAFT else None),
-        "open_dialog": open_dialog,
-    })
+    """A recipe version's old page: its product's page instead, saying why a
+    change was refused when one was."""
+    _, bom = boms.get_bom(actor=request.user, company_id=request.company_id, pk=pk, code="inventory.view")
+    if line_form is not None and line_form.errors:
+        messages.error(request, " ".join(e for errors in line_form.errors.values() for e in errors))
+    return _to_product(bom)
 
 
 @login_required
@@ -182,7 +170,9 @@ def order_list(request):
             except ValidationError as exc:
                 apply_service_errors(new_form, exc)
             else:
-                messages.success(request, f"{order.number} planned. Someone else releases it.")
+                messages.success(request, f"{order.number} planned. " + (
+                    "Release it when the materials can be used." if orders.may_release(request.user, order)
+                    else "Someone else with planning access releases it."))
                 return redirect("production:order_detail", pk=order.pk)
     with use_company(company_id):
         rows = access.scope_warehouses(
@@ -202,7 +192,8 @@ def order_list(request):
 
 def _order_page(request, pk, output_form=None, open_dialog=""):
     company_id = request.company_id
-    _, order = orders.get_order(actor=request.user, company_id=company_id, pk=pk, code="inventory.view")
+    membership, order = orders.get_order(actor=request.user, company_id=company_id, pk=pk,
+                                         code="inventory.view")
     branch = order.output_warehouse.branch_id
     with use_company(company_id):
         usage = orders.usage(order)
@@ -216,7 +207,8 @@ def _order_page(request, pk, output_form=None, open_dialog=""):
         "order": order, "usage": usage, "uses": uses, "output": output, "labels": made,
         "material_cost": orders.material_cost(order),
         "sees_costs": access.sees_costs(request.user, company_id),
-        "can_release": order.status == "planned" and may_plan,
+        "can_release": order.status == "planned" and may_plan and orders.may_release(request.user, order),
+        "waits_for_release": order.status == "planned" and not orders.may_release(request.user, order),
         "can_cancel": order.status in ("planned", "released") and may_plan,
         "can_close": order.status == "completed" and may_plan,
         "can_run": running and may_run,
@@ -225,7 +217,7 @@ def _order_page(request, pk, output_form=None, open_dialog=""):
                        and access.may(request.user, company_id, "purchase.qc", branch)),
         "can_print": bool(made) and may_run,
         "output_form": output_form or (forms.OutputForm(company_id=company_id, order=order, initial={
-            "uom": order.uom_id, "qty_good": order.planned_qty, "output_date": order.planned_date})
+            "qty_good": format(order.planned_qty.normalize(), "f"), "output_date": order.planned_date})
             if running and may_run else None),
         "qc_form": forms.QcForm(), "print_form": PrintForm(), "open_dialog": open_dialog,
     })

@@ -26,6 +26,12 @@ def inventory_on(company_id):
     return bool(company_id) and feature_on(company_id, FEATURE)
 
 
+def production_on(company_id):
+    """Production (materials, recipes, making products) is its own module on top
+    of Store & Inventory (2026-10-27)."""
+    return bool(company_id) and feature_on(company_id, "production")
+
+
 def require_module(actor, company_id):
     """The actor's membership, once the company has the module."""
     membership = require_company_membership(actor, company_id)

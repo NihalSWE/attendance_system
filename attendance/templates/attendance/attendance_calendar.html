@@ -41,6 +41,11 @@
             <a class="btn btn--ghost" href="{% url 'attendance:attendance_list' %}?month={{ month }}&year={{ year }}">
                 Table view
             </a>
+            {% if can_edit_month %}
+                <a class="btn btn--primary" href="{% url 'attendance:attendance_month_edit' employee.pk year month %}">
+                    Edit this month
+                </a>
+            {% endif %}
             {% if employee %}
                 {# This person's month as on screen; a calendar is not a table, so PDF only. #}
                 <a class="btn btn--ghost"

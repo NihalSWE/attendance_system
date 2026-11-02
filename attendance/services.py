@@ -40,6 +40,7 @@ close has passed. A day inside a posted payroll run is never touched.
 """
 
 import calendar as month_calendar
+from contextlib import nullcontext
 import logging
 import datetime
 import threading
@@ -273,18 +274,10 @@ def _classify_working_day(shift, settings, day, *, scheduled_start=None,
     return status, punch_status, fraction, minutes
 
 
-def _write_pairing(record, paired):
-    """Replace this record's allocations and sessions with the new pairing.
-
-    Rewritten rather than merged: a recalculation must leave exactly the
-    current answer, and these rows are a derived layer over PunchEvent, which
-    is never touched.
-    """
-    AttendanceSession.objects.filter(attendance_record=record).delete()
-    PunchAllocation.objects.filter(attendance_record=record).delete()
+def _pairing_rows(record, paired):
+    """``(allocations, sessions)`` - unsaved rows - for a day's pairing."""
     if paired is None or not paired.kept:
-        return
-
+        return [], []
     allocations = []
     for index, scan in enumerate(paired.kept, start=1):
         punch_id, correction_id = correction_input.source_ids(scan.punch_event_id)
@@ -319,8 +312,6 @@ def _write_pairing(record, paired):
                 interpretation_note="Scanned again only seconds after the scan before.",
             )
         )
-    PunchAllocation.objects.bulk_create(allocations)
-
     by_sequence = {a.sequence_number: a for a in allocations}
     sessions = []
     for index, session in enumerate(paired.sessions, start=1):
@@ -345,11 +336,71 @@ def _write_pairing(record, paired):
                 ),
             )
         )
+    return allocations, sessions
+
+
+ALLOCATION_KEY = ("sequence_number", "punch_event_id", "attendance_correction_id", "event_at",
+                  "interpreted_direction", "label", "is_included", "exclusion_reason", "interpretation_note")
+
+
+def _pairing_signature(allocations, sessions):
+    """What a pairing is, compared by value: its allocations and sessions."""
+    seq = {id(a): a.sequence_number for a in allocations}
+    return (
+        tuple(tuple(getattr(a, key) or None for key in ALLOCATION_KEY) for a in allocations),
+        tuple((x.sequence_number, seq.get(id(x.in_allocation)), seq.get(id(x.out_allocation)),
+               x.started_at, x.ended_at, x.worked_minutes, x.status) for x in sessions),
+    )
+
+
+def stored_pairings(record_ids):
+    """``{record_id: signature}`` of the pairings stored for these days."""
+    allocations, by_pk = defaultdict(list), {}
+    for row in PunchAllocation.all_objects.filter(attendance_record_id__in=record_ids).order_by(
+            "attendance_record_id", "sequence_number"):
+        allocations[row.attendance_record_id].append(row)
+        by_pk[row.pk] = row
+    sessions = defaultdict(list)
+    for row in AttendanceSession.all_objects.filter(attendance_record_id__in=record_ids).order_by(
+            "attendance_record_id", "sequence_number"):
+        row.in_allocation = by_pk.get(row.in_allocation_id)
+        row.out_allocation = by_pk.get(row.out_allocation_id)
+        sessions[row.attendance_record_id].append(row)
+    found = {}
+    for record_id in record_ids:
+        rows = allocations.get(record_id, [])
+        found[record_id] = _pairing_signature(rows, sessions.get(record_id, []))
+    return found
+
+
+def _write_pairing(record, paired, allocations=None, sessions=None, fresh=False):
+    """Replace this record's allocations and sessions with the new pairing.
+
+    Rewritten rather than merged: a recalculation must leave exactly the
+    current answer, and these rows are a derived layer over PunchEvent, which
+    is never touched.
+    """
+    if not fresh:
+        # A day just created has nothing to replace.
+        AttendanceSession.objects.filter(attendance_record=record).delete()
+        PunchAllocation.objects.filter(attendance_record=record).delete()
+    if allocations is None:
+        allocations, sessions = _pairing_rows(record, paired)
+    if not allocations:
+        return
+    for row in allocations:
+        row.attendance_record = record
+    for row in sessions:
+        row.attendance_record = record
+    PunchAllocation.objects.bulk_create(allocations)
     AttendanceSession.objects.bulk_create(sessions)
 
 
 def locked_ranges(company_id):
-    """The date ranges of every posted payroll run.
+    """The date ranges of every posted payroll run of the Monthly staff.
+
+    A weekly pay group's finalised week locks only its own people's days
+    (``weekly_locked_ranges``, 2026-10-24).
 
     A day inside one never changes again: salary has been paid against it.
     Read through the unscoped manager because this also runs from the
@@ -359,18 +410,33 @@ def locked_ranges(company_id):
 
     return list(
         PayrollRun.all_objects.filter(
-            company_id=company_id, status=PayrollRun.Status.POSTED
+            company_id=company_id, status=PayrollRun.Status.POSTED, pay_group__isnull=True,
         ).values_list(
             "payroll_period__start_date", "payroll_period__end_date"
         )
     )
 
 
+def weekly_locked_ranges(company_id):
+    """``{employee_id: [(first, last), ...]}``: the weeks finalised for each
+    person in a weekly pay group (payroll/paygroups.py)."""
+    from payroll.models import PayrollRecord, PayrollRun
+
+    found = defaultdict(list)
+    for employee_id, first, last in PayrollRecord.all_objects.filter(
+        company_id=company_id, payroll_run__status=PayrollRun.Status.POSTED,
+        payroll_run__pay_group__isnull=False,
+    ).values_list("employee_id", "payroll_run__payroll_period__start_date",
+                  "payroll_run__payroll_period__end_date"):
+        found[employee_id].append((first, last))
+    return found
+
+
 def _is_locked(day, ranges):
     return any(start <= day <= end for start, end in ranges)
 
 
-def recalculate(company_id, *, employee_ids=None, start, end, now=None):
+def recalculate(company_id, *, employee_ids=None, start, end, now=None, progress=None):
     """Rebuild attendance for a range of days. The one way in.
 
     Called by ingestion for the days a punch batch touched, by the screens for
@@ -384,6 +450,9 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
     Returns a summary dict. Safe to call with no shifts configured: it simply
     writes nothing rather than raising, because ingestion must never fail on
     a company that has not finished setting itself up.
+
+    ``progress(done, total)``, if given, is told after each person (salary
+    generation shows it, 2026-11-01).
     """
     from tenants.models import Company
 
@@ -404,6 +473,25 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
         return {"days": 0, "skipped_locked": 0, "no_shift": True}
 
     posted = locked_ranges(company_id)
+    weekly_locked = weekly_locked_ranges(company_id)
+    from payroll.paygroups import Groups
+
+    groups = Groups(company_id, start - datetime.timedelta(days=1), end)
+
+    def locked_for(employee_id, assignments_of, day):
+        """A finalised week locks its people's days; a finalised month locks
+        the days someone was monthly (2026-10-24)."""
+        if _is_locked(day, weekly_locked.get(employee_id, ())):
+            return True
+        if not _is_locked(day, posted):
+            return False
+        if not groups.any:
+            return True
+        placement = _assignment_on(assignments_of, datetime.datetime.combine(
+            day, datetime.time(12), tzinfo=company_tz))
+        department_id = placement.department_id if placement else None
+        return groups.group_id(employee_id, department_id, day) is None
+
     written = defaultdict(int)
     touched_ids = []
     # When each day built here next changes with time alone (AttendanceDue).
@@ -472,8 +560,23 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
             employees.keys(), since=range_start, until=range_end,
             start=lookback, end=end,
         )
+        # What is stored now, read once: a day whose answer is unchanged is
+        # not written again (2026-11-01).
+        stored_days = {
+            (row.employee_id, row.work_date): row
+            for row in AttendanceRecord.objects.filter(
+                employee_id__in=employees.keys(), work_date__gte=lookback, work_date__lte=end)
+        }
+        stored_pairs = stored_pairings([row.pk for row in stored_days.values()])
+        new_days = []
 
-        for employee_id, employee in employees.items():
+        for index, (employee_id, employee) in enumerate(employees.items()):
+            if progress is not None:
+                progress(index, len(employees))
+            if len(new_days) >= NEW_DAYS_BATCH:
+                # Thousands of people's first month: written as it goes.
+                touched_ids += _create_days(new_days)
+                new_days = []
             assignments = assignments_by_employee[employee_id]
             punches = sorted(
                 punches_by_employee[employee_id] + fixes.scans.get(employee_id, []),
@@ -520,13 +623,17 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                     window=window, punches=punches, settings=settings,
                     calendar=calendar, leave_by_key=leave_by_key,
                     company=company, company_tz=company_tz, now=now,
-                    locked=_is_locked(day, posted),
+                    locked=locked_for(employee_id, assignments, day),
                     overtime=overtime_by_key.get((employee_id, day)),
                     status_fix=fixes.statuses.get((employee_id, day)),
                     accepted_reason=fixes.accepted.get((employee_id, day)),
                     late_excused=(fixes.excused or {}).get((employee_id, day)),
                     inactive=inactive_periods.on(
                         inactive_by_employee.get(employee_id, ()), day),
+                    stored=stored_days.get((employee_id, day)),
+                    stored_pairing=stored_pairs.get(
+                        getattr(stored_days.get((employee_id, day)), "pk", None)),
+                    new_days=new_days,
                 )
                 if outcome is None:
                     written["skipped"] += 1
@@ -538,13 +645,18 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
                                                   employee_id=employee_id, work_date=day,
                                                   due_at=window.closes_at))
                 else:
-                    touched_ids.append(outcome.pk)
+                    if outcome.pk is not None:
+                        touched_ids.append(outcome.pk)
                     written[outcome.attendance_status] += 1
                     if outcome.is_open:
                         due_rows.append(AttendanceDue(
                             company_id=company_id, employee_id=employee_id, work_date=day,
                             due_at=_next_change(window, now)))
                 day += datetime.timedelta(days=1)
+
+        touched_ids += _create_days(new_days)
+        if progress is not None:
+            progress(len(employees), len(employees))
 
         # Days that no longer apply (before joining, no placement, no shift)
         # are removed so a recalculation leaves exactly the current answer.
@@ -558,6 +670,10 @@ def recalculate(company_id, *, employee_ids=None, start, end, now=None):
             stale = stale.exclude(
                 work_date__gte=locked_start, work_date__lte=locked_end
             )
+        for locked_employee, weeks in weekly_locked.items():
+            for locked_start, locked_end in weeks:
+                stale = stale.exclude(employee_id=locked_employee,
+                                      work_date__gte=locked_start, work_date__lte=locked_end)
         AttendanceSession.objects.filter(attendance_record__in=stale).delete()
         PunchAllocation.objects.filter(attendance_record__in=stale).delete()
         stale.delete()
@@ -603,7 +719,7 @@ def _overtime_decisions(employee_ids, start, end):
 def _write_day(*, day, employee, assignments, window, punches, settings,
                calendar, leave_by_key, company, company_tz, now, locked,
                overtime=None, status_fix=None, accepted_reason=None, late_excused=None,
-               inactive=None):
+               inactive=None, stored=None, stored_pairing=None, new_days=None):
     """One employee-day. Returns the record, "locked", None for no record, or
     "pending" - no record *yet*: the day has not closed and nobody has come in,
     so it becomes absent (or leave) when it closes.
@@ -788,11 +904,76 @@ def _write_day(*, day, employee, assignments, window, punches, settings,
         # reason turning up later is a new question, so it is not covered.
         values["review_status"] = ReviewStatus.REVIEWED
 
-    record, _ = AttendanceRecord.objects.update_or_create(
+    # Written only when the answer changed (2026-11-01): salary generation
+    # recalculates a whole month, and most days come out exactly as stored.
+    if stored is not None:
+        allocations, sessions = _pairing_rows(stored, paired)
+        if _same_day(stored, values) and stored_pairing == _pairing_signature(allocations, sessions):
+            return stored
+    elif new_days is not None:
+        # Nothing stored for this day: written with the others in one go.
+        record = AttendanceRecord(company=company, employee=employee, work_date=day, **values)
+        new_days.append((record, paired))
+        return record
+    record, created = AttendanceRecord.objects.update_or_create(
         company=company, employee=employee, work_date=day, defaults=values,
     )
-    _write_pairing(record, paired)
+    _write_pairing(record, paired, fresh=created)
     return record
+
+
+#: Days with nothing stored, written together once there are this many.
+NEW_DAYS_BATCH = 5000
+
+
+def _create_days(new_days):
+    """Write the days that had nothing stored: the records, their scans and
+    their sessions in three batches (2026-11-01). If one of them was created
+    meanwhile (scans arriving at the same moment), each is written on its own
+    instead. Returns their ids."""
+    from django.db import IntegrityError
+
+    if not new_days:
+        return []
+    try:
+        with transaction.atomic():
+            AttendanceRecord.objects.bulk_create([record for record, _paired in new_days], batch_size=1000)
+            allocations, sessions = [], []
+            for record, paired in new_days:
+                rows, joined = _pairing_rows(record, paired)
+                allocations += rows
+                sessions += joined
+            PunchAllocation.objects.bulk_create(allocations, batch_size=2000)
+            for session in sessions:
+                # The allocations have their ids now.
+                session.in_allocation = session.in_allocation
+                session.out_allocation = session.out_allocation
+            AttendanceSession.objects.bulk_create(sessions, batch_size=2000)
+    except IntegrityError:
+        written = []
+        for record, paired in new_days:
+            values = {field.name: getattr(record, field.name) for field in AttendanceRecord._meta.concrete_fields
+                      if field.name not in ("id", "company", "employee", "work_date", "created_at", "updated_at")}
+            saved, created = AttendanceRecord.objects.update_or_create(
+                company=record.company, employee=record.employee, work_date=record.work_date, defaults=values)
+            _write_pairing(saved, paired, fresh=created)
+            written.append(saved.pk)
+        return written
+    return [record.pk for record, _paired in new_days]
+
+
+def _same_day(record, values):
+    """True when ``values`` would leave ``record`` as it is (its calculation
+    time aside)."""
+    for name, value in values.items():
+        if name == "calculated_at":
+            continue
+        if name in ("employee_assignment", "branch", "shift", "leave_day"):
+            if getattr(record, f"{name}_id") != (value.pk if value is not None else None):
+                return False
+        elif getattr(record, name) != value:
+            return False
+    return True
 
 
 def _part_label(leave):
@@ -1238,8 +1419,7 @@ def recalculate_for_punches(company_id, employee_days):
     return summary
 
 
-@transaction.atomic
-def calculate_attendance(*, actor, company_id, year, month):
+def calculate_attendance(*, actor, company_id, year, month, first=None, last=None, progress=None):
     """(Re)calculate one month. Kept for payroll generation.
 
     Attendance is live now — ``recalculate`` runs on its own when punches
@@ -1258,7 +1438,10 @@ def calculate_attendance(*, actor, company_id, year, month):
             "Calculating a whole month needs owner, company administrator or "
             "payroll manager access."
         )
-    first, last = month_bounds(year, month)
+    if first is None or last is None:
+        # A salary month that is not the calendar month passes its own dates
+        # (payroll/periods.py, 2026-10-24).
+        first, last = month_bounds(year, month)
     today = timezone.localdate()
     if first > today:
         raise ValidationError("That month has not started yet.")
@@ -1270,11 +1453,15 @@ def calculate_attendance(*, actor, company_id, year, month):
             "company shift. Attendance is measured against the shift."
         )
 
-    summary = recalculate(company_id, start=first, end=last)
-    summary["month"] = f"{year}-{month:02d}"
-    with use_company(company_id):
-        record_company_event(
-            actor=actor, membership=membership, company=membership.company,
-            action="attendance.calculated", obj=membership.company, after=summary,
-        )
+    # In one transaction, unless the background salary generation is showing
+    # its progress (2026-11-01): then each day is saved as it goes, as when
+    # scans arrive, so the progress written meanwhile can be seen.
+    with transaction.atomic() if progress is None else nullcontext():
+        summary = recalculate(company_id, start=first, end=last, progress=progress)
+        summary["month"] = f"{year}-{month:02d}"
+        with use_company(company_id):
+            record_company_event(
+                actor=actor, membership=membership, company=membership.company,
+                action="attendance.calculated", obj=membership.company, after=summary,
+            )
     return summary

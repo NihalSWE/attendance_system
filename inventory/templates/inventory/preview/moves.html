@@ -1,0 +1,32 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}Move stock{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs">Products and stock / 6. Move stock</p>
+            <h1 class="ui-head__title">Move stock</h1>
+            <p class="ui-head__sub">Stock taken from one store to another. It counts in the new store once received.</p>
+        </div>
+        <div class="ui-head__actions">
+            <a class="ui-btn ui-btn--main" href="{% url 'inventory:preview_move_new' %}">{% include "ui/icon.html" with name="plus" %} Move stock</a>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Moves</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Number</th><th>Date</th><th>From</th><th>To</th><th>What</th><th>Status</th><th class="no-sort"><span class="sr-only">Action</span></th></tr></thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr><td>{{ row.number }}</td><td>{{ row.date }}</td><td>{{ row.from }}</td><td>{{ row.to }}</td><td>{{ row.lines }}</td><td><span class="ui-chip ui-chip--{{ row.tone }}">{{ row.status }}</span></td>
+                            <td>{% if row.tone == "wait" %}<button class="ui-btn ui-btn--main ui-btn--sm" type="button">Received</button>{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% url 'inventory:preview_stock' as stock_url %}
+    {% include "ui/next_step.html" with what="Check where everything is now." url=stock_url button="Stock" %}
+{% endblock %}

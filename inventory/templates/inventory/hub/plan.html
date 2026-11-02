@@ -1,0 +1,87 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Make {{ item.name }}{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:products' %}">Products</a> / <a href="{{ hub_url }}">{{ item.code }}</a> / Make</p>
+            <h1 class="ui-head__title">Make {{ item.name }}</h1>
+            <p class="ui-head__sub">Plan → Start → Finish. Planning holds nothing back: the materials leave the stores when you start.</p>
+        </div>
+    </div>
+
+    {% if no_recipe %}
+        <div class="ui-card"><div class="ui-card__body"><p>{{ no_recipe }}</p></div></div>
+        {% include "ui/next_step.html" with what="Write the recipe: what one batch makes and the materials it uses." url=hub_url|add:"#recipe" button="Write the recipe" %}
+    {% else %}
+        {% if suggestion %}
+            <div class="ui-tiles">
+                <div class="ui-tile"><p class="ui-tile__label">Stock to keep</p><p class="ui-tile__value">{{ suggestion.keep|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ item.base_uom.code }}{% if suggestion.per_day %} · sells {{ suggestion.per_day|floatformat:"-2g" }} a day{% endif %}</p></div>
+                <div class="ui-tile"><p class="ui-tile__label">In stock + coming</p><p class="ui-tile__value">{{ suggestion.have|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ suggestion.in_stock|floatformat:"-2g" }} in stock · {{ suggestion.coming|floatformat:"-2g" }} planned</p></div>
+                <div class="ui-tile{% if suggestion.batches %} ui-tile--good{% endif %}"><p class="ui-tile__label">Suggested</p><p class="ui-tile__value">{{ suggestion.batches }}</p><p class="ui-tile__hint">batch{{ suggestion.batches|pluralize:"es" }} · {{ suggestion.wanted }} wanted, materials allow {{ suggestion.possible }}</p></div>
+            </div>
+        {% endif %}
+
+        <form class="ui-card" method="post" action="{{ request.path }}" data-fetch data-plan novalidate>
+            {% csrf_token %}
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="play" %} What to make</h2><span class="ui-card__note">One batch makes {{ plan.bom.batch_size|floatformat:"-4g" }} {{ plan.bom.batch_uom.code }}</span></div>
+            <div class="ui-card__body">
+                <div class="ui-grid-2">
+                    {% include "inventory/hub/field.html" with box=form.batches %}
+                    {% include "inventory/hub/field.html" with box=form.planned_date %}
+                    {% include "inventory/hub/field.html" with box=form.into %}
+                </div>
+            </div>
+            <div id="plan-lines">{% include "inventory/hub/_plan_lines.html" %}</div>
+            <div class="ui-card__body">
+                <div class="ui-message" data-form-message role="status" hidden></div>
+                <div class="ui-form-actions">
+                    <a class="ui-btn" href="{{ hub_url }}">Cancel</a>
+                    {% if can_buy %}<button class="ui-btn" type="submit" name="action" value="buy" data-plan-buy{% if not plan.short %} hidden{% endif %}>{% include "ui/icon.html" with name="plus" %} Buy the rest</button>{% endif %}
+                    <button class="ui-btn ui-btn--main" type="submit" name="action" value="save">{% include "ui/icon.html" with name="check" %} Plan it</button>
+                </div>
+            </div>
+        </form>
+
+        {% include "ui/next_step.html" with what="After planning, start it when the materials leave the stores, then finish it with what came out." %}
+    {% endif %}
+{% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script>
+        // The materials follow the batches, date and store as they change (plan §8.2).
+        (function () {
+            const form = document.querySelector("form[data-plan]");
+            if (!form) return;
+            let timer = null;
+            async function refresh() {
+                const params = new URLSearchParams();
+                ["batches", "planned_date", "into"].forEach(name => {
+                    const box = form.querySelector('[name="' + name + '"]');
+                    if (box) params.set(name, box.value);
+                });
+                history.replaceState(null, "", "?" + params.toString());
+                params.set("partial", "1");
+                try {
+                    const reply = await fetch(location.pathname + "?" + params.toString(), {credentials: "same-origin"});
+                    if (!reply.ok) return;
+                    document.getElementById("plan-lines").innerHTML = await reply.text();
+                    const short = document.querySelector("#plan-lines [data-short]");
+                    const buy = form.querySelector("[data-plan-buy]");
+                    if (buy) buy.hidden = !short;
+                } catch (error) { /* the table stays as it was */ }
+            }
+            function later() { window.clearTimeout(timer); timer = window.setTimeout(refresh, 300); }
+            form.addEventListener("input", later);
+            form.addEventListener("change", later);
+            if (window.jQuery) window.jQuery(form).on("select2:select", later);
+            // Make fewer: the most the materials allow, then the table again.
+            document.addEventListener("click", function (event) {
+                const fewer = event.target.closest("[data-make-fewer]");
+                if (!fewer) return;
+                event.preventDefault();
+                form.querySelector('[name="batches"]').value = fewer.dataset.makeFewer;
+                refresh();
+            });
+        })();
+    </script>
+{% endblock %}

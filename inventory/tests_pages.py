@@ -6,6 +6,7 @@ from django.urls import reverse
 
 from access_control.branch_access import grant_access
 from auditlog.models import AuditLog
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from employees.models import Employee
 from inventory.models import Item, ItemUom, Location, Uom, Warehouse
@@ -101,9 +102,14 @@ class MasterPageTests(InventoryFixture, TestCase):
         pack = ItemUom.all_objects.get(item=self.sugar)
         self.assertContains(self.client.get(reverse("inventory:item_detail", args=[self.sugar.pk])),
                             "1 BAG")
+        # The base unit is not offered as a pack (2026-10-26), and is refused if posted.
+        page = self.client.get(reverse("inventory:item_detail", args=[self.sugar.pk]))
+        form = page.context["pack_form"]
+        self.assertNotIn(self.kg, form.fields["uom"].queryset)
+        self.assertNotIn(self.bag, form.fields["uom"].queryset)
         refused = self.client.post(reverse("inventory:pack_unit_add", args=[self.sugar.pk]),
                                    {"uom": self.kg.pk, "factor": "1"})
-        self.assertContains(refused, "base unit already")
+        self.assertContains(refused, "Select a valid choice")
         self.client.post(reverse("inventory:pack_unit_remove", args=[self.sugar.pk, pack.pk]))
         self.assertFalse(ItemUom.all_objects.filter(item=self.sugar).exists())
 
@@ -139,7 +145,7 @@ class GateTests(InventoryFixture, TestCase):
 
     def test_owner_sees_the_menu(self):
         self.client.force_login(self.owner)
-        self.assertContains(self.client.get(reverse("inventory:stock")), MENU)
+        assert_inventory_menu(self, self.client.get(reverse("inventory:stock")), MENU)
 
     def test_permissions_are_offered_only_with_the_module(self):
         from access_control.branch_access import offered
@@ -161,7 +167,7 @@ class GateTests(InventoryFixture, TestCase):
                      code="inventory.view", branch_ids=[self.branch.pk])
         page = self.client.get(reverse("inventory:stock"))
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU)
         # Viewing is not setting up.
         response = self.client.post(reverse("inventory:items"), {"code": "Z", "name": "Z"})
         self.assertEqual(response.status_code, 403)

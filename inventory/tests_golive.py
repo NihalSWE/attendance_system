@@ -10,6 +10,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 from django.urls import reverse
+from base_template.testing import assert_inventory_menu
 from openpyxl import load_workbook
 
 from common.tenant import use_company
@@ -104,7 +105,7 @@ class CountSheetTests(GoLiveFixture, TestCase):
         self.client.force_login(self.owner)
         page = self.client.get(reverse("inventory:golive"))
         self.assertContains(page, "Count sheets")
-        self.assertContains(page, 'data-menu="inventory"')
+        assert_inventory_menu(self, page, 'data-menu="inventory"')
         sheet = self.client.get(reverse("inventory:golive_count_sheet"), {"store": self.rms.pk, "file_type": "xlsx"})
         self.assertIn("spreadsheetml", sheet["Content-Type"])
 

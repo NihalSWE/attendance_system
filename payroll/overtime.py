@@ -40,6 +40,7 @@ from accounts.models import CompanyMembership
 from attendance.models import AttendanceRecord
 from attendance.services import locked_ranges, month_bounds, recalculate, refresh
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from organization.models import Branch
 from organization.services import (
@@ -261,7 +262,7 @@ def _record_in_scope(scope, record_id):
         .first()
     )
     if record is None:
-        raise PermissionDenied("Day not found in this company.")
+        raise NotInThisCompany("Day not found in this company.")
     if scope.branches.filter(pk=record.branch_id).exists():
         return record
     # A department head reaches their own department's day and no other, even
@@ -346,7 +347,7 @@ def overtime_day(*, actor, company_id, record_id):
             "employee_id", "work_date"
         ).first()
     if stored is None:
-        raise PermissionDenied("Day not found in this company.")
+        raise NotInThisCompany("Day not found in this company.")
     refresh(company_id, employee_ids=[stored[0]], start=stored[1], end=stored[1])
     with use_company(company_id):
         record = (

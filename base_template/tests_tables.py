@@ -193,3 +193,20 @@ class TableTests(OvertimeBase):
         data = self.draw("department_list", **{"order[0][column]": 4, "order[0][dir]": "desc"})
         self.assertEqual((data["recordsTotal"], len(data["data"][0]) - 2), (1, 5))
         self.assertIn("Software", data["data"][0]["1"])
+
+    def test_the_page_carries_its_first_page_counts(self):
+        """tables.js keeps the rows the server drew (deferLoading, 2026-10-18):
+        each list's pager says which list it belongs to and its two counts."""
+        for index in range(3):
+            schedule.create_shift(actor=self.admin, company_id=self.company.pk, values={
+                "code": f"T{index}", "name": f"Shift {index}",
+                "start_time": datetime.time(9), "end_time": datetime.time(17),
+                "spans_next_day": False, "grace_in_minutes": 0,
+                "minimum_full_day_minutes": 400, "minimum_half_day_minutes": 200})
+        html = self.client.get(reverse("scheduling:schedule_overview"),
+                               {"shifts_table_q": "Shift 1"})
+        self.assertContains(html, 'data-server-table-for="shifts"')
+        self.assertRegex(html.content.decode(),
+                         r'data-server-table-for="shifts"\s+data-total="\d+" data-filtered="1"')
+        # Set before the first paint, so nothing is drawn the no-script way first.
+        self.assertContains(html, 'classList.add("navigation-ready", "tables-js")')

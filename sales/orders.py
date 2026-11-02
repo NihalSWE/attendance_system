@@ -21,7 +21,7 @@ cannot be issued, used or transferred - only delivered. What could not be
 reserved is shown as short; "Reserve again" tries later (after production).
 Delivering releases what it delivers; cancelling or closing releases the rest.
 
-**Credit limit**: a customer with a limit (0 = cash only, not checked) whose
+**Credit limit**: a customer with a limit (0 = no limit: not checked) whose
 unpaid invoices plus open orders plus this order go over it is confirmed
 only with a reason - a warning, not a block.
 """
@@ -48,6 +48,7 @@ from inventory.doc_common import (
     unit_factor,
 )
 from inventory.masters import units_for
+from inventory.models import ItemUom
 from sales.models import (
     CENT,
     PriceList,
@@ -135,6 +136,11 @@ def price_for(customer, item, uom, qty, day):
         line = lines.first()
         if line is not None:
             return line.price
+    # A pack's own price first (a carton need not cost 24 packets, 2026-10-27).
+    pack_price = (ItemUom.all_objects.filter(item=item, uom=uom).exclude(sale_price=None)
+                  .values_list("sale_price", flat=True).first())
+    if pack_price is not None:
+        return pack_price
     if item.sale_price is not None:
         return (item.sale_price * units_for(item).get(uom.pk, Decimal("1"))).quantize(FOUR)
     return None

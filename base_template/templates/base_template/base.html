@@ -20,8 +20,13 @@
         <link rel="stylesheet" href="{% static 'base_template/css/vendor-controls.css' %}">
         <link rel="stylesheet" href="{% static 'base_template/css/datepicker.css' %}">
         <link rel="stylesheet" href="{% static 'base_template/css/timepicker.css' %}">
+        <link rel="stylesheet" href="{% static 'base_template/css/ui.css' %}">
         {% block extra_css %}
         {% endblock %}
+        {# Before the first paint (2026-10-18): with scripts on, the narrow-screen #}
+        {# sidebar starts closed and server tables start in their scripted form, #}
+        {# instead of being drawn the no-script way and then jumping (CLS 1.15).  #}
+        <script>document.documentElement.classList.add("navigation-ready", "tables-js");</script>
     </head>
     <body>
         <div class="shell">
@@ -83,11 +88,12 @@
         </script>
         <script defer src="{% static 'base_template/js/password_toggle.js' %}">
         </script>
+        <script defer src="{% static 'base_template/js/fetch_forms.js' %}">
+        </script>
         {% block extra_js %}
         {% endblock %}
-        {% if server_tables %}
-            <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js"></script>
-            <script defer src="{% static 'base_template/js/tables.js' %}"></script>
-        {% endif %}
+        {# Every page (2026-10-26): server lists, and short lists marked data-local-table. #}
+        <script defer src="https://cdn.datatables.net/2.3.4/js/dataTables.min.js"></script>
+        <script defer src="{% static 'base_template/js/tables.js' %}"></script>
     </body>
 </html>

@@ -16,8 +16,8 @@ from django.db.models import Max
 from common.choices import ActiveStatus
 from common.tenant import use_company
 from inventory.doc_common import _writable, audit, check_qty, now, plain, require, unit_factor
-from inventory.models import ItemKind
-from production.models import Bom, BomLine
+from inventory.models import MADE_KINDS, ItemKind
+from production.models import Bom, BomLine, ProductionOrder
 
 CODE = "production.bom"
 FIELDS = ("item", "batch_size", "batch_uom", "effective_from", "note")
@@ -38,6 +38,15 @@ def _draft(bom):
         raise ValidationError(f"{bom} is {bom.get_status_display().lower()}: start a new version to change it.")
 
 
+def _changeable(bom):
+    """A draft, or the version in use while no production order has used it
+    yet (2026-10-26: the recipe on the finished good's page changes in place
+    until production uses it; after that a change is a new version)."""
+    if bom.status == Bom.Status.ACTIVE and not ProductionOrder.all_objects.filter(bom=bom).exists():
+        return
+    _draft(bom)
+
+
 @transaction.atomic
 def create_bom(*, actor, company_id, values, copy_from=None):
     """A new draft version of a product's recipe (copying ``copy_from``'s lines)."""
@@ -46,8 +55,9 @@ def create_bom(*, actor, company_id, values, copy_from=None):
     item = values.get("item")
     if item is None:
         raise ValidationError({"item": "Choose the finished product."})
-    if item.kind != ItemKind.FINISHED:
-        raise ValidationError({"item": f"{item.code} is not a finished product."})
+    # A product, or a material made here (2026-10-31).
+    if item.kind not in MADE_KINDS or item.sourcing == item.Sourcing.BUY:
+        raise ValidationError({"item": f"{item.code} is bought, not made here: it has no recipe."})
     factor = unit_factor(item, values.get("batch_uom"))
     check_qty(item, values.get("batch_size"), factor, field="batch_size")
     with use_company(company_id):
@@ -80,7 +90,7 @@ def new_version(*, actor, company_id, bom_id):
 @transaction.atomic
 def add_line(*, actor, company_id, bom_id, values):
     membership, bom = get_bom(actor=actor, company_id=company_id, pk=bom_id)
-    _draft(bom)
+    _changeable(bom)
     values = _writable(values, LINE_FIELDS)
     item = values.get("item")
     if item is None:
@@ -102,7 +112,7 @@ def add_line(*, actor, company_id, bom_id, values):
 @transaction.atomic
 def remove_line(*, actor, company_id, bom_id, line_id):
     _, bom = get_bom(actor=actor, company_id=company_id, pk=bom_id)
-    _draft(bom)
+    _changeable(bom)
     with use_company(company_id):
         if not bom.lines.filter(pk=line_id).delete()[0]:
             raise ValidationError("That line is not on this recipe.")

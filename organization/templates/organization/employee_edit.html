@@ -212,6 +212,13 @@
                 {% endif %}
             </div>
             <div class="card__body">
+                {% if not placement_since and employee.leaving_date %}
+                    <div class="alert alert--info">
+                        {{ employee.full_name }} left on {{ employee.leaving_date|date:"d M Y" }}.
+                        To bring them back, save a placement from a later date: they become
+                        active again. Then set their salary and map them on the devices again.
+                    </div>
+                {% endif %}
                 {% if placement.non_field_errors %}
                     <div class="alert alert--danger">
                         {{ placement.non_field_errors }}

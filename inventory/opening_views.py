@@ -80,6 +80,9 @@ def _detail(request, company_id, pk, line_form=None, open_dialog=""):
         line_form = forms.OpeningLineForm(company_id=company_id,
                                           branch_ids=branch_ids(request.user, company_id,
                                                                 "inventory.adjust"))
+    if line_form is not None:
+        # Made on or before the opening day: later days are greyed out.
+        line_form.fields["mfg_date"].widget.attrs["max"] = document.work_date.isoformat()
     return render(request, "inventory/opening_detail.html", {
         "document": document, "lines": lines, "sees_costs": sees_costs,
         "total": sum((line.value for line in lines), Decimal("0")),

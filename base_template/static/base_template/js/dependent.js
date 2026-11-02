@@ -27,6 +27,10 @@
     function valueOf(form, name) {
         var control = form.querySelector('[name="' + name + '"]');
         if (!control) return null;
+        if (control.type === "checkbox") {
+            // A tick shows "on" while ticked, "" while not (2026-10-26).
+            return control.checked ? "on" : "";
+        }
         if (control.type === "radio") {
             var on = form.querySelector('[name="' + name + '"]:checked');
             return on ? on.value : "";

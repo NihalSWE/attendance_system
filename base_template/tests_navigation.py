@@ -20,6 +20,7 @@ class NavigationSelectionTests(SimpleTestCase):
             ("payroll:penalty_rule_change", "salary", "Penalty rules"),
             ("payroll:overtime_decide", "salary", "Overtime"),
             ("scheduling:weekly_off_start", "shifts", "Weekly off days"),
+            ("scheduling:working_day_list", "shifts", "Working days"),
             ("devices:device_users", "devices", "All devices"),
         )
         for view, group, label in cases:

@@ -256,6 +256,86 @@
             </form>
         </div>
 
+        {# One box, edited any time (2026-10-26). #}
+        <div class="card" id="salary-month">
+            <div class="card__head">
+                <h2>
+                    Salary month
+                </h2>
+            </div>
+            <form method="post" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="section" value="salary_month">
+                <div class="card__body stack">
+                    {% if salary_month_note %}
+                        <div class="alert alert--{{ salary_month_note.0 }}">{{ salary_month_note.1 }}</div>
+                    {% endif %}
+                    <p>
+                        {% if salary_start_day == 1 %}
+                            <strong>Salary months are calendar months</strong> (1st to the last day of the month).
+                        {% else %}
+                            <strong>Salary months run from the {{ salary_start_words.0 }} to the {{ salary_start_words.1 }} of the next month</strong>{% if salary_since %}, since {{ salary_since }}{% endif %}.
+                            A salary month is named after the month it ends in.
+                        {% endif %}
+                    </p>
+                    <div class="grid grid--3">
+                        {% include "leaves/includes/field.html" with field=salary_month_form.start_day %}
+                    </div>
+                    <p class="t-faint">
+                        A change applies from {{ salary_first_free }}, the first salary month with no
+                        salary generated yet. Months already generated keep their dates.
+                    </p>
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Salary month</th>
+                                    <th>Covers</th>
+                                    <th class="numeric">Days</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in salary_months_ahead %}
+                                    <tr>
+                                        <td>
+                                            {{ row.name }}
+                                            {% if row.current %}<span class="badge badge--info">Now</span>{% endif %}
+                                            {% if row.changeover %}<span class="badge badge--warning">Changeover month</span>{% endif %}
+                                        </td>
+                                        <td>{{ row.first|date:"d M Y" }} - {{ row.last|date:"d M Y" }}</td>
+                                        <td class="numeric">{{ row.days }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card__foot">
+                    <button class="btn btn--primary" type="submit">
+                        Save
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        {# Weekly pay groups have their own page (2026-10-25). #}
+        <div class="card" id="pay-groups">
+            <div class="card__head">
+                <h2>
+                    Pay groups
+                </h2>
+                <a class="btn btn--ghost btn--sm" href="{% url 'payroll:pay_groups' %}">
+                    Open Pay groups
+                </a>
+            </div>
+            <div class="card__body">
+                <p class="t-faint">
+                    Who is paid every week instead of every month: the weekly groups and the
+                    departments and people in them are on the Pay groups page.
+                </p>
+            </div>
+        </div>
+
         <div class="card">
             <div class="card__head">
                 <h2>

@@ -119,3 +119,27 @@ class SelfServiceGate:
         if request.method in ("GET", "HEAD"):
             return redirect("me:home")
         raise PermissionDenied("This page is for the company's administrators.")
+
+
+class NotFoundOutsideCompany:
+    """Answer a row from another company as "not found" on the web panel
+    (2026-10-18). Services raise ``common.exceptions.NotInThisCompany``; a
+    refusal (403) would tell a guesser that the number exists somewhere. The
+    API answers through its own handler and is not changed here.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        return self.get_response(request)
+
+    def process_exception(self, request, exception):
+        from django.core.handlers.exception import response_for_exception
+        from django.http import Http404
+
+        from common.exceptions import NotInThisCompany
+
+        if isinstance(exception, NotInThisCompany) and not request.path.startswith("/api/"):
+            return response_for_exception(request, Http404(str(exception)))
+        return None

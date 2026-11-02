@@ -56,6 +56,7 @@
             {% endif %}
         </div>
     </div>
+    {% include "purchasing/includes/guide.html" with at="receive" doc=doc %}
 
     {% if can_edit %}
         <div class="card">
@@ -70,7 +71,7 @@
         <div class="card__head"><h2>What arrived</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
         {% if lines %}
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead>
                         <tr>
                             <th>Item</th><th class="numeric">Received</th><th class="numeric">Refused</th><th class="numeric">Accepted</th>

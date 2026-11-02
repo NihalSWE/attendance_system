@@ -108,11 +108,15 @@ def clean_line(document, values):
     if item.track_expiry and not expiry and mfg and item.shelf_life_days:
         expiry = mfg + datetime.timedelta(days=item.shelf_life_days)
     if item.track_expiry and not expiry:
-        errors["expiry_date"] = f"{item.code} has an expiry date: give it."
+        errors["expiry_date"] = (f"{item.code} has an expiry date: give it"
+                                 + (", or the manufacture date." if item.shelf_life_days
+                                    else " (it has no shelf life to work it out from)."))
     if mfg and expiry and expiry < mfg:
         errors["expiry_date"] = "The expiry date is before the manufacture date."
     if mfg and mfg > document.work_date:
         errors["mfg_date"] = "Made after the opening day?"
+    elif mfg and mfg > timezone.localdate():
+        errors["mfg_date"] = "That day has not come yet."
     if errors:
         raise ValidationError(errors)
     values = dict(values, batch_no=batch_no, expiry_date=expiry, factor=factors[uom.pk])

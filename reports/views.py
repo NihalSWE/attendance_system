@@ -74,10 +74,8 @@ def report(request, slug):
         # A filter outside the viewer's reach is dropped, not trusted.
         if f.branch and not any(str(b.pk) == f.branch for b in choices["branches"]):
             f.branch = ""
-        if f.department and not choices["departments"].filter(pk=int(f.department)).exists():
-            f.department = ""
-        if f.employee and not choices["employees"].filter(pk=int(f.employee)).exists():
-            f.employee = ""
+        f.departments = allowed(f.departments, choices["departments"])
+        f.employees = allowed(f.employees, choices["employees"])
         result = report.build(Context(company_id=company_id, company=company, zone=zone,
                                       scope=scope, filters=f))
         described = _described(f, choices)
@@ -122,17 +120,28 @@ def report(request, slug):
     })
 
 
+def allowed(ids, choices):
+    """The ids of ``ids`` that are among ``choices`` (the viewer's reach)."""
+    if not ids:
+        return []
+    found = {str(pk) for pk in choices.filter(pk__in=[int(i) for i in ids]).values_list("pk", flat=True)}
+    return [i for i in ids if i in found]
+
+
 def _described(f, choices):
     """The filters in words, for the page and the download's header."""
     said = [f"Period: {f.label}"]
     branch = next((b for b in choices["branches"] if str(b.pk) == f.branch), None)
     said.append(f"Branch: {branch.name if branch else 'All branches'}")
-    if f.department:
-        department = choices["departments"].filter(pk=int(f.department)).first()
-        said.append(f"Department: {department.name}")
-    if f.employee:
-        employee = choices["employees"].filter(pk=int(f.employee)).first()
-        said.append(f"Employee: {employee.full_name}")
+    if f.departments:
+        names = choices["departments"].filter(pk__in=f.departments).order_by("name")
+        several = len(choices["branches"]) > 1
+        said.append("Departments: " + ", ".join(
+            f"{d.name} · {d.branch.name}" if several else d.name for d in names))
+    if f.employees:
+        people = choices["employees"].filter(pk__in=f.employees).order_by("first_name", "last_name")
+        said.append(("Also: " if f.departments or f.branch else "Employees: ")
+                    + ", ".join(p.full_name for p in people))
     for name, value in f.extra.items():
         if value and value not in ("summary",):
             label = {"view": "View", "status": "Status", "leave_status": "Leave status",

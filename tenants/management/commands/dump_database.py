@@ -18,7 +18,11 @@ It differs from a plain ``dumpdata`` where this project needs it to:
   bigger than a PC's memory) - and Windows' own encoding never mangles a
   Bangla name;
 - short-lived and secret-bearing rows are left out: sessions, the API's live
-  logins, one-time password-reset links, login attempts and replay records.
+  logins, one-time password-reset links, login attempts and replay records;
+- every table is read from one snapshot of the database (2026-10-24): the
+  live server keeps taking punches while it dumps, and a punch's allocation
+  written after the punches were read pointed at a punch missing from the
+  file, so the copy would not load.
 
 The file holds people's personal data and password hashes: copy it to the PC,
 then delete it from the server; never commit it.
@@ -31,6 +35,7 @@ import sys
 from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand
+from django.db import connection, transaction
 from django.utils import timezone
 
 from tenants.database_copy import every_company
@@ -74,7 +79,7 @@ class Command(BaseCommand):
         self.stdout.write("Dumping the database... (a minute or two for a large one)")
         opener = _gzip_open if path.endswith(".gz") else _text_open
         try:
-            with opener(path) as stream, every_company():
+            with opener(path) as stream, every_company(), _snapshot():
                 call_command(
                     "dumpdata",
                     exclude=list(EXCLUDED),
@@ -92,6 +97,23 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"Written: {path} ({size:.1f} MB)"))
         self.stdout.write("Copy it to your PC, then delete it here (it holds personal data). "
                           "On the PC: python manage.py load_database <the file>")
+
+
+class _snapshot(transaction.Atomic):
+    """One read-only transaction that sees the database as it was when it
+    began, so rows written meanwhile are in none of the tables."""
+
+    def __init__(self):
+        super().__init__(using=None, savepoint=False, durable=False)
+
+    def __enter__(self):
+        outermost = not connection.in_atomic_block
+        super().__enter__()
+        # Only a transaction's first statement may set this (a test's own
+        # transaction has run others already).
+        if outermost and connection.vendor == "postgresql":
+            with connection.cursor() as cursor:
+                cursor.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
 
 
 def _text_open(path):

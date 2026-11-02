@@ -456,6 +456,11 @@
             {% endif %}
         </div>
         <div class="card__body">
+            {% if by_hand %}
+                <div class="alert alert--info">
+                    {% if by_hand.present_days is not None %}Present days set by hand: {{ by_hand.present_days }} (the scans showed {{ by_hand.scan_present_days }}){% else %}Hours set by hand: {{ by_hand.hours }} (the scans showed {{ by_hand.scan_hours }}){% endif %}{% if not for_employee %}, by {{ by_hand.by }}: “{{ by_hand.reason }}”{% endif %}.
+                </div>
+            {% endif %}
             <dl class="slip-stats">
                 <div class="slip-stats__item">
                     <dt>

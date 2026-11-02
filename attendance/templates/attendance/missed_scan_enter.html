@@ -17,7 +17,7 @@
         <span class="crumbs__sep" aria-hidden="true">
             /
         </span>
-        <a href="{% url 'organization:employee_detail' employee.pk %}">
+        <a href="{% url 'organization:employee_detail' employee.public_id %}">
             {{ employee.full_name }}
         </a>
         <span class="crumbs__sep" aria-hidden="true">
@@ -41,7 +41,7 @@
             {% include "attendance/includes/fix_fields.html" %}
         </div>
         <div class="card__foot">
-            <a class="btn btn--ghost" href="{% url 'organization:employee_detail' employee.pk %}">
+            <a class="btn btn--ghost" href="{% url 'organization:employee_detail' employee.public_id %}">
                 Cancel
             </a>
             <button class="btn btn--primary" type="submit">

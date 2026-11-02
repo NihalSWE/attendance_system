@@ -4,7 +4,7 @@ The root's own department and designation routes live in
 organization/catalogue_urls.py under their own namespace, because they belong
 to the platform operator, not a tenant.
 """
-from django.urls import path
+from django.urls import path, register_converter
 
 from organization import (
     company_views,
@@ -18,6 +18,10 @@ from organization import (
     import_views,
     views,
 )
+from organization.converters import EmployeeConverter
+
+# Employee pages are addressed by the random public id (organization/converters.py).
+register_converter(EmployeeConverter, "employee")
 
 app_name = "organization"
 
@@ -72,51 +76,51 @@ urlpatterns = [
     ),
     path("company/", company_views.company_profile, name="company_profile"),
     path("email/", company_views.mail_settings, name="mail_settings"),
-    path("employees/<int:pk>/", employee_detail_views.employee_detail, name="employee_detail"),
-    path("employees/<int:pk>/edit/", employee_edit_views.employee_edit, name="employee_edit"),
-    path("employees/<int:pk>/end/", employee_detail_views.employee_end, name="employee_end"),
-    path("employees/<int:pk>/photo/", employee_detail_views.employee_photo, name="employee_photo"),
-    path("employees/<int:pk>/photo/change/", employee_detail_views.employee_photo_change,
+    path("employees/<employee:pk>/", employee_detail_views.employee_detail, name="employee_detail"),
+    path("employees/<employee:pk>/edit/", employee_edit_views.employee_edit, name="employee_edit"),
+    path("employees/<employee:pk>/end/", employee_detail_views.employee_end, name="employee_end"),
+    path("employees/<employee:pk>/photo/", employee_detail_views.employee_photo, name="employee_photo"),
+    path("employees/<employee:pk>/photo/change/", employee_detail_views.employee_photo_change,
          name="employee_photo_change"),
-    path("employees/<int:pk>/personal/", employee_detail_views.employee_personal,
+    path("employees/<employee:pk>/personal/", employee_detail_views.employee_personal,
          name="employee_personal"),
     # The Edit employee cards as profile modals (Ajay, 2026-09-27).
-    path("employees/<int:pk>/profile/edit/", employee_detail_views.employee_profile_edit,
+    path("employees/<employee:pk>/profile/edit/", employee_detail_views.employee_profile_edit,
          name="employee_profile_edit"),
-    path("employees/<int:pk>/line-manager/", employee_detail_views.employee_line_manager,
+    path("employees/<employee:pk>/line-manager/", employee_detail_views.employee_line_manager,
          name="employee_line_manager"),
     # Education, documents and device permissions on the profile (2026-09-27).
-    path("employees/<int:pk>/education/", employee_records_views.employee_education_save,
+    path("employees/<employee:pk>/education/", employee_records_views.employee_education_save,
          name="employee_education_add"),
-    path("employees/<int:pk>/education/<int:row>/",
+    path("employees/<employee:pk>/education/<int:row>/",
          employee_records_views.employee_education_save, name="employee_education_edit"),
-    path("employees/<int:pk>/education/<int:row>/remove/",
+    path("employees/<employee:pk>/education/<int:row>/remove/",
          employee_records_views.employee_education_remove, name="employee_education_remove"),
-    path("employees/<int:pk>/documents/", employee_records_views.employee_document_add,
+    path("employees/<employee:pk>/documents/", employee_records_views.employee_document_add,
          name="employee_document_add"),
-    path("employees/<int:pk>/documents/<int:row>/", employee_records_views.employee_document,
+    path("employees/<employee:pk>/documents/<int:row>/", employee_records_views.employee_document,
          name="employee_document"),
-    path("employees/<int:pk>/documents/<int:row>/remove/",
+    path("employees/<employee:pk>/documents/<int:row>/remove/",
          employee_records_views.employee_document_remove, name="employee_document_remove"),
     # The profile's actions (2026-09-27).
-    path("employees/<int:pk>/leave/", employee_actions_views.employee_leave,
+    path("employees/<employee:pk>/leave/", employee_actions_views.employee_leave,
          name="employee_leave"),
-    path("employees/<int:pk>/late/", employee_actions_views.employee_late,
+    path("employees/<employee:pk>/late/", employee_actions_views.employee_late,
          name="employee_late"),
-    path("employees/<int:pk>/leave-policy/", employee_actions_views.employee_leave_policy,
+    path("employees/<employee:pk>/leave-policy/", employee_actions_views.employee_leave_policy,
          name="employee_leave_policy"),
-    path("employees/<int:pk>/leave-balance/", employee_actions_views.employee_leave_adjust,
+    path("employees/<employee:pk>/leave-balance/", employee_actions_views.employee_leave_adjust,
          name="employee_leave_adjust"),
-    path("employees/<int:pk>/active/", employee_actions_views.employee_active,
+    path("employees/<employee:pk>/active/", employee_actions_views.employee_active,
          name="employee_active"),
-    path("employees/<int:pk>/overtime/", employee_actions_views.employee_overtime,
+    path("employees/<employee:pk>/overtime/", employee_actions_views.employee_overtime,
          name="employee_overtime"),
-    path("employees/<int:pk>/reports-to/", employee_actions_views.employee_reports,
+    path("employees/<employee:pk>/reports-to/", employee_actions_views.employee_reports,
          name="employee_reports"),
-    path("employees/<int:pk>/devices/<int:enrollment>/",
+    path("employees/<employee:pk>/devices/<int:enrollment>/",
          employee_records_views.employee_device_permission,
          name="employee_device_permission"),
-    path("employees/<int:pk>/reports/", employee_detail_views.employee_report_visibility,
+    path("employees/<employee:pk>/reports/", employee_detail_views.employee_report_visibility,
          name="employee_report_visibility"),
     # Feed the dependent branch -> department -> designation selects.
     path(

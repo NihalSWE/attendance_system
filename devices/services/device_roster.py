@@ -94,7 +94,7 @@ def _rows(device, prefixes):
         yield from _tabledata_rows(device, prefix)
 
 
-def _removed_pins(device):
+def removed_pins_from_messages(device):
     """Numbers the device no longer holds, judged by its latest complete list.
 
     A 3.x device answers "Refresh user list" with its whole user table, the
@@ -142,13 +142,43 @@ def _removed_pins(device):
     return earlier - listed - later
 
 
+def _removed_pins(device):
+    """Numbers the device no longer holds (``device_users.removed_pins``)."""
+    from devices.services import device_users
+
+    return device_users.removed_pins(device)
+
+
 def build_roster(device):
     """Return one dict per user the device has reported, newest values winning.
 
     Each row carries what the device knows (id, name, privilege, card,
     password, credential counts) joined to what *we* know (the mapped employee
-    and whether their punches are permitted).
+    and whether their punches are permitted). Read from the ``DeviceUser``
+    rows, worked out once per upload (2026-10-18), not from every upload.
     """
+    from devices.services import device_users
+
+    users = {}
+    for row in device_users.rows(device):
+        if not row.reported:
+            continue
+        users[row.pin] = {
+            "pin": row.pin, "uid": row.uid, "name": row.name,
+            "card_number": row.card_number, "has_password": row.has_password,
+            "group": row.group, "tz": row.tz, "privilege_code": row.privilege_code,
+            "disabled_on_device": row.disabled_on_device,
+            "fingerprint_count": row.fingerprint_count, "face_count": row.face_count,
+            "other_biometric_count": row.other_biometric_count, "has_photo": row.has_photo,
+            "only_in_scans": False,
+        }
+    return _finish(device, users, device_users.removed_pins(device))
+
+
+def roster_from_messages(device):
+    """The roster worked out from every stored upload, as before 2026-10-18.
+    Slow on a busy device; kept to check the ``DeviceUser`` rows against
+    (``manage.py rebuild_device_users --check``)."""
     users = {}
 
     def blank(pin):
@@ -209,6 +239,21 @@ def build_roster(device):
         if row is not None:
             row["has_photo"] = True
 
+    return _finish(device, users, removed_pins_from_messages(device))
+
+
+def _blank(pin):
+    return {
+        "pin": pin, "uid": "", "name": "", "card_number": "", "has_password": False,
+        "group": "", "tz": "",
+        "privilege_code": "", "disabled_on_device": False, "fingerprint_count": 0,
+        "face_count": 0, "other_biometric_count": 0, "has_photo": False,
+        "only_in_scans": False,
+    }
+
+
+def _finish(device, users, removed):
+    """Scanned-only numbers, our side (the mapped employee), and the order."""
     # A number that scanned but whose user record has not reached us yet
     # (the 3A reports a user only when it is added, edited or asked for). It
     # is listed so it can be mapped now; "Refresh user list" fetches the name.
@@ -219,7 +264,7 @@ def build_roster(device):
     )
     for pin in scanned:
         if pin not in users:
-            users[pin] = {**blank(pin), "only_in_scans": True}
+            users[pin] = {**_blank(pin), "only_in_scans": True}
 
     # Join our side: who this device user maps to, and whether it counts.
     enrollments = {
@@ -229,7 +274,6 @@ def build_roster(device):
         .order_by("effective_from")
     }
 
-    removed = _removed_pins(device)
     roster = []
     for pin, row in users.items():
         row["removed_from_device"] = pin in removed

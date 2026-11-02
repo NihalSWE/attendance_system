@@ -6,6 +6,7 @@ import datetime
 from django.test import TestCase
 from django.urls import reverse
 
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from inventory import labels
 from inventory.models import (
@@ -35,7 +36,8 @@ class StorePageTests(StoreFixture, TestCase):
         for key in KEYS:
             page = self.client.get(self.url("store_list", key))
             self.assertEqual(page.status_code, 200, key)
-            self.assertContains(page, f'href="{self.url(f"store_{key}")}"')
+            assert_inventory_menu(self, page, f'href="{self.url(f"store_{key}")}"',
+                                  view=f"inventory:store_{key}")
 
     def test_requisition_issue_and_return_through_the_pages(self):
         c = self.client

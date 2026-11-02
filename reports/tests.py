@@ -339,3 +339,35 @@ class DataTableTests(ReportCase):
         self.assertEqual([row[1] for row in rows], ["Rahim", "Clerk"])
         self.assertIn('Table search: "office"', " ".join(lines))
         self.assertIn("Sorted by: Name descending", " ".join(lines))
+
+
+class SeveralDepartmentsAndPeopleTests(ReportCase):
+    """2026-10-26: several departments and several people; they add up -
+    everyone in the chosen departments, plus each person picked, wherever
+    they work (a department and someone from another department is both)."""
+
+    def setUp(self):
+        super().setUp()
+        with use_company(self.company):
+            self.department_of = {person.full_name: person.assignments.first().department_id
+                                  for person in (self.employee, self.far, self.clerk)}
+
+    def test_a_department_plus_someone_from_another_department(self):
+        home = self.department_of[self.employee.full_name]
+        self.assertNotEqual(self.department_of[self.far.full_name], home)
+        everyone_home = sorted(name for name, dep in self.department_of.items() if dep == home)
+        names = sorted(self.names(self.rows("daily-attendance", department=str(home),
+                                            employee=str(self.far.pk), **DAY)))
+        self.assertEqual(names, sorted(everyone_home + [self.far.full_name]))
+        page = self.open("daily-attendance", department=str(home), employee=str(self.far.pk), **DAY)
+        self.assertContains(page, f"Also: {self.far.full_name}")
+
+    def test_several_people_only(self):
+        names = self.names(self.rows("daily-attendance", employee=[str(self.far.pk), str(self.clerk.pk)],
+                                     **DAY))
+        self.assertEqual(sorted(names), sorted([self.far.full_name, self.clerk.full_name]))
+
+    def test_someone_outside_the_viewers_reach_is_dropped(self):
+        names = self.names(self.rows("daily-attendance", employee=[str(self.clerk.pk), "999999"],
+                                     **DAY))
+        self.assertEqual(names, [self.clerk.full_name])

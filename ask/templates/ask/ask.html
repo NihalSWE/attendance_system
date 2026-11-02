@@ -1,0 +1,131 @@
+{% extends "base_template/base.html" %}
+{% load static %}
+{% comment %}
+    Ask (2026-11-02, ask/views.py): a question in plain words, answered from
+    our own data. The answer line, chips saying how it was understood (remove
+    one, or Change), then the rows with links to the real pages.
+{% endcomment %}
+{% block title %}Ask{% endblock %}
+{% block extra_css %}
+    <link rel="stylesheet" href="{% static 'ask/ask.css' %}">
+{% endblock %}
+{% block page %}
+<div class="ui-page ask">
+    <div class="ui-head">
+        <div>
+            <h1 class="ui-head__title">Ask</h1>
+            <p class="ui-head__sub">Ask about attendance, leave, overtime or salary in plain words, in English or Bangla. Only the question goes to the AI; the answer comes from our own data, and you see only what your login may see.</p>
+        </div>
+    </div>
+
+    <form class="ui-card ask__box" method="get" action="{% url 'ask:ask' %}" data-ask-form>
+        <label class="sr-only" for="ask-q">Your question</label>
+        <input class="input" id="ask-q" name="q" type="search" value="{{ question }}" maxlength="300" placeholder="e.g. who was late today · how much salary for Rahim this month" autocomplete="off">
+        <button class="ui-btn ui-btn--main" type="submit">Ask</button>
+        <span class="ask__thinking" data-ask-thinking hidden>Thinking…</span>
+    </form>
+
+    {% if why %}
+        <div class="ui-message ui-message--error">{{ why }}</div>
+    {% elif result %}
+        {% if result.refused %}
+            <div class="ui-message ui-message--error">{{ result.refused }}</div>
+        {% else %}
+            <p class="ask__answer">{{ result.answer }}</p>
+        {% endif %}
+
+        <div class="ask__chips" aria-label="How the question was understood">
+            {% for chip in chips %}
+                <span class="ui-chip">{{ chip.label }}{% if chip.remove %} <a class="ask__remove" href="?{{ chip.remove }}" aria-label="Remove {{ chip.label }}">×</a>{% endif %}</span>
+            {% endfor %}
+            <button class="ui-btn ui-btn--sm" type="button" data-open-dialog="ask-change">Change</button>
+        </div>
+
+        {% if result.choices %}
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">Which one?</h2></div>
+                <ul class="ask__choices">
+                    {% for label, query in result.choices %}
+                        <li><a href="?{{ query }}">{{ label }}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
+        {% if result.columns %}
+            <div class="ui-card">
+                <div class="ui-card__head">
+                    <h2 class="ui-card__title">{{ result.rows|length }} row{{ result.rows|length|pluralize }}</h2>
+                    {% if result.link %}<a class="ui-btn ui-btn--sm" href="{{ result.link.1 }}">{{ result.link.0 }}</a>{% endif %}
+                </div>
+                {% if result.cut %}<p class="ui-card__note">{{ result.cut }} more not shown here: the page it comes from has them all.</p>{% endif %}
+                {% if not page %}
+                    <div class="empty server-table-empty"><div class="empty__text">Nothing to show.</div></div>
+                {% endif %}
+                {% if server_table or page %}
+                    <div class="table-wrap">
+                        <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table">
+                            <thead>
+                                <tr>{% for label, numeric in result.columns %}<th{% if numeric %} class="numeric"{% endif %}>{{ label }}</th>{% endfor %}</tr>
+                            </thead>
+                            <tbody>
+                                {% for row in page %}
+                                    <tr>{% for cell in row %}<td{% if cell.numeric %} class="numeric"{% endif %}>{% if cell.url %}<a href="{{ cell.url }}">{{ cell }}</a>{% else %}{{ cell }}{% endif %}</td>{% endfor %}</tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% include "base_template/includes/table_pagination.html" %}
+                {% endif %}
+            </div>
+        {% elif result.link %}
+            <p><a href="{{ result.link.1 }}">{{ result.link.0 }}</a></p>
+        {% endif %}
+
+        <dialog class="modal" id="ask-change" aria-labelledby="ask-change-title">
+            <form class="modal__card" method="get" action="{% url 'ask:ask' %}">
+                <div class="modal__head">
+                    <h2 id="ask-change-title">Change the search</h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <input type="hidden" name="q" value="{{ question }}">
+                <div class="modal__body"><div class="grid grid--2">
+                    <label class="field"><span class="field__label">Search</span>
+                        <select class="input select js-select" name="s">{% for key, label in searches.items %}<option value="{{ key }}"{% if key == found.search %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    <label class="field"><span class="field__label">Status (attendance)</span>
+                        <select class="input select js-select" name="status"><option value="">Any</option>{% for key, label in statuses.items %}<option value="{{ key }}"{% if key == found.status %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    <label class="field"><span class="field__label">From</span><input class="input" type="date" name="from" value="{{ found.date_from|date:'Y-m-d' }}"></label>
+                    <label class="field"><span class="field__label">To</span><input class="input" type="date" name="to" value="{{ found.date_to|date:'Y-m-d' }}"></label>
+                    <label class="field"><span class="field__label">Month (salary)</span>
+                        <select class="input select js-select" name="month"><option value="">This month</option>{% for number, name in months %}<option value="{{ number }}"{% if number == found.month %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+                    <label class="field"><span class="field__label">Year</span>
+                        <select class="input select js-select" name="year"><option value="">This year</option>{% for option in years %}<option value="{{ option }}"{% if option == found.year %} selected{% endif %}>{{ option }}</option>{% endfor %}</select></label>
+                    <label class="field"><span class="field__label">Employee (name or ID)</span><input class="input" name="emp" value="{{ found.employee }}" maxlength="100">{% if found.employee_id and not found.employee %}<input type="hidden" name="emp_id" value="{{ found.employee_id }}">{% endif %}</label>
+                    <label class="field"><span class="field__label">Branch</span>
+                        <select class="input select js-select2" name="branch" data-placeholder="All branches"><option value="">All branches</option>{% for pk, name in branches %}<option value="{{ pk }}"{% if pk == found.branch_id %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+                    <label class="field"><span class="field__label">Department</span>
+                        <select class="input select js-select2" name="dept" data-placeholder="All departments"><option value="">All departments</option>{% for name in departments %}<option value="{{ name }}"{% if name == found.department %} selected{% endif %}>{{ name }}</option>{% endfor %}</select></label>
+                    <label class="field"><span class="field__label">Overtime</span>
+                        <select class="input select js-select" name="ot"><option value="">Approved and waiting</option>{% for key, label in overtime_states.items %}<option value="{{ key }}"{% if key == found.overtime %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                    <label class="field"><span class="field__label">Salary totals</span>
+                        <select class="input select js-select" name="by">{% for key, label in group_choices.items %}<option value="{{ key }}"{% if key == found.group_by %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+                </div></div>
+                <div class="modal__foot">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn--primary" type="submit">Show</button>
+                </div>
+            </form>
+        </dialog>
+    {% else %}
+        <div class="ui-card"><div class="ui-card__body">
+            <p class="ui-muted">For example:</p>
+            <ul class="ask__examples">
+                <li><a href="?q=find+all+the+employees+who+were+late+today">find all the employees who were late today</a></li>
+                <li><a href="?q=who+is+in+the+office+now">who is in the office now</a></li>
+                <li><a href="?q=who+is+on+leave+this+week">who is on leave this week</a></li>
+                <li><a href="?q=salary+totals+by+department+this+month">salary totals by department this month</a></li>
+            </ul>
+        </div></div>
+    {% endif %}
+</div>
+{% endblock %}

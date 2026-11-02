@@ -2,15 +2,16 @@
     <div class="card__head"><h2>What changes</h2><span class="spacer"></span><span class="t-muted">{{ lines|length }} line{{ lines|length|pluralize }}</span></div>
     {% if lines %}
         <div class="table-wrap">
-            <table class="table">
-                <thead><tr><th>Item</th><th>Batch</th><th>Bin</th><th class="numeric">Change</th>{% if sees_costs %}<th class="numeric">Unit cost</th>{% endif %}<th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
+            <table class="table" data-local-table>
+                <thead><tr><th>Item</th><th>Batch</th><th>Bin</th><th class="numeric">Change</th>{% if shows_effect %}<th class="numeric">In store now</th><th class="numeric">After this</th>{% endif %}{% if sees_costs %}<th class="numeric">Unit cost</th>{% endif %}<th>Note</th><th><span class="sr-only">Actions</span></th></tr></thead>
                 <tbody>
                     {% for line in lines %}
                         <tr>
                             <td><a href="{% url 'inventory:item_detail' line.item_id %}">{{ line.item.code }}</a> {{ line.item.name }}</td>
                             <td>{{ line.batch.batch_no|default:line.batch_no|default:"—" }}{% if line.batch_no and not line.batch %} <span class="badge badge--info">New</span>{% endif %}</td>
                             <td>{{ line.location.code|default:"—" }}</td>
-                            <td class="numeric">{% if line.qty_change > 0 %}+{% endif %}{{ line.qty_change.normalize }} {{ line.uom.code }}</td>
+                            <td class="numeric"><strong class="{% if line.qty_change > 0 %}ui-good{% else %}ui-bad{% endif %}">{% if line.qty_change > 0 %}+{% endif %}{{ line.qty_change.normalize }} {{ line.uom.code }}</strong></td>
+                            {% if shows_effect %}<td class="numeric">{{ line.now_qty|floatformat:"-4g" }} {{ line.item.base_uom.code }}</td><td class="numeric"><strong{% if line.after_qty < 0 %} class="ui-bad" title="More than the store has"{% endif %}>{{ line.after_qty|floatformat:"-4g" }} {{ line.item.base_uom.code }}</strong></td>{% endif %}
                             {% if sees_costs %}<td class="numeric">{{ line.unit_cost|floatformat:2|default:"average" }}</td>{% endif %}
                             <td>{{ line.note }}</td>
                             <td>{% include "inventory/store/_remove.html" %}</td>

@@ -168,7 +168,8 @@ ITEM = Master(Item, (
     "code", "name", "name_bn", "kind", "category", "base_uom", "barcode", "track_batch",
     "track_expiry", "shelf_life_days", "qc_required", "min_stock", "reorder_point",
     "reorder_qty", "max_stock", "default_warehouse", "standard_cost", "sale_price",
-    "vat_rate", "hs_code", "notes",
+    "vat_rate", "hs_code", "notes", "sourcing", "keep_by", "keep_days", "batch_per_mix",
+    "warranty_months", "guarantee_months", "serial_numbers",
 ), "inventory.item")
 WAREHOUSE = Master(Warehouse, ("branch", "code", "name", "kind", "notes"),
                    "inventory.warehouse", branch_path="branch")
@@ -230,17 +231,54 @@ def update_item(*, actor, company_id, pk, values):
 
 
 @transaction.atomic
+def delete_item(*, actor, company_id, pk):
+    """Delete an item nothing uses yet (2026-10-26). Its pack units go with it,
+    and so does a recipe no production order has used. Anything else that
+    points at it - stock, a document, a batch, a label, another product's
+    recipe - stops the delete (every such link PROTECTs the item); deactivate
+    it instead. Returns the deleted item's code."""
+    from production.models import Bom, BomLine, ProductionOrder
+
+    membership, item = get_for_edit(ITEM, actor=actor, company_id=company_id, pk=pk)
+    with use_company(company_id):
+        if _item_has_moved(item):
+            raise ValidationError(f"{item.code} has stock movements, so it cannot be deleted. "
+                                  "Deactivate it instead.")
+        used_in = (BomLine.all_objects.filter(item=item).select_related("bom__item")
+                   .values_list("bom__item__code", flat=True).distinct())
+        if used_in:
+            raise ValidationError(f"{item.code} is a material of {', '.join(used_in)}: remove it "
+                                  "from that recipe first, or deactivate it.")
+        recipes = Bom.all_objects.filter(item=item)
+        if ProductionOrder.all_objects.filter(item=item).exists():
+            raise ValidationError(f"{item.code} has production orders, so it cannot be deleted. "
+                                  "Deactivate it instead.")
+        code = item.code
+        record_company_event(actor=actor, membership=membership, company=membership.company,
+                             action="inventory.item.deleted", obj=item, before=ITEM.snapshot(item))
+        try:
+            with transaction.atomic():
+                BomLine.all_objects.filter(bom__in=recipes).delete()
+                recipes.delete()
+                item.delete()
+        except models.ProtectedError:
+            raise ValidationError(f"{code} is on a document, a batch or a label, so it cannot be "
+                                  "deleted. Deactivate it instead.") from None
+    return code
+
+
+@transaction.atomic
 def add_pack_unit(*, actor, company_id, item_id, values):
     """1 CARTON = 24 PCS: a pack the item can be entered in."""
     membership, item = get_for_edit(ITEM, actor=actor, company_id=company_id, pk=item_id)
-    values = _writable(values, ("uom", "factor", "barcode"))
+    values = _writable(values, ("uom", "factor", "sale_price", "barcode"))
     with use_company(company_id):
         pack = create_validated(ItemUom, company=membership.company, item=item,
                                 created_by=actor, updated_by=actor, **values)
         record_company_event(actor=actor, membership=membership, company=membership.company,
                              action="inventory.item.pack_unit_added", obj=item,
                              after={"uom": pack.uom.code, "factor": plain(pack.factor),
-                                    "barcode": pack.barcode})
+                                    "sale_price": plain(pack.sale_price), "barcode": pack.barcode})
     return pack
 
 
@@ -266,7 +304,7 @@ def units_for(item):
 
 
 SETTINGS_FIELDS = ("valuation_scope", "expiry_alert_days", "slow_moving_days", "alert_emails", "small_label",
-                   "large_label", "gs1_labels")
+                   "large_label", "gs1_labels", "warranty_on")
 
 
 @transaction.atomic

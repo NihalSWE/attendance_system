@@ -29,6 +29,7 @@ from django.utils import timezone
 
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
+from common.exceptions import NotInThisCompany
 from common.services import create_validated
 from common.tenant import use_company
 from organization.services import assert_branch_in_scope, require_structure_manager
@@ -353,7 +354,7 @@ def _employee_in_scope(membership, employee):
     from employees.models import Employee, EmployeeAssignment
 
     if not Employee.objects.filter(pk=employee.pk).exists():
-        raise PermissionDenied("Employee not found in this company.")
+        raise NotInThisCompany("Employee not found in this company.")
     placement = (
         EmployeeAssignment.objects.select_related("branch")
         .filter(employee=employee, effective_to__isnull=True)
@@ -473,7 +474,7 @@ def get_employee_shift_for_edit(*, actor, company_id, assignment_id):
             .filter(pk=assignment_id).first()
         )
         if assignment is None:
-            raise PermissionDenied("Employee shift not found in this company.")
+            raise NotInThisCompany("Employee shift not found in this company.")
         _employee_in_scope(membership, assignment.employee)
     return membership, assignment
 
@@ -569,7 +570,7 @@ def get_shift_for_edit(*, actor, company_id, shift_id):
     with use_company(company_id):
         shift = Shift.objects.filter(pk=shift_id).first()
     if shift is None:
-        raise PermissionDenied("Shift not found in this company.")
+        raise NotInThisCompany("Shift not found in this company.")
     return membership, shift
 
 
@@ -802,7 +803,7 @@ def get_weekly_off_for_edit(*, actor, company_id, rule_id):
     with use_company(company_id):
         rule = WeeklyOffRule.objects.select_related("branch").filter(pk=rule_id).first()
         if rule is None:
-            raise PermissionDenied("Weekly off day not found in this company.")
+            raise NotInThisCompany("Weekly off day not found in this company.")
         if rule.branch_id:
             assert_branch_in_scope(membership, rule.branch)
     return membership, rule
@@ -962,7 +963,7 @@ def get_holiday_for_edit(*, actor, company_id, holiday_id):
     with use_company(company_id):
         holiday = Holiday.objects.select_related("branch").filter(pk=holiday_id).first()
         if holiday is None:
-            raise PermissionDenied("Holiday not found in this company.")
+            raise NotInThisCompany("Holiday not found in this company.")
         if holiday.branch_id:
             assert_branch_in_scope(membership, holiday.branch)
     return membership, holiday
@@ -1174,7 +1175,7 @@ def get_working_day_for_edit(*, actor, company_id, working_day_id):
     with use_company(company_id):
         working = WorkingDay.objects.select_related("branch").filter(pk=working_day_id).first()
         if working is None:
-            raise PermissionDenied("Working day not found in this company.")
+            raise NotInThisCompany("Working day not found in this company.")
         if working.branch_id:
             assert_branch_in_scope(membership, working.branch)
     return membership, working

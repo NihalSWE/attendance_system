@@ -1,0 +1,147 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}{{ item.name }}{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:products' %}">Products</a> / {{ item.code }}</p>
+            <h1 class="ui-head__title">{{ item.name }}{% if item.status != "active" %} <span class="ui-chip">Inactive</span>{% endif %}</h1>
+            <p class="ui-head__sub">{% if production %}{% if item.sourcing == "make" %}Made here{% elif item.sourcing == "both" %}Made here and bought{% else %}Bought ready{% endif %} · {% endif %}sold by the {{ item.base_uom.code }}{% for pack in packs %} and the {{ pack.uom.code }} (1 = {{ pack.factor|floatformat:"-4" }} {{ item.base_uom.code }}){% endfor %}{% if item.track_expiry %} · {{ item.shelf_life_days|default:"no" }} days shelf life{% elif item.track_batch %} · keeps batches{% endif %}</p>
+        </div>
+        <div class="ui-head__actions">
+            {% include "inventory/hub/_head_actions.html" %}
+            {% if makes and can_plan %}
+                <a class="ui-btn ui-btn--main" href="{% url 'production:plan' item.pk %}">{% include "ui/icon.html" with name="play" %} Make this</a>
+            {% elif not makes %}
+                <a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">{% include "ui/icon.html" with name="plus" %} Stock in</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="ui-tiles">
+        {% if sees_costs %}
+            <div class="ui-tile"><p class="ui-tile__label">Cost per {{ item.base_uom.code }}</p><p class="ui-tile__value">{% if line.cost %}{{ line.cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">{% if line.expected is not None %}expected: one batch ÷ {{ sheet.makes|floatformat:"-2g" }}{% elif makes and sheet.missing %}a material has no cost yet{% elif line.on_hand %}average of what is in stock{% else %}none in stock yet{% endif %}</p></div>
+        {% endif %}
+        <div class="ui-tile"><p class="ui-tile__label">Sale price</p><p class="ui-tile__value">{% if item.sale_price %}{{ item.sale_price|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">per {{ item.base_uom.code }}{% for pack in packs %}{% if pack.price %} · {{ pack.uom.code }} {{ pack.price|floatformat:"2g" }}{% endif %}{% endfor %}</p></div>
+        {% if sees_costs %}
+            <div class="ui-tile{% if line.margin is not None and line.margin < 0 %} ui-tile--bad{% elif line.margin %} ui-tile--good{% endif %}"><p class="ui-tile__label">Margin</p><p class="ui-tile__value">{% if line.margin is not None %}{{ line.margin|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">{% if line.margin is not None %}{{ line.margin_pct }}% per {{ item.base_uom.code }}{% else %}needs a price and a cost{% endif %}</p></div>
+        {% endif %}
+        <div class="ui-tile{% if line.tone == 'wait' %} ui-tile--warn{% elif line.tone == 'bad' %} ui-tile--bad{% endif %}"><p class="ui-tile__label">In stock</p><p class="ui-tile__value">{{ line.on_hand|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ line.stock_text }}{% if line.keep %} · keep {{ line.keep|floatformat:"-2g" }}{% endif %}</p></div>
+        <div class="ui-tile"><p class="ui-tile__label">Sold, last 30 days</p><p class="ui-tile__value">{{ sold|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ item.base_uom.code }} · {{ per_day|floatformat:"-2g" }} a day</p></div>
+    </div>
+
+    {% include "inventory/hub/_qc_card.html" with waiting=qc_waiting %}
+
+    {# The page in the order the work is done (2026-11-01): each step jumps to its part. #}
+    <nav class="ui-steps product-steps" aria-label="Getting it ready to sell">
+        {% for step in steps %}
+            <a class="ui-steps__step ui-steps__step--{{ step.state }}" href="{{ step.anchor }}"{% if step.state == "now" %} aria-current="step"{% endif %}>
+                <span class="product-steps__no">{% if step.state == "done" %}{% include "ui/icon.html" with name="check" small=True %}{% else %}{{ step.number }}{% endif %}</span>
+                <span>{{ step.title }}</span>
+            </a>
+        {% endfor %}
+    </nav>
+
+    {% include "inventory/hub/_item_parts.html" with step=step_no.details %}
+
+    {% if makes %}
+        {% include "inventory/hub/_recipe.html" with step=step_no.recipe %}
+        {% if sees_costs %}{% include "inventory/hub/_cost_sheet.html" with step=step_no.cost %}{% endif %}
+    {% else %}
+            <div class="ui-card" id="stock-in">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% if step_no.stock_in %}<span class="ui-stepno">{{ step_no.stock_in }}</span>{% endif %}{% include "ui/icon.html" with name="history" %} Bought and counted in</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:stock_in' %}">Stock in</a></div>
+                <div class="table-wrap">
+                    <table class="table" data-local-table>
+                        <thead><tr><th>Date</th><th>How</th><th>Store</th><th class="numeric">Quantity</th>{% if sees_costs %}<th class="numeric">Cost per {{ item.base_uom.code }}</th>{% endif %}</tr></thead>
+                        <tbody>
+                            {% for move in received %}
+                                <tr><td>{{ move.work_date|date:"j M Y" }}</td><td>{{ move.get_move_type_display }}</td><td>{{ move.warehouse.name }}</td><td class="numeric">{{ move.qty|floatformat:"-2g" }} {{ item.base_uom.code }}</td>{% if sees_costs %}<td class="numeric">{{ move.unit_cost|floatformat:"2g" }}</td>{% endif %}</tr>
+                            {% empty %}
+                                <tr><td colspan="5">Nothing received yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+    {% endif %}
+
+    {% include "inventory/hub/_price.html" with step=step_no.price %}
+
+    {% if makes and has_recipe %}
+        <div class="ui-card" id="make">
+            <div class="ui-card__head">
+                <h2 class="ui-card__title"><span class="ui-stepno">{{ step_no.make }}</span>{% include "ui/icon.html" with name="play" %} {% if suggestion and suggestion.batches %}Suggested: make {{ suggestion.batches }} batch{{ suggestion.batches|pluralize:"es" }}{% elif suggestion %}Enough in stock and planned{% else %}How many to make{% endif %}</h2>
+                {% if can_plan %}<a class="ui-btn ui-btn--main ui-btn--sm" href="{% url 'production:plan' item.pk %}{% if suggestion.batches %}?batches={{ suggestion.batches }}{% endif %}">{% if suggestion.batches %}Make {{ suggestion.batches }} batch{{ suggestion.batches|pluralize:"es" }}{% else %}Plan a production{% endif %}</a>{% endif %}
+            </div>
+            <div class="ui-card__body">
+                {% if suggestion %}
+                    <p>Keep {{ suggestion.keep|floatformat:"-2g" }} − {{ suggestion.in_stock|floatformat:"-2g" }} in stock − {{ suggestion.coming|floatformat:"-2g" }} planned = <strong>{{ suggestion.wanted }} batch{{ suggestion.wanted|pluralize:"es" }} wanted</strong>.
+                        The materials allow <strong>{{ suggestion.possible }}</strong>.{% if suggestion.per_day %} You sell about {{ suggestion.per_day|floatformat:"-2g" }} {{ item.base_uom.code }} a day.{% endif %}</p>
+                {% else %}
+                    <p>Set a <strong>stock to keep</strong> (Edit) and the page suggests how many batches to make. Until then, you choose.</p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+    {% if makes and not has_recipe %}
+        <div class="ui-card" id="make">
+            <div class="ui-card__head"><h2 class="ui-card__title"><span class="ui-stepno">{{ step_no.make }}</span>{% include "ui/icon.html" with name="play" %} Make</h2></div>
+            <div class="ui-card__body"><div class="ui-locked"><p><strong>Write the recipe first.</strong> A production takes its materials from the recipe: what one batch makes and what it uses.</p><a class="ui-btn ui-btn--sm" href="#recipe">Go to the recipe</a></div></div>
+        </div>
+    {% endif %}
+
+    <div class="ui-card" id="stock">
+        <div class="ui-card__head"><h2 class="ui-card__title"><span class="ui-stepno">{{ step_no.sell }}</span>{% include "ui/icon.html" with name="store" %} Stock by store{% if item.track_batch %} and batch{% endif %}</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:move_new' %}">Move stock</a></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr>{% if item.track_batch %}<th>Batch</th>{% endif %}<th>Store</th>{% if item.track_batch %}<th>Made</th><th>Expiry</th>{% endif %}<th class="numeric">Quantity</th>{% if sees_costs %}<th class="numeric">Cost per {{ item.base_uom.code }}</th>{% endif %}</tr></thead>
+                <tbody>
+                    {% for row in batches %}
+                        <tr>{% if item.track_batch %}<td>{{ row.batch.batch_no|default:"—" }}{% if row.batch.status and row.batch.status != "released" %} <span class="ui-chip ui-chip--wait">{{ row.batch.get_status_display }}</span>{% endif %}</td>{% endif %}<td>{{ row.warehouse.name }}{% if row.location %} · {{ row.location.code }}{% endif %}</td>{% if item.track_batch %}<td>{{ row.batch.mfg_date|date:"j M Y"|default:"—" }}</td><td>{{ row.batch.expiry_date|date:"j M Y"|default:"—" }}</td>{% endif %}<td class="numeric">{{ row.qty_on_hand|floatformat:"-2g" }} {{ item.base_uom.code }}</td>{% if sees_costs %}<td class="numeric">{{ row.unit_cost|floatformat:"2g" }}</td>{% endif %}</tr>
+                    {% empty %}
+                        <tr><td colspan="6">None in stock.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if makes %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Productions</h2><a class="ui-btn ui-btn--sm" href="{% url 'production:runs' %}">All productions</a></div>
+            <div class="table-wrap">
+                <table class="table" data-local-table>
+                    <thead><tr><th>Production</th><th>Date</th><th class="numeric">Planned</th><th class="numeric">Good</th><th>Status</th>{% if sees_costs %}<th class="numeric">Cost per {{ item.base_uom.code }}</th>{% endif %}</tr></thead>
+                    <tbody>
+                        {% for p in productions %}
+                            <tr><td><a href="{% url 'production:run' p.pk %}">{{ p.number }}</a></td><td>{{ p.planned_date|date:"j M Y" }}</td><td class="numeric">{{ p.planned_qty|floatformat:"-2g" }} {{ p.uom.code }}</td><td class="numeric">{% if p.good_qty_base is not None %}{{ p.good_qty_base|floatformat:"-2g" }} {{ item.base_uom.code }}{% else %}—{% endif %}</td><td><span class="ui-chip ui-chip--{% for key, tone in tones.items %}{% if key == p.status %}{{ tone }}{% endif %}{% endfor %}">{{ p.get_status_display }}</span></td>{% if sees_costs %}<td class="numeric">{% if p.unit_cost is not None %}{{ p.unit_cost|floatformat:"2g" }}{% else %}—{% endif %}</td>{% endif %}</tr>
+                        {% empty %}
+                            <tr><td colspan="6">Not made yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    {% if makes and buys %}
+        <div class="ui-card" id="stock-in">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% if step_no.stock_in %}<span class="ui-stepno">{{ step_no.stock_in }}</span>{% endif %}{% include "ui/icon.html" with name="history" %} Bought and counted in</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:stock_in' %}">Stock in</a></div>
+            <div class="table-wrap">
+                <table class="table" data-local-table>
+                    <thead><tr><th>Date</th><th>How</th><th>Store</th><th class="numeric">Quantity</th>{% if sees_costs %}<th class="numeric">Cost per {{ item.base_uom.code }}</th>{% endif %}</tr></thead>
+                    <tbody>
+                        {% for move in received %}
+                            <tr><td>{{ move.work_date|date:"j M Y" }}</td><td>{{ move.get_move_type_display }}</td><td>{{ move.warehouse.name }}</td><td class="numeric">{{ move.qty|floatformat:"-2g" }} {{ item.base_uom.code }}</td>{% if sees_costs %}<td class="numeric">{{ move.unit_cost|floatformat:"2g" }}</td>{% endif %}</tr>
+                        {% empty %}
+                            <tr><td colspan="5">Nothing received yet.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    {% endif %}
+
+    <p class="ui-muted">Every movement of it: <a href="{% url 'inventory:item_detail' item.pk %}#moves">stock card</a>.</p>
+
+    {% include "ui/next_step.html" with what=next_step.0 url=next_step.1 button=next_step.2 %}
+{% endblock %}

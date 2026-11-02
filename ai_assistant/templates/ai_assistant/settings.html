@@ -17,7 +17,7 @@
             <p class="page__sub">The AI reads orders into drafts; a person always confirms. It never sets prices, confirms orders or moves stock.</p>
         </div>
     </div>
-    <div class="alert alert--info">Order text and report figures are sent to Anthropic, the AI provider. Switch the assistant on only after the client's written consent is received and recorded below. The key is stored encrypted and never shown again.</div>
+    <div class="alert alert--info">Order text and report figures are sent to Anthropic, the AI provider. Switch the assistant on only after the client's written consent is received and recorded below. The key is stored encrypted and never shown again. Ask (questions in the top search bar) has its own switch and consent: <a href="{% url 'ask:settings' %}">Ask settings</a>.</div>
     <div class="card">
         <form class="card__body stack" method="post" novalidate>
             {% csrf_token %}

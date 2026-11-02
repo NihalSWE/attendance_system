@@ -27,6 +27,7 @@ from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.utils import timezone
 from django.db.models import F
 
 from common.choices import ActiveStatus
@@ -152,6 +153,8 @@ def clean_line(receipt, values):
         errors["expiry_date"] = "The expiry date is before the manufacture date."
     if mfg and mfg > receipt.received_date:
         errors["mfg_date"] = "Made after it arrived?"
+    elif mfg and mfg > timezone.localdate():
+        errors["mfg_date"] = "That day has not come yet."
     if errors:
         raise ValidationError(errors)
     if order_line is not None:

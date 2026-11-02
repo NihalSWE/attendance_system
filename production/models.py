@@ -112,10 +112,13 @@ class ProductionOrder(TenantOwned, ActorTracked):
 
     class Status(models.TextChoices):
         PLANNED = "planned", "Planned"
-        RELEASED = "released", "Released"
-        COMPLETED = "completed", "Completed"
+        # Plain words (2026-10-27, plan §8.6): Plan → Start → Finish.
+        RELEASED = "released", "Started"
+        COMPLETED = "completed", "Finished"
         CLOSED = "closed", "Closed"
         CANCELLED = "cancelled", "Cancelled"
+        FAILED = "failed", "Failed"
+        REVERSED = "reversed", "Reversed"
 
     number = models.CharField(max_length=32)
     item = models.ForeignKey("inventory.Item", on_delete=models.PROTECT, related_name="+",
@@ -144,6 +147,14 @@ class ProductionOrder(TenantOwned, ActorTracked):
     good_qty_base = models.DecimalField(**QTY, null=True, blank=True)
     rejected_qty_base = models.DecimalField(**QTY, null=True, blank=True)
     unit_cost = models.DecimalField(**QTY, null=True, blank=True)
+    # Full cost (2026-10-27, plan §8.5): what one unit was expected to cost at
+    # Start, the other costs of the day (people, machines...) at Finish, and why
+    # the result was far from the plan, failed or was reversed.
+    expected_unit_cost = models.DecimalField(**QTY, null=True, blank=True)
+    other_cost = models.DecimalField(**QTY, null=True, blank=True)
+    reason = models.CharField(max_length=500, blank=True)
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = _user()
 
     class Meta:
         db_table = "production_order"
@@ -187,6 +198,9 @@ class Consumption(TenantOwned, ActorTracked):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     posted_at = models.DateTimeField(null=True, blank=True)
     posted_by = _user()
+    # The store it went out of (or back into); empty: the order's materials store.
+    warehouse = models.ForeignKey("inventory.Warehouse", null=True, blank=True, on_delete=models.PROTECT,
+                                  related_name="+")
 
     class Meta:
         db_table = "production_consumption"
@@ -267,3 +281,126 @@ class Output(TenantOwned, ActorTracked):
     @property
     def rejected_base(self):
         return (self.qty_rejected * self.factor).quantize(FOUR)
+
+
+# --- Cost of making a product (2026-10-27, docs/inventory/PRODUCTION_PLAN.md §7.4) ---
+
+MONEY = {"max_digits": 18, "decimal_places": 2}
+
+
+class CostRate(TenantOwned, ActorTracked):
+    """What an hour costs: Line worker 75, Supervisor 150, Oven 300. Used by
+    the products' cost sheets; a change counts for productions after it."""
+
+    class Kind(models.TextChoices):
+        LABOUR = "labour", "People"
+        MACHINE = "machine", "Machine"
+
+    name = models.CharField(max_length=64)
+    kind = models.CharField("For", max_length=16, choices=Kind.choices)
+    rate = models.DecimalField("Tk per hour", **MONEY, validators=[MinValueValidator(ZERO)])
+    status = models.CharField(max_length=16, default="active",
+                              choices=(("active", "Active"), ("inactive", "Inactive")))
+
+    class Meta:
+        db_table = "production_cost_rate"
+        ordering = ("kind", "name")
+        constraints = [models.UniqueConstraint(fields=["company", "name"], name="uniq_cost_rate_name")]
+
+    def __str__(self):
+        return self.name
+
+
+class CostLine(TenantOwned, ActorTracked):
+    """One cost of making one batch of a product, besides its materials."""
+
+    class How(models.TextChoices):
+        LABOUR = "labour", "People × hours × rate"
+        MACHINE = "machine", "Machine hours × rate"
+        FIXED = "fixed", "An amount per batch"
+        PERCENT = "percent", "A % of the materials"
+
+    item = models.ForeignKey("inventory.Item", on_delete=models.CASCADE, related_name="cost_lines",
+                             verbose_name="Product")
+    how = models.CharField("How it is worked out", max_length=16, choices=How.choices)
+    label = models.CharField("Name", max_length=64, blank=True)
+    rate = models.ForeignKey(CostRate, null=True, blank=True, on_delete=models.PROTECT,
+                             related_name="lines")
+    people = models.DecimalField(**QTY, null=True, blank=True, validators=[MinValueValidator(FOUR)])
+    hours = models.DecimalField("Hours per batch", **QTY, null=True, blank=True,
+                                validators=[MinValueValidator(FOUR)])
+    amount = models.DecimalField("Tk per batch", **MONEY, null=True, blank=True,
+                                 validators=[MinValueValidator(ZERO)])
+    percent = models.DecimalField("% of materials", max_digits=6, decimal_places=2, null=True, blank=True,
+                                  validators=[MinValueValidator(ZERO), MaxValueValidator(Decimal("1000"))])
+
+    class Meta:
+        db_table = "production_cost_line"
+        ordering = ("item", "pk")
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def name(self):
+        if self.label:
+            return self.label
+        if self.rate_id:
+            return self.rate.name
+        return self.get_how_display()
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+
+        needs = {self.How.LABOUR: ("rate", "people", "hours"), self.How.MACHINE: ("rate", "hours"),
+                 self.How.FIXED: ("amount",), self.How.PERCENT: ("percent",)}.get(self.how, ())
+        errors = {name: "Fill this in." for name in needs if getattr(self, name) in (None, "")}
+        if self.rate_id and self.how in (self.How.LABOUR, self.How.MACHINE) and self.rate.kind != self.how:
+            errors["rate"] = f"Choose a {'people' if self.how == self.How.LABOUR else 'machine'} rate."
+        if errors:
+            raise ValidationError(errors)
+        # Only what this way of working out uses is kept.
+        for name in ("rate", "people", "hours", "amount", "percent"):
+            if name not in needs:
+                setattr(self, name, None)
+
+
+# --- Start and Finish (2026-10-27, plan §8.3-8.6, §15 phase 7) -----------------
+
+class OrderCost(TenantOwned):
+    """A cost of the day of one production besides its materials: people,
+    machines, gas... filled from the product's cost sheet at Finish."""
+
+    order = models.ForeignKey(ProductionOrder, on_delete=models.CASCADE, related_name="costs")
+    name = models.CharField(max_length=64)
+    amount = models.DecimalField(**MONEY, validators=[MinValueValidator(ZERO)])
+
+    class Meta:
+        db_table = "production_order_cost"
+        ordering = ("order", "pk")
+
+
+class OutputPart(TenantOwned):
+    """How much of the output went into which store (a split: Main 30 + Depot 18)."""
+
+    output = models.ForeignKey(Output, on_delete=models.CASCADE, related_name="parts")
+    warehouse = models.ForeignKey("inventory.Warehouse", on_delete=models.PROTECT, related_name="+")
+    qty_base = models.DecimalField(**QTY, validators=[MinValueValidator(FOUR)])
+
+    class Meta:
+        db_table = "production_output_part"
+        ordering = ("output", "pk")
+
+
+class Leftover(TenantOwned):
+    """What was left of a material at Finish: returned to its store, or wasted (why)."""
+
+    order = models.ForeignKey(ProductionOrder, on_delete=models.CASCADE, related_name="leftovers")
+    item = models.ForeignKey("inventory.Item", on_delete=models.PROTECT, related_name="+")
+    returned = models.DecimalField(**QTY, default=ZERO, validators=[MinValueValidator(ZERO)])
+    wasted = models.DecimalField(**QTY, default=ZERO, validators=[MinValueValidator(ZERO)])
+    reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "production_leftover"
+        ordering = ("order", "pk")

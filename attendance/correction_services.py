@@ -31,6 +31,7 @@ from attendance.services import (
     recalculate,
 )
 from auditlog.services import record_company_event
+from common.exceptions import NotInThisCompany
 from common.tenant import use_company
 from employees.models import Employee
 from organization.services import require_company_membership
@@ -142,7 +143,7 @@ def _new(*, actor, membership, employee_id, work_date, correction_type, reason, 
     # The employee id comes from the URL. The tenant-scoped manager answers
     # only for this company, so another company's employee is simply not found.
     if not Employee.objects.filter(pk=employee_id).exists():
-        raise PermissionDenied("Employee not found in this company.")
+        raise NotInThisCompany("Employee not found in this company.")
     now = timezone.now()
     return AttendanceCorrection.objects.create(
         company=membership.company, employee_id=employee_id, work_date=work_date,
@@ -367,7 +368,7 @@ def withdraw(*, actor, company_id, correction_id, note):
             .filter(pk=correction_id).first()
         )
         if correction is None:
-            raise PermissionDenied("Correction not found in this company.")
+            raise NotInThisCompany("Correction not found in this company.")
         # The corrected day's branch decides, as for making the fix.
         membership = require_corrector(
             actor, company_id, correction.employee_id, correction.work_date

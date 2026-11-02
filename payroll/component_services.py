@@ -19,6 +19,7 @@ from django.db import transaction
 
 from auditlog.services import record_company_event
 from common.choices import ActiveStatus
+from common.exceptions import NotInThisCompany
 from common.services import create_validated
 from common.tenant import use_company
 from organization.services import require_structure_manager
@@ -75,7 +76,7 @@ def update_component(*, actor, company_id, component_id, values):
     with use_company(company_id):
         component = SalaryComponent.objects.filter(pk=component_id).first()
         if component is None:
-            raise PermissionDenied("Component not found in this company.")
+            raise NotInThisCompany("Component not found in this company.")
         if SalaryComponent.objects.filter(code=values["code"]).exclude(pk=component.pk).exists():
             raise ValidationError({"code": f"{values['code']} is already used."})
         before = _snapshot(component)
@@ -103,7 +104,7 @@ def set_component_status(*, actor, company_id, component_id, status):
     with use_company(company_id):
         component = SalaryComponent.objects.filter(pk=component_id).first()
         if component is None:
-            raise PermissionDenied("Component not found in this company.")
+            raise NotInThisCompany("Component not found in this company.")
         before = _snapshot(component)
         component.status = status
         component.updated_by = actor
@@ -162,7 +163,7 @@ def give_component(*, actor, company_id, employee_id, values):
     with use_company(company_id):
         employee = Employee.objects.filter(pk=employee_id).first()
         if employee is None:
-            raise PermissionDenied("Employee not found in this company.")
+            raise NotInThisCompany("Employee not found in this company.")
     membership = _may_prepare_for(actor, company_id, employee)
     component = values["component"]
     starts = values["effective_from"]

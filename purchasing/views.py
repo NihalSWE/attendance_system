@@ -102,7 +102,7 @@ def requisition_list(request, new_form=None):
                  order=("number", "request_date", "branch__name", "department__name", "needed_by",
                         "status", None),
                  choices=PurchaseRequisition.Status.choices,
-                 extra={"page": {"title": 'Purchase requisitions', "about": 'A department asks to buy; an approver says yes or no; approved lines become purchase orders.', "columns": ('Number', 'Date', 'Branch', 'Department', 'Needed by', 'Status'), "row": 'purchasing/rows/requisition.html', "new_label": 'New requisition', "url": 'purchasing:requisitions'}, "can_new": can_raise, "can_raise": can_raise,
+                 extra={"page": {"title": 'Purchase requisitions', "about": 'A department asks to buy; an approver says yes or no; approved lines become purchase orders.', "columns": ('Number', 'Date', 'Branch', 'Department', 'Needed by', 'Status'), "row": 'purchasing/rows/requisition.html', "new_label": 'New requisition', "url": 'purchasing:requisitions'}, "guide_at": "ask", "can_new": can_raise, "can_raise": can_raise,
                         "new_form": new_form or (_requisition_form(request) if can_raise else None),
                         "open_dialog": "new-dialog" if new_form is not None else ""})
 
@@ -231,7 +231,7 @@ def order_list(request):
                  order=("number", "order_date", "supplier__name", "branch__name", "expected_date",
                         "status", None),
                  choices=PurchaseOrder.Status.choices,
-                 extra={"page": {"title": 'Purchase orders', "about": 'Orders to suppliers: approved, sent as a PDF, then received in one or more goods receipts.', "columns": ('Number', 'Date', 'Supplier', 'Branch', 'Delivery by', 'Status'), "row": 'purchasing/rows/order.html', "new_label": 'New order', "url": 'purchasing:orders'}, "can_new": can_order, "can_order": can_order,
+                 extra={"page": {"title": 'Purchase orders', "about": 'Orders to suppliers: approved, sent as a PDF, then received in one or more goods receipts.', "columns": ('Number', 'Date', 'Supplier', 'Branch', 'Delivery by', 'Status'), "row": 'purchasing/rows/order.html', "new_label": 'New order', "url": 'purchasing:orders'}, "guide_at": "order", "can_new": can_order, "can_order": can_order,
                         "new_form": new_form or (_order_form(request) if can_order else None),
                         "open_dialog": "new-dialog" if new_form is not None else ""})
 
@@ -416,7 +416,7 @@ def receipt_list(request):
                  order=("number", "received_date", "supplier__name", "order__number",
                         "warehouse__code", "status", None),
                  choices=GoodsReceipt.Status.choices,
-                 extra={"page": {"title": 'Goods receipts (GRN)', "about": 'What arrived at a store, against an order or direct. Posting puts it in stock; items needing QC wait in quarantine.', "columns": ('Number', 'Received', 'Supplier', 'Order', 'Store', 'Status'), "row": 'purchasing/rows/receipt.html', "new_label": 'New goods receipt', "url": 'purchasing:receipts'}, "can_new": can_receive, "can_receive": can_receive,
+                 extra={"page": {"title": 'Goods receipts (GRN)', "about": 'What arrived at a store, against an order or direct. Posting puts it in stock; items needing QC wait in quarantine.', "columns": ('Number', 'Received', 'Supplier', 'Order', 'Store', 'Status'), "row": 'purchasing/rows/receipt.html', "new_label": 'New goods receipt', "url": 'purchasing:receipts'}, "guide_at": "receive", "can_new": can_receive, "can_receive": can_receive,
                         "new_form": new_form or (_receipt_form(request, initial=initial)
                                                  if can_receive else None),
                         "open_dialog": "new-dialog" if new_form is not None or initial else ""})
@@ -602,7 +602,7 @@ def return_list(request):
                  order=("number", "return_date", "supplier__name", "receipt__number", "reason",
                         "status", None),
                  choices=PurchaseReturn.Status.choices,
-                 extra={"page": {"title": 'Purchase returns', "about": "Goods sent back to the supplier: failed QC, damaged, wrong item. Posting takes them out of stock at the receipt's cost.", "columns": ('Number', 'Date', 'Supplier', 'From receipt', 'Why', 'Status'), "row": 'purchasing/rows/return.html', "new_label": 'New return', "url": 'purchasing:returns'}, "can_new": can_enter, "can_enter": can_enter,
+                 extra={"page": {"title": 'Purchase returns', "about": "Goods sent back to the supplier: failed QC, damaged, wrong item. Posting takes them out of stock at the receipt's cost.", "columns": ('Number', 'Date', 'Supplier', 'From receipt', 'Why', 'Status'), "row": 'purchasing/rows/return.html', "new_label": 'New return', "url": 'purchasing:returns'}, "guide_at": "return", "can_new": can_enter, "can_enter": can_enter,
                         "new_form": new_form or (forms.ReturnForm(company_id=company_id, initial=initial)
                                                  if can_enter else None),
                         "open_dialog": "new-dialog" if new_form is not None or initial else ""})

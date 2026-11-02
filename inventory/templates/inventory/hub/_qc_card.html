@@ -1,0 +1,55 @@
+{% comment %}
+    Batches waiting for a quality check (2026-11-01, inventory/qc.py): counted in
+    stock but never used, moved or sold until they pass. Shown on the Quality
+    check page and on the item's own page. Params: waiting, can_qc, show_item.
+{% endcomment %}
+{% if waiting %}
+    <div class="ui-card qc-card" id="quality-check">
+        <div class="ui-card__head">
+            <h2 class="ui-card__title">{% include "ui/icon.html" with name="alert" %} Waiting for quality check</h2>
+            <span class="ui-card__note">Counted in stock, but it cannot be used, moved or sold until it passes.</span>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr>
+                    <th>SL</th>{% if show_item %}<th>Item</th>{% endif %}<th>Batch</th><th>From</th>
+                    <th class="numeric">In stock</th><th>Where</th><th>Expires</th>{% if can_qc %}<th><span class="sr-only">Decide</span></th>{% endif %}
+                </tr></thead>
+                <tbody>
+                    {% for row in waiting %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            {% if show_item %}<td><a href="{% if row.item.kind == 'finished' %}{% url 'inventory:product' row.item.pk %}{% else %}{% url 'inventory:material' row.item.pk %}{% endif %}">{{ row.item.name }}</a><span class="qc-card__code">{{ row.item.code }}</span></td>{% endif %}
+                            <td>{{ row.batch.batch_no }}</td>
+                            <td>{% if row.source == "made" %}Made · <a href="{{ row.url }}">{{ row.document }}</a>{% elif row.source == "bought" %}Bought · <a href="{{ row.url }}">{{ row.document }}</a>{% else %}{{ row.batch.get_source_display }}{% endif %}</td>
+                            <td class="numeric"><strong>{{ row.qty|floatformat:"-2g" }}</strong> {{ row.item.base_uom.code }}</td>
+                            <td>{% for name, qty in row.stores %}{{ name }}{% if not forloop.last %}, {% endif %}{% endfor %}</td>
+                            <td>{% if row.batch.expiry_date %}{{ row.batch.expiry_date|date:"d M Y" }}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
+                            {% if can_qc %}
+                                <td class="qc-card__actions">
+                                    <form method="post" action="{% url 'inventory:qc_decide' row.batch.pk %}" data-fetch>
+                                        {% csrf_token %}<input type="hidden" name="result" value="passed">
+                                        <button class="ui-btn ui-btn--sm ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" small=True %} Pass</button>
+                                    </form>
+                                    <button class="ui-btn ui-btn--sm" type="button" data-open-dialog="qc-fail-{{ row.batch.pk }}">Fail</button>
+                                    <dialog class="modal" id="qc-fail-{{ row.batch.pk }}" aria-labelledby="qc-fail-{{ row.batch.pk }}-title">
+                                        <form class="modal__card" method="post" action="{% url 'inventory:qc_decide' row.batch.pk %}" data-fetch>
+                                            {% csrf_token %}<input type="hidden" name="result" value="failed">
+                                            <div class="modal__head"><h2 id="qc-fail-{{ row.batch.pk }}-title">Fail batch {{ row.batch.batch_no }}</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                                            <div class="modal__body stack">
+                                                <p class="ui-muted">The batch is blocked: it stays counted but is never used or sold. {% if row.source == "bought" %}Send it back with a purchase return.{% else %}Write it off with a stock adjustment.{% endif %}</p>
+                                                <div class="field"><label class="field__label" for="qc-notes-{{ row.batch.pk }}">What failed <span class="field__req">*</span></label><input class="input" id="qc-notes-{{ row.batch.pk }}" name="notes" maxlength="500"></div>
+                                            </div>
+                                            <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--danger" type="submit">Fail the batch</button></div>
+                                        </form>
+                                    </dialog>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if not can_qc %}<p class="ui-muted qc-card__note">Someone with "Record quality checks" passes or fails these.</p>{% endif %}
+    </div>
+{% endif %}

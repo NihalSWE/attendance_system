@@ -5,7 +5,7 @@ import datetime
 from django import forms
 from django.utils import timezone
 
-from common.forms import StyledFormMixin
+from common.forms import StyledFormMixin, employee_codes
 from employees.models import Employee
 from leaves.documents import DocumentField
 from leaves.models import LeaveType
@@ -124,6 +124,12 @@ class LfaClaimForm(StyledFormMixin, forms.Form):
             self.fields["document"].required = True
         else:
             self.fields["document"].help_text = "Optional. " + self.fields["document"].help_text
+
+    def employee_options(self):
+        """``(person, Employee ID)`` for the page's own employee picker."""
+        people = list(self.fields["employee"].queryset)
+        codes = employee_codes(self.fields["employee"].queryset)
+        return [(person, codes.get(person.pk, "")) for person in people]
 
     def clean_leave_request(self):
         value = self.cleaned_data.get("leave_request")

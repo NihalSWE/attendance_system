@@ -70,6 +70,7 @@ Every endpoint added or changed, newest first.
   module for; granting one to a company without it is refused (400). No
   inventory endpoints yet (Phase 9 of docs/inventory/00-PLAN.md).
 
+
 ## 2026-10-07 — Fairer day rules; graces at most 60 minutes
 
 - **Changed:** `worked_minutes` counts minutes inside the late and

@@ -355,7 +355,7 @@
                                             <span class="badge badge--success">
                                                 Linked
                                             </span>
-                                            <a href="{% url 'organization:employee_detail' row.employee.pk %}">
+                                            <a href="{% url 'organization:employee_detail' row.employee.public_id %}">
                                                 {{ row.employee.full_name }}
                                             </a>
                                         </div>
@@ -367,7 +367,7 @@
                                             <div class="unlinked-why">
                                                 {{ row.unlinked.text }}
                                                 {% if row.unlinked.employee %}
-                                                    <a href="{% url 'organization:employee_detail' row.unlinked.employee.pk %}">Open {{ row.unlinked.employee.full_name }}</a>
+                                                    <a href="{% url 'organization:employee_detail' row.unlinked.employee.public_id %}">Open {{ row.unlinked.employee.full_name }}</a>
                                                 {% endif %}
                                             </div>
                                             {% if row.unlinked.code == "other_number" %}

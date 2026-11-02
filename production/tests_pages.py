@@ -4,10 +4,12 @@ from django.test import TestCase
 from django.urls import reverse
 
 from access_control.branch_access import grant_access
+from base_template.testing import assert_inventory_menu
 from common.tenant import use_company
 from employees.models import Employee
 from inventory.models import BarcodeLabel, StockBalance
 from inventory.testing import D
+from production import orders
 from production.models import Bom, Consumption, ProductionOrder
 from production.tests_flow import ProductionFixture
 
@@ -20,10 +22,35 @@ class ProductionPageTests(ProductionFixture, TestCase):
         self.client.force_login(self.owner)
 
     def test_lists_open_and_the_menu_shows(self):
-        for name in ("boms", "orders", "report"):
+        for name in ("orders", "report"):
             page = self.client.get(reverse(f"production:{name}"))
             self.assertEqual(page.status_code, 200, name)
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="production")
+
+    def test_the_links_shown_open(self):
+        # Scan and Labels (2026-10-25) show; BOMs is not in the menu - the
+        # recipe is on the finished good's page - nor, from 2026-10-31,
+        # Production orders (Make does it); its page still opens.
+        shown = ("inventory:scan", "inventory:labels", "inventory:products")
+        for name in shown:
+            page = self.client.get(reverse(name))
+            self.assertEqual(page.status_code, 200, name)
+            for link in shown:
+                self.assertContains(page, f'href="{reverse(link)}"', msg_prefix=name)
+            self.assertNotContains(page, f'href="{reverse("production:boms")}"', msg_prefix=name)
+            self.assertNotContains(page, f'href="{reverse("production:orders")}"', msg_prefix=name)
+        self.assertEqual(self.client.get(reverse("production:orders")).status_code, 200)
+        self.client.post(reverse("production:boms"), {"item": self.juice.pk, "batch_size": "1000",
+                                                      "batch_uom": self.pcs.pk})
+        with use_company(self.company):
+            bom = Bom.objects.get(item=self.juice, status="draft")
+        # The old BOM pages show no versions any more: they go to the product's page.
+        product = reverse("inventory:product", args=[self.juice.pk]) + "#recipe"
+        self.assertRedirects(self.client.get(reverse("production:bom_detail", args=[bom.pk])), product,
+                             fetch_redirect_response=False)
+        self.assertRedirects(self.client.get(reverse("production:boms")),
+                             reverse("inventory:products"), fetch_redirect_response=False)
+        self.assertNotContains(self.client.get(product), "version")
 
     def test_a_whole_run_through_the_pages(self):
         c = self.client
@@ -81,6 +108,24 @@ class ProductionGateTests(ProductionFixture, TestCase):
         self.client.force_login(self.owner)
         self.assertEqual(self.client.get(reverse("production:orders")).status_code, 404)
 
+    def test_a_planner_does_not_release_their_own_order(self):
+        order = self.released()
+        user = self.member("planner@inv.test", "employee")
+        with use_company(self.company):
+            employee = Employee.objects.create(company=self.company, user=user, first_name="P")
+        for code in ("inventory.view", "production.plan"):
+            grant_access(actor=self.owner, company_id=self.company.pk, employee_id=employee.pk,
+                         code=code, branch_ids=[self.branch.pk])
+        ProductionOrder.all_objects.filter(pk=order.pk).update(status="planned", created_by=user)
+        self.client.force_login(user)
+        page = self.client.get(reverse("production:order_detail", args=[order.pk]))
+        self.assertContains(page, "someone else with planning access releases it")
+        self.assertNotContains(page, reverse("production:order_action", args=[order.pk, "release"]))
+        # The owner may release an order they planned themselves.
+        order.refresh_from_db()
+        order.created_by = self.owner
+        self.assertTrue(orders.may_release(self.owner, order))
+
     def test_a_viewer_sees_but_does_not_run(self):
         order = self.released()
         user = self.member("viewer@inv.test", "employee")
@@ -90,7 +135,7 @@ class ProductionGateTests(ProductionFixture, TestCase):
                      code="inventory.view", branch_ids=[self.branch.pk])
         self.client.force_login(user)
         page = self.client.get(reverse("production:order_detail", args=[order.pk]))
-        self.assertContains(page, MENU)
+        assert_inventory_menu(self, page, MENU, menu="production")
         self.assertNotContains(page, "Use planned materials")
         self.assertNotContains(page, "16.5")
         self.assertEqual(self.client.post(reverse("production:order_action", args=[order.pk, "use"])).status_code, 403)

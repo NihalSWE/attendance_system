@@ -1,0 +1,236 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}{{ order.number }}{% endblock %}
+{% block content %}
+    {% with unit=item.base_uom.code %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'production:runs' %}">Make</a> / {{ order.number }}</p>
+            <h1 class="ui-head__title">{{ order.number }} <span class="ui-chip ui-chip--{{ tone }}">{{ order.get_status_display }}</span></h1>
+            <p class="ui-head__sub"><a href="{% url 'inventory:product' item.pk %}">{{ item.name }}</a> · {{ batches }} batch{{ batches|pluralize:"es" }} ({{ order.planned_base|floatformat:"-4g" }} {{ unit }}) · {{ order.planned_date|date:"j M Y" }} · into {{ order.output_warehouse.name }}</p>
+        </div>
+        {% if can_execute and order.status == Status.PLANNED %}
+            <div class="ui-head__actions"><button class="ui-btn ui-btn--danger" type="button" data-open-dialog="cancel-dialog">{% include "ui/icon.html" with name="x" %} Cancel</button></div>
+        {% elif can_execute and order.status == Status.RELEASED %}
+            <div class="ui-head__actions"><button class="ui-btn ui-btn--danger" type="button" data-open-dialog="cancel-dialog">{% include "ui/icon.html" with name="x" %} Return the materials and cancel</button></div>
+        {% elif can_reverse %}
+            <div class="ui-head__actions"><button class="ui-btn ui-btn--danger" type="button" data-open-dialog="reverse-dialog">Reverse</button></div>
+        {% endif %}
+    </div>
+
+    <div class="ui-steps">
+        <span class="ui-steps__step ui-steps__step--done">{% include "ui/icon.html" with name="check" small=True %} 1 · Planned</span>
+        {% if order.status == Status.PLANNED %}<span class="ui-steps__step ui-steps__step--now">2 · Start</span>
+        {% elif order.released_at %}<span class="ui-steps__step ui-steps__step--done">{% include "ui/icon.html" with name="check" small=True %} 2 · Start</span>
+        {% else %}<span class="ui-steps__step">2 · Start</span>{% endif %}
+        {% if order.status == Status.RELEASED %}<span class="ui-steps__step ui-steps__step--now">3 · Finish</span>
+        {% elif order.completed_at %}<span class="ui-steps__step ui-steps__step--done">{% include "ui/icon.html" with name="check" small=True %} 3 · Finish</span>
+        {% else %}<span class="ui-steps__step">3 · Finish</span>{% endif %}
+    </div>
+
+    {% if order.status == Status.PLANNED %}
+        <form method="post" action="{% url 'production:run_start' order.pk %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Materials leaving the stores</h2><span class="ui-card__note">Change a line only if a store gave more or less</span></div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th>Material</th><th>Store</th><th>Batch</th><th class="numeric">Planned</th><th>Given</th></tr></thead>
+                        <tbody>
+                            {% for need in proposal.needs %}
+                                {% for take in need.takes %}
+                                    <tr>
+                                        <td>{{ need.item.name }}</td><td>{{ take.store.name }}</td>
+                                        <td>{% if take.batch %}{{ take.batch.batch_no }}{% if take.batch.expiry_date %} <span class="ui-muted">· expires {{ take.batch.expiry_date|date:"j M Y" }}</span>{% endif %}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
+                                        <td class="numeric">{{ take.qty|floatformat:"-4g" }} {{ need.item.base_uom.code }}</td>
+                                        <td><div class="field"><div class="ui-unit" style="max-width:220px"><input class="input" name="qty-{{ need.item.pk }}-{{ take.key }}" type="number" step="any" min="0" value="{{ take.qty|floatformat:'-4' }}"><span class="ui-unit__label">{{ need.item.base_uom.code }}</span></div></div></td>
+                                    </tr>
+                                {% endfor %}
+                                {% if need.short %}
+                                    <tr><td colspan="5" class="ui-bad">{{ need.item.name }}: {{ need.short|floatformat:"-4g" }} {{ need.item.base_uom.code }} short in every store of {{ order.output_warehouse.branch.name }}.</td></tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="ui-card__body">
+                    <div class="ui-grid-2">
+                        <div class="field"><label class="field__label" for="start-date">Date</label><input class="input" id="start-date" name="work_date" type="date" data-datepicker value="{{ today|date:'Y-m-d' }}"></div>
+                        <div class="field"><label class="field__label" for="start-reason">Why more (if a material is over 5 % of the plan)</label><input class="input" id="start-reason" name="reason" type="text"></div>
+                    </div>
+                    {% if proposal.short %}
+                        <div class="ui-message ui-message--error" role="status"><div>Short: it cannot start yet. Buy the rest, or plan fewer batches.</div></div>
+                    {% endif %}
+                    <div class="ui-message" data-form-message role="status" hidden></div>
+                    <div class="ui-form-actions">
+                        <a class="ui-btn" href="{% url 'production:plan' item.pk %}?batches={{ proposal.batches }}">{% include "ui/icon.html" with name="edit" %} Plan again</a>
+                        {% if can_execute %}<button class="ui-btn ui-btn--main" type="submit"{% if proposal.short %} disabled{% endif %}>{% include "ui/icon.html" with name="play" %} Start: materials out</button>{% endif %}
+                    </div>
+                </div>
+            </div>
+        </form>
+        {% if proposal.short %}
+            {% url 'production:plan' item.pk as plan_url %}
+            {% include "ui/next_step.html" with what="Some materials are short: buy the rest from the plan page, then start." url=plan_url button="Plan page" %}
+        {% else %}
+            {% include "ui/next_step.html" with what="When the materials leave the stores, press Start." %}
+        {% endif %}
+
+    {% elif order.status == Status.RELEASED %}
+        <form method="post" action="{% url 'production:run_finish' order.pk %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} What came out</h2><span class="ui-card__note">Planned: {{ order.planned_base|floatformat:"-4g" }} {{ unit }}</span></div>
+                <div class="ui-card__body">
+                    <div class="ui-grid-2">
+                        <div class="field"><label class="field__label" for="f-good">Good <span class="field__req">*</span></label><div class="ui-unit"><input class="input" id="f-good" name="good" type="number" step="any" min="0" value="{{ order.planned_base|floatformat:'-4' }}"><span class="ui-unit__label">{{ unit }}</span></div><span class="field__help">0 when nothing good came out: it is recorded as failed.</span></div>
+                        <div class="field"><label class="field__label" for="f-damaged">Damaged</label><div class="ui-unit"><input class="input" id="f-damaged" name="damaged" type="number" step="any" min="0" value="0"><span class="ui-unit__label">{{ unit }}</span></div><span class="field__help">Their cost is spread over the good ones.</span></div>
+                        <div class="field"><label class="field__label" for="f-date">Date</label><input class="input" id="f-date" name="output_date" type="date" data-datepicker value="{{ today|date:'Y-m-d' }}"></div>
+                        {% if item.track_batch and not item.batch_per_mix %}<div class="field"><label class="field__label" for="f-batch">Batch number</label><input class="input" id="f-batch" name="batch_no" type="text"><span class="field__help">Left empty, one is made from the product code and date.</span></div>{% endif %}
+                        <div class="field"><label class="field__label" for="f-reason">Why (below 90 %, above 105 %, or failed)</label><input class="input" id="f-reason" name="reason" type="text"></div>
+                    </div>
+                    <p class="ui-muted">Into which store{% if item.batch_per_mix %} (one: every mix gets its own batch number){% else %}; split across stores if you like, they must add up to Good{% endif %}:</p>
+                    <div class="ui-grid-2">
+                        {% for store in into_stores %}
+                            <div class="field"><label class="field__label" for="into-{{ store.pk }}">{{ store.name }} <span class="ui-muted">({{ store.branch.name }})</span></label><div class="ui-unit"><input class="input" id="into-{{ store.pk }}" name="into-{{ store.pk }}" type="number" step="any" min="0" value="{% if store.pk == order.output_warehouse_id %}{{ order.planned_base|floatformat:'-4' }}{% endif %}"{% if store.pk == order.output_warehouse_id %} data-into-main{% endif %}><span class="ui-unit__label">{{ unit }}</span></div></div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Materials: used and left over</h2><span class="ui-card__note">Left over: back to the store it came from, or wasted (say why)</span></div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th>Material</th><th class="numeric">Planned</th><th class="numeric">Out of the stores</th><th>Back to the store</th><th>Wasted</th><th>Why wasted</th></tr></thead>
+                        <tbody>
+                            {% for row in usage %}
+                                <tr>
+                                    <td>{{ row.item.name }}</td>
+                                    <td class="numeric">{{ row.planned|floatformat:"-4g" }} {{ row.item.base_uom.code }}</td>
+                                    <td class="numeric">{{ row.used|floatformat:"-4g" }} {{ row.item.base_uom.code }}</td>
+                                    <td><div class="field"><div class="ui-unit" style="max-width:180px"><input class="input" name="returned-{{ row.item.pk }}" type="number" step="any" min="0" placeholder="0"><span class="ui-unit__label">{{ row.item.base_uom.code }}</span></div></div></td>
+                                    <td><div class="field"><div class="ui-unit" style="max-width:180px"><input class="input" name="wasted-{{ row.item.pk }}" type="number" step="any" min="0" placeholder="0"><span class="ui-unit__label">{{ row.item.base_uom.code }}</span></div></div></td>
+                                    <td><div class="field"><input class="input" name="reason-{{ row.item.pk }}" type="text" placeholder="spilled, spoiled…"></div></td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Other costs of this production</h2><span class="ui-card__note">Filled from the product's cost of one batch × {{ batches }}; correct them if the day was different</span></div>
+                <div class="ui-card__body">
+                    {% for name, amount in day_costs %}
+                        <div class="ui-grid-2">
+                            <div class="field"><label class="field__label" for="cn-{{ forloop.counter0 }}">Cost</label><input class="input" id="cn-{{ forloop.counter0 }}" name="cost-name-{{ forloop.counter0 }}" type="text" value="{{ name }}" placeholder="e.g. Overtime"></div>
+                            <div class="field"><label class="field__label" for="ca-{{ forloop.counter0 }}">Amount</label><div class="ui-unit"><input class="input" id="ca-{{ forloop.counter0 }}" name="cost-amount-{{ forloop.counter0 }}" type="number" step="any" min="0" value="{% if amount is not None %}{{ amount|floatformat:'-2' }}{% endif %}"><span class="ui-unit__label">Tk</span></div></div>
+                        </div>
+                    {% endfor %}
+                    <div class="ui-message" data-form-message role="status" hidden></div>
+                    <div class="ui-form-actions">
+                        {% if can_execute %}<button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Finish: into stock</button>{% endif %}
+                    </div>
+                </div>
+            </div>
+        </form>
+        {% include "ui/next_step.html" with what="When the batches are done, write what came out and press Finish." %}
+
+    {% else %}
+        <div class="ui-tiles">
+            <div class="ui-tile{% if order.status == Status.FAILED %} ui-tile--bad{% else %} ui-tile--good{% endif %}"><p class="ui-tile__label">Good</p><p class="ui-tile__value">{{ order.good_qty_base|default_if_none:0|floatformat:"-4g" }}</p><p class="ui-tile__hint">{{ unit }}{% if order.yield_pct %} · {{ order.yield_pct }}% of the plan{% endif %}</p></div>
+            <div class="ui-tile{% if order.rejected_qty_base %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Damaged</p><p class="ui-tile__value">{{ order.rejected_qty_base|default_if_none:0|floatformat:"-4g" }}</p><p class="ui-tile__hint">{{ unit }}</p></div>
+            {% if sees_costs %}
+                <div class="ui-tile{% if order.unit_cost and order.expected_unit_cost and order.unit_cost > order.expected_unit_cost %} ui-tile--bad{% endif %}"><p class="ui-tile__label">Cost per {{ unit }}</p><p class="ui-tile__value">{% if order.unit_cost %}{{ order.unit_cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">{% if order.expected_unit_cost %}expected {{ order.expected_unit_cost|floatformat:"2g" }}{% else %}no expected cost was known{% endif %}{% if item.sale_price %} · sells at {{ item.sale_price|floatformat:"2g" }}{% endif %}</p></div>
+                <div class="ui-tile"><p class="ui-tile__label">Total cost</p><p class="ui-tile__value">{{ total_cost|floatformat:"0g" }}</p><p class="ui-tile__hint">Tk{% if order.status == Status.FAILED %} · a loss{% endif %}</p></div>
+            {% endif %}
+        </div>
+        {% if order.reason %}<div class="ui-card"><div class="ui-card__body"><p><strong>{% if order.status == Status.REVERSED %}Reversed{% elif order.status == Status.FAILED %}Failed{% elif order.status == Status.CANCELLED %}Cancelled{% else %}Note{% endif %}:</strong> {{ order.reason }}</p></div></div>{% endif %}
+
+        {% if sees_costs and order.status != Status.CANCELLED %}
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} What it cost</h2><span class="ui-card__note">Total ÷ good; damaged carry no cost of their own</span></div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead><tr><th>Cost</th><th class="numeric">Amount</th></tr></thead>
+                        <tbody>
+                            <tr><td>Materials used{% if leftovers %} <span class="ui-muted">(less what went back)</span>{% endif %}</td><td class="numeric">{{ order.material_cost|default_if_none:0|floatformat:"2g" }}</td></tr>
+                            {% for cost in costs %}<tr><td>{{ cost.name }}</td><td class="numeric">{{ cost.amount|floatformat:"2g" }}</td></tr>{% endfor %}
+                            <tr class="ui-total"><td>Total</td><td class="numeric">{{ total_cost|floatformat:"2g" }}</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                {% if order.unit_cost and order.expected_unit_cost %}<div class="ui-card__foot"><span class="ui-muted">Per {{ unit }}: expected</span> <strong>{{ order.expected_unit_cost|floatformat:"2g" }}</strong> · <span class="ui-muted">actual</span> <strong class="{% if order.unit_cost > order.expected_unit_cost %}ui-bad{% else %}ui-good{% endif %}">{{ order.unit_cost|floatformat:"2g" }}</strong></div>{% endif %}
+            </div>
+        {% endif %}
+
+        {% if made or parts %}
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Made</h2>{% if waits_qc %}<span><button class="ui-btn ui-btn--sm" type="button" data-open-dialog="qc-dialog">Quality check</button></span>{% endif %}</div>
+                <div class="ui-card__body">
+                    {% for batch in made %}<p>Batch <strong>{{ batch.batch_no }}</strong> · made {{ batch.mfg_date|date:"j M Y" }}{% if batch.expiry_date %} · expires {{ batch.expiry_date|date:"j M Y" }}{% endif %} {% if batch.status != "released" %}<span class="ui-chip ui-chip--wait">{{ batch.get_status_display }}</span>{% endif %}</p>{% endfor %}
+                    <p>{% for part in parts %}{{ part.warehouse.name }} {{ part.qty_base|floatformat:"-4g" }} {{ unit }}{% if not forloop.last %} + {% endif %}{% endfor %}</p>
+                    {% if serials %}<p>{{ serials }} serial number{{ serials|pluralize }} made · <a href="{% url 'inventory:serial_labels' %}?output={{ output.pk }}">Print serial labels</a></p>{% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% if leftovers %}
+            <div class="ui-card">
+                <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Left over</h2></div>
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>Material</th><th class="numeric">Back to the store</th><th class="numeric">Wasted</th><th>Why</th></tr></thead>
+                    <tbody>{% for row in leftovers %}<tr><td>{{ row.item.name }}</td><td class="numeric">{{ row.returned|floatformat:"-4g" }} {{ row.item.base_uom.code }}</td><td class="numeric">{{ row.wasted|floatformat:"-4g" }} {{ row.item.base_uom.code }}</td><td>{{ row.reason }}</td></tr>{% endfor %}</tbody>
+                </table></div>
+            </div>
+        {% endif %}
+
+        {% url 'inventory:product' item.pk as product_url %}
+        {% include "ui/next_step.html" with what="See the product: its stock, expected and actual cost, and what to make next." url=product_url button=item.name %}
+    {% endif %}
+    {% endwith %}
+
+    {% if can_execute %}
+        <dialog class="modal" id="cancel-dialog" aria-labelledby="cancel-title">
+            <form class="modal__card" method="post" action="{% url 'production:run_action' order.pk 'cancel' %}" data-fetch novalidate>
+                {% csrf_token %}
+                <div class="modal__head"><h2 id="cancel-title">Cancel {{ order.number }}?</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                <div class="modal__body stack">
+                    {% if order.status == Status.RELEASED %}<p>Every material goes back to the store and batch it came from.</p>
+                        <div class="field"><label class="field__label" for="cancel-reason">Why <span class="field__req">*</span></label><input class="input" id="cancel-reason" name="reason" type="text"></div>
+                    {% else %}<p>Nothing has left the stores: the plan is simply cancelled.</p>{% endif %}
+                </div>
+                <div class="ui-message" data-form-message role="status" hidden></div>
+                <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Keep it</button><button class="ui-btn ui-btn--danger" type="submit">Cancel it</button></div>
+            </form>
+        </dialog>
+    {% endif %}
+    {% if can_reverse %}
+        <dialog class="modal" id="reverse-dialog" aria-labelledby="reverse-title">
+            <form class="modal__card" method="post" action="{% url 'production:run_action' order.pk 'reverse' %}" data-fetch novalidate>
+                {% csrf_token %}
+                <div class="modal__head"><h2 id="reverse-title">Reverse {{ order.number }}?</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                <div class="modal__body stack">
+                    <p>What it made leaves stock and every material goes back where it came from. Possible while nothing it made was sold, moved or used.</p>
+                    <div class="field"><label class="field__label" for="reverse-reason">Why <span class="field__req">*</span></label><input class="input" id="reverse-reason" name="reason" type="text"></div>
+                </div>
+                <div class="ui-message" data-form-message role="status" hidden></div>
+                <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Keep it</button><button class="ui-btn ui-btn--danger" type="submit">Reverse</button></div>
+            </form>
+        </dialog>
+    {% endif %}
+    {% if waits_qc %}
+        <dialog class="modal" id="qc-dialog" aria-labelledby="qc-title">
+            <form class="modal__card" method="post" action="{% url 'production:run_action' order.pk 'qc-pass' %}" data-fetch novalidate>
+                {% csrf_token %}
+                <div class="modal__head"><h2 id="qc-title">Quality check</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+                <div class="modal__body stack">
+                    <p>Passed, it can be sold. Failed, it stays blocked.</p>
+                    <div class="field"><label class="field__label" for="qc-notes">Notes (say what failed)</label><input class="input" id="qc-notes" name="notes" type="text"></div>
+                </div>
+                <div class="ui-message" data-form-message role="status" hidden></div>
+                <div class="modal__foot"><button class="ui-btn ui-btn--danger" type="submit" formaction="{% url 'production:run_action' order.pk 'qc-fail' %}">Failed</button><button class="ui-btn ui-btn--main" type="submit">Passed</button></div>
+            </form>
+        </dialog>
+    {% endif %}
+{% endblock %}

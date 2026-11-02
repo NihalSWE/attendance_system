@@ -1,0 +1,155 @@
+{% extends "inventory/preview/base.html" %}
+{% block title %}{{ product.name }}{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:preview_products' %}">Products</a> / {{ product.code }}</p>
+            <h1 class="ui-head__title">{{ product.name }}</h1>
+            <p class="ui-head__sub">Made here · sold by the packet and the carton (1 carton = 24 packets) · keeps batches, {{ product.shelf_life }} days shelf life</p>
+        </div>
+        <div class="ui-head__actions">
+            <button class="ui-btn" type="button">{% include "ui/icon.html" with name="edit" %} Edit</button>
+            <a class="ui-btn ui-btn--main" href="{% url 'inventory:preview_plan' %}">{% include "ui/icon.html" with name="play" %} Make this</a>
+        </div>
+    </div>
+
+    <div class="ui-tiles">
+        <div class="ui-tile"><p class="ui-tile__label">Cost per packet</p><p class="ui-tile__value">{{ summary.sheet.per_packet }}</p><p class="ui-tile__hint">Tk {{ summary.sheet.per_carton }} per carton</p></div>
+        <div class="ui-tile"><p class="ui-tile__label">Sale price</p><p class="ui-tile__value">{{ summary.price|floatformat:2 }}</p><p class="ui-tile__hint">per packet · carton 450</p></div>
+        <div class="ui-tile ui-tile--good"><p class="ui-tile__label">Margin</p><p class="ui-tile__value">{{ summary.margin }}</p><p class="ui-tile__hint">{{ summary.margin_pct }}% per packet</p></div>
+        <div class="ui-tile ui-tile--warn"><p class="ui-tile__label">In stock</p><p class="ui-tile__value">{{ summary.in_stock }}</p><p class="ui-tile__hint">cartons ({{ summary.in_stock_packets }} packets) · keep {{ product.keep_cartons }}</p></div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head">
+            <h2 class="ui-card__title">{% include "ui/icon.html" with name="play" %} Suggested: make {{ summary.suggest }} batches ({% widthratio summary.suggest 1 10 %} cartons)</h2>
+            <a class="ui-btn ui-btn--main ui-btn--sm" href="{% url 'inventory:preview_plan' %}">Make {{ summary.suggest }} batches</a>
+        </div>
+        <div class="ui-card__body">
+            <p>Keep {{ product.keep_cartons }} cartons − {{ summary.in_stock }} in stock = {{ summary.wanted }} batches wanted.
+                The materials allow <strong>{{ summary.possible }}</strong>: <span class="ui-bad">{{ summary.short_by }}</span> runs short.
+                You sell about {{ summary.per_day }} cartons a day.</p>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head">
+            <h2 class="ui-card__title">{% include "ui/icon.html" with name="list" %} Recipe: one batch makes 10 cartons</h2>
+            <button class="ui-btn ui-btn--sm" type="button" data-open-dialog="recipe-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add material</button>
+        </div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Material</th><th class="numeric">Per batch</th><th class="numeric">Wastage</th><th class="numeric">Cost</th><th class="numeric">In stock</th><th>Enough for</th><th class="no-sort"><span class="sr-only">Remove</span></th></tr></thead>
+                <tbody>
+                    {% for row in recipe %}
+                        <tr>
+                            <td><a href="{% url 'inventory:preview_material' row.code %}">{{ row.name }}</a></td>
+                            <td class="numeric">{{ row.qty|floatformat:"-2" }} {{ row.unit }}</td>
+                            <td class="numeric">{{ row.waste|floatformat:"-1" }} %</td>
+                            <td class="numeric">{{ row.cost|floatformat:"2g" }}</td>
+                            <td class="numeric">{{ row.in_stock|floatformat:"-2" }} {{ row.unit }}</td>
+                            <td><span class="ui-chip ui-chip--{% if row.enough < 5 %}bad{% else %}ok{% endif %}">{{ row.enough }} batches</span></td>
+                            <td><button class="ui-btn ui-btn--danger ui-btn--sm" type="button">{% include "ui/icon.html" with name="trash" small=True %} Remove</button></td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head">
+            <h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Cost of one batch</h2>
+            <button class="ui-btn ui-btn--sm" type="button">{% include "ui/icon.html" with name="plus" small=True %} Add cost</button>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>Cost</th><th>How it is worked out</th><th class="numeric">Per batch</th></tr></thead>
+                <tbody>
+                    {% for label, how, amount in sheet.lines %}
+                        <tr><td>{{ label }}</td><td class="ui-muted">{{ how }}</td><td class="numeric">{{ amount|floatformat:"2g" }}</td></tr>
+                    {% endfor %}
+                    <tr class="ui-total"><td>Total for one batch</td><td class="ui-muted">10 cartons = 240 packets</td><td class="numeric">{{ sheet.total|floatformat:"2g" }}</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="ui-card__foot">
+            <span class="ui-muted">Per carton</span> <strong>{{ sheet.per_carton }}</strong> ·
+            <span class="ui-muted">per packet</span> <strong>{{ sheet.per_packet }}</strong> ·
+            <span class="ui-muted">rates from</span> <a href="#">Cost rates</a> (line worker 75/h, oven 300/h)
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Stock by store and batch</h2><button class="ui-btn ui-btn--sm" type="button">Move stock</button></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Batch</th><th>Store</th><th>Made</th><th>Expiry</th><th class="numeric">Cartons</th><th class="numeric">Cost per carton</th></tr></thead>
+                <tbody>
+                    {% for number, made, expiry, store, cartons, cost in product.stock %}
+                        <tr><td>{{ number }}</td><td>{% for key, label in stores.items %}{% if key == store %}{{ label }}{% endif %}{% endfor %}</td><td>{{ made }}</td><td>{{ expiry }}</td><td class="numeric">{{ cartons }}</td><td class="numeric">{{ cost }}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} Productions</h2><a class="ui-btn ui-btn--sm" href="{% url 'inventory:preview_make' %}">All productions</a></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Production</th><th>Date</th><th class="numeric">Batches</th><th>Status</th><th class="numeric">Cost per packet</th></tr></thead>
+                <tbody>
+                    {% for p in productions %}
+                        <tr><td><a href="{% url 'inventory:preview_production' p.number %}">{{ p.number }}</a></td><td>{{ p.date }}</td><td class="numeric">{{ p.batches }}</td><td><span class="ui-chip ui-chip--{{ p.tone }}">{{ p.status }}</span></td><td class="numeric">{% if p.good %}13.36{% else %}<span class="ui-muted">expected {{ summary.sheet.per_packet }}</span>{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% url 'inventory:preview_plan' as plan_url %}
+    {% include "ui/next_step.html" with what="Stock is below what you keep: make the suggested batches." url=plan_url button="Make 3 batches" %}
+
+    <dialog class="modal modal--wide" id="recipe-dialog" aria-labelledby="recipe-dialog-title">
+        <form class="modal__card" method="post" action="{% url 'inventory:preview_save' 'recipe_line' %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="modal__head">
+                <h2 id="recipe-dialog-title">Add a material to the recipe</h2>
+                <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+            </div>
+            <div class="modal__body stack">
+                <p class="ui-muted">How much one batch (10 cartons) uses.</p>
+                <div class="field">
+                    <span class="field__label">Material</span>
+                    <div class="check-list">
+                        <label class="check"><input class="check__input" type="radio" name="source" value="existing" checked><span>One already added</span></label>
+                        <label class="check"><input class="check__input" type="radio" name="source" value="new"><span>A new material</span></label>
+                    </div>
+                </div>
+                <div class="field" data-show-when="source:existing">
+                    <label class="field__label" for="pv-material">Which one <span class="field__req">*</span></label>
+                    <select class="input select js-select" id="pv-material" name="material">
+                        <option value="">Choose a material</option>
+                        <option value="RM-0006" data-unit="kg">RM-0006 · Salt</option>
+                        <option value="RM-0007" data-unit="kg">RM-0007 · Milk powder</option>
+                    </select>
+                    <span class="field__help">Materials already on the recipe are left out.</span>
+                </div>
+                <div class="ui-grid-2">
+                    {% include "inventory/preview/field.html" with name="new_name" label="Name" required=True show_when="source:new" %}
+                    {% include "inventory/preview/field.html" with name="new_unit" label="Unit" required=True options=units show_when="source:new" %}
+                </div>
+                <div class="ui-grid-2">
+                    {% include "inventory/preview/field.html" with name="qty" label="How much one batch uses" type="number" unit_from="material new_unit" required=True %}
+                    {% include "inventory/preview/field.html" with name="waste" label="Normal wastage" type="number" unit="%" %}
+                </div>
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="modal__foot">
+                <button class="ui-btn" type="button" data-close-dialog>Cancel</button>
+                <button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Add</button>
+            </div>
+        </form>
+    </dialog>
+{% endblock %}

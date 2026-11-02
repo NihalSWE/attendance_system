@@ -174,6 +174,14 @@
                 To
             </label>
             {{ date_filter.date_to }}
+            {# One click to today or yesterday, keeping the other filters. #}
+            {% for quick in quick_days %}
+                <a class="btn {% if quick.active %}btn--primary{% else %}btn--ghost{% endif %}"
+                   href="{{ quick.url }}" title="{{ quick.day|date:'l d M Y' }}"
+                   {% if quick.active %}aria-current="true"{% endif %}>
+                    {{ quick.label }}
+                </a>
+            {% endfor %}
             {# Sorts the table as its headers do; no name, so Apply ignores it. #}
             <label class="sr-only" for="daily-sort">
                 Sort by

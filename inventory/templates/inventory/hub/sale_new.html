@@ -1,0 +1,32 @@
+{% extends "inventory/hub/base.html" %}
+{% load static %}
+{% block title %}Sell{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:sales' %}">Sell</a> / New sale</p>
+            <h1 class="ui-head__title">New sale</h1>
+            <p class="ui-head__sub">Who buys, from which store, and what. It is delivered at once, the batch that expires first going first.</p>
+        </div>
+    </div>
+    {{ balances|json_script:"stock-rows" }}
+    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-most="{{ most }}" novalidate>
+        {% csrf_token %}
+        <div class="ui-card">
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} Customer and store</h2></div>
+            <div class="ui-card__body"><div class="ui-grid-2">
+                {% include "inventory/hub/field.html" with box=form.customer %}
+                {% include "inventory/hub/field.html" with box=form.store %}
+                {% include "inventory/hub/field.html" with box=form.day %}
+                {% include "inventory/hub/field.html" with box=form.credit_note %}
+                    {% include "inventory/hub/field.html" with box=form.below_cost %}
+                    {% include "inventory/hub/field.html" with box=form.below_cost_reason %}
+                {% if form.invoice %}{% include "inventory/hub/field.html" with box=form.invoice %}{% endif %}
+            </div></div>
+        </div>
+        {% url 'inventory:sales' as cancel_url %}
+        {% include "inventory/hub/_lines_card.html" with mode="sell" button="Sell and deliver" cancel_url=cancel_url %}
+    </form>
+    {% include "ui/next_step.html" with what="After this, the sale shows in Sell with its delivery (and invoice)." %}
+{% endblock %}
+{% block extra_js %}{{ block.super }}<script defer src="{% static 'inventory/js/lines.js' %}"></script>{% endblock %}

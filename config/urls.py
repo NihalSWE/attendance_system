@@ -6,7 +6,7 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
-from base_template import views
+from base_template import ui_preview, views
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -29,6 +29,7 @@ urlpatterns = [
     path("production/", include("production.urls")),
     # Phase 8: the AI sales order assistant (before "sales/" so its paths win).
     path("sales/ai/", include("ai_assistant.urls")),
+    path("ask/", include("ask.urls")),
     path("sales/", include("sales.urls")),
     # An Employee or Branch manager login's own pages.
     path("me/", include("base_template.me_urls")),
@@ -37,6 +38,8 @@ urlpatterns = [
     path("", include("devices.urls")),
 
     path("", views.dashboard, name="dashboard"),
+    # The 2026 layout pieces with sample data, for approval (plan §15 phase 1).
+    path("ui-preview/", ui_preview.ui_preview, name="ui_preview"),
     path("employees/", views.employee_list, name="employee_list"),
     path("departments/", views.department_list, name="department_list"),
     path("switch-company/", views.switch_company, name="switch_company"),

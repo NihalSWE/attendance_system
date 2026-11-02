@@ -1,0 +1,53 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Cost rates{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / Settings / Cost rates</p>
+            <h1 class="ui-head__title">Cost rates</h1>
+            <p class="ui-head__sub">What an hour of people or of a machine costs. Products' costs of one batch use them; a change counts for productions after it.</p>
+        </div>
+        {% if form %}<div class="ui-head__actions"><button class="ui-btn ui-btn--main" type="button" data-open-dialog="rate-dialog">{% include "ui/icon.html" with name="plus" %} Add rate</button></div>{% endif %}
+    </div>
+
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="coins" %} Rates</h2></div>
+        <div class="table-wrap">
+            <table class="table" data-local-table>
+                <thead><tr><th>Name</th><th>For</th>{% if sees_costs %}<th class="numeric">Tk per hour</th>{% endif %}<th>Used by</th><th>Status</th>{% if can_edit %}<th class="no-sort"><span class="sr-only">Actions</span></th>{% endif %}</tr></thead>
+                <tbody>
+                    {% for rate in rates %}
+                        <tr>
+                            <td>{{ rate.name }}</td>
+                            <td>{{ rate.get_kind_display }}</td>
+                            {% if sees_costs %}<td class="numeric">{{ rate.rate|floatformat:"2g" }}</td>{% endif %}
+                            <td>{{ rate.used_by|default:"—" }}</td>
+                            <td><span class="ui-chip ui-chip--{% if rate.status == 'active' %}ok{% else %}bad{% endif %}">{{ rate.get_status_display }}</span></td>
+                            {% if can_edit %}<td>
+                                <button class="ui-btn ui-btn--sm" type="button" data-open-dialog="rate-{{ rate.pk }}">{% include "ui/icon.html" with name="edit" small=True %} Edit</button>
+                                <form method="post" action="{% url 'production:cost_rate_status' rate.pk %}" data-fetch style="display:inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="status" value="{% if rate.status == 'active' %}inactive{% else %}active{% endif %}">
+                                    <button class="ui-btn ui-btn--sm{% if rate.status == 'active' %} ui-btn--danger{% endif %}" type="submit">{% if rate.status == 'active' %}Switch off{% else %}Switch on{% endif %}</button>
+                                </form>
+                            </td>{% endif %}
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="6">No rates yet. Add one: Line worker 75 Tk per hour, Oven 300 Tk per hour.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% url 'inventory:products' as products_url %}
+    {% include "ui/next_step.html" with what="Use the rates in a product's cost of one batch: open the product, then Add cost." url=products_url button="Products" %}
+
+    {% if form %}
+        {% include "inventory/hub/_rate_form.html" with id="rate-dialog" title="Add a rate" action=request.path form=form submit="Add rate" %}
+        {% for rate in rates %}
+            {% url 'production:cost_rate_save' rate.pk as save_url %}
+            {% include "inventory/hub/_rate_form.html" with id=rate.dialog_id title="Edit "|add:rate.name action=save_url form=rate.form submit="Save" %}
+        {% endfor %}
+    {% endif %}
+{% endblock %}

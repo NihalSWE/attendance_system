@@ -19,10 +19,11 @@
         <div>
             <h1 class="page__title">{{ order.number }} {% include "production/_status.html" %}</h1>
             <p class="page__sub">
-                {{ order.planned_qty.normalize }} {{ order.uom.code }} of <a href="{% url 'inventory:item_detail' order.item_id %}">{{ order.item.code }}</a> {{ order.item.name }}
-                · <a href="{% url 'production:bom_detail' order.bom_id %}">BOM v{{ order.bom.version }}</a> · {{ order.planned_date|date:"d M Y" }}
+                {{ order.planned_qty.normalize }} {{ order.uom.code }} of <a href="{% url 'inventory:product' order.item_id %}">{{ order.item.code }}</a> {{ order.item.name }}
+                · {{ order.planned_date|date:"d M Y" }}
                 {% if order.line_name %} · {{ order.line_name }}{% endif %}{% if order.shift_name %} · {{ order.shift_name }}{% endif %}
                 <br>Materials from {{ order.material_warehouse }} · finished goods into {{ order.output_warehouse }}
+                {% if waits_for_release %}<br>You planned it: someone else with planning access releases it.{% endif %}
                 {% if order.released_at %}<br>Released by {{ order.released_by.get_full_name|default:order.released_by.email }} on {{ order.released_at|date:"d M Y H:i" }}{% endif %}
             </p>
         </div>
@@ -31,7 +32,7 @@
                 <form method="post" action="{% url 'production:order_action' order.pk 'cancel' %}" data-confirm="Possible only while no material was used." data-confirm-title="Cancel {{ order.number }}?" data-confirm-button="Cancel it" data-confirm-tone="danger">{% csrf_token %}<button class="btn btn--quiet" type="submit">Cancel</button></form>
             {% endif %}
             {% if can_release %}
-                <form method="post" action="{% url 'production:order_action' order.pk 'release' %}" data-confirm="Materials can then be used for it. Someone other than the planner releases it." data-confirm-title="Release {{ order.number }}?" data-confirm-button="Release">{% csrf_token %}<button class="btn btn--primary" type="submit">Release</button></form>
+                <form method="post" action="{% url 'production:order_action' order.pk 'release' %}" data-confirm="Materials can then be used for it." data-confirm-title="Release {{ order.number }}?" data-confirm-button="Release">{% csrf_token %}<button class="btn btn--primary" type="submit">Release</button></form>
             {% endif %}
             {% if can_run %}
                 {% if not has_draft_use %}
@@ -77,7 +78,7 @@
     <div class="card">
         <div class="card__head"><h2>Planned and used</h2><span class="spacer"></span>{% if sees_costs %}<span class="t-muted">Materials so far <span class="amount">{{ material_cost|floatformat:2 }}</span></span>{% endif %}</div>
         <div class="table-wrap">
-            <table class="table">
+            <table class="table" data-local-table>
                 <thead><tr><th>Material</th><th class="numeric">Planned</th><th class="numeric">Used</th><th class="numeric">Still to use</th><th class="numeric">Over / under</th>{% if sees_costs %}<th class="numeric">Cost</th>{% endif %}</tr></thead>
                 <tbody>
                     {% for row in usage %}
@@ -99,7 +100,7 @@
         <div class="card">
             <div class="card__head"><h2>Material uses</h2></div>
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-local-table>
                     <thead><tr><th>Number</th><th>Date</th><th>What</th><th>Status</th></tr></thead>
                     <tbody>
                         {% for use in uses %}

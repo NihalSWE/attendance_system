@@ -48,6 +48,7 @@
             {% endfor %}
         </div>
     </div>
+    {% include "inventory/store/_guide.html" with row=row %}
 
     {% if can_scan %}
         <div class="card" id="scan">

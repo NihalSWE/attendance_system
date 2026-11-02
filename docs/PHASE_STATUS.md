@@ -6188,6 +6188,148 @@ Late penalties unchanged: a late day made up after the shift is still late
 Live copy, 1-5 Oct: present 68, half 99 → 90, absent 73 → 82 (lone
 after-shift scans). Deploy: pull, restart, `recalculate_attendance --since 2026-10-01`.
 
+### Working days on a weekly off; calendar changes reach built days — 2026-10-17
+
+Decided by the senior (2026-10-17, the small version of
+`docs/working-day/00-PLAN.md`): a worked weekly-off date follows the normal
+rules (late, half day, absent with the cut, overtime only after the shift at
+the normal rate); past dates allowed unless that month's salary is posted;
+one employee working a day off waits.
+
+- **`scheduling.WorkingDay`** (migration `scheduling.0007_working_day`):
+  date, branch (empty: every branch), reason, active/cancelled.
+  `WorkCalendar.day()` order: holiday → working day → weekly off.
+- **Services** `add_working_day` / `cancel_working_day`: only a weekly-off
+  date, not a holiday ("cancel the holiday instead"), not twice, not in a
+  posted month; overtime decisions on the date are dropped (listed in the
+  audit row); people whose leave spans the date are named (leave books
+  working days only, so they show absent until HR changes the leave).
+- **`attendance.services.dates_changed`**: the given dates made due for the
+  people placed there, rebuilt in the background. Now also called by
+  holiday add / year calendar / edit / cancel and weekly off add / stop
+  (before, those left built days unchanged until `recalculate_attendance`).
+  A swap day off is an ordinary holiday.
+- **Screen** Shifts → Holidays → **Working days**
+  (`/shifts/working-days/`): server-side list (year, branch, status,
+  count), "Make a day a working day" modal, Cancel by confirm modal. Links
+  from the Holidays page and the Weekly off days card. Sidebar: Shifts → "Working days" (added 2026-10-18, `base_template/navigation.py`).
+- **API** `GET/POST /api/v1/working-days`, `GET /working-days/{id}`,
+  `POST /working-days/{id}/cancel` (CHANGELOG).
+- Tests: `scheduling/tests_working_day.py` (22), `api.tests.test_shifts`.
+- Deploy: pull, `migrate`, restart. No recalculation needed.
+
+### Device user lists kept as rows (speed, phase 1) — 2026-10-18
+
+Measured on a copy of the live database (2026-10-17): the Device users page
+took 10.3 s, then 10.3 s again for its table, on Shed 1 (Male); the Employees
+list 2.3 s and an employee's page up to 4.7 s. Cause: `build_roster` and
+`_removed_pins` worked the user list out on every view from every upload the
+device ever sent. A device re-sends its whole user table (names, templates,
+photos): 4,644 uploads, 195 MB, searched about ten times per view.
+
+- **`devices.DeviceUser`** (one row per device and number: name, card,
+  privilege, group/tz, template counts, photo, last seen in a 3.x list, the
+  list it was in) and **`devices.DeviceUserSync`** (per device: last upload
+  applied, latest "Refresh user list" answer). Migration `devices.0011`.
+- **`devices/services/device_users.py`**: each upload is applied once, when
+  it arrives (`ingest` → `record_message`, best effort); readers call
+  `sync`, which applies anything after the last upload applied (so nothing is
+  lost if an upload was stored without it), and builds a device from all of
+  its uploads the first time. Same rules as before: newest fields win, each
+  template counted once, photo, removed = not in the latest complete list.
+- `build_roster` and `_removed_pins` read the rows; every caller (Device
+  users page, Employees list badges, employee page, mapping, API) is
+  unchanged. The old way stays as `roster_from_messages` for checking.
+- **`manage.py rebuild_device_users [--device ID] [--check]`**: rebuild from
+  the stored uploads; `--check` compares with the old way.
+- Live copy: all 6 devices "same as before"; Device users 0.2–0.5 s (was
+  10.3 + 10.3 s), Employees list 0.39 s (2.3 s), employee page 0.45 s (up to
+  4.7 s). Tests: `devices/tests_device_users.py` (10); devices + device API
+  461 OK.
+- Deploy: pull, `migrate`, restart, then once
+  `python manage.py rebuild_device_users` (about 2 s on the live data; without
+  it each device is built on its first view). No `.env` change.
+
+### Lists load once and the page stops jumping (speed, phase 2) — 2026-10-18
+
+Measured in the browser on the live copy (Device users, Shed 1 Male): CLS
+1.15 from two jumps - the narrow-screen sidebar drawn full-width until
+`navigation.js` ran (0.82), and the table redrawn when its second request
+answered (0.33); every server table asked again for the first page the server
+had already drawn into the HTML.
+
+- `base.html`: a one-line script in `<head>` sets `navigation-ready` and
+  `tables-js` before the first paint (no CSP on the site; no inline-script
+  rule broken).
+- `table_pagination.html`: the no-script pager carries
+  `data-server-table-for`, `data-total` and `data-filtered`.
+- `tables.js`: `deferLoading` with those counts - the first page is the
+  server's HTML rows; paging, search and sort still ask the server, one page
+  at a time. An empty kept page says "No results for these filters." If
+  DataTables did not load, `tables-js` is removed and the counted HTML pager
+  shows again.
+- `vendor-controls.css`: with `tables-js`, the no-script pager and
+  `.server-table-empty` notes stay hidden; a table not yet started keeps 61px
+  above and below for DataTables' rows.
+- After: CLS 0.000 and no second request on Device users, Shifts (three named
+  lists) and Working days; page 2 starts at SL 26; search asks the server.
+- Not done, on purpose: the employee page's 27 membership lookups (about
+  10-20 ms of 0.45 s; most of the rest is building its edit forms) - caching
+  permission checks is not worth the risk for that.
+- Test: `base_template.tests_tables` (the counts on the page). No `.env`
+  change.
+
+### Safer page addresses (phase 3) — 2026-10-18
+
+The senior changed `/organization/employees/268/` to `269` and saw the next
+person. Checked on the live copy: only the company's own owner and
+administrator could (others: 403, other companies: 403), so access was
+enforced - but the plain number let anyone allowed in count the people and
+try the next one, and a 403 confirmed a number existed elsewhere.
+
+- **Random ids for employee pages**: the 23 `organization` employee routes
+  use `<employee:pk>` (`organization/converters.py`): the address carries
+  `Employee.public_id`, the view still gets the employee's id as `pk` (no
+  view changed). `/organization/employees/269/` is now 404. Links built from
+  `employee.pk` still work (one lookup each); lists pass `public_id` directly
+  (Employees list, Device users, employee page, leave balances, LFA claim).
+- **"Not found", not "refused"**: `common.exceptions.NotInThisCompany` (a
+  `PermissionDenied`) replaces the 41 "… not found in this company."
+  refusals; `common.middleware.NotFoundOutsideCompany` answers it 404 on the
+  panel. The API is unchanged (its handler still answers as before).
+- **Address sweep** `base_template/tests_address_sweep.py`: another
+  company's administrator opens every panel page whose address has an id
+  (264 tries; pages added later are included automatically) with the first
+  company's ids - its names never appear and nothing crashes. Plain number
+  404; another company's employee 404.
+- Not changed: API ids (documented integers, behind login, scopes and the
+  same checks); other pages' numeric ids (branches, departments, leave…) -
+  the sweep covers them, random ids for them can follow the same converter.
+- No migration, no `.env` change.
+
+### Old device uploads pruned (phase 4) — 2026-10-18
+
+Built, not run on live: deleting stored uploads needs the senior's go-ahead.
+
+- `devices/services/message_prune.py`: an upload is kept while anything in
+  it is still the newest of its kind (each number's user row and latest 3.x
+  user line, each template, each photo, every part of the latest "Refresh user
+  list" answer), or it has punches, a line not understood, or no user lines
+  at all. The rest are full copies.
+- `manage.py prune_device_messages` - counts only; `--check` deletes inside a
+  transaction, rebuilds each device's user list from what is left, compares
+  with the list before, then undoes; `--apply` deletes (a device whose list
+  would change is left as it was). `--device ID` for one device.
+- Live copy (2026-10-18): 5,306 of 10,896 user uploads are copies, 288 MB of
+  the 310 MB of stored text; `--check` - all 6 devices' lists unchanged,
+  nothing deleted.
+- Deploy: needs phase 1 deployed first (`DeviceUser`). Then, with the
+  senior's OK: `python manage.py prune_device_messages --check`, then
+  `--apply`, then in a quiet hour `VACUUM FULL devices_devicemessage` (locks
+  the table while it runs) to give the space back to the disk; take a
+  database backup first. The Messages page will list fewer uploads.
+- Tests: `devices/tests_message_prune.py` (5). No migration, no `.env` change.
+
 ### Inventory Phase 0: decisions pack and Excel templates — 2026-10-15
 
 First step of the Store & Inventory module ([inventory/00-PLAN.md](inventory/00-PLAN.md)).
@@ -6425,32 +6567,468 @@ sheets in [inventory/training/](inventory/training/).
 **Deploy:** pull, collectstatic, restart. The go-live itself is on site with
 the client, following the runbook.
 
-### Working days on a weekly off; calendar changes reach built days — 2026-10-17
+### Daily list: Today and Yesterday — 2026-10-24
 
-Decided by the senior (2026-10-17, the small version of
-`docs/working-day/00-PLAN.md`): a worked weekly-off date follows the normal
-rules (late, half day, absent with the cut, overtime only after the shift at
-the normal rate); past dates allowed unless that month's salary is posted;
-one employee working a day off waits.
+Item 1 of [payroll-periods/00-PLAN.md](payroll-periods/00-PLAN.md) (the plan
+for salary periods, weekly pay, facilities and two attendance items; the
+senior took its defaults for every decision, 2026-10-24).
 
-- **`scheduling.WorkingDay`** (migration `scheduling.0007_working_day`):
-  date, branch (empty: every branch), reason, active/cancelled.
-  `WorkCalendar.day()` order: holiday → working day → weekly off.
-- **Services** `add_working_day` / `cancel_working_day`: only a weekly-off
-  date, not a holiday ("cancel the holiday instead"), not twice, not in a
-  posted month; overtime decisions on the date are dropped (listed in the
-  audit row); people whose leave spans the date are named (leave books
-  working days only, so they show absent until HR changes the leave).
-- **`attendance.services.dates_changed`**: the given dates made due for the
-  people placed there, rebuilt in the background. Now also called by
-  holiday add / year calendar / edit / cancel and weekly off add / stop
-  (before, those left built days unchanged until `recalculate_attendance`).
-  A swap day off is an ordinary holiday.
-- **Screen** Shifts → Holidays → **Working days**
-  (`/shifts/working-days/`): server-side list (year, branch, status,
-  count), "Make a day a working day" modal, Cancel by confirm modal. Links
-  from the Holidays page and the Weekly off days card. Sidebar unchanged.
-- **API** `GET/POST /api/v1/working-days`, `GET /working-days/{id}`,
-  `POST /working-days/{id}/cancel` (CHANGELOG).
-- Tests: `scheduling/tests_working_day.py` (22), `api.tests.test_shifts`.
-- Deploy: pull, `migrate`, restart. No recalculation needed.
+- Attendance → Daily list and Late entries: **Today** and **Yesterday**
+  buttons next to the date filters (`attendance/views.py` `_quick_days`):
+  that one day in the company's time, keeping the branch, department,
+  employee and status filters; the one shown is marked.
+- Tests: `attendance/tests_quick_days.py` (4). No migration, no `.env` change.
+
+### Salary month from the settings, and weekly pay groups — 2026-10-24
+
+Items 3 and 4 of [payroll-periods/00-PLAN.md](payroll-periods/00-PLAN.md),
+branch `feature/salary-periods`. The plan's "How 3 and 4 were built" lists
+the code.
+
+- **Salary month** (Salary settings → Salary month): starts on day 1–28 from
+  a chosen month. Day 26: "October" is 26 Sep – 25 Oct, named after the month
+  it ends in. The first month after a change is a shorter changeover month
+  paid basic × its days ÷ its calendar month's days. A change only applies
+  from a month with no salary run and no bonus, deduction or LFA line. The
+  Salary page says what the month covers and marks a month not yet over as a
+  preview.
+- **Weekly pay groups** (Salary settings → Pay groups): add a group (e.g.
+  Weekly workers, weeks Saturday to Friday); put a department or one person
+  in it from the first day of a week (never inside a finalised salary). On
+  the Salary page choose **Paid** (Monthly staff or the group) and the
+  **Week**: Generate, Submit, Approve and Undo work as for a month. A week
+  pays the daily or hourly rate for the days in the group. Allowances and
+  recurring deductions come in the last week ending in the month. Somebody on
+  a monthly salary stays Monthly staff. A finalised week locks attendance
+  only for that week's people.
+- Not done: the API salary endpoints still show the Monthly staff's month
+  only.
+- Migrations: `payroll` 0013 (`SalaryCycle`), 0014 (`PayGroup`,
+  `PayGroupMember`, `PayrollRun.pay_group`). No `.env` change. A company with
+  no salary-month change and no pay group sees no difference.
+- Tests: `payroll/tests_salary_periods.py` (11), `payroll/tests_weekly.py` (10).
+
+**Deploy:** pull, migrate, collectstatic, restart.
+
+### Pay groups get their own page — 2026-10-25
+
+The senior could not use the Pay groups card on Salary settings: both pickers
+could be filled, nothing listed what was saved, "From" was a blank date that
+was then refused, and a refused save reloaded at the top of a long page with
+the reason far below. Branch `feature/pay-groups-page`.
+
+- **Salary → Pay groups** (`payroll/paygroup_views.py`, sidebar item, a button
+  on the Salary page; Salary settings keeps a card that links to it). One card
+  per group: its week (e.g. "Weekly, Monday to Sunday", "This week: …") and a
+  table of who is in it, with an empty-state line.
+- Every change is a modal (the employee profile's pattern): **Add pay group**,
+  **Add people** (Whole department / One person, one picker shown; the server
+  reads only the chosen one), **Keep one person monthly**, **Edit** (rename;
+  the week start only while the group is unused), **Back to monthly** / **Weekly
+  again** per row (choosing the row's own start removes it). A refused save
+  opens its modal again with the reason.
+- Start days are a list (`paygroups.start_days`): the group's week starts from
+  4 weeks back to 8 ahead, this week chosen (or the first open week), weeks
+  inside a finalised salary left out.
+- Tests: `payroll/tests_weekly.py` (16). No migration, no `.env` change.
+- Other pages that stack several forms on one page, to check for the same
+  hidden-error problem: Salary settings (salary month, rules, general),
+  Edit employee (`employee_edit.html`), Webhooks settings, Access for a
+  person, Mail settings, AI assistant settings.
+
+### Inventory: valid choices, a page per item type, the recipe on the product — 2026-10-26
+
+The senior found the inventory forms hard to use: Unit, Category and Batch
+lists offered choices that saving then refused; one Items page with a long
+form for every type; the recipe (BOM) on a page of its own with versions to
+activate; production orders with boxes nobody needed. Branch
+`feature/inventory-validation`.
+
+- **Lists follow the field they depend on** (`inventory/forms.py`
+  `CompanyForm.link_choices`, `base_template/js/forms.js` `follow`): Unit offers
+  only the item's base unit and packs (chosen and hidden when it is the only
+  one); Batch only the item's batches; Bin only the store's; Category only the
+  item type's. Batch, supplier batch, manufacture and expiry boxes show only
+  for an item that keeps batches (`BATCH_ENTRY`, `data-item-needs`). Ticking
+  "Has an expiry date" ticks "Keeps batches" (`data-ticks`).
+- **"This or that" forms ask first** (`CompanyForm.EITHER`): issues, receipts and
+  returns show a choice (e.g. From a requisition / Direct) and only that side's
+  fields; the hidden side is ignored and the "choose one" message is at the top.
+- **One page per item type** (`inventory/views.py`): Raw materials, Packaging,
+  Finished goods, Spare parts, General items (`/inventory/raw-materials/` ...),
+  plus All items. The page sets the type; the Add form shows the main fields and
+  folds the rest under "More details (optional)".
+- **Materials (recipe) on the finished good's page** (`production/recipes.py`,
+  `production/recipe_views.py`, `production/templates/production/recipe_card.html`):
+  one batch makes N; Add material offers raw materials and packaging not on it
+  yet, in the material's own unit. In use as soon as it has a material; a change
+  after a production order used it makes a new version (`production/boms.py`
+  `_changeable`). BOMs left the menu (the pages still open).
+- **Production orders in the menu, fewer boxes** (`production/forms.py`): no
+  Unit, line or shift; the stores are chosen already; the output form folds
+  batch, expiry, bin and packages. A planner who is not an owner does not see
+  Release on their own order (`orders.may_release`).
+- **Dates**: the date picker greys out days outside the input's `min`/`max`
+  (`datepicker.js`); the opening stock manufacture date stops at the opening day.
+- Wording: expiry help and errors say the manufacture date is needed for the
+  shelf life to work; "Recipe v1" instead of "BOM v1"; page anchors land below
+  the sticky top bar (`shell.css`).
+- Tests: `inventory/tests_follow.py`, `production/tests_recipes.py`, and updates
+  in `inventory/tests_pages.py`, `production/tests_flow.py`,
+  `production/tests_pages.py`. Tutorial rebuilt (Steps 6, 13, new 14).
+- Checked in the browser on a test copy: Add raw material, the recipe card,
+  opening stock (unit and batch boxes following the item, the date limit),
+  plan → release → use materials → post output → Stock on hand.
+
+Same day, after the senior's review:
+- **Delete** on item rows and the item page for an item whose stock never moved
+  (`masters.delete_item`); stock, a recipe it is on, production orders or any
+  document stop it with the reason. Pack units and an unused recipe go with it.
+- **Add material → "A new raw material or packaging item"** makes the item and
+  puts it on the recipe in one step; a refused form opens again with what was
+  written (`production/recipe_views.py`).
+- **No version on screen**: the recipe card and the order header no longer show
+  one (still kept underneath, so past orders keep what they were planned with).
+- **Data tables**: `tables.js` `data-local-table` gives short lists SL, Show N,
+  search, sortable headers and pages; on the 32 document and detail tables of
+  inventory, production, purchasing and sales. DataTables now loads on every page.
+
+**Deploy:** pull, collectstatic, restart. No migration.
+
+### Attendance → Fix setup: the one-time fix for people added from a device — 2026-10-26
+
+People added with "Add as employees" landed in their branch's Unassigned
+department and designation (no shift, so attendance wrote no days), some were
+never put on the branch's other devices, and their scans from before the link
+stayed refused as "unknown employee". Branch `fix/attendance-setup`.
+
+- **Attendance → Fix setup** (owner / company admin; `attendance/setup_fix_views.py`,
+  `devices/services/setup_fix.py`): one data table of everyone with a problem
+  (Unassigned department, No shift, Not on every device), filters by branch and
+  problem with counts, tick boxes.
+- **1. Set department**: branch → department → designation for the ticked people
+  or everyone in the list. It *corrects* the current placement (attendance reads
+  the placement of each day, so a transfer from today would not fix past days),
+  audited as `employee.placement_corrected`, then recalculates them from the
+  chosen salary month's first day. Unassigned is not offered.
+- **2. Send to devices**: every device of their branch (`mapping.send_employees`).
+- **3. Re-check refused scans**: `recheck_punches` from a salary month's first
+  day; the days of scans that now count are recalculated.
+- The three slow steps run in the background (`SetupFixJob`, like
+  `DeviceLoadJob`); the page shows the job and refreshes until it is done, with
+  a table of who could not be done and why. Only salary months not yet posted
+  are offered.
+- Tests: `devices/tests_setup_fix.py` (10). Checked in the browser on a test copy
+  with the jobs in the background.
+
+- **Missing days** (2026-10-27): for people set up correctly now whose first days
+  are missing. People added from a device had their placement, salary, own shift
+  and device links start on the day they were added, so earlier scans were refused
+  and those days had no placement. For chosen people (or a department) and a salary
+  month start: the first of each record starts from that day (when later; one held
+  by someone else is said, not moved), joining date too; refused scans re-checked;
+  attendance rebuilt; a table per person of days still absent, linked to the month
+  edit page to mark worked days by hand. `setup_fix.move_start_back`.
+
+**Deploy:** pull, migrate (devices 0012 and 0013), collectstatic, restart.
+
+### Inventory redesign, phase 3: production switch, buy/make, pack prices, stock to keep — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §15. Phases 1-2 (layout pieces, screens on
+sample data at /inventory/preview/) were merged before this.
+
+- **Production is its own module** (tenants 0009): needs Store & Inventory; its three
+  permissions move to it; production pages answer "Production is not enabled" without it
+  (`production/gate.py`); the menu hides Production, Raw materials and Packaging
+  (`item(module=...)`). Every company with Inventory on gets Production on, so nothing
+  changes for them.
+- **How you get it** on items (`Item.sourcing`: buy / make / both; only a finished good is
+  made). Finished goods with a recipe became "make" (inventory 0005). The recipe card and
+  production planning are for made products only; a recipe for a bought one is refused.
+- **A sale price per pack** (`ItemUom.sale_price`): sales use it before price × pack size.
+- **Stock to keep** as a quantity (`min_stock`) or days of sales (`keep_by`, `keep_days`,
+  `inventory/keep.py`: 30-day average of deliveries less returns); the reorder report and
+  the morning email use it.
+- Tests: `inventory/tests_phase3.py` (9) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (tenants 0009, inventory 0005), collectstatic, restart.
+
+### Inventory redesign, phase 4: Materials and Products on real records — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §15 phase 4 (and 1.5, the menu in work order).
+The screens approved on sample data are now real pages:
+
+- **Start here** `/inventory/start/` (`inventory/hub.py` `checklist`): tiles (materials and
+  products low or out, value in stock, set-up steps) and the checklist from the company's
+  own records - stores, materials, products, recipes, stock in, first production, first
+  sale, below stock to keep - each a link; a trading company sees no production steps. The
+  Next step box is the first step not done.
+- **Materials** `/inventory/materials/` (Production only) and **Products**
+  `/inventory/products/`: server tables (SL, search, pages) with stock in the stores the
+  person sees, stock to keep, value, status chip (OK / Low / Out); products also how you
+  get it, price, cost and margin (money only with "See costs"). Filters: category, store,
+  status.
+- **Add / Edit / Delete save with fetch** (`inventory/hub_forms.py`, `hub_views.py`): the
+  answer above the Save button, wrong boxes red. A code is suggested when left empty
+  (RM-0003); the unit is asked once and shown beside every quantity; the bigger unit
+  (1 bag = 50 kg, 1 carton = 24 at its own price) is on the Add form. Delete for an item
+  that never moved, else Deactivate. Pack add/remove, delete and status answer fetch too.
+- **Material page**: stock by store and batch, used in, units, Next step.
+- **Product hub**: cost, price, margin, in stock (also in its biggest unit), sold in the
+  last 30 days and per day; recipe with what is in stock and how many batches it is enough
+  for (editing it stays on the item page until phase 5); stock by store and batch;
+  productions or purchases; units and prices; Next step.
+- **Menu**: Start here, Materials, Products first; Raw materials / Packaging / Finished
+  goods leave the menu (their pages still open). The BOM list goes to Products.
+- Tests: `inventory/tests_phase4.py` (17) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, collectstatic, restart (no migration).
+
+### Inventory redesign, phase 5: recipe and cost — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §7.3, §7.4, §15 phase 5.
+
+- **The recipe is on the product's page** (`inventory/hub/_recipe.html`): one batch makes N;
+  Add material (one already added, a new one made right there, or a product made here);
+  Batch size; Remove - all save with fetch (`production/recipe_views.py` answers fetch and
+  goes back to the product). Each line shows its cost, what is in stock and how many batches
+  it is enough for; a switched-off material is marked "Switched off: replace it". The old
+  card on the item page is gone (it points to the product); `recipe_card.html` removed.
+- **Cost rates** `/production/cost-rates/` (`production.CostRate`, migration production 0002):
+  people or machine, Tk per hour; add, edit, switch off with fetch. A rate a product uses
+  keeps its kind. A new rate counts from then on.
+- **Cost of one batch** (`production.CostLine`, `production/costing.py`): people × hours ×
+  rate, machine hours × rate, a fixed amount, or a % of the materials; only the boxes the
+  chosen way needs are shown and kept. Materials = recipe × average cost, wastage included;
+  a material with no cost yet is named. Total, per unit, per pack, margin.
+- **Expected cost** is the product's cost per unit on its page and on the Products list (made
+  products with a full sheet); otherwise the stock's average.
+- **Semi-finished**: a product made here can go into another's recipe; a loop is refused;
+  with none in stock it costs what making it costs.
+- Branch access: Start here, Materials, Products and their pages open to "View stock"; item
+  saving to "Set up items"; cost rates and costs to "Set up BOMs (recipes)" - a store keeper
+  given access now finds the new pages (`access_control/page_access.py`).
+- Tests: `inventory/tests_phase5.py` (14) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (production 0002), collectstatic, restart.
+
+### Inventory redesign, phase 6: planning a production — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §8.1, §8.2, §11 (1-7, 26); §15 phase 6.
+
+- **How many to make** (`production/planning.py` `suggest`): stock to keep − in stock −
+  what open productions will make, in whole batches, capped by what the materials allow.
+  A card on the product page says it and links to the plan ("Make 2 batches").
+- **Plan page** `/production/products/<id>/make/` (`production/plan_views.py`,
+  `inventory/hub/plan.html`): batches, date, store the products go into. The materials
+  table redraws as these change: needed (wastage included, rounded up to the unit),
+  usable in the branch, taken from which stores, enough / short.
+- **Where from**: every usable store of the output store's branch - the material's usual
+  store first, then the others, first expiry first inside each. Expired batches, batches
+  waiting for QC, and quarantine / rejected / transit stores are not counted; another
+  branch's stock is not taken.
+- **Short**: red, with the most batches the materials allow, **Make fewer** (sets it) and
+  **Buy the rest** (a draft purchase requisition for exactly what is missing, rounded up to
+  the unit). A product made here that is short offers **Make it first**. Other open
+  productions needing the same material are named. A short plan can be saved.
+- **Plan it** creates the production (planned quantity = whole batches; materials store =
+  the store most materials come from until Start takes from several, phase 7); a date in a
+  closed month is refused.
+- Tests: `inventory/tests_phase6.py` (11) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, collectstatic, restart (no migration).
+
+### Inventory redesign, phase 7: Start and Finish — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §8.3-8.6, §11; §15 phase 7. Service
+`production/making.py`; pages `production/run_views.py` (`/production/runs/`, one
+production at `/production/runs/<id>/`), templates `inventory/hub/runs.html`, `run.html`.
+
+- **Start** (7.1): the store lines come from the plan (every usable store of the branch,
+  usual store first, first expiry first); the store keeper changes a quantity only if a store
+  gave more or less; more than 5 % over needs a reason; refused while short. One material use
+  per store (`Consumption.warehouse`), posted at once; the expected cost per unit is kept.
+- **Finish** (7.2-7.4): good and damaged; into one store or split (`OutputPart`, must add up);
+  the day's other costs filled from the cost sheet × batches and editable (`OrderCost`);
+  leftovers back to the store and batch they came from at the cost used, or wasted with a
+  reason (`Leftover`); good below 90 % / above 105 % needs a reason; 0 good = **Failed**
+  (reason, cost a loss). Unit cost = (materials used + other costs) ÷ good; the new batch is
+  valued at it; the page shows expected against actual.
+- **Batch per mix** (7.6): product switch "New batch number for every batch made"
+  (`Item.batch_per_mix`, inventory 0006): one batch per mix, the good shared over them, one
+  store only.
+- **Reverse** (7.5, reason) while nothing made was sold, moved or used; **Cancel after Start**
+  returns every material. QC pass / fail covers every batch made.
+- Statuses read Planned → Started → Finished (+ Failed, Reversed, Cancelled). Old production
+  orders still open on their old page. The menu's Make and the flow bar go to the new list.
+- Tests: `inventory/tests_phase7.py` (15) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (production 0003, inventory 0006), collectstatic, restart.
+
+### Inventory redesign, phase 8: warranty — 2026-10-27
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §10; §15 phase 8. Service `inventory/warranty.py`,
+page `inventory/warranty_views.py` (`/inventory/warranty/`), template `inventory/hub/warranty.html`.
+
+- **Company switch** (8.1): Inventory settings → Warranty (`InventorySettings.warranty_on`,
+  off by default). Off: no warranty box on any item, no menu entry, no flow-bar step; the page
+  says it is off (owner/admin get the settings link).
+- **Per item**: Warranty (months) and "A serial number for each unit" (`Item.warranty_months`,
+  `serial_numbers`) on the product and material forms. A product's warranty runs from delivery;
+  a material's (the supplier's) from receipt.
+- **Serial numbers** (8.2): one per unit made when a production finishes (batch number + running
+  number; removed again if it is reversed); "Serial numbers in" for units received; "Serial
+  numbers out" scans them against a delivery (each in stock, on the delivery, no more than
+  delivered) - the customer and date are kept; labels as a PDF per item or per production.
+- **Claims** (8.3): by serial (looked up as you type: covered until / out of warranty since) or
+  by item and delivery date; replace / repair (cost) / refund (amount) / refuse (reason);
+  covering one out of warranty needs a reason; the faulty unit can go into a store (its own
+  blocked batch), the new unit leaves one (first expiry first); a unit replaced or refunded once
+  is not claimed again. Claims list, and this year's claims by item with the commonest problems.
+- New permission "Record warranty claims and serial numbers" (`inventory.warranty`).
+- Tests: `inventory/tests_phase8.py` (12) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (inventory 0007), collectstatic, restart.
+
+### Inventory redesign, phase 9 part 1: reports, data conversion, table look — 2026-10-28
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §13; §15 phase 9 (9.1, 9.2) and 1.2.
+
+- **Reports** (9.1, `inventory/reports.py`, same filters / server table / Excel / PDF as the
+  others, under Inventory reports → Production): **Production cost** (materials, other costs,
+  total, cost per unit against expected, % over), **Material use** (per material and store:
+  out at Start, back at Finish, used, of it wasted, cost), **Waste and failed productions**
+  (wasted material, damaged output, failed productions with reason and loss), **Shortages**
+  (planned productions that cannot start, each material short now). Stock value, expiry and
+  reorder were there already.
+- **Conversion** (9.2, migration production 0004, runs once at deploy, safe to repeat): old
+  material uses get their store; old outputs record the store they went into; old finished
+  productions get other costs 0. A company with exactly one active price list gets its prices
+  onto products where none is set (base unit → sale price, pack → pack price); with several
+  lists nothing is guessed.
+- **Table look** (1.2, `ui.css`, `.ui-page` only): plain-case headers, action-blue current
+  page and focus, soft blue row hover, quiet SL column, filter row padding inside cards.
+- Tests: `inventory/tests_phase9.py` (5) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, migrate (production 0004), collectstatic, restart.
+Left in phase 9: 9.3 tutorial from the new screens; 9.4 Stock in, Stock, Move stock and Sell in
+the new look (the flow bar opens their current pages today).
+
+### Inventory redesign, phase 9 part 2: Stock in, Stock, Move stock, Sell — 2026-10-28
+
+Plan: docs/inventory/PRODUCTION_PLAN.md §3, §15 9.4 (screens approved on sample data in 2.5).
+Service `inventory/flows.py`, pages `inventory/flow_views.py`, templates `inventory/hub/stock_in*`,
+`stock_now`, `moves`, `move_new`, `sales`, `sale_new`, `_line.html`, script
+`inventory/static/inventory/js/lines.js`.
+
+- **One screen per job**, each filling the existing document and posting it at once in one
+  transaction (every check of the document still applies; a refusal keeps nothing):
+  - **Stock in** `/inventory/stock-in/`: a purchase (goods receipt, received and posted), the
+    first count (opening stock: posted when the person may approve, else waits), a customer
+    return (good back to stock, damaged to the rejected store). The list shows all three,
+    each linking to its document.
+  - **Stock** `/inventory/stock/now/`: every item in stock, where it is, stock to keep, value,
+    status; the batches that expire first (within the settings' warning days). The detailed
+    stock-on-hand page stays one click away.
+  - **Move stock** `/inventory/move/`: send from one store to another (a batch can be chosen,
+    else the one expiring first); it waits in transit until the other store presses Receive.
+  - **Sell** `/inventory/sell/`: customer, store, lines → the sale is confirmed and delivered
+    (first expiry first), and invoiced when asked. Someone who may not confirm their own sale
+    leaves it for whoever confirms. More than the store has is refused, nothing kept.
+- **Lines follow their item**: the item's own units, "per <unit>" for cost / price, batch and
+  expiry only for items that keep them (and not on a return), what is in the chosen store,
+  the batch list of that store; "Add a line" up to 30. A refused line names its row and box.
+  The product's price is only a hint on Sell: empty, the customer's price list decides.
+- The flow bar, the menu (Stock in, Stock, Move stock, Sell) and every button on the new
+  pages now open these screens.
+- Tests: `inventory/tests_phase9b.py` (9) and the apps touched. Full suite: after all phases.
+
+**Deploy:** pull, collectstatic, restart (no migration).
+Left in phase 9: 9.3 the tutorial from the new screens; then the full suite and deploy.
+
+### Inventory redesign, phase 9.3 and the full test run — 2026-10-28
+
+- **Tutorial** (9.3): `docs/scripts/build_products_tutorial.py` writes
+  `docs/inventory/PRODUCTS-AND-STOCK-TUTORIAL.pdf` - Start here, Materials, Products, recipe and
+  cost, Stock in, Make (Plan, Start, Finish), Stock, Move stock, Sell, Warranty, reports and the
+  questions people ask; every box with what to write and what it does. The training README points
+  to it first.
+- **Full suite** (after every phase, as asked): 2,761 tests, 1 failure -
+  `api.tests.test_inventory.ProductionTests`: its fixture made the product straight through the
+  service, without "How you get it", so it was a bought product, which since phase 3 cannot be
+  planned. The API itself creates products through the form, which defaults to Make: the
+  behaviour is right, the fixture was not (the same fix the production fixture had in phase 3).
+  Fixed; the 12 API inventory tests pass.
+
+**The redesign (phases 0-9) is complete. Deploy everything together:** pull, migrate (devices
+0012/0013, tenants 0009, inventory 0005-0007, production 0002-0004), collectstatic, restart.
+
+### Generate salary in the background, with its progress — 2026-11-01
+
+- Generate ran inside the click: with 150+ people it took longer than a person will wait and
+  with 2,000+ it would pass the server's time limit, with nothing on screen meanwhile.
+- The click now writes a `GenerateJob` (payroll 0016) and returns at once
+  (`payroll/generate_jobs.py`). A thread runs `generate_payroll`, which reports
+  `progress(stage, done, total)`: attendance person by person (`recalculate(progress=...)`), then
+  the payslips. The Salary page shows the shared progress card - "Generating August 2026", a bar,
+  step 1 "Bringing attendance up to date: 640 of 2000 people", step 2 "Calculating payslips" -
+  asks `payroll:generate_status` every second and reloads with the result when it has finished.
+- While it runs, Generate and Submit are hidden and Submit/Approve are refused; a second click
+  returns the running job. Whoever started it sees what it did (or why it stopped) once.
+- A job whose thread stopped (deploy, restart) has a silent heartbeat; after 3 minutes the next
+  look at the Salary page starts it again (generating replaces the draft, so this is safe).
+- So the progress can be seen, the background run saves attendance days as it goes (like scans
+  arriving) instead of in one transaction; days with nothing stored are written 5,000 at a time.
+- The API's generate (`api/v1/payroll`) is unchanged: it still answers when done.
+- Supersedes the unmerged branch `fix/fast-salary-generation` (2026-10-26), whose migration
+  clashes with payroll 0015 and which showed no progress.
+- Tests: `payroll/tests_generate_jobs.py` (10).
+
+**Deploy:** pull, migrate (payroll 0016), collectstatic, restart.
+
+### Ask: questions in the top search bar — 2026-11-02
+
+- **What:** type a question in plain words in the top search bar ("find all the employees who
+  were late today", "how much salary generated for Ajay this month", in English, Bangla or a
+  mix). A name or code (one or two words) still searches employees as before; a question (three
+  words or more, or ending in "?") opens `/ask/`. "Thinking…" shows while it is read.
+- **How:** one Claude call (`ai_assistant.claude.ask_json`, kind "ask") gets the question, today's
+  date, the company's timezone and its branch and department names, and returns only JSON: a
+  search and its filters (`ask/interpret.py`). Claude never sees results, salaries or attendance,
+  never writes SQL, and gets no employee names: names are matched in our code among the people the
+  viewer may see. Every value it returns is checked; the understood search then lives in the
+  address, so a reload, a removed chip or Change runs again without another AI call.
+- **Searches** (`ask/searches.py`, read-only, each on the code its page uses, so the numbers are
+  the page's): attendance days by status (late, absent, present, half day, on leave, left early,
+  missing scan, inactive), attendance counts per person (most first), in the office now, on leave
+  on a day or range, leave balance, overtime (approved / waiting), one person's salary (monthly
+  run and weekly pay group weeks; "not generated yet" when it is not), salary totals by
+  department or branch.
+- **Access, in our code only:** the same rules as the pages - attendance `view_scope` /
+  `now_scope`, the Leave list's scope, `overtime_scope`, `salary_month_branches` (HR and the
+  auditor see no pay; a branch manager only their branches), always inside the active company.
+  `/ask/` is a branch page (`access_control/page_access.py`): an Employee login opens it only once
+  given a permission it answers for, and then sees only that.
+- **Page:** a one-line answer, chips with how it was understood (remove one, or Change), a server
+  table with links to the real pages (the day on the calendar, the payslip, the profile) and to
+  the page it comes from. Several people matching a name are listed to choose from; no match says
+  so. Ask off, no consent, no key, the daily limit reached, an unanswerable question or a bad AI
+  answer: said plainly, then the normal employee name search.
+- **Settings:** Organisation › Ask settings (owner/company admin; `ask/settings/`): its own switch
+  and consent ("questions and employee names are sent to Anthropic; salaries and attendance are
+  not"), the model (Claude Haiku 5.5 by default, low effort), the shared key and daily limit.
+  `AiSettings` gains `ask_enabled`, `ask_consent_received`, `ask_consent_date`, `ask_model`;
+  `AiCall.Kind` gains "ask". The AI order assistant keeps its own switch.
+- **Files:** `ask/` (new app: interpret, searches, views, forms, templates, static), 
+  `ai_assistant/models.py` + migration 0002, `ai_assistant/claude.py`, `config/settings.py`,
+  `config/urls.py`, `base_template/includes/topbar.html`, `base_template/context_processors.py`,
+  `base_template/navigation.py`, `access_control/page_access.py`,
+  `ai_assistant/templates/ai_assistant/settings.html` (a link to Ask settings).
+- **Tests:** `ask/tests.py` (32): each search per role (company admin, payroll manager, branch
+  manager, HR, Employee login, auditor; HR gets no salary), both examples end to end with a fake
+  client (two Ajays → asks which), Ask off / no key / no consent / limit reached / unknown / bad
+  JSON / a bare name, the address checked again, settings and the top bar.
+
+**Deploy:** pull, migrate (ai_assistant 0002), collectstatic, restart. Then, as the owner or company
+admin, Organisation › Ask settings: record the client's consent, save the key if it is not saved
+yet, switch Ask on.

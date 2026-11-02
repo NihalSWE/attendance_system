@@ -25,7 +25,7 @@ Customer ─► Sales order ─confirm (reserve)─► Delivery challan (scan, F
   issued, used in production or transferred; only this order's deliveries
   take it. What could not be reserved shows as short ("Reserve again" after
   production). Cancel frees the reservation; Close frees what is left.
-- **Credit limit**: a customer with a limit (0 = cash only, not checked)
+- **Credit limit**: a customer with a limit (0 = no limit: not checked)
   whose unpaid invoices + open orders + this order go over it is confirmed
   only with a reason - a warning, not a block.
 - **Delivery challan**: "Deliver" drafts it from the reserved stock; cartons

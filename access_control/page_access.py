@@ -18,6 +18,9 @@ from inventory.reports import REPORTS as INVENTORY_REPORTS
 from reports.catalogue import REPORTS
 
 # view name -> the branch permission it needs, or a tuple: any one of them.
+#: Store & Inventory's page per item type (inventory/urls.py, 2026-10-26).
+ITEM_TYPE_PAGES = ("raw_materials", "packaging", "finished_goods", "spare_parts", "general_items")
+
 BRANCH_PAGES = {
     # A12 part 2: who has which access (itself limited to the viewer's branches).
     "organization:access": "access.grant",
@@ -52,6 +55,10 @@ BRANCH_PAGES = {
     "leaves:leave_record": "leave.record",
     "leaves:leave_cancel": "leave.record",
     "leaves:leave_amend": "leave.record",
+    # Ask (2026-11-02): each search limits itself to what the viewer may see
+    # with that search's own permission (ask/searches.py).
+    "ask:ask": ("attendance.view", "employees.view", "leave.view", "leave.record", "overtime.view",
+                "overtime.decide", "salary.view", "salary.prepare"),
     "payroll:overtime_list": ("overtime.view", "overtime.decide"),
     "payroll:overtime_decide": ("overtime.view", "overtime.decide"),
     "payroll:overtime_undo": "overtime.decide",
@@ -69,6 +76,7 @@ BRANCH_PAGES = {
     "payroll:lfa_paid": "salary.prepare",
     "payroll:lfa_document": "salary.prepare",
     "payroll:payroll_generate": "salary.prepare",
+    "payroll:generate_status": "salary.prepare",
     # Salary approval (A11): whoever prepares salary submits the month, and
     # can take it back; approving stays with the owner and company admin.
     "payroll:payroll_submit": "salary.prepare",
@@ -98,6 +106,16 @@ BRANCH_PAGES = {
     "attendance:attendance_day": "attendance.view",
     "attendance:attendance_now": ("employees.view", "attendance.view"),
     "attendance:attendance_review": "attendance.fix",
+    # Stock waiting for a quality check (2026-11-01): seen with the stock;
+    # deciding needs purchase.qc, checked by inventory/qc.py.
+    "inventory:qc": "inventory.view",
+    "inventory:qc_decide": ("purchase.qc",),
+    # Present days set by hand (2026-10-31): the service also refuses a head
+    # of department, who fixes days but not a period's count.
+    "payroll:attendance_summary": "attendance.fix",
+    "payroll:attendance_summary_person": "attendance.fix",
+    "payroll:attendance_summary_save": "attendance.fix",
+    "payroll:attendance_summary_revert": "attendance.fix",
     "attendance:attendance_day_fix": "attendance.fix",
     "attendance:attendance_correction_withdraw": "attendance.fix",
     # N11: missed scans employees report, for whoever may fix the day's branch.
@@ -135,10 +153,38 @@ BRANCH_PAGES = {
     # the services check each store's branch again. Settings are not listed.
     **{f"inventory:{key}": "inventory.view"
        for key in ("home", "stock", "item_detail", "units", "categories", "items", "stores",
-                   "bins", "suppliers", "customers", "opening", "opening_detail")},
+                   "bins", "suppliers", "customers", "opening", "opening_detail",
+                   *ITEM_TYPE_PAGES)},
     **{f"inventory:{key}_{action}": "inventory.items"
-       for key in ("units", "categories", "items", "stores", "bins", "suppliers", "customers")
+       for key in ("units", "categories", "items", "stores", "bins", "suppliers", "customers",
+                   *ITEM_TYPE_PAGES)
        for action in ("edit", "status")},
+    **{f"inventory:{key}_delete": "inventory.items" for key in ("items", *ITEM_TYPE_PAGES)},
+    # The redesigned pages (2026-10-27, plan §15 phases 4-5): Start here,
+    # Materials, Products and their pages to viewers; saving an item to
+    # "Set up items"; the cost rates to "Set up BOMs (recipes)".
+    **{f"inventory:{key}": "inventory.view"
+       for key in ("start", "materials", "material", "products", "product")},
+    "inventory:item_save": "inventory.items",
+    "inventory:item_price": "inventory.items",
+    **{f"inventory:{name}": ("inventory.view", "inventory.warranty") for name in ("warranty", "serial_lookup")},
+    **{f"inventory:{name}": "inventory.warranty"
+       for name in ("claim_save", "serials_add", "serials_deliver", "serial_labels")},
+    "production:plan": "production.plan",
+    "inventory:stock_in": ("inventory.view", "purchase.receive", "inventory.adjust"),
+    "inventory:stock_in_new": ("purchase.receive", "inventory.adjust", "sales.deliver"),
+    "inventory:stock_now": "inventory.view",
+    "inventory:moves": ("inventory.view", "inventory.transfer"),
+    "inventory:move_new": "inventory.transfer",
+    "inventory:move_receive": "inventory.transfer",
+    "inventory:sales": ("inventory.view", "sales.order", "sales.deliver", "sales.invoice"),
+    "inventory:sale_new": "sales.order",
+    **{f"production:{name}": ("inventory.view", "production.plan", "production.execute")
+       for name in ("runs", "run")},
+    **{f"production:{name}": "production.execute" for name in ("run_start", "run_finish", "run_action")},
+    **{f"production:{name}": "production.bom"
+       for name in ("cost_rates", "cost_rate_save", "cost_rate_status", "cost_line_add",
+                    "cost_line_remove")},
     "inventory:standard_units": "inventory.items",
     "inventory:pack_unit_add": "inventory.items",
     "inventory:pack_unit_remove": "inventory.items",
@@ -168,6 +214,9 @@ BRANCH_PAGES = {
                     "delivery_line_add", "delivery_line_remove", "delivery_scan", "delivery_pdf",
                     "delivery_action", "invoices", "invoice_detail", "invoice_pdf", "invoice_action",
                     "returns", "return_detail", "return_line_add", "return_line_remove", "return_action")},
+    # A finished good's Materials card (2026-10-26): "Set up BOMs (recipes)".
+    **{f"production:{name}": "production.bom"
+       for name in ("recipe_batch", "recipe_add", "recipe_remove")},
     # Phase 5: production. Every page opens to anyone who may view stock or
     # take part; the services check the finished-goods store's branch and the
     # exact permission (BOMs, planning, running, QC).

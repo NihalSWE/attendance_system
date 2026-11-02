@@ -1,0 +1,35 @@
+{% extends "inventory/hub/base.html" %}
+{% block title %}Stock in{% endblock %}
+{% block content %}
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / Stock in</p>
+            <h1 class="ui-head__title">Stock in</h1>
+            <p class="ui-head__sub">Everything that came into the stores: purchases, the first count, and goods customers returned.</p>
+        </div>
+        <div class="ui-head__actions"><a class="ui-btn ui-btn--main" href="{% url 'inventory:stock_in_new' %}">{% include "ui/icon.html" with name="plus" %} Stock in</a></div>
+    </div>
+    <div class="ui-card">
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="history" %} What came in</h2><span class="ui-card__note">Click a number to open it</span></div>
+        <div class="table-wrap">
+            <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+                <thead><tr><th>Date</th><th>Number</th><th>How</th><th>Store</th><th>From</th><th class="numeric">Lines</th><th>Status</th></tr></thead>
+                <tbody>
+                    {% for row in rows %}
+                        <tr><td>{{ row.0 }}</td><td><a href="{{ row.line }}">{{ row.1 }}</a></td><td>{{ row.2 }}</td><td>{{ row.3|default:"—" }}</td><td>{{ row.4|default:"—" }}</td><td class="numeric">{{ row.5 }}</td><td><span class="ui-chip ui-chip--{% if row.6 == 'Draft' %}info{% elif row.6 == 'Reversed' or row.6 == 'Cancelled' %}bad{% else %}ok{% endif %}">{{ row.6 }}</span></td></tr>
+                    {% empty %}
+                        <tr><td colspan="7">Nothing has come in yet: press Stock in.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% include "base_template/includes/table_pagination.html" %}
+    </div>
+    {% if production %}
+        {% url 'production:runs' as next_url %}
+        {% include "ui/next_step.html" with what="With the materials in, make the products." url=next_url button="Make" %}
+    {% else %}
+        {% url 'inventory:sales' as next_url %}
+        {% include "ui/next_step.html" with what="With the products in, sell them." url=next_url button="Sell" %}
+    {% endif %}
+{% endblock %}

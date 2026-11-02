@@ -35,7 +35,7 @@
         <div class="card__body">
             <dl class="facts profile-facts profile-facts--two">
                 <dt>Employee</dt>
-                <dd><a href="{% url 'organization:employee_detail' claim.employee.pk %}">{{ claim.employee.full_name }}</a></dd>
+                <dd><a href="{% url 'organization:employee_detail' claim.employee.public_id %}">{{ claim.employee.full_name }}</a></dd>
                 <dt>Claimed</dt>
                 <dd>{{ claim.created_at|date:"j M Y" }}{% if claim.submitted_by and claim.submitted_by_id != claim.employee.user_id %} <span class="t-faint">· entered by {{ claim.submitted_by.email }}</span>{% endif %}</dd>
                 <dt>Amount by the rules</dt>
