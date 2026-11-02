@@ -7061,3 +7061,22 @@ yet, switch Ask on.
   (the menu order).
 
 **Deploy:** pull, collectstatic, restart. No migration.
+
+### Price lists: Edit and Delete, and Edit on each price — 2026-11-02
+
+- **Price lists page** (`sales/price_list_list.html`): each list has **Edit** (name, from, until,
+  note, in a modal) and **Delete**, beside Open.
+- **A price list's page**: **Edit list** and **Delete list** at the top (with how many customers
+  use it), **Add a price** (was "Set a price"), and **Edit** beside Remove on every price (item,
+  unit, from quantity, price, in a modal opened filled in).
+- **Rules** (`sales/orders.py`): `update_price_list`: customers name their list, so a renamed list
+  moves its customers to the new name. `delete_price_list`: its prices go; orders already made
+  keep their prices; its customers' list is cleared, so they get each item's own sale price.
+  `update_price`: refused when the list already has a price for that item, unit and from quantity.
+  All three need "Enter sales orders" and are in the audit log.
+- URLs `sales:price_list_edit`, `sales:price_list_delete`, `sales:price_edit` (branch pages like
+  the other sales pages; menu aliases of Price lists).
+- Tests: `sales/tests_pages.py` (`test_edit_and_delete_a_price_list`,
+  `test_a_deliverer_cannot_change_price_lists`).
+
+**Deploy:** pull, restart. No migration.

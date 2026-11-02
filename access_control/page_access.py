@@ -209,7 +209,8 @@ BRANCH_PAGES = {
     # part; the services check the order's store branch and the exact
     # permission (order, confirm, deliver, invoice).
     **{f"sales:{name}": ("inventory.view", "sales.order", "sales.approve", "sales.deliver", "sales.invoice")
-       for name in ("price_lists", "price_list_detail", "price_remove", "orders", "order_detail",
+       for name in ("price_lists", "price_list_detail", "price_list_edit", "price_list_delete", "price_edit",
+                    "price_remove", "orders", "order_detail",
                     "order_line_add", "order_line_remove", "order_action", "deliveries", "delivery_detail",
                     "delivery_line_add", "delivery_line_remove", "delivery_scan", "delivery_pdf",
                     "delivery_action", "invoices", "invoice_detail", "invoice_pdf", "invoice_action",

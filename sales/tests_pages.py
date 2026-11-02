@@ -116,6 +116,50 @@ class SalesPageTests(SalesFixture, TestCase):
         self.assertContains(page, f"{made[0].number} (FGW), {made[1].number} (RMS) drafted")
         self.assertContains(self.client.get(reverse("sales:delivery_detail", args=[made[1].pk])), "from RMS")
 
+    def test_edit_and_delete_a_price_list(self):
+        # 2026-11-02: Edit and Delete on the price list, Edit on each price.
+        from sales.models import Customer, PriceListLine
+
+        distributor = PriceList.all_objects.get(name="Distributor")
+        page = self.client.get(reverse("sales:price_lists"))
+        self.assertContains(page, f"?edit={distributor.pk}")
+        self.assertContains(page, reverse("sales:price_list_delete", args=[distributor.pk]))
+        page = self.client.get(reverse("sales:price_lists"), {"edit": distributor.pk})
+        self.assertContains(page, 'data-open-on-load="edit-dialog"')
+        # Renaming keeps its customers: their record moves to the new name.
+        response = self.client.post(reverse("sales:price_list_edit", args=[distributor.pk]), {
+            "name": "Distributor 2027", "valid_from": "", "valid_to": "", "note": ""}, follow=True)
+        self.assertContains(response, "1 customer moved to the new name.")
+        self.assertEqual(Customer.all_objects.get(pk=self.customer.pk).price_list_name, "Distributor 2027")
+        # From the list's own page it goes back there; a bad date comes back in its modal.
+        response = self.client.post(reverse("sales:price_list_edit", args=[distributor.pk]), {
+            "name": "Distributor 2027", "valid_from": "2026-12-01", "valid_to": "2026-11-01", "note": "",
+            "next": "detail"})
+        self.assertContains(response, 'data-open-on-load="list-dialog"')
+        self.assertContains(response, "Ends before it starts?")
+
+        # Edit one price: the modal opens filled in, and saving changes it.
+        line = PriceListLine.all_objects.get(price_list=distributor, min_qty=0)
+        page = self.client.get(reverse("sales:price_list_detail", args=[distributor.pk]), {"edit_line": line.pk})
+        self.assertContains(page, 'data-open-on-load="line-dialog"')
+        self.assertContains(page, f"Edit the price of {self.juice.code}")
+        self.client.post(reverse("sales:price_edit", args=[distributor.pk, line.pk]), {
+            "item": self.juice.pk, "uom": self.pcs.pk, "price": "21.50", "min_qty": "0"})
+        self.assertEqual(PriceListLine.all_objects.get(pk=line.pk).price, D("21.50"))
+        # Changing it onto a price the list already has is refused (from 500 to 0).
+        other = PriceListLine.all_objects.get(price_list=distributor, min_qty=500)
+        refused = self.client.post(reverse("sales:price_edit", args=[distributor.pk, other.pk]), {
+            "item": self.juice.pk, "uom": self.pcs.pk, "price": "19", "min_qty": "0"})
+        self.assertContains(refused, "already has a price for that item, unit and from quantity")
+        self.assertEqual(PriceListLine.all_objects.get(pk=other.pk).price, D("21"))
+
+        # Delete: its prices go, and its customers fall back to each item's sale price.
+        response = self.client.post(reverse("sales:price_list_delete", args=[distributor.pk]), follow=True)
+        self.assertContains(response, "deleted with its 2 prices. 1 customer now get each item&#x27;s own sale price.")
+        self.assertFalse(PriceList.all_objects.filter(pk=distributor.pk).exists())
+        self.assertFalse(PriceListLine.all_objects.filter(price_list_id=distributor.pk).exists())
+        self.assertEqual(Customer.all_objects.get(pk=self.customer.pk).price_list_name, "")
+
     def test_over_the_credit_limit_asks_why(self):
         self.customer.credit_limit = D("1000")
         self.customer.save()
@@ -129,6 +173,19 @@ class SalesPageTests(SalesFixture, TestCase):
 
 
 class SalesGateTests(SalesFixture, TestCase):
+    def test_a_deliverer_cannot_change_price_lists(self):
+        user = self.member("seller@inv.test", "employee")
+        with use_company(self.company):
+            employee = Employee.objects.create(company=self.company, user=user, first_name="S")
+        grant_access(actor=self.owner, company_id=self.company.pk, employee_id=employee.pk,
+                     code="sales.deliver", branch_ids=[self.branch.pk])
+        self.client.force_login(user)
+        distributor = PriceList.all_objects.get(name="Distributor")
+        page = self.client.get(reverse("sales:price_lists"))
+        self.assertNotContains(page, reverse("sales:price_list_delete", args=[distributor.pk]))
+        self.assertEqual(self.client.post(reverse("sales:price_list_delete", args=[distributor.pk])).status_code, 403)
+        self.assertTrue(PriceList.all_objects.filter(pk=distributor.pk).exists())
+
     def test_without_the_module_nothing_opens(self):
         self.enable_module(False)
         self.client.force_login(self.owner)

@@ -16,7 +16,7 @@ from inventory import access
 from inventory.forms import ReasonForm
 from inventory.views import branch_ids, company_or_bail
 from sales import deliveries, forms, invoice_pdf, orders
-from sales.models import Delivery, PriceList, SalesInvoice, SalesOrder, SalesReturn
+from sales.models import Customer, Delivery, PriceList, PriceListLine, SalesInvoice, SalesOrder, SalesReturn
 
 #: Who may look at sales documents: anyone who views stock or takes part.
 VIEW = ("inventory.view", "sales.order", "sales.approve", "sales.deliver", "sales.invoice")
@@ -85,13 +85,83 @@ def price_list_list(request):
                        "Price list “{obj.name}” made. Add its prices.", "sales:price_list_detail")
         if done:
             return done
+    return _price_lists(request, new_form=form)
+
+
+def _price_lists(request, new_form=None, edit_form=None, edit_row=None):
+    """The Price lists page; ``?edit=<id>`` opens that list's Edit modal (2026-11-02)."""
+    company_id = request.company_id
+    can_edit = access.may(request.user, company_id, "sales.order")
+    if can_edit and edit_form is None and str(request.GET.get("edit", "")).isdigit():
+        with use_company(company_id):
+            edit_row = PriceList.objects.filter(pk=int(request.GET["edit"])).first()
+        if edit_row is not None:
+            edit_form = forms.PriceListForm(instance=edit_row, company_id=company_id, auto_id="edit_%s")
+    open_dialog = "new-dialog" if new_form is not None else "edit-dialog" if edit_form is not None else ""
     return _list(request, "sales/price_list_list.html", PriceList.objects.all(), ("name", "note"),
                  ("name", "valid_from", "valid_to", "status", None), (), {
-                     "can_edit": can_edit, "open_dialog": "new-dialog" if form is not None else "",
-                     "new_form": form or (forms.PriceListForm(company_id=company_id) if can_edit else None)})
+                     "can_edit": can_edit, "open_dialog": open_dialog, "edit_form": edit_form, "edit_row": edit_row,
+                     "new_form": new_form or (forms.PriceListForm(company_id=company_id) if can_edit else None)})
 
 
-def _price_list_page(request, pk, form=None, open_dialog=""):
+@login_required
+def price_list_edit(request, pk):
+    """Save a price list's name, dates and note (from its Edit modal, on the
+    Price lists page or on the list's own page: ``next=detail``)."""
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    if request.method != "POST":
+        return redirect(f"{reverse('sales:price_lists')}?edit={pk}")
+    back_to_list = request.POST.get("next") != "detail"
+    access.require(request.user, company_id, "sales.order")
+    with use_company(company_id):
+        row = PriceList.objects.filter(pk=pk).first()
+    if row is None:
+        messages.error(request, "That price list was not found.")
+        return redirect("sales:price_lists")
+    # Its own box ids: the page holds the New (or Add a price) modal too.
+    form = forms.PriceListForm(request.POST, instance=row, company_id=company_id,
+                               auto_id="list_%s" if not back_to_list else "edit_%s")
+    if form.is_valid():
+        try:
+            saved = orders.update_price_list(actor=request.user, company_id=company_id, price_list_id=pk,
+                                             values=form.cleaned_data)
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            moved = saved.customers_moved
+            note = f" {moved} customer{'s' if moved != 1 else ''} moved to the new name." if moved else ""
+            messages.success(request, f"Price list “{saved.name}” saved.{note}")
+            return redirect("sales:price_lists") if back_to_list else redirect("sales:price_list_detail", pk=pk)
+    with use_company(company_id):
+        row.refresh_from_db()
+    if back_to_list:
+        return _price_lists(request, edit_form=form, edit_row=row)
+    return _price_list_page(request, pk, list_form=form, open_dialog="list-dialog")
+
+
+@login_required
+@require_POST
+def price_list_delete(request, pk):
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    try:
+        gone = orders.delete_price_list(actor=request.user, company_id=company_id, price_list_id=pk)
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages))
+        return redirect("sales:price_lists")
+    prices, customers = gone["prices"], gone["customers"]
+    note = (f" {customers} customer{'s' if customers != 1 else ''} now get each item's own sale price."
+            if customers else "")
+    messages.success(request, f"Price list “{gone['name']}” deleted with its {prices} "
+                              f"price{'s' if prices != 1 else ''}.{note}")
+    return redirect("sales:price_lists")
+
+
+def _price_list_page(request, pk, form=None, open_dialog="", line_form=None, line=None, list_form=None):
+    """A price list's page. ``?edit_line=<id>`` opens that price's Edit modal (2026-11-02)."""
     company_id = request.company_id
     access.require(request.user, company_id, VIEW)
     with use_company(company_id):
@@ -101,9 +171,20 @@ def _price_list_page(request, pk, form=None, open_dialog=""):
 
             raise PermissionDenied("Price list not found.")
         lines = list(price_list.lines.select_related("item", "uom").order_by("item__code", "min_qty"))
+        customers = Customer.objects.filter(price_list_name=price_list.name).count()
     can_edit = access.may(request.user, company_id, "sales.order")
+    if can_edit and line_form is None and str(request.GET.get("edit_line", "")).isdigit():
+        line = next((row for row in lines if row.pk == int(request.GET["edit_line"])), None)
+        if line is not None:
+            line_form = forms.PriceForm(company_id=company_id, auto_id="line_%s", initial={
+                "item": line.item_id, "uom": line.uom_id, "min_qty": f"{line.min_qty.normalize():f}",
+                "price": f"{line.price:.2f}"})
+            open_dialog = "line-dialog"
     return render(request, "sales/price_list_detail.html", {
         "price_list": price_list, "lines": lines, "can_edit": can_edit, "open_dialog": open_dialog,
+        "customers": customers, "line_form": line_form, "line": line,
+        "list_form": list_form or (forms.PriceListForm(instance=price_list, company_id=company_id, auto_id="list_%s")
+                                   if can_edit else None),
         "price_form": form or (forms.PriceForm(company_id=company_id) if can_edit else None)})
 
 
@@ -126,6 +207,29 @@ def price_list_detail(request, pk):
                 return redirect("sales:price_list_detail", pk=pk)
         return _price_list_page(request, pk, form=form, open_dialog="price-dialog")
     return _price_list_page(request, pk)
+
+
+@login_required
+@require_POST
+def price_edit(request, pk, line_pk):
+    """Save one price from its Edit modal: item, unit, from quantity, price."""
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    access.require(request.user, company_id, "sales.order")
+    form = forms.PriceForm(request.POST, company_id=company_id, auto_id="line_%s")
+    if form.is_valid():
+        try:
+            orders.update_price(actor=request.user, company_id=company_id, price_list_id=pk, line_id=line_pk,
+                                values=form.cleaned_data)
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, "Price saved.")
+            return redirect("sales:price_list_detail", pk=pk)
+    with use_company(company_id):
+        line = PriceListLine.objects.select_related("item").filter(pk=line_pk, price_list_id=pk).first()
+    return _price_list_page(request, pk, line_form=form, line=line, open_dialog="line-dialog")
 
 
 @login_required
