@@ -1,0 +1,10 @@
+/* Ask (2026-11-02). */
+.ask__box { display: flex; gap: var(--s-2, 8px); align-items: center; padding: var(--s-3, 12px); flex-wrap: wrap; }
+.ask__box .input { flex: 1 1 260px; min-width: 0; }
+.ask__thinking, .topbar__thinking { color: var(--text-muted, #666); font-size: 13px; }
+.ask__answer { font-size: 18px; font-weight: 600; margin: var(--s-4, 16px) 0 var(--s-2, 8px); }
+.ask__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: var(--s-4, 16px); }
+.ask__remove { text-decoration: none !important; font-weight: 700; margin-left: 2px; color: inherit !important; }
+.ask__choices, .ask__examples { margin: 0; padding: var(--s-3, 12px) var(--s-5, 24px); }
+.ask__choices li, .ask__examples li { padding: 4px 0; }
+form.is-thinking input[name=q] { opacity: .6; }

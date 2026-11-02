@@ -97,6 +97,8 @@ INSTALLED_APPS = [
     'sales',
     # Phase 8: the AI sales order assistant (off per company until consent is recorded).
     'ai_assistant',
+    # Ask: questions in the top search bar, answered from our own data.
+    'ask',
     # The REST API (docs/api/00-PLAN.md): the panels' functions for apps,
     # frontends and the ERP. Calls the same services the panels use.
     'rest_framework',

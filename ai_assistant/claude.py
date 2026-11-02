@@ -83,11 +83,19 @@ def cost_of(model, usage):
             / MILLION).quantize(Decimal("0.000001"))
 
 
-def check_available(own):
-    """Why the AI cannot be called for this company now, raised; nothing when it can."""
-    if not own.enabled:
+def check_available(own, kind=None):
+    """Why the AI cannot be called for this company now, raised; nothing when it can.
+
+    Ask (``kind`` "ask") has its own switch and consent, apart from the order
+    assistant's; the key and the daily limit are shared."""
+    if kind == AiCall.Kind.ASK:
+        if not own.ask_enabled:
+            raise AiUnavailable("Ask is off for this company.")
+        if not own.ask_consent_received:
+            raise AiUnavailable("The client's consent to send questions to the AI provider is not recorded.")
+    elif not own.enabled:
         raise AiUnavailable("The AI assistant is off for this company.")
-    if not own.consent_received:
+    elif not own.consent_received:
         raise AiUnavailable("The client's consent to send order text to the AI provider is not recorded.")
     if not own.has_key:
         raise AiUnavailable("No AI key is saved (AI assistant settings).")
@@ -121,18 +129,23 @@ def ask_json(*, company_id, kind, system, content, schema, message=None, max_tok
     cannot be called, ``ValidationError`` when the call failed or was declined.
     """
     own = settings_for(company_id)
-    check_available(own)
+    check_available(own, kind)
     import anthropic
 
-    call = AiCall(company_id=company_id, kind=kind, message=message, model=own.model)
+    # Ask: its own model (Haiku unless the company chose another), at low
+    # effort - reading one question into a search is a small job.
+    asking = kind == AiCall.Kind.ASK
+    model = own.ask_model if asking else own.model
+    effort = "low" if asking else own.effort
+    call = AiCall(company_id=company_id, kind=kind, message=message, model=model)
     request = {
-        "model": own.model,
+        "model": model,
         "max_tokens": max_tokens,
         "system": [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
         "messages": [{"role": "user", "content": content}],
-        "output_config": {"effort": own.effort, "format": {"type": "json_schema", "schema": schema}},
+        "output_config": {"effort": effort, "format": {"type": "json_schema", "schema": schema}},
     }
-    if own.model in FALLBACK_MODELS:
+    if model in FALLBACK_MODELS:
         # On a policy decline the API re-runs the request on a fallback model.
         request.update(betas=[FALLBACK_BETA], fallbacks="default")
     try:
@@ -155,7 +168,7 @@ def ask_json(*, company_id, kind, system, content, schema, message=None, max_tok
         call.stop_reason = getattr(response, "stop_reason", "") or ""
         call.input_tokens, call.output_tokens = usage["input_tokens"], usage["output_tokens"]
         call.cache_read_tokens, call.cache_write_tokens = usage["cache_read_tokens"], usage["cache_write_tokens"]
-        call.cost = cost_of(call.served_by or own.model, usage)
+        call.cost = cost_of(call.served_by or model, usage)
         text = next((block.text for block in response.content if getattr(block, "type", "") == "text"), "")
         call.output = text[:20000]
         if call.stop_reason == "refusal":

@@ -29,6 +29,7 @@ urlpatterns = [
     path("production/", include("production.urls")),
     # Phase 8: the AI sales order assistant (before "sales/" so its paths win).
     path("sales/ai/", include("ai_assistant.urls")),
+    path("ask/", include("ask.urls")),
     path("sales/", include("sales.urls")),
     # An Employee or Branch manager login's own pages.
     path("me/", include("base_template.me_urls")),

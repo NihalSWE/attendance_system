@@ -39,6 +39,7 @@ def shell(request):
     unrestricted_admin = False
     branch_menus = []
     leave_approver = False
+    ask_box = False
     module_codes = _module_codes(user, company_id) if membership else frozenset()
     if membership and not self_service:
         unrestricted_admin = may_manage_devices(user, company_id)
@@ -57,10 +58,13 @@ def shell(request):
     elif membership and self_service:
         # A12: the company pages this branch manager / person given access may
         # open (access_control.page_access), under "Company" in their sidebar.
+        allowed = opener(user, company_id)
         branch_menus = company_menus(
             request, can_manage=False, can_manage_devices=False,
-            allowed=opener(user, company_id), module_codes=module_codes,
+            allowed=allowed, module_codes=module_codes,
         )
+        # Ask in the top bar (2026-11-02), once they may see something it answers.
+        ask_box = allowed("ask:ask")
         # The approval inbox: a branch manager, or someone given "Approve leave".
         leave_approver = membership.role == "manager" or can(user, company_id, "leave.approve")
 
@@ -78,6 +82,7 @@ def shell(request):
         # flow bar shows Warranty only while it is on).
         "module_codes": module_codes,
         "sidebar_leave_approver": leave_approver,
+        "ask_box": ask_box,
         # "My LFA", once the company has switched LFA on (2026-09-28).
         "sidebar_lfa": bool(self_service and company_id and _lfa_on(company_id)),
         # Developer's API: the owner and administrator of a company the platform

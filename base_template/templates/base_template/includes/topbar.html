@@ -1,3 +1,4 @@
+{% load static %}
 <header class="topbar">
     <button class="btn btn--ghost navigation-toggle" type="button" aria-label="Open navigation" aria-controls="{% if platform_surface %}platform-sidebar{% elif self_service %}self-service-sidebar{% else %}company-sidebar{% endif %}" aria-expanded="false">
         Menu
@@ -11,15 +12,30 @@
         <span class="platform-label">
             My panel
         </span>
+        {% if ask_box %}
+            {# A branch login given access (A12): Ask only, limited to what it may see. #}
+            <form class="topbar__search" action="{% url 'ask:ask' %}" method="get" data-ask-form data-ask-url="{% url 'ask:ask' %}" data-ask-only>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="7"/>
+                    <path d="m20 20-3.5-3.5"/>
+                </svg>
+                <input name="q" type="search" placeholder="Ask a question…" aria-label="Ask a question">
+                <span class="t-muted" data-ask-thinking hidden>Thinking…</span>
+            </form>
+        {% endif %}
     {% else %}
-        <form class="topbar__search" action="{% url 'employee_list' %}" method="get">
+        {# Ask (2026-11-02): a name or code searches employees as before; a #}
+        {# question (three words or more, or "?") opens Ask (ask/ask.js). #}
+        <form class="topbar__search" action="{% url 'employee_list' %}" method="get" data-ask-form data-ask-url="{% url 'ask:ask' %}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="11" cy="11" r="7"/>
                 <path d="m20 20-3.5-3.5"/>
             </svg>
-            <input name="q" type="search" placeholder="Search employees, codes…" aria-label="Search employees">
+            <input name="q" type="search" placeholder="Search employees, or ask a question…" aria-label="Search employees">
+            <span class="t-muted" data-ask-thinking hidden>Thinking…</span>
         </form>
     {% endif %}
+    <script defer src="{% static 'ask/ask.js' %}"></script>
     <span class="spacer">
     </span>
     {% comment %}

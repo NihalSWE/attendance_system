@@ -6985,3 +6985,50 @@ Left in phase 9: 9.3 the tutorial from the new screens; then the full suite and 
 - Tests: `payroll/tests_generate_jobs.py` (10).
 
 **Deploy:** pull, migrate (payroll 0016), collectstatic, restart.
+
+### Ask: questions in the top search bar — 2026-11-02
+
+- **What:** type a question in plain words in the top search bar ("find all the employees who
+  were late today", "how much salary generated for Ajay this month", in English, Bangla or a
+  mix). A name or code (one or two words) still searches employees as before; a question (three
+  words or more, or ending in "?") opens `/ask/`. "Thinking…" shows while it is read.
+- **How:** one Claude call (`ai_assistant.claude.ask_json`, kind "ask") gets the question, today's
+  date, the company's timezone and its branch and department names, and returns only JSON: a
+  search and its filters (`ask/interpret.py`). Claude never sees results, salaries or attendance,
+  never writes SQL, and gets no employee names: names are matched in our code among the people the
+  viewer may see. Every value it returns is checked; the understood search then lives in the
+  address, so a reload, a removed chip or Change runs again without another AI call.
+- **Searches** (`ask/searches.py`, read-only, each on the code its page uses, so the numbers are
+  the page's): attendance days by status (late, absent, present, half day, on leave, left early,
+  missing scan, inactive), attendance counts per person (most first), in the office now, on leave
+  on a day or range, leave balance, overtime (approved / waiting), one person's salary (monthly
+  run and weekly pay group weeks; "not generated yet" when it is not), salary totals by
+  department or branch.
+- **Access, in our code only:** the same rules as the pages - attendance `view_scope` /
+  `now_scope`, the Leave list's scope, `overtime_scope`, `salary_month_branches` (HR and the
+  auditor see no pay; a branch manager only their branches), always inside the active company.
+  `/ask/` is a branch page (`access_control/page_access.py`): an Employee login opens it only once
+  given a permission it answers for, and then sees only that.
+- **Page:** a one-line answer, chips with how it was understood (remove one, or Change), a server
+  table with links to the real pages (the day on the calendar, the payslip, the profile) and to
+  the page it comes from. Several people matching a name are listed to choose from; no match says
+  so. Ask off, no consent, no key, the daily limit reached, an unanswerable question or a bad AI
+  answer: said plainly, then the normal employee name search.
+- **Settings:** Organisation › Ask settings (owner/company admin; `ask/settings/`): its own switch
+  and consent ("questions and employee names are sent to Anthropic; salaries and attendance are
+  not"), the model (Claude Haiku 5.5 by default, low effort), the shared key and daily limit.
+  `AiSettings` gains `ask_enabled`, `ask_consent_received`, `ask_consent_date`, `ask_model`;
+  `AiCall.Kind` gains "ask". The AI order assistant keeps its own switch.
+- **Files:** `ask/` (new app: interpret, searches, views, forms, templates, static), 
+  `ai_assistant/models.py` + migration 0002, `ai_assistant/claude.py`, `config/settings.py`,
+  `config/urls.py`, `base_template/includes/topbar.html`, `base_template/context_processors.py`,
+  `base_template/navigation.py`, `access_control/page_access.py`,
+  `ai_assistant/templates/ai_assistant/settings.html` (a link to Ask settings).
+- **Tests:** `ask/tests.py` (32): each search per role (company admin, payroll manager, branch
+  manager, HR, Employee login, auditor; HR gets no salary), both examples end to end with a fake
+  client (two Ajays → asks which), Ask off / no key / no consent / limit reached / unknown / bad
+  JSON / a bare name, the address checked again, settings and the top bar.
+
+**Deploy:** pull, migrate (ai_assistant 0002), collectstatic, restart. Then, as the owner or company
+admin, Organisation › Ask settings: record the client's consent, save the key if it is not saved
+yet, switch Ask on.

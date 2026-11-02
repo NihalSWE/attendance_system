@@ -55,6 +55,10 @@ BRANCH_PAGES = {
     "leaves:leave_record": "leave.record",
     "leaves:leave_cancel": "leave.record",
     "leaves:leave_amend": "leave.record",
+    # Ask (2026-11-02): each search limits itself to what the viewer may see
+    # with that search's own permission (ask/searches.py).
+    "ask:ask": ("attendance.view", "employees.view", "leave.view", "leave.record", "overtime.view",
+                "overtime.decide", "salary.view", "salary.prepare"),
     "payroll:overtime_list": ("overtime.view", "overtime.decide"),
     "payroll:overtime_decide": ("overtime.view", "overtime.decide"),
     "payroll:overtime_undo": "overtime.decide",
