@@ -101,17 +101,39 @@ def materials(request):
         return _add(request, company_id, MaterialForm)
     access.require(request.user, company_id, "inventory.view")
     context = _common(request, company_id, "materials")
-    filters = _filters(request, company_id, hub.MATERIAL_KINDS)
-    found = hub.lines(company_id, request.user, hub.MATERIAL_KINDS, category=filters["category"],
+    # By type (2026-11-02): raw materials, packaging and finished goods each
+    # on their own tab; "All materials" is raw and packaging together.
+    kind = request.GET.get("kind", "").strip()
+    kinds = [kind] if kind in dict(MATERIAL_TABS) else list(hub.MATERIAL_KINDS)
+    filters = _filters(request, company_id, kinds)
+    found = hub.lines(company_id, request.user, kinds, category=filters["category"],
                       store=filters["store"], state=filters["status"])
-    every = found if not filters["filtered"] else hub.lines(company_id, request.user, hub.MATERIAL_KINDS)
+    every = hub.lines(company_id, request.user, [*hub.MATERIAL_KINDS, ItemKind.FINISHED])
+    materials = [line for line in every if line.item.kind in hub.MATERIAL_KINDS]
     table = _table(request, found, _material_cells(context["sees_costs"], context["can_manage"]))
+    counts = {value: sum(1 for line in every if line.item.kind == value) for value in dict(MATERIAL_TABS)}
+    keep = request.GET.copy()
+    for name in ("kind", "page", "table", "draw", "start", "length"):
+        keep.pop(name, None)
     return render(request, "inventory/hub/materials.html", {
-        **context, **filters, "rows": table, "count": len(every),
-        "low": sum(1 for line in every if line.tone != "ok"),
-        "value": sum((line.value for line in every), hub.ZERO),
+        **context, **filters, "rows": table, "count": len(materials),
+        "low": sum(1 for line in materials if line.tone != "ok"),
+        "value": sum((line.value for line in materials), hub.ZERO),
+        "kind": kind if kind in dict(MATERIAL_TABS) else "",
+        "tabs": [{"kind": "", "label": "All materials", "count": len(materials),
+                  "about": "Everything you buy or make and use up in production."}]
+        + [{"kind": value, "label": label, "count": counts[value], "about": about}
+           for value, (label, about) in MATERIAL_TABS],
+        "keep_query": keep.urlencode(),
         "form": MaterialForm(company_id=company_id) if context["can_manage"] else None,
     })
+
+
+MATERIAL_TABS = (
+    (ItemKind.RAW, ("Raw materials", "What goes into the product: fruit pulp, sugar, flour, chemicals.")),
+    (ItemKind.PACKAGING, ("Packaging", "What the product is packed in: bottles, caps, labels, cartons.")),
+    (ItemKind.FINISHED, ("Finished goods", "What you make or buy to sell. Each opens on its product page.")),
+)
 
 
 @login_required
@@ -332,7 +354,13 @@ def _item_parts(request, company_id, item):
 
     cost = pricing.cost_per_unit(company_id, item)
     margin = (item.sale_price - cost).quantize(pricing.CENT) if cost is not None and item.sale_price else None
+    from inventory.posting import settings_for
+    from production.costing import last_cost
+
+    last = last_cost(company_id, item)
     price = {"price_cost": cost, "price_margin": margin, "can_price": can_manage,
+             # Which cost that is (2026-11-02): the last price paid, or the average.
+             "price_cost_from": settings_for(company_id).price_cost, "last_cost": last,
              "price_margin_pct": (margin / item.sale_price * 100).quantize(Decimal("0.1"))
              if margin is not None else None}
     # Edit from a list's row (2026-10-31): the page opens with its Edit modal

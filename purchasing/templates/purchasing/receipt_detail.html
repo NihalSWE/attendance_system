@@ -21,7 +21,7 @@
             <p class="page__sub">
                 {{ doc.supplier.name }} · into {{ doc.warehouse }} · {{ doc.received_date|date:"d M Y" }}
                 {% if doc.order %} · against <a href="{% url 'purchasing:order_detail' doc.order_id %}">{{ doc.order.number }}</a>{% else %} · direct{% endif %}
-                {% if doc.challan_no %}<br>Challan {{ doc.challan_no }}{% endif %}{% if doc.invoice_no %} · invoice {{ doc.invoice_no }}{% endif %}{% if doc.vehicle_no %} · vehicle {{ doc.vehicle_no }}{% endif %}
+                {% if doc.challan_no %}<br>Challan {{ doc.challan_no }}{% endif %}{% if doc.invoice_no %} · invoice {{ doc.invoice_no }}{% endif %}{% if doc.vehicle_no %} · vehicle {{ doc.vehicle_no }}{% endif %}{% if doc.vat_amount %}<br>VAT paid {{ doc.vat_amount|floatformat:"2g" }} Tk ({{ doc.vat_rate|floatformat:"-2" }} %){% endif %}
                 {% if doc.posted_at %}<br>Posted {{ doc.posted_at|date:"d M Y H:i" }}{% endif %}
                 {% if doc.reversed_at %} · reversed {{ doc.reversed_at|date:"d M Y H:i" }}: {{ doc.reverse_reason }}{% endif %}
             </p>

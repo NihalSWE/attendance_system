@@ -209,7 +209,8 @@ story += [
         ("Batch (one mix)", "The recipe is for one batch: \"1 batch = 240 packets\". 1,200 packets = 5 batches."),
         ("Batch number", "Stock that came in together, with its own dates and cost. The one that expires "
                          "first always goes out first."),
-        ("Cost of one", "What one unit really costs: the average buy price, or for a made item, its recipe "
+        ("Cost of one", "What one unit really costs: the last price paid (or the average, as Inventory settings "
+         "say), or for a made item, its recipe "
                         "and costs."),
         ("Margin", "Sale price - cost of one. Below cost = a loss on each one sold."),
         ("Guarantee / Warranty", "Guarantee: the first months, a faulty unit is replaced. Warranty: after that, "
@@ -301,7 +302,8 @@ story += [grid(("Page", "What you add"), [
                         "Biscuits (products)."),
     ("Stores", "Each store: its branch, code, name and type - raw, packaging, finished goods, quarantine, rejected."),
     ("Bins", "Optional shelves or racks inside a store."),
-    ("Inventory settings", "Average cost for the whole company or per store; expiry warning days; label sizes; "
+    ("Inventory settings", "Average cost for the whole company or per store; <b>Cost used for prices and recipes</b> "
+     "(the last price paid, or the average); expiry warning days; label sizes; "
                            "<b>Warranty</b> on or off (off by default)."),
     ("Suppliers, Customers", "Who you buy from and sell to (code, name, payment terms, credit limit)."),
     ("Price lists", "Optional: a customer's own prices; Sell uses them first."),
@@ -396,15 +398,19 @@ story += section(4, "Recipe and cost of one batch", "The product (or a made mate
                  "the product or material is Made here or Both.")
 story += steps([
     "With no recipe yet the page asks <b>how much one batch makes</b>: write it and Save.",
-    "<b>Add material</b>: any material, a new one made right there, or something else made here (a cream). Write how "
-    "much <b>one batch</b> uses and its normal wastage %.",
+    "<b>Add material</b>: choose <b>several materials at once</b> in the search list (type a few letters); each "
+    "chosen one gets its own row: how much <b>one batch</b> uses, in its own unit, and its normal wastage %. "
+    "Or make a new one right there (A new raw material or packaging item).",
     "<b>Cost rates</b> (Inventory &rarr; Setup &rarr; Cost rates): what an hour of a worker or a machine costs.",
     "<b>Add cost</b>: people x hours x rate, machine hours x rate, a fixed amount per batch (gas), or a % of the "
     "materials.",
 ])
 story += [box("What you read", [
-    "Materials (recipe x each material's average cost, or its expected buy price before the first purchase) + "
-    "the costs = <b>one batch</b>; divided by what one batch makes = <b>one unit</b>.",
+    "Each material has its own row with its sum written out: <b>500 PCS + 10 % wastage = 550 PCS x 4.00 Tk = "
+    "2,200.00</b>. The cost of one unit of a material is the last price paid for it (or its average cost, as "
+    "Inventory settings say), else its expected buy price before the first purchase.",
+    "<b>Materials</b> (the rows added up) + <b>other costs</b> (Add cost) = <b>one batch</b>; divided by what one "
+    "batch makes = <b>one unit</b> (the sum is shown: 3,206.00 / 500 = 6.41); x the pack size = <b>one pack</b>.",
     "A material with no cost yet is named in red: buy it (Stock in) or give its expected buy price.",
 ])]
 
@@ -413,14 +419,18 @@ story += section(5, "Stock in", "Inventory &rarr; Stock &rarr; Stock in &rarr; S
                  "Everything that comes into a store: a purchase, the first count, or a customer return.",
                  "suppliers or customers, and the items.")
 story += [fields([
-    ("Where it comes from", "Yes", "A purchase, First count (opening stock), or A customer returned it.",
+    ("Where it comes from", "Yes", "A purchase, First count (opening stock), or A customer returned it - "
+     "what each one means is written under the choice (see the box below).",
      "A purchase", "Decides the boxes below."),
     ("Supplier / Customer", "Some", "Who it came from.", "Sweet Mills", ""),
-    ("Into store, Date", "Yes", "The store and the day it arrived.", "Raw store", "A closed month is refused."),
+    ("Into store, Date", "Yes", "The store and the day it arrived. Choose the store first.", "Raw store",
+     "The item lists then show only the items kept in that store. A closed month is refused."),
     ("Why it came back", "Some", "For a return.", "Wrong order", ""),
     ("Item, Quantity, Unit", "Yes", "One line per item; <b>Add a line</b> for more.", "Flour, 10, BAG",
      "Only the item's own units are offered."),
-    ("Cost", "Some", "What you paid, per the unit chosen.", "2,600 per BAG", "The buy price: sets the average cost."),
+    ("Cost", "Some", "What you paid, per the unit chosen (look at \"Tk per ...\" beside it).", "2,500 per DRUM",
+     "Becomes the item's buy price: the next Stock in starts from it, and so do prices and recipes. "
+     "The line total shows under it: 5 DRUM x 2,500 = 12,500."),
     ("Sale price (optional)", "No", "A new sale price, now that the buy price is in. It shows the price now.",
      "now 60", "Empty: the price stays. Below the new cost: refused unless Sell below cost."),
     ("Batch number", "Some", "From the label (items with batches).", "FL-231026", "Empty: one is made."),
@@ -431,6 +441,16 @@ story += [fields([
     ("Condition", "Some", "Return: good or damaged.", "Damaged", "Damaged goes to the rejected store."),
     ("Sell below cost / Why below cost", "No", "Only if a sale price below cost is meant.", "on, clearing old stock",
      "Kept with the price change in the audit log."),
+    ("VAT % / VAT amount", "No", "A purchase only: the VAT on the bill, if you paid it. Write either one.",
+     "15", "The other is worked out from the subtotal; the total to pay = subtotal + VAT. Kept on the goods "
+     "receipt; the stock is costed before VAT."),
+]), Spacer(1, 4), box("The three kinds of Stock in", [
+    "<b>A purchase (goods received)</b>: you bought it from a supplier and it arrived. Choose the supplier, write "
+    "what the bill says it cost, and VAT if you paid it. It makes a goods receipt (GRN).",
+    "<b>First count (opening stock)</b>: stock you already had on the first day you use the software, counted on "
+    "the shelf. Once per item, to start; after that stock comes in by purchase or production.",
+    "<b>A customer returned it</b>: a customer sent back what you sold. Good goods go back to stock, damaged ones "
+    "to the rejected store. No cost is asked: it comes back at what it cost when it left.",
 ]), Spacer(1, 4), box("On Put in stock", [
     "A purchase is received and posted at once; a first count is posted if you may approve opening stock, otherwise "
     "it waits; a return is posted. If any line is refused, nothing is saved - the line and the box are named.",
@@ -674,6 +694,59 @@ story += [grid(("Report", "What it shows"), [
 ], (60, 110))]
 
 # ------------------------------------------------------------------ questions
+# ------------------------------------------------------------------ 2026-11-02
+story += section(17, "What changed on 2 November 2026", "Everywhere in Inventory",
+                 "Ten changes asked for after trying the screens: where each one is, and how it works.")
+story += [grid(("Change", "Where, and how it works"), [
+    ("1. Search in every list", "Every dropdown in Inventory (and its Purchase and Sales pages) has a search box: "
+     "click it and type a few letters of the code or the name."),
+    ("2. Where it comes from", "Stock in explains the three kinds under the choice: a purchase, the first count, "
+     "a customer return (see Step 5)."),
+    ("3. Items of the chosen store", "Stock in: choose the store first; the item lists offer the items whose usual "
+     "store it is, items of the store's type (raw, packaging, finished, spare) with no usual store, and anything "
+     "already in it. Sell and Move stock: only what is in stock in that store. A line already filled keeps its item."),
+    ("4. VAT and the total", "Stock in, a purchase: each line shows quantity x cost; under the lines the subtotal, "
+     "VAT (% or amount) and the total to pay."),
+    ("5. Materials by type", "Inventory &rarr; Materials: tabs All materials, Raw materials, Packaging, Finished "
+     "goods, each with how many; the tiles above open a tab."),
+    ("6. The last price counts", "The cost typed on a purchase becomes the item's buy price, and the cost of one "
+     "(prices, margins, recipes) is the last price paid - not an average of old and new stock. Inventory settings "
+     "&rarr; Cost used for prices and recipes can go back to the average. The stock's value stays at average cost."),
+    ("7. General and spare items", "Explained below, with dots on where they fit."),
+    ("8. Several recipe materials", "Add material on the recipe: choose several in one search list; each gets its "
+     "own quantity and wastage."),
+    ("9. Cost of one batch", "Each material on its own row with its sum written out, and how the batch, one unit and "
+     "one pack are worked out (Step 4)."),
+    ("10. Made but cannot sell", "Sell says it at once: &quot;Ready to sell: 0 PCS - 500 PCS waits for a quality check: "
+     "pass it first&quot;, with a link to Quality check (see Step 11)."),
+], (45, 125))]
+story += [box("Why the average cost was 2.76 (the 250 ml bottle)", [
+    "On Stock in the cost box says <b>Tk per BOX</b> when the unit is BOX. 10 BOX at 4 Tk <b>per BOX</b> is 40 Tk "
+    "for 240 bottles (0.17 each); then 500 PCS at 4 Tk each is 2,000 Tk. 740 bottles for 2,040 Tk = <b>2.76</b> "
+    "each on average. For 4 Tk a bottle, the box costs 96 Tk (24 x 4): write 96 per BOX, or choose PCS.",
+    "Now the cost of one is the last price paid (4.00), so prices and recipes follow the latest bill.",
+], "warn")]
+story += [P("General items and spare parts", "h2"), P(
+    "Besides materials and products, a factory keeps two more kinds of things. They are counted, bought and "
+    "taken out of a store like the others, but they never go into a recipe and are never sold:"),
+    grid(("Kind", "What it is", "Examples", "How it moves"), [
+        ("Spare parts", "Parts kept to repair the machines.", "Bearing 6205, V-belt, motor, filter, seal",
+         "Stock in (purchase) &rarr; Spare parts store &rarr; Store issue to Maintenance when a machine is "
+         "repaired."),
+        ("General items", "Everything else the company uses up that is not part of the product.",
+         "Gloves, cleaning liquid, printer paper, toner, tea, light bulbs",
+         "Stock in (purchase) &rarr; General store &rarr; Store issue to the department that uses it."),
+    ], (25, 45, 50, 50)),
+    Spacer(1, 4), box("Where they fit (the dots)", [
+        "&bull; Setup &rarr; Item categories: a category of type <b>Spare part</b> or <b>General</b>.",
+        "&bull; Stores &amp; Bins &rarr; Stores: a store of kind <b>Spare parts</b> or <b>General</b> (optional: one "
+        "store can hold them).",
+        "&bull; Inventory &rarr; Materials menu &rarr; <b>Spare parts</b> / <b>General items</b>: add them there.",
+        "&bull; Stock in: buy them like any item. Store issue (Requisitions): a department takes them out.",
+        "&bull; Reports &rarr; Consumption by department: what each department used.",
+        "&bull; They are not on Materials (raw, packaging) or Products, not in recipes, not on Sell.",
+    ], "ok")]
+
 story += [CondPageBreak(80 * mm), Spacer(1, 6 * mm), P("Questions people ask", "h1"), grid(("When", "What happens"), [
     ("I don't know the price when adding", "Right: no price is asked. Buy it (Stock in), then set the price."),
     ("I typed a price below cost", "Refused, with the loss shown. Fix it, or Sell below cost with a reason."),
@@ -683,6 +756,11 @@ story += [CondPageBreak(80 * mm), Spacer(1, 6 * mm), P("Questions people ask", "
     ("A mistake after Finish", "Reverse it (a reason) while nothing made was touched."),
     ("Delete an item", "Only while it has never moved and is in no recipe; else Deactivate."),
     ("Where is Opening stock?", "Stock in &rarr; Where it comes from: First count (opening stock)."),
+    ("I made 500 but cannot sell 480", "The product has Quality check before use: the batch waits. Stock &rarr; "
+     "Quality check &rarr; Pass, then sell. Not checking quality? Untick it on the product (Edit)."),
+    ("The cost went down after buying", "Look at the unit beside the cost (Tk per BOX or per PCS)."),
+    ("An item is missing from the list", "The store chosen above does not keep it: choose its store, or set the "
+     "item's usual store (Edit)."),
     ("No \"See costs\"", "Quantities only: no money on any screen."),
 ], (60, 110))]
 

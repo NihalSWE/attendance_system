@@ -303,7 +303,7 @@ def units_for(item):
     return factors
 
 
-SETTINGS_FIELDS = ("valuation_scope", "expiry_alert_days", "slow_moving_days", "alert_emails", "small_label",
+SETTINGS_FIELDS = ("valuation_scope", "price_cost", "expiry_alert_days", "slow_moving_days", "alert_emails", "small_label",
                    "large_label", "gs1_labels", "warranty_on")
 
 

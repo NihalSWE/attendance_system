@@ -5,7 +5,7 @@
         <div>
             <p class="ui-head__crumbs"><a href="{% url 'inventory:start' %}">Products and stock</a> / 1. Materials</p>
             <h1 class="ui-head__title">Materials</h1>
-            <p class="ui-head__sub">What you buy and use up in production: raw materials and packaging.</p>
+            <p class="ui-head__sub">What you buy and use up in production, by type: raw materials, packaging, and the finished goods they make.</p>
         </div>
         {% if form %}
             <div class="ui-head__actions">
@@ -16,13 +16,17 @@
     </div>
 
     <div class="ui-tiles">
-        <div class="ui-tile"><p class="ui-tile__label">Materials</p><p class="ui-tile__value">{{ count }}</p><p class="ui-tile__hint">raw and packaging</p></div>
+        {% for tab in tabs|slice:"1:" %}<a class="ui-tile ui-tile--link" href="?kind={{ tab.kind }}"><p class="ui-tile__label">{{ tab.label }}</p><p class="ui-tile__value">{{ tab.count }}</p><p class="ui-tile__hint">item{{ tab.count|pluralize }}</p></a>{% endfor %}
         <div class="ui-tile{% if low %} ui-tile--warn{% endif %}"><p class="ui-tile__label">Low or out</p><p class="ui-tile__value">{{ low }}</p><p class="ui-tile__hint">below stock to keep</p></div>
         {% if sees_costs %}<div class="ui-tile"><p class="ui-tile__label">Value in stock</p><p class="ui-tile__value">{{ value|floatformat:"0g" }}</p><p class="ui-tile__hint">Tk, at average cost</p></div>{% endif %}
     </div>
 
     <div class="ui-card">
-        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} All materials</h2><span class="ui-card__note">Click a name to see its stock, batches and use</span></div>
+        <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} {% for tab in tabs %}{% if tab.kind == kind %}{{ tab.label }} <small>{{ tab.count }}</small>{% endif %}{% endfor %}</h2><span class="ui-card__note">Click a name to see its stock, batches and use</span></div>
+        <nav class="ui-kinds" aria-label="Type">
+            {% for tab in tabs %}<a class="{% if tab.kind == kind %}is-on{% endif %}" href="?{% if tab.kind %}kind={{ tab.kind }}{% if keep_query %}&amp;{% endif %}{% endif %}{{ keep_query }}">{{ tab.label }} <span>{{ tab.count }}</span></a>{% endfor %}
+        </nav>
+        {% for tab in tabs %}{% if tab.kind == kind %}<p class="ui-kind-card__about">{{ tab.about }}</p>{% endif %}{% endfor %}
         {% include "inventory/hub/filters.html" %}
         <div class="table-wrap">
             <table class="table" data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
@@ -31,16 +35,16 @@
                     {% for row in rows %}{% with line=row.line %}
                         <tr>
                             <td>{{ line.item.code }}</td>
-                            <td><a href="{% url 'inventory:material' line.item.pk %}">{{ line.item.name }}</a>{% if line.item.status != "active" %} <span class="ui-chip">Inactive</span>{% endif %}</td>
-                            <td>{{ line.item.get_kind_display }}</td>
+                            <td><a href="{% if line.item.kind == 'finished' %}{% url 'inventory:product' line.item.pk %}{% else %}{% url 'inventory:material' line.item.pk %}{% endif %}">{{ line.item.name }}</a>{% if line.item.status != "active" %} <span class="ui-chip">Inactive</span>{% endif %}</td>
+                            <td><span class="ui-chip ui-chip--{% if line.item.kind == 'raw' %}info{% elif line.item.kind == 'packaging' %}wait{% else %}ok{% endif %}">{{ line.item.get_kind_display }}</span></td>
                             <td class="numeric">{{ line.stock_text }}</td>
                             <td class="numeric">{% if line.keep %}{{ line.keep|floatformat:"-2g" }} {{ line.item.base_uom.code }}{% else %}<span class="ui-muted">—</span>{% endif %}</td>
                             {% if sees_costs %}<td class="numeric">{{ line.value|floatformat:"0g" }}</td>{% endif %}
                             <td><span class="ui-chip ui-chip--{{ line.tone }}">{{ line.words }}</span>{% if line.below_cost %} <span class="ui-chip ui-chip--bad">Below cost</span>{% endif %}</td>
-                            {% if can_manage %}<td><a class="ui-btn ui-btn--sm" href="{% url 'inventory:material' line.item.pk %}?edit=1&amp;back={% url 'inventory:materials' %}">{% include "ui/icon.html" with name="edit" small=True %} Edit</a></td>{% endif %}
+                            {% if can_manage %}<td><a class="ui-btn ui-btn--sm" href="{% if line.item.kind == 'finished' %}{% url 'inventory:product' line.item.pk %}{% else %}{% url 'inventory:material' line.item.pk %}{% endif %}?edit=1&amp;back={% url 'inventory:materials' %}">{% include "ui/icon.html" with name="edit" small=True %} Edit</a></td>{% endif %}
                         </tr>
                     {% endwith %}{% empty %}
-                        <tr><td colspan="{% if sees_costs %}7{% else %}6{% endif %}">{% if filtered %}Nothing matches: try clearing the filters.{% else %}No materials yet. Add the first one: flour, sugar, wrappers, cartons.{% endif %}</td></tr>
+                        <tr><td colspan="{% if sees_costs %}7{% else %}6{% endif %}">{% if filtered %}Nothing matches: try clearing the filters.{% elif kind == "finished" %}No finished goods yet: add them on Products.{% elif kind %}None of this type yet.{% else %}No materials yet. Add the first one: flour, sugar, wrappers, cartons.{% endif %}</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

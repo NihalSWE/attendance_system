@@ -1,7 +1,9 @@
 {% comment %}
     The cost of one batch (plan §7.4; production.costing.sheet): the
     materials, then each cost line, the total, and what one unit and one pack
-    cost with the margin. Only for someone who sees costs.
+    cost with the margin. Only for someone who sees costs. 2026-11-02: how it
+    is worked out is said first, and each material has its own row with its
+    sum written out.
 {% endcomment %}
 <div class="ui-card" id="costs">
     <div class="ui-card__head">
@@ -9,11 +11,19 @@
         {% if cost_form and sheet %}<button class="ui-btn ui-btn--sm" type="button" data-open-dialog="cost-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add cost</button>{% endif %}
     </div>
     {% if sheet %}
+        <ol class="ui-cost-steps">
+            <li><strong>Materials:</strong> what one batch uses of each material, plus its normal wastage, × the cost of one unit of it ({% if price_cost_from == "average" %}its average cost in stock{% else %}the last price paid for it{% endif %}).</li>
+            <li><strong>Other costs:</strong> people, machines, gas, a share of rent: whatever you add with <em>Add cost</em> (rates from Cost rates).</li>
+            <li><strong>One {{ item.base_uom.code }}</strong> = the total for one batch ÷ what one batch makes ({{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}){% if per_pack %}; one pack = one {{ item.base_uom.code }} × how many are in it{% endif %}.</li>
+        </ol>
         <div class="table-wrap">
             <table class="table">
                 <thead><tr><th>Cost</th><th>How it is worked out</th><th class="numeric">Per batch</th>{% if cost_form %}<th><span class="sr-only">Remove</span></th>{% endif %}</tr></thead>
                 <tbody>
-                    <tr><td>Materials</td><td class="ui-muted">The recipe × each material's average cost, wastage included{% if sheet.missing %} · <span class="ui-bad">no cost yet: {{ sheet.missing|join:", " }}</span>{% endif %}</td><td class="numeric">{{ sheet.materials_total|floatformat:"2g" }}</td>{% if cost_form %}<td></td>{% endif %}</tr>
+                    {% for row in sheet.materials %}
+                        <tr class="ui-sub-row"><td>{{ row.name }}</td><td class="ui-muted ui-cost-math">{% if row.missing %}<span class="ui-bad">{{ row.how }}: put it in stock or give its buy price</span>{% else %}{{ row.how }}{% endif %}</td><td class="numeric">{{ row.amount|floatformat:"2g" }}</td>{% if cost_form %}<td></td>{% endif %}</tr>
+                    {% endfor %}
+                    <tr><td><strong>Materials</strong></td><td class="ui-muted">{{ sheet.materials|length }} material{{ sheet.materials|length|pluralize }} added up{% if sheet.missing %} · <span class="ui-bad">no cost yet: {{ sheet.missing|join:", " }}</span>{% endif %}</td><td class="numeric"><strong>{{ sheet.materials_total|floatformat:"2g" }}</strong></td>{% if cost_form %}<td></td>{% endif %}</tr>
                     {% for row in sheet.costs %}
                         <tr>
                             <td>{{ row.name }}{% if row.line.rate and row.line.rate.status != "active" %} <span class="ui-chip ui-chip--wait">Rate switched off</span>{% endif %}</td>
@@ -29,13 +39,13 @@
                     {% empty %}
                         <tr><td colspan="{% if cost_form %}4{% else %}3{% endif %}" class="ui-muted">Only materials so far. Add people, machines, gas or a share of rent: <em>Add cost</em>.</td></tr>
                     {% endfor %}
-                    <tr class="ui-total"><td>Total for one batch</td><td class="ui-muted">makes {{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}</td><td class="numeric">{{ sheet.total|floatformat:"2g" }}</td>{% if cost_form %}<td></td>{% endif %}</tr>
+                    <tr class="ui-total"><td>Total for one batch</td><td class="ui-muted">materials {{ sheet.materials_total|floatformat:"2g" }} + other costs {{ sheet.costs_total|floatformat:"2g" }} · makes {{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}</td><td class="numeric">{{ sheet.total|floatformat:"2g" }}</td>{% if cost_form %}<td></td>{% endif %}</tr>
                 </tbody>
             </table>
         </div>
         <div class="ui-card__foot">
-            <span class="ui-muted">Per {{ item.base_uom.code }}</span> <strong>{% if sheet.per_unit is not None %}{{ sheet.per_unit|floatformat:"2g" }}{% else %}—{% endif %}</strong>
-            {% for pack, amount in per_pack %} · <span class="ui-muted">per {{ pack.uom.code }}</span> <strong>{{ amount|floatformat:"2g" }}</strong>{% endfor %}
+            <span class="ui-muted">Per {{ item.base_uom.code }}</span> <strong>{% if sheet.per_unit is not None %}{{ sheet.per_unit|floatformat:"2g" }}{% else %}—{% endif %}</strong>{% if sheet.per_unit is not None %} <span class="ui-muted">({{ sheet.total|floatformat:"2g" }} ÷ {{ sheet.makes|floatformat:"-4g" }})</span>{% endif %}
+            {% for pack, amount in per_pack %} · <span class="ui-muted">per {{ pack.uom.code }}</span> <strong>{{ amount|floatformat:"2g" }}</strong> <span class="ui-muted">({{ pack.factor|floatformat:"-4g" }} {{ item.base_uom.code }})</span>{% endfor %}
             {% if sheet.margin is not None %} · <span class="ui-muted">margin per {{ item.base_uom.code }}</span> <strong class="{% if sheet.margin < 0 %}ui-bad{% else %}ui-good{% endif %}">{{ sheet.margin|floatformat:"2g" }} ({{ sheet.margin_pct }}%)</strong>{% endif %}
             · <span class="ui-muted">rates from</span> <a href="{% url 'production:cost_rates' %}">Cost rates</a>
         </div>

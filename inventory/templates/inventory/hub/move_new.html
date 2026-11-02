@@ -10,7 +10,7 @@
         </div>
     </div>
     {{ balances|json_script:"stock-rows" }}
-    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-most="{{ most }}" novalidate>
+    <form method="post" action="{{ request.path }}" data-fetch data-lines-form data-lines-mode="move" data-most="{{ most }}" novalidate>
         {% csrf_token %}
         <div class="ui-card">
             <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} From and to</h2></div>

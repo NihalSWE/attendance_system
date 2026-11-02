@@ -7082,3 +7082,40 @@ yet, switch Ask on.
   `test_a_deliverer_cannot_change_price_lists`).
 
 **Deploy:** pull, restart. No migration.
+
+### Inventory: search lists, store items, VAT, last price, materials by type — 2026-11-02
+
+- **Search in every dropdown** (`inventory/static/inventory/js/searchable.js`, loaded by
+  `inventory/_js.html`): the short fixed lists (`.js-select`) and the Stock in / Move / Sell line
+  lists become Select2 with the search box always shown. A converted list (`data-bridge`) also
+  fires a real `change`, so `data-show-when` and the lists that follow it keep working; a copied
+  line gets its own Select2 (`window.inventorySelect2`).
+- **Stock in** (`inventory/flow_views.py`, `flows.py`, `hub/stock_in_new.html`, `lines.js`):
+  - what each "Where it comes from" means, under the choice (`flows.STOCK_IN_HELP`);
+  - once a store is chosen the item lists offer only its items: usual store, else a store of the
+    item's type (raw, packaging, finished, spare) or one with no type, or stock already there.
+    Sell and Move stock: only what is in stock in that store;
+  - each line's quantity × cost, the subtotal, **VAT** (% or amount, either fills the other) and
+    the total to pay (`hub/_stock_in_total.html`). `GoodsReceipt.vat_rate` / `vat_amount`
+    (migration `purchasing 0003_receipt_vat`), shown on the GRN. Stock stays costed before VAT;
+  - the cost typed on a purchase becomes the item's expected buy price (`standard_cost`).
+- **Cost of one = the last price paid** (`InventorySettings.price_cost`, default "last",
+  migration `inventory 0009_price_cost`; `production.costing.last_cost` / `unit_cost`): prices,
+  margins, below-cost checks and recipes use what one unit cost the last time it came in (bought,
+  first count, made). "Average" brings the old behaviour back. Stock value stays at average cost.
+  The material page shows Last price paid and Stock value.
+- **Sell**: under each line "Ready to sell: N · M waits for a quality check: pass it first" (link
+  to Quality check); `_balances_json` marks quarantined batches `held`. The refusal is unchanged.
+- **Materials page by type** (`hub_views.materials`, `hub/materials.html`): tabs All materials,
+  Raw materials, Packaging, Finished goods (finished open their product page), tiles per type.
+- **Recipe: several materials at once** (`production/recipe_views._add_many`, `hub/_recipe.html`,
+  `inventory.js`): a multi-select; each chosen material gets `qty_<id>` and `scrap_<id>`; one
+  refused, none added. The single and "new material" paths are unchanged.
+- **Cost of one batch written out** (`hub/_cost_sheet.html`, `costing.sheet`): how it is worked
+  out, one row per material ("500 PCS + 10 % wastage = 550 PCS × 4.00 Tk = 2,200.00"), and the
+  per-unit and per-pack sums.
+- Tutorial: `docs/inventory/PRODUCTS-AND-STOCK-TUTORIAL.pdf` Step 17 (the ten changes, the 2.76
+  average explained, general items and spare parts with where they fit), Steps 4 and 5 updated.
+- Tests: `inventory/tests_update_nov2.py`; `tests_pages.test_settings_by_posting_the_form`.
+
+**Deploy:** pull, `migrate` (inventory 0009, purchasing 0003), `collectstatic`, restart.

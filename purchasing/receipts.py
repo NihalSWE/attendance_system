@@ -59,7 +59,7 @@ from purchasing.models import (
 Status = GoodsReceipt.Status
 Qc = GoodsReceiptLine.Qc
 HEADER_FIELDS = ("order", "supplier", "warehouse", "received_date", "challan_no", "invoice_no",
-                 "vehicle_no", "note")
+                 "vehicle_no", "note", "vat_rate", "vat_amount")
 LINE_FIELDS = ("order_line", "item", "location", "qty_received", "qty_rejected", "uom", "unit_cost",
                "batch_no", "supplier_batch_no", "mfg_date", "expiry_date", "packages", "note")
 

@@ -7,7 +7,8 @@ docs/inventory/PRODUCTION_PLAN.md §5, §7.4; §15 phase 5).
 - **Cost lines** on a product: besides its materials, each batch costs people
   × hours × rate, machine hours × rate, a fixed amount, or a % of the
   materials.
-- **The cost sheet**: materials (the recipe × each material's average cost,
+- **The cost sheet**: materials (the recipe × each material's cost - the
+  last price paid, or the average cost, as the inventory setting says -
   wastage included) + the cost lines = one batch; divided by what one batch
   makes = one unit; × a pack's size = one pack. A semi-finished product on
   the recipe costs what is in stock of it, else what making it costs.
@@ -220,10 +221,33 @@ class Sheet:
         return [(pack, (self.per_unit * pack.factor).quantize(CENT)) for pack in packs]
 
 
+LAST_IN = ("receipt", "opening", "production_output")
+
+
+def last_cost(company_id, item):
+    """What one base unit cost the last time it came in (bought, counted on
+    the first day, or made), or None: a reversed entry does not count."""
+    from inventory.models import StockMove
+
+    return (StockMove.all_objects.filter(company_id=company_id, item=item, move_type__in=LAST_IN, qty__gt=0,
+                                         reversal__isnull=True)
+            .order_by("-work_date", "-posted_at", "-pk").values_list("unit_cost", flat=True).first())
+
+
 def unit_cost(company_id, item, seen=frozenset()):
-    """What one unit of ``item`` costs: its average cost in stock; for a
-    semi-finished product with none in stock, what making one costs; else its
-    standard cost. None when nothing says."""
+    """What one unit of ``item`` costs. With "the last price paid" (the
+    inventory setting, 2026-11-02): what it cost the last time it came in,
+    else its expected buy price. Otherwise, or with neither: its average cost
+    in stock; for a semi-finished product with none in stock, what making one
+    costs; else its standard cost. None when nothing says."""
+    from inventory.posting import settings_for
+
+    if settings_for(company_id).price_cost == "last":
+        last = last_cost(company_id, item)
+        if last:
+            return last
+        if item.standard_cost and item.sourcing == Item.Sourcing.BUY:
+            return item.standard_cost
     costs = ItemCost.all_objects.filter(company_id=company_id, item=item)
     company = costs.filter(warehouse=None).values_list("avg_cost", flat=True).first()
     if company:
@@ -259,8 +283,13 @@ def sheet(company_id, item, seen=frozenset()):
     for line in lines:
         need = line.qty_base * (1 + line.scrap_pct / 100)
         cost = unit_cost(company_id, line.item, seen)
-        how = f"{need.normalize():,f} {line.item.base_uom.code}"
-        how += f" × {cost.quantize(CENT):,f}" if cost is not None else " · no cost yet"
+        # Written out in full (2026-11-02): 500 PCS + 10 % wastage = 550 PCS × 2.76 = 1,516.24.
+        code = line.item.base_uom.code
+        how = f"{line.qty_base.normalize():,f} {code}"
+        if line.scrap_pct:
+            how += f" + {line.scrap_pct.normalize():f} % wastage = {need.normalize():,f} {code}"
+        how += (f" × {cost.quantize(CENT):,f} Tk = {_amount(need * cost):,.2f}" if cost is not None
+                else " · no cost yet")
         found.materials.append(Row(line.item.name, how, _amount(need * (cost or ZERO)), line, cost is None))
     for line in cost_lines:
         if line.how == CostLine.How.LABOUR:
