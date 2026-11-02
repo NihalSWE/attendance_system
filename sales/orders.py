@@ -51,6 +51,7 @@ from inventory.masters import units_for
 from inventory.models import ItemUom
 from sales.models import (
     CENT,
+    Customer,
     PriceList,
     PriceListLine,
     Reservation,
@@ -122,6 +123,83 @@ def remove_price(*, actor, company_id, price_list_id, line_id):
         audit(actor, membership, "sales.price_list.price_removed", price_list,
               before={"item": line.item.code, "price": plain(line.price)})
         line.delete()
+
+
+@transaction.atomic
+def update_price_list(*, actor, company_id, price_list_id, values):
+    """Rename a price list or change its dates and note (2026-11-02). Customers
+    name their list, so a renamed list keeps its customers: their record is
+    moved to the new name."""
+    membership = require(actor, company_id, "sales.order")
+    price_list = get(PriceList, company_id, price_list_id, "Price list")
+    values = _writable(values, ("name", "valid_from", "valid_to", "note"))
+    if not (values.get("name") or "").strip():
+        raise ValidationError({"name": "Give the name customers are given (e.g. Distributor)."})
+    if values.get("valid_from") and values.get("valid_to") and values["valid_to"] < values["valid_from"]:
+        raise ValidationError({"valid_to": "Ends before it starts?"})
+    with use_company(company_id):
+        before = {"name": price_list.name, "valid_from": plain(price_list.valid_from),
+                  "valid_to": plain(price_list.valid_to), "note": price_list.note}
+        old_name = price_list.name
+        for field, value in values.items():
+            setattr(price_list, field, value)
+        price_list.updated_by = actor
+        price_list.full_clean()
+        price_list.save()
+        moved = 0
+        if price_list.name != old_name:
+            moved = Customer.objects.filter(price_list_name=old_name).update(price_list_name=price_list.name)
+        audit(actor, membership, "sales.price_list.updated", price_list, before=before, after={
+            "name": price_list.name, "valid_from": plain(price_list.valid_from),
+            "valid_to": plain(price_list.valid_to), "note": price_list.note, "customers_moved": moved})
+    price_list.customers_moved = moved
+    return price_list
+
+
+@transaction.atomic
+def delete_price_list(*, actor, company_id, price_list_id):
+    """Delete a price list and its prices (2026-11-02). Orders keep the prices
+    they were made with; customers who used the list get each item's own sale
+    price from now on, and the list is taken off their record."""
+    membership = require(actor, company_id, "sales.order")
+    price_list = get(PriceList, company_id, price_list_id, "Price list")
+    with use_company(company_id):
+        name, prices = price_list.name, price_list.lines.count()
+        customers = Customer.objects.filter(price_list_name=name).update(price_list_name="")
+        audit(actor, membership, "sales.price_list.deleted", price_list,
+              before={"name": name, "prices": prices, "customers": customers})
+        price_list.delete()
+    return {"name": name, "prices": prices, "customers": customers}
+
+
+@transaction.atomic
+def update_price(*, actor, company_id, price_list_id, line_id, values):
+    """Change one price on a list: its item, unit, from quantity or price (2026-11-02)."""
+    membership = require(actor, company_id, "sales.order")
+    price_list = get(PriceList, company_id, price_list_id, "Price list")
+    values = _writable(values, ("item", "uom", "price", "min_qty"))
+    item = values.get("item")
+    if item is None:
+        raise ValidationError({"item": "Choose the item."})
+    unit_factor(item, values.get("uom"))
+    if values.get("price") is None or values["price"] < 0:
+        raise ValidationError({"price": "Give the price."})
+    values["min_qty"] = values.get("min_qty") or Decimal("0")
+    with use_company(company_id):
+        line = price_list.lines.select_related("item", "uom").filter(pk=line_id).first()
+        if line is None:
+            raise ValidationError("That price is not on this list.")
+        if price_list.lines.filter(item=item, uom=values["uom"], min_qty=values["min_qty"]).exclude(pk=line.pk).exists():
+            raise ValidationError({"item": "This list already has a price for that item, unit and from quantity: "
+                                           "change that one, or remove it first."})
+        before = {"item": line.item.code, "uom": line.uom.code, "min_qty": plain(line.min_qty),
+                  "price": plain(line.price)}
+        line.item, line.uom, line.min_qty, line.price = item, values["uom"], values["min_qty"], values["price"]
+        line.save()
+        audit(actor, membership, "sales.price_list.price_changed", price_list, before=before, after={
+            "item": item.code, "uom": values["uom"].code, "min_qty": plain(values["min_qty"]),
+            "price": plain(values["price"])})
+    return line
 
 
 def price_for(customer, item, uom, qty, day):

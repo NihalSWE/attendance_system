@@ -11,8 +11,19 @@
     <td>{{ row.valid_from|date:"d M Y"|default:"—" }}</td>
     <td>{{ row.valid_to|date:"d M Y"|default:"—" }}</td>
     <td>{{ row.get_status_display }}</td>
-    <td><a class="btn btn--ghost btn--sm" href="{% url 'sales:price_list_detail' row.pk %}">Open</a></td>
+    <td><div class="inv-actions">
+        <a class="btn btn--ghost btn--sm" href="{% url 'sales:price_list_detail' row.pk %}">Open</a>
+        {% if can_edit %}
+            <a class="btn btn--ghost btn--sm" href="?edit={{ row.pk }}">Edit</a>
+            <form method="post" action="{% url 'sales:price_list_delete' row.pk %}"
+                  data-confirm="Its prices are deleted. Orders already made keep their prices; customers on this list get each item's own sale price from now on."
+                  data-confirm-title="Delete the price list “{{ row.name }}”?" data-confirm-button="Delete" data-confirm-tone="danger">
+                {% csrf_token %}<button class="btn btn--quiet btn--sm" type="submit">Delete</button>
+            </form>
+        {% endif %}
+    </div></td>
 {% endblock %}
 {% block dialogs %}
     {% if new_form %}{% url 'sales:price_lists' as new_url %}{% include "organization/profile/modal_form.html" with id="new-dialog" title="New price list" action=new_url form=new_form submit="Make" %}{% endif %}
+    {% if edit_form %}{% url 'sales:price_list_edit' edit_row.pk as edit_url %}{% include "organization/profile/modal_form.html" with id="edit-dialog" title="Edit "|add:edit_row.name action=edit_url form=edit_form submit="Save" note="Renaming it moves the customers who use it to the new name." %}{% endif %}
 {% endblock %}

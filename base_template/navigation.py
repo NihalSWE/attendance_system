@@ -189,6 +189,7 @@ SALES_ENTRIES = (
          "sales:return_line_remove", "sales:return_action", needs=("sales.deliver", "inventory.view")),
     item("Customers", "inventory:customers", needs="inventory.view"),
     item("Price lists", "sales:price_lists", "sales:price_list_detail", "sales:price_remove",
+         "sales:price_list_edit", "sales:price_list_delete", "sales:price_edit",
          needs=("sales.order", "inventory.view")),
     # Phase 8: orders read by the AI into drafts; a person confirms each.
     item("AI order inbox", "ai_assistant:inbox", "ai_assistant:message", "ai_assistant:message_action",

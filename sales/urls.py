@@ -9,6 +9,9 @@ app_name = "sales"
 urlpatterns = [
     path("price-lists/", views.price_list_list, name="price_lists"),
     path("price-lists/<int:pk>/", views.price_list_detail, name="price_list_detail"),
+    path("price-lists/<int:pk>/edit/", views.price_list_edit, name="price_list_edit"),
+    path("price-lists/<int:pk>/delete/", views.price_list_delete, name="price_list_delete"),
+    path("price-lists/<int:pk>/prices/<int:line_pk>/edit/", views.price_edit, name="price_edit"),
     path("price-lists/<int:pk>/prices/<int:line_pk>/remove/", views.price_remove, name="price_remove"),
 
     path("orders/", views.order_list, name="orders"),
