@@ -418,3 +418,65 @@ class PlanForm(StyledFormMixin, forms.Form):
         except ValidationError as exc:
             raise forms.ValidationError(exc.message_dict["qty"]) from None
         return qty
+
+
+class BottleSizeForm(StyledFormMixin, forms.Form):
+    """A bottle size of a made product (2026-11-03, production.bottling): how
+    much one holds, its bottle, cap and label, and optionally its bottling
+    cost, sale price and carton."""
+
+    size = forms.DecimalField(label="One bottle holds", min_value=Decimal("0.0001"), max_digits=18,
+                              decimal_places=4)
+    containers = forms.ModelMultipleChoiceField(
+        queryset=Item.all_objects.none(), label="Bottle, cap, label", required=False,
+        help_text="One of each goes into every bottle. More can be added on its recipe later.")
+    unit = forms.ModelChoiceField(queryset=Uom.all_objects.none(), label="Counted in", empty_label=None)
+    name = forms.CharField(label="Name", max_length=255, required=False)
+    code = forms.CharField(label="Code", max_length=64, required=False,
+                           help_text="Left empty, the next free code.")
+    bottling_cost = forms.DecimalField(label="Bottling cost (optional)", min_value=Decimal("0"),
+                                       max_digits=18, decimal_places=2, required=False,
+                                       help_text="Filling and sealing one bottle: people, machine, power.")
+    sale_price = forms.DecimalField(label="Sale price of one bottle (optional)", min_value=Decimal("0"),
+                                    max_digits=18, decimal_places=2, required=False,
+                                    help_text="Or set it later, once its cost shows.")
+    carton_factor = forms.DecimalField(label="Bottles in a carton (optional)", min_value=Decimal("1"),
+                                       max_digits=18, decimal_places=0, required=False)
+
+    #: Unit codes taken for a carton, the first that the company has.
+    CARTONS = ("CARTON", "CTN", "BOX", "CASE")
+
+    def __init__(self, *args, company_id, product, **kwargs):
+        # Its own ids: the product's Edit form on the same page has a sale price and a code too.
+        kwargs.setdefault("prefix", "bottle")
+        super().__init__(*args, **kwargs)
+        self.product = product
+        units = Uom.all_objects.filter(company_id=company_id, status="active", kind=Uom.Kind.COUNT)
+        self.fields["unit"].queryset = units.exclude(code__in=self.CARTONS)
+        pcs = units.filter(code__iexact="PCS").first()
+        if pcs is not None:
+            self.fields["unit"].initial = pcs.pk
+        by_code = {uom.code.upper(): uom for uom in units.filter(code__in=self.CARTONS)}
+        self.carton = next((by_code[code] for code in self.CARTONS if code in by_code), None)
+        if self.carton is None:
+            del self.fields["carton_factor"]
+        else:
+            self.fields["carton_factor"].label = f"Bottles in a {self.carton.code.lower()} (optional)"
+        self.fields["containers"].queryset = (
+            Item.all_objects.filter(company_id=company_id, status="active", kind__in=recipes.MATERIAL_KINDS)
+            .select_related("base_uom").order_by("kind", "name"))
+        self.fields["containers"].label_from_instance = lambda item: f"{item.code} · {item.name}"
+        self.fields["containers"].widget.attrs["data-placeholder"] = "Search: bottle 250 ml, cap, label"
+        self.fields["size"].unit_text = product.base_uom.code
+        self.fields["size"].help_text = f"How much {product.name} goes into one bottle: 250, 500, 1000."
+        self.fields["name"].help_text = f"Left empty: {product.name} and the size, e.g. " \
+                                        f"\"{product.name} 250 {product.base_uom.code.lower()}\"."
+        for name in ("bottling_cost", "sale_price"):
+            self.fields[name].unit_text = "Tk"
+
+    def service_values(self):
+        data = self.cleaned_data
+        return {"size": data["size"], "unit": data["unit"], "containers": list(data["containers"]),
+                "name": data["name"], "code": data["code"], "bottling_cost": data["bottling_cost"],
+                "sale_price": data["sale_price"], "carton": self.carton,
+                "carton_factor": data.get("carton_factor")}

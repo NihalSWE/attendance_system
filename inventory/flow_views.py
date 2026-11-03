@@ -549,4 +549,6 @@ def sale_new(request):
         "form": SaleForm(company_id=company_id, stores=stores, can_invoice=can_invoice,
                          initial={"day": timezone.localdate()}),
         "items": _item_options(company_id), "balances": _balances_json(request, company_id, stores),
-        "rows": range(1, ROWS_SHOWN + 1), "most": LINES, "qc_url": reverse("inventory:qc")})
+        "rows": range(1, ROWS_SHOWN + 1), "most": LINES, "qc_url": reverse("inventory:qc"),
+        # From a product's "Sell" (2026-11-03): on line 1.
+        "preselect": int(request.GET["item"]) if request.GET.get("item", "").isdigit() else None})

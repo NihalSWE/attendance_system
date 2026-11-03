@@ -1,0 +1,70 @@
+{% comment %}
+    How the product is sold (2026-11-03, production.bottling): as it is (by its
+    unit and packs), and each bottle size made from it - its own product,
+    whose recipe takes this one with the bottle, cap and label. A bottle's
+    cost is the product in it + its packaging + the bottling cost.
+{% endcomment %}
+{% load money %}
+<div class="ui-card" id="sell-as">
+    <div class="ui-card__head">
+        <h2 class="ui-card__title">{% include "ui/icon.html" with name="store" %} How you sell it</h2>
+        {% if bottle_form %}<button class="ui-btn ui-btn--main ui-btn--sm" type="button" data-open-dialog="bottle-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add a bottle size</button>{% endif %}
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>Sold as</th><th class="numeric">Holds</th>{% if sees_costs %}<th class="numeric">Cost of one</th>{% endif %}<th class="numeric">Sale price</th>{% if sees_costs %}<th class="numeric">Margin</th>{% endif %}<th class="numeric">In stock</th><th class="no-sort"><span class="sr-only">Actions</span></th></tr></thead>
+            <tbody>
+                {% for way in ways %}
+                    <tr>
+                        {% if forloop.first %}
+                            <td><strong>As it is</strong> <span class="ui-muted">· by the {{ item.base_uom.code }}{% for pack in way.packs %} and the {{ pack.uom.code }} ({{ pack.factor|qty }} {{ item.base_uom.code }}){% endfor %}</span></td>
+                            <td class="numeric">—</td>
+                        {% else %}
+                            <td><a href="{% url 'inventory:product' way.item.pk %}">{{ way.item.name }}</a> <span class="ui-muted">· by the {{ way.item.base_uom.code }}{% for pack in way.packs %} and the {{ pack.uom.code }} ({{ pack.factor|qty }} {{ way.item.base_uom.code }}){% endfor %}</span></td>
+                            <td class="numeric">{{ way.uses|qty }} {{ item.base_uom.code }}</td>
+                        {% endif %}
+                        {% if sees_costs %}<td class="numeric">{% if way.cost is not None %}{{ way.cost|floatformat:"2g" }} <span class="ui-muted">/ {{ way.item.base_uom.code }}</span>{% else %}<span class="ui-chip ui-chip--wait">No cost yet</span>{% endif %}</td>{% endif %}
+                        <td class="numeric">{% if way.price %}{{ way.price|floatformat:"2g" }} <span class="ui-muted">/ {{ way.item.base_uom.code }}</span>{% if way.price_per_bulk_unit %}<br><span class="ui-muted">= {{ way.price_per_bulk_unit|qty }} a {{ item.base_uom.code }}</span>{% endif %}{% else %}<a href="{% if forloop.first %}#price{% else %}{% url 'inventory:product' way.item.pk %}#price{% endif %}">Set the price</a>{% endif %}</td>
+                        {% if sees_costs %}<td class="numeric">{% if way.margin is not None %}<span class="ui-chip ui-chip--{% if way.margin < 0 %}bad{% else %}ok{% endif %}">{{ way.margin|floatformat:"2g" }} · {{ way.margin_pct|floatformat:"1" }} %</span>{% else %}—{% endif %}</td>{% endif %}
+                        <td class="numeric">{{ way.on_hand|qty }} {{ way.item.base_uom.code }}</td>
+                        <td><div class="inv-actions">
+                            {% if not forloop.first and can_plan %}<a class="ui-btn ui-btn--sm" href="{% url 'production:plan' way.item.pk %}">{% include "ui/icon.html" with name="play" small=True %} Fill bottles</a>{% endif %}
+                            <a class="ui-btn ui-btn--sm" href="{% url 'inventory:sale_new' %}?item={{ way.item.pk }}">Sell</a></div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="ui-card__foot ui-muted">
+        {% if ways|length > 1 %}Fill bottles takes the {{ item.name }} and the empty bottles, caps and labels out of stock, and puts the filled bottles in, each size with its own stock, cost and batch.{% else %}Sell it as it is, or add a bottle size: its own product, made from this one and an empty bottle, with its own cost and price.{% endif %}
+    </div>
+</div>
+
+{% if bottle_form %}
+    <dialog class="modal modal--wide" id="bottle-dialog" aria-labelledby="bottle-dialog-title">
+        <form class="modal__card" method="post" action="{% url 'inventory:bottle_size_add' item.pk %}" data-fetch novalidate>
+            {% csrf_token %}
+            <div class="modal__head"><h2 id="bottle-dialog-title">Add a bottle size of {{ item.name }}</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <div class="modal__body stack">
+                <p class="ui-muted">It becomes a product of its own, made here: its recipe for one bottle takes this much {{ item.name }} and one of each bottle, cap and label. Batches, expiry and QC follow {{ item.name }}.</p>
+                <div class="ui-grid-2">
+                    {% include "inventory/hub/field.html" with box=bottle_form.size %}
+                    {% include "inventory/hub/field.html" with box=bottle_form.unit %}
+                </div>
+                {% include "inventory/hub/field.html" with box=bottle_form.containers %}
+                <div class="ui-grid-2">
+                    {% include "inventory/hub/field.html" with box=bottle_form.bottling_cost %}
+                    {% include "inventory/hub/field.html" with box=bottle_form.sale_price %}
+                </div>
+                <div class="ui-grid-2">
+                    {% include "inventory/hub/field.html" with box=bottle_form.name %}
+                    {% include "inventory/hub/field.html" with box=bottle_form.code %}
+                </div>
+                {% if bottle_form.carton_factor %}<div class="ui-grid-2">{% include "inventory/hub/field.html" with box=bottle_form.carton_factor %}</div>{% endif %}
+            </div>
+            <div class="ui-message" data-form-message role="status" hidden></div>
+            <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Add</button></div>
+        </form>
+    </dialog>
+{% endif %}
