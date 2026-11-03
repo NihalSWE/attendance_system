@@ -69,7 +69,7 @@ class AddSizeTests(BottleFixture, TestCase):
     def test_a_price_below_cost_adds_nothing(self):
         with self.assertRaises(ValidationError) as caught:
             self.add(sale_price=D("50"))
-        self.assertIn("Below cost: one bottle costs 71.60", caught.exception.message_dict["sale_price"][0])
+        self.assertIn("Below cost: one filled bottle costs 71.60", caught.exception.message_dict["sale_price"][0])
         self.assertFalse(Item.all_objects.filter(name="Orange juice 250 ml").exists())
 
     def test_refused_twice_or_in_its_own_unit(self):
@@ -126,3 +126,13 @@ class PageTests(BottleFixture, TestCase):
         self.assertContains(page, "Fill bottles")
         sale = self.client.get(reverse("inventory:sale_new") + f"?item={bottle.pk}")
         self.assertContains(sale, f'value="{bottle.pk}" ')
+
+    def test_the_dialog_knows_the_costs_to_show_one_bottle(self):
+        page = self.client.get(reverse("inventory:product", args=[self.bulk.pk]))
+        self.assertContains(page, 'data-bulk-cost="0.27')
+        self.assertContains(page, f'&quot;{self.bottle.pk}&quot;: &quot;3.2')
+        self.assertContains(page, "Cost of one filled bottle")
+        self.assertContains(page, "Sale price of one filled bottle")
+        # A material's sale price is only for selling the material itself.
+        material = self.client.get(reverse("inventory:material", args=[self.bottle.pk]))
+        self.assertContains(material, "Only if you sell the PET bottle 250 ml itself")

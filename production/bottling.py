@@ -127,7 +127,8 @@ def add_size(*, actor, company_id, product, size, unit, containers=(), name="", 
         cost = pricing.cost_per_unit(company_id, bottle)
         if cost is not None and sale_price < cost:
             raise ValidationError({"sale_price": (
-                f"Below cost: one bottle costs {cost:,.2f}. Give a higher price, or leave it empty and set "
-                "it on the bottle's own page (Sell below cost, with a reason).")})
+                f"Below cost: one filled bottle costs {cost:,.2f} (the juice in it, the empty bottle, cap, "
+                "label and bottling). Give a higher price, or leave it empty and set it on the bottle's own "
+                "page (Sell below cost, with a reason).")})
         pricing.set_price(actor=actor, company_id=company_id, item=bottle, price=sale_price, field="sale_price")
     return bottle

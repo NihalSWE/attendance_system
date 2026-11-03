@@ -428,8 +428,9 @@ class BottleSizeForm(StyledFormMixin, forms.Form):
     size = forms.DecimalField(label="One bottle holds", min_value=Decimal("0.0001"), max_digits=18,
                               decimal_places=4)
     containers = forms.ModelMultipleChoiceField(
-        queryset=Item.all_objects.none(), label="Bottle, cap, label", required=False,
-        help_text="One of each goes into every bottle. More can be added on its recipe later.")
+        queryset=Item.all_objects.none(), label="Empty bottle, cap, label", required=False,
+        help_text="The empty bottle you fill (its cost is what you paid for it), its cap and label: one of "
+                  "each goes into every bottle. More can be added on its recipe later.")
     unit = forms.ModelChoiceField(queryset=Uom.all_objects.none(), label="Counted in", empty_label=None)
     name = forms.CharField(label="Name", max_length=255, required=False)
     code = forms.CharField(label="Code", max_length=64, required=False,
@@ -437,9 +438,10 @@ class BottleSizeForm(StyledFormMixin, forms.Form):
     bottling_cost = forms.DecimalField(label="Bottling cost (optional)", min_value=Decimal("0"),
                                        max_digits=18, decimal_places=2, required=False,
                                        help_text="Filling and sealing one bottle: people, machine, power.")
-    sale_price = forms.DecimalField(label="Sale price of one bottle (optional)", min_value=Decimal("0"),
+    sale_price = forms.DecimalField(label="Sale price of one filled bottle (optional)", min_value=Decimal("0"),
                                     max_digits=18, decimal_places=2, required=False,
-                                    help_text="Or set it later, once its cost shows.")
+                                    help_text="What a customer pays for one bottle of juice. Look at its cost "
+                                              "above first, or set it later on the bottle's own page.")
     carton_factor = forms.DecimalField(label="Bottles in a carton (optional)", min_value=Decimal("1"),
                                        max_digits=18, decimal_places=0, required=False)
 
@@ -473,6 +475,22 @@ class BottleSizeForm(StyledFormMixin, forms.Form):
                                         f"\"{product.name} 250 {product.base_uom.code.lower()}\"."
         for name in ("bottling_cost", "sale_price"):
             self.fields[name].unit_text = "Tk"
+        # The cost of one filled bottle as you choose (2026-11-03): the same
+        # costs the bottle's own cost sheet uses (production.costing.unit_cost).
+        from production.costing import unit_cost
+
+        self.bulk_cost = unit_cost(company_id, product)
+        self.costs = {}
+        for item in self.fields["containers"].queryset:
+            cost = unit_cost(company_id, item)
+            if cost is not None:
+                self.costs[str(item.pk)] = f"{cost:f}"
+
+    @property
+    def costs_json(self):
+        import json
+
+        return json.dumps(self.costs)
 
     def service_values(self):
         data = self.cleaned_data
