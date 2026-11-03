@@ -7204,3 +7204,12 @@ yet, switch Ask on.
   each empty bottle, cap, label at its cost + bottling, the same costs as the bottle's cost sheet), then
   **Sale price of one filled bottle** with its margin live. A material's Sale price card says it is only for
   selling the material itself (making uses its cost, never that price).
+
+### Finish: damaged come off Good — 2026-11-03
+
+- PRD-2026-00005 (client's local data) was finished Good 500 + Damaged 25 for 500 planned: stock 500, cost
+  69.15 instead of 475 at 72.79. Good was left at the planned amount it starts with.
+- Finish (`inventory/hub/run.html`): typing Damaged sets Good to planned − damaged until Good is typed by hand;
+  a single store box follows Good; under Damaged: "475 good + 25 damaged = 500 came out, of 500 planned".
+- `production/making.py finish`: Good + Damaged above the plan (+5 %) without a reason is refused on Damaged:
+  "lower it to 475, or say why". Test: `inventory/tests_phase7.py` test_damaged_are_not_in_good.

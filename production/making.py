@@ -256,6 +256,13 @@ def finish(*, actor, company_id, order_id, values):
     elif good > 0 and not reason and not (LOW <= good / order.planned_base <= HIGH):
         errors["reason"] = (f"Good is {(good / order.planned_base * 100).quantize(Decimal('1'))} % of the plan: "
                             "say why.")
+    elif good > 0 and damaged > 0 and not reason and good + damaged > order.planned_base * HIGH:
+        # 2026-11-03: Good 500 + Damaged 25 from materials for 500 - the damaged
+        # ones were meant to come off Good. Good is only what goes into stock.
+        errors["damaged"] = (f"{(good + damaged).normalize():f} came out ({good.normalize():f} good + "
+                             f"{damaged.normalize():f} damaged), more than the {order.planned_base.normalize():f} "
+                             f"planned. Good is only what goes into stock: lower it to "
+                             f"{max(order.planned_base - damaged, ZERO).normalize():f}, or say why.")
     parts = [(store, qty) for store, qty in (values.get("parts") or []) if qty]
     if good > 0:
         if not parts:
