@@ -26,7 +26,7 @@ class _HubItemForm(ItemForm):
     #: The boxes on the form, in order; the rest go under "More details".
     MAIN_BOXES = ()
     #: On/off settings, drawn as switches.
-    SWITCHES = ("track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix",
+    SWITCHES = ("track_batch", "track_expiry", "shelf_life_days", "qc_required",
                 "warranty_months", "serial_numbers")
     #: ``{box: name of the box whose unit is shown beside it}``.
     UNIT_FROM = {"min_stock": "base_uom", "pack_factor": "base_uom", "sale_price": "base_uom",
@@ -92,7 +92,6 @@ class _HubItemForm(ItemForm):
         "track_expiry": ("Expiry tracking", "Expired stock can never be used or sold."),
         "shelf_life_days": ("Shelf life", ""),
         "qc_required": ("QC before use", "New stock waits until it passes a quality check."),
-        "batch_per_mix": ("Batch number per mix", "Off: one batch number per production."),
         "warranty_months": ("Warranty (repair)", "From the delivery date (sold) or received date (bought)."),
         "guarantee_months": ("Guarantee (replace)", "The first months of the warranty; not longer than it."),
         "serial_numbers": ("Serial number per unit", "Each unit is scanned out on delivery."),
@@ -183,7 +182,7 @@ class MaterialForm(_HubItemForm):
         self.fields["base_uom"].help_text = "Stock is counted in this unit; fixed once stock moves."
         if "pack_uom" in self.fields:
             self.fields["pack_uom"].help_text = "Optional: the unit you buy in, e.g. BAG."
-        for name in ("keep_by", "keep_days", "sale_price", "vat_rate", "batch_per_mix"):
+        for name in ("keep_by", "keep_days", "sale_price", "vat_rate"):
             self.fields.pop(name, None)
         # Bought, made here, or both (2026-10-31): a made material gets its own
         # recipe and is made with Make; its cost comes from its production.
@@ -216,7 +215,7 @@ class ProductForm(_HubItemForm):
         ("Stock control", "When it runs low, and where new stock goes.",
          ("keep_by", "min_stock", "keep_days", "reorder_qty", "default_warehouse")),
         ("Batches & expiry", "For food, medicine and anything that expires.",
-         ("track_batch", "track_expiry", "shelf_life_days", "qc_required", "batch_per_mix")),
+         ("track_batch", "track_expiry", "shelf_life_days", "qc_required")),
         ("Warranty", "Your warranty to the customer.", ("warranty_months", "guarantee_months", "serial_numbers")),
     )
     BATCH_HINT = "Each production or delivery gets its own batch number."

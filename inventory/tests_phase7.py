@@ -1,7 +1,7 @@
 """Phase 7 of the redesign (2026-10-27, docs/inventory/PRODUCTION_PLAN.md §15):
 Start takes materials out of several stores; Finish records good and damaged,
 splits the output, returns or wastes leftovers, records a failed production;
-the full cost (materials + the day's costs) ÷ good; one batch per mix;
+the full cost (materials + the day's costs) ÷ good; one batch per production;
 Reverse while nothing made was touched; Cancel after Start returns everything."""
 
 from django.core.exceptions import ValidationError
@@ -127,16 +127,13 @@ class FinishTests(RunFixture, TestCase):
         self.assertEqual((order.status, order.material_cost), (ProductionOrder.Status.FAILED, MATERIALS))
         self.assertEqual(self.have(self.juice), D("0"))
 
-    def test_one_batch_number_per_mix(self):
-        Item.all_objects.filter(pk=self.juice.pk).update(batch_per_mix=True)
-        depot = self.store("DEP", "Depot", Warehouse.Kind.FINISHED)
-        with self.assertRaisesMessage(ValidationError, "one store"):
-            self.finish(parts=[(self.fgw, D("1000")), (depot, D("1000"))])
+    def test_one_batch_number_per_production(self):
+        # 2026-11-03: twice the recipe is still one batch, and the next production is the next number.
         _order, output = self.finish(good=D("1999"))
-        batches = sorted((batch.batch_no, StockBalance.all_objects.get(batch=batch).qty_on_hand)
-                         for batch in making.made_batches(output))
-        self.assertEqual([qty for _no, qty in batches], [D("999"), D("1000")])
-        self.assertEqual(len({number for number, _qty in batches}), 2)
+        made = making.made_batches(output)
+        self.assertEqual(len(made), 1)
+        self.assertEqual(StockBalance.all_objects.get(batch=made[0]).qty_on_hand, D("1999"))
+        self.assertTrue(made[0].batch_no.endswith("-1"))
 
 
 class ReverseAndCancelTests(RunFixture, TestCase):

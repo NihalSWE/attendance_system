@@ -282,8 +282,6 @@ class Item(TenantOwned, ActorTracked):
     track_expiry = models.BooleanField(default=False)
     shelf_life_days = models.PositiveIntegerField(null=True, blank=True)
     qc_required = models.BooleanField(default=False)
-    # One batch number per production (default), or one per mix (2026-10-27, plan §6.2).
-    batch_per_mix = models.BooleanField("New batch number for every batch made", default=False)
     # Warranty on this item (plan §10): from delivery for a product, from receipt
     # for a material (the supplier's). Only with the company's warranty on.
     warranty_months = models.PositiveSmallIntegerField("Warranty (months)", null=True, blank=True,

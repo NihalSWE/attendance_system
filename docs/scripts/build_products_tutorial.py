@@ -375,7 +375,6 @@ story += [P("Item", "h2"), fields([
     ("Batch tracking / Expiry tracking / Shelf life", "No", "As for materials.", "on, on, 180 days",
      "A made batch expires on the made date + shelf life (or earlier, never later)."),
     ("QC before use", "No", "New stock is checked first.", "", ""),
-    ("Batch number per mix", "No", "Off: one batch number per production. On: one per mix.", "", ""),
 ]), P("Warranty (only when Warranty is on)", "h2"), fields([
     ("Warranty (repair)", "No", "Your warranty to the customer, in months.", "12", "Runs from the delivery date."),
     ("Guarantee (replace)", "No", "Its first months, when a faulty unit is replaced.", "3",
