@@ -136,9 +136,13 @@ class SetupFixTests(MappingCase):
         from attendance.models import AttendanceRecord
         from employees.services import create_employee
 
-        start = setup_fix.month_starts(self.company)[0][0]
+        # The scan must fall before yesterday (when the person was added), so the
+        # month chosen must start before yesterday: on a salary month's second
+        # day its first day is yesterday itself, and the month before is used.
+        yesterday = timezone.localdate() - datetime.timedelta(days=1)
+        start = next(first for first, _label in setup_fix.month_starts(self.company) if first < yesterday)
         scan_day = max(start, timezone.localdate() - datetime.timedelta(days=5))
-        added = mapping.day_start(self.company, timezone.localdate() - datetime.timedelta(days=1))
+        added = mapping.day_start(self.company, yesterday)
         # Added yesterday from the device: placement and link from yesterday.
         late = create_employee(
             company=self.company, first_name="Late", employee_code="130200", branch=self.hq,
