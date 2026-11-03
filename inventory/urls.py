@@ -97,6 +97,7 @@ urlpatterns += [
     path("products/<int:pk>/", hub_views.product, name="product"),
     path("items/<int:pk>/save/", hub_views.item_save, name="item_save"),
     path("items/<int:pk>/price/", hub_views.item_price, name="item_price"),
+    path("products/<int:pk>/bottle-sizes/add/", hub_views.bottle_size_add, name="bottle_size_add"),
     # Stock in, Stock, Move stock and Sell in the new look (2026-10-28, plan §15 9.4).
     path("stock-in/", flow_views.stock_in, name="stock_in"),
     path("stock-in/new/", flow_views.stock_in_new, name="stock_in_new"),

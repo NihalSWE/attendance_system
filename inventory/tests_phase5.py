@@ -150,7 +150,7 @@ class PagesTests(CostFixture, TestCase):
         self.assertContains(page, "Cost of 1,000 PCS (the recipe)")
         self.assertContains(page, "18,344.85")
         self.assertContains(page, "4 × 1.5 h × 75")
-        self.assertContains(page, "expected: one batch ÷ 1,000")
+        self.assertContains(page, "expected: the recipe ÷ 1,000")
         # The products list uses the expected cost too.
         line = hub.lines(self.company.pk, self.owner, [ItemKind.FINISHED], only=self.juice.pk)[0]
         self.assertEqual(line.cost, (D("18344.85") / 1000).quantize(D("0.01")))

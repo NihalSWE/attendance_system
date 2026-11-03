@@ -243,6 +243,8 @@ def product(request, pk):
     productions = hub.productions(company_id, item) if makes else []
     steps = _product_steps(item, makes, making.get("has_recipe", False), parts["price_cost"], line, productions,
                            sold, context["sees_costs"])
+    if makes:
+        making.update(_ways(request, company_id, item))
     return render(request, "inventory/hub/product.html", {
         **context, **parts, **making, "line": line, "makes": makes, "steps": steps,
         "step_no": {step["key"]: step["number"] for step in steps},
@@ -315,6 +317,45 @@ def _making(request, company_id, item, recipe, packs):
         found.update({"material_form": material_form, "batch_form": batch_form,
                       "cost_form": production_forms.CostLineForm(company_id=company_id)})
     return found
+
+
+def _ways(request, company_id, item, form=None):
+    """How it is sold (2026-11-03, production.bottling): as it is, and each
+    bottle size made from it, with the form that adds a bottle size."""
+    from production import bottling
+    from production.forms import BottleSizeForm
+
+    can_add = (access.may(request.user, company_id, masters.CODE)
+               and access.may(request.user, company_id, "production.bom"))
+    return {"ways": bottling.ways(company_id, request.user, item),
+            "bottle_form": form or (BottleSizeForm(company_id=company_id, product=item) if can_add else None)}
+
+
+@login_required
+@require_POST
+def bottle_size_add(request, pk):
+    """Add a bottle size of a made product: its own product and recipe."""
+    from production import bottling
+    from production.forms import BottleSizeForm
+
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    access.require(request.user, company_id, masters.CODE)
+    access.require(request.user, company_id, "production.bom")
+    item = _item(company_id, pk)
+    form = BottleSizeForm(request.POST, company_id=company_id, product=item)
+    if not form.is_valid():
+        return fetch.refused(form)
+    try:
+        bottle = bottling.add_size(actor=request.user, company_id=company_id, product=item,
+                                   **form.service_values())
+    except ValidationError as exc:
+        _service_errors(form, exc)
+        return fetch.refused(form)
+    return fetch.saved(f"{bottle.code} {bottle.name} added: its recipe takes "
+                       f"{form.cleaned_data['size'].normalize():f} {item.base_uom.code} of {item.name}.",
+                       reverse("inventory:product", args=[item.pk]) + "#sell-as")
 
 
 # --- shared ---------------------------------------------------------------------

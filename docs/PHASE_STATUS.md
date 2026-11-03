@@ -7182,3 +7182,21 @@ yet, switch Ask on.
 - `inventory/tests_phase9.py` ConversionTests run the old data migration against today's inventory tables.
 
 **Deploy:** pull, migrate (inventory 0011), restart.
+
+### How you sell it: as it is and in bottle sizes — 2026-11-03
+
+- The client makes orange juice in bulk (ML) and sells it as liquid (ML / L) and in 250 ml, 500 ml and 1 L
+  bottles, by the bottle and by the carton. A bottle costs the juice in it + bottle, cap, label + bottling.
+- A made product's page has a **How you sell it** card (`inventory/hub/_sell_as.html`): the product as it is,
+  then every product whose recipe in use takes it, each with what it holds, its cost, price, price per ML,
+  margin, stock, its units (PCS and CARTON), **Fill bottles** (Plan of that size) and **Sell** (the sale form
+  with it on line 1).
+- **Add a bottle size** (`production/bottling.py add_size`, `inventory:bottle_size_add`): size, bottle/cap/label,
+  counted in (PCS), optional bottling cost, sale price (refused below cost), name, code and bottles per carton.
+  It makes a product made here with the bulk product's category, batches, expiry, QC, usual store and VAT,
+  a recipe for 1 = the size of the bulk product + one of each container, a "Bottling" cost, the carton unit
+  and the price - all or nothing. The form has the prefix `bottle-` (the Edit form on the page has the same names).
+- Wording: the cost tile says "expected: the recipe ÷ N".
+- Tests: `production/tests_bottling.py`.
+
+**Deploy:** pull, restart (no migration).

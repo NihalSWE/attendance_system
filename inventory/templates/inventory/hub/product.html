@@ -19,7 +19,7 @@
 
     <div class="ui-tiles">
         {% if sees_costs %}
-            <div class="ui-tile"><p class="ui-tile__label">Cost per {{ item.base_uom.code }}</p><p class="ui-tile__value">{% if line.cost %}{{ line.cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">{% if line.expected is not None %}expected: one batch ÷ {{ sheet.makes|floatformat:"-2g" }}{% elif makes and sheet.missing %}a material has no cost yet{% elif line.on_hand %}average of what is in stock{% else %}none in stock yet{% endif %}</p></div>
+            <div class="ui-tile"><p class="ui-tile__label">Cost per {{ item.base_uom.code }}</p><p class="ui-tile__value">{% if line.cost %}{{ line.cost|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">{% if line.expected is not None %}expected: the recipe ÷ {{ sheet.makes|floatformat:"-2g" }}{% elif makes and sheet.missing %}a material has no cost yet{% elif line.on_hand %}average of what is in stock{% else %}none in stock yet{% endif %}</p></div>
         {% endif %}
         <div class="ui-tile"><p class="ui-tile__label">Sale price</p><p class="ui-tile__value">{% if item.sale_price %}{{ item.sale_price|floatformat:"2g" }}{% else %}—{% endif %}</p><p class="ui-tile__hint">per {{ item.base_uom.code }}{% for pack in packs %}{% if pack.price %} · {{ pack.uom.code }} {{ pack.price|floatformat:"2g" }}{% endif %}{% endfor %}</p></div>
         {% if sees_costs %}
@@ -66,6 +66,8 @@
 
     {% include "inventory/hub/_price.html" with step=step_no.price %}
 
+    {% if makes %}{% include "inventory/hub/_sell_as.html" %}{% endif %}
+
     {% if makes and has_recipe %}
         <div class="ui-card" id="make">
             <div class="ui-card__head">
@@ -85,7 +87,7 @@
     {% if makes and not has_recipe %}
         <div class="ui-card" id="make">
             <div class="ui-card__head"><h2 class="ui-card__title"><span class="ui-stepno">{{ step_no.make }}</span>{% include "ui/icon.html" with name="play" %} Make</h2></div>
-            <div class="ui-card__body"><div class="ui-locked"><p><strong>Write the recipe first.</strong> A production takes its materials from the recipe: what one batch makes and what it uses.</p><a class="ui-btn ui-btn--sm" href="#recipe">Go to the recipe</a></div></div>
+            <div class="ui-card__body"><div class="ui-locked"><p><strong>Write the recipe first.</strong> A production takes its materials from the recipe: the quantity it is for and what it uses.</p><a class="ui-btn ui-btn--sm" href="#recipe">Go to the recipe</a></div></div>
         </div>
     {% endif %}
 
