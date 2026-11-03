@@ -317,10 +317,10 @@ class CostLine(TenantOwned, ActorTracked):
     class How(models.TextChoices):
         LABOUR = "labour", "People × hours × rate"
         MACHINE = "machine", "Machine hours × rate"
-        FIXED = "fixed", "An amount per batch"
+        FIXED = "fixed", "An amount (for the recipe's quantity)"
         PERCENT = "percent", "A % of the materials"
         # 2026-11-03: worked out last, on the materials and every other cost.
-        VAT = "vat", "VAT: a % of the batch cost"
+        VAT = "vat", "VAT: a % of the cost"
 
     item = models.ForeignKey("inventory.Item", on_delete=models.CASCADE, related_name="cost_lines",
                              verbose_name="Product")

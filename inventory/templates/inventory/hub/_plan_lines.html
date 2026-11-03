@@ -1,11 +1,12 @@
 {% comment %}
     The materials of a plan (production.planning.plan): needed, usable in the
-    branch, taken from which stores, and what is short. Redrawn as the batches,
+    branch, taken from which stores, and what is short. Redrawn as the quantity,
     date or store change (plan.html).
 {% endcomment %}
+{% load money %}
 {% if plan %}
     <div class="ui-card__body">
-        <p><strong>{{ plan.batches }} batch{{ plan.batches|pluralize:"es" }}</strong> make <strong>{{ plan.makes|floatformat:"-4g" }} {{ item.base_uom.code }}</strong> into {{ plan.into.name }}. Materials from the stores of {{ plan.into.branch.name }}, the usual store first, the batch that expires first.</p>
+        <p><strong>{{ plan.makes|qty }} {{ item.base_uom.code }}</strong> into {{ plan.into.name }}, as one batch. The recipe is for {{ plan.bom.batch_size_base|qty }} {{ item.base_uom.code }}{% if plan.times != 1 %}, so every material is × {{ plan.times|qty }}{% endif %}. Materials from the stores of {{ plan.into.branch.name }}, the usual store first, the batch that expires first.</p>
     </div>
     <div class="table-wrap">
         <table class="table">
@@ -15,10 +16,10 @@
                     <tr>
                         <td>{% if need.item.kind == "finished" %}<a href="{% url 'inventory:product' need.item.pk %}">{{ need.item.name }}</a>{% else %}<a href="{% url 'inventory:material' need.item.pk %}">{{ need.item.name }}</a>{% endif %}
                             {% if need.others %}<div class="ui-muted">Another planned production also needs it: {{ need.others|join:", " }}</div>{% endif %}</td>
-                        <td class="numeric">{{ need.need|floatformat:"-4g" }} {{ need.item.base_uom.code }}</td>
-                        <td class="numeric">{{ need.available|floatformat:"-4g" }} {{ need.item.base_uom.code }}</td>
-                        <td>{% for store, qty in need.stores %}{{ store.name }} {{ qty|floatformat:"-4g" }}{% if not forloop.last %} + {% endif %}{% empty %}<span class="ui-muted">—</span>{% endfor %}</td>
-                        <td>{% if need.short %}<span class="ui-chip ui-chip--bad" data-short>Short by {{ need.short|floatformat:"-4g" }} {{ need.item.base_uom.code }}</span>{% if need.item.kind == "finished" %} <a href="{% url 'production:plan' need.item.pk %}">Make it first</a>{% endif %}{% else %}<span class="ui-chip ui-chip--ok">Enough</span>{% endif %}</td>
+                        <td class="numeric">{{ need.need|qty }} {{ need.item.base_uom.code }}</td>
+                        <td class="numeric">{{ need.available|qty }} {{ need.item.base_uom.code }}</td>
+                        <td>{% for store, qty in need.stores %}{{ store.name }} {{ qty|qty }}{% if not forloop.last %} + {% endif %}{% empty %}<span class="ui-muted">—</span>{% endfor %}</td>
+                        <td>{% if need.short %}<span class="ui-chip ui-chip--bad" data-short>Short by {{ need.short|qty }} {{ need.item.base_uom.code }}</span>{% if need.item.kind == "finished" %} <a href="{% url 'production:plan' need.item.pk %}">Make it first</a>{% endif %}{% else %}<span class="ui-chip ui-chip--ok">Enough</span>{% endif %}</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -27,10 +28,10 @@
     {% if plan.short %}
         <div class="ui-card__body">
             <div class="ui-message ui-message--error" role="status">
-                <div>{{ plan.short|length }} material{{ plan.short|length|pluralize }} short. The materials allow <strong>{{ plan.possible }} batch{{ plan.possible|pluralize:"es" }}</strong>.
-                    You can plan it as it is (it cannot start until the materials are in), make fewer, or buy the rest.</div>
+                <div>{{ plan.short|length }} material{{ plan.short|length|pluralize }} short. The materials allow <strong>{{ plan.possible|qty }} {{ item.base_uom.code }}</strong>.
+                    You can plan it as it is (it cannot start until the materials are in), make less, or buy the rest.</div>
             </div>
-            {% if plan.possible %}<p><button class="ui-btn ui-btn--sm" type="button" data-make-fewer="{{ plan.possible }}">Make fewer: {{ plan.possible }} batch{{ plan.possible|pluralize:"es" }}</button></p>{% endif %}
+            {% if plan.possible %}<p><button class="ui-btn ui-btn--sm" type="button" data-make-fewer="{{ plan.possible_text }}">Make less: {{ plan.possible|qty }} {{ item.base_uom.code }}</button></p>{% endif %}
         </div>
     {% endif %}
 {% else %}

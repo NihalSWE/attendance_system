@@ -805,10 +805,8 @@ def shortages(ctx):
     rows, short_runs = [], 0
     for order in planned.select_related("item__base_uom", "bom", "output_warehouse").order_by(
             "planned_date", "number"):
-        size = order.bom.batch_size_base or Decimal("1")
-        batches = int((order.planned_base / size).to_integral_value()) or 1
-        found = planning.plan(ctx.company_id, order.item, batches, order.output_warehouse, ctx.today,
-                              exclude_order=order.pk, bom=order.bom, makes=order.planned_base)
+        found = planning.plan(ctx.company_id, order.item, order.planned_base, order.output_warehouse, ctx.today,
+                              exclude_order=order.pk, bom=order.bom)
         if found.short:
             short_runs += 1
         for need in found.short:

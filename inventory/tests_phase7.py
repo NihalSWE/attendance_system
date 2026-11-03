@@ -26,7 +26,7 @@ class RunFixture(PlanFixture):
     def setUp(self):
         super().setUp()
         self.order, _plan = planning.save(actor=self.owner, company_id=self.company.pk, product=self.juice,
-                                          batches=2, into=self.fgw, day=self.today)
+                                          qty=D("2000"), into=self.fgw, day=self.today)
 
     def start(self, **extra):
         return making.start(actor=self.owner, company_id=self.company.pk, order_id=self.order.pk,
@@ -57,7 +57,7 @@ class StartTests(RunFixture, TestCase):
 
     def test_start_is_refused_while_short(self):
         short, _plan = planning.save(actor=self.owner, company_id=self.company.pk, product=self.juice,
-                                     batches=3, into=self.fgw, day=self.today)
+                                     qty=D("3000"), into=self.fgw, day=self.today)
         with self.assertRaisesMessage(ValidationError, "Mango pulp is short by 5 KG"):
             making.start(actor=self.owner, company_id=self.company.pk, order_id=short.pk, work_date=self.today)
 

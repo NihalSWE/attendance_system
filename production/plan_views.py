@@ -1,8 +1,9 @@
 """Plan a production from the product's page (2026-10-27,
 docs/inventory/PRODUCTION_PLAN.md §8.1-8.2, §15 phase 6; production.planning).
 
-The page shows, as you change the batches or the store, what the materials
-are, where each comes from and what is short. Plan it, Make fewer, or Buy
+The page shows, as you change the quantity or the store, what the materials
+are, where each comes from and what is short (2026-11-03: any quantity, in the
+product's unit; the recipe's materials scaled to it). Plan it, Make fewer, or Buy
 the rest - each answers in place (base_template/fetch.py)."""
 
 from django.contrib.auth.decorators import login_required
@@ -31,12 +32,12 @@ def _product(company_id, pk):
 
 
 def _chosen(form, initial):
-    """The batches, date and store the page shows: what was typed when it is
+    """The quantity, date and store the page shows: what was typed when it is
     right, else what the page started with."""
     if form.is_bound and form.is_valid():
         data = form.cleaned_data
-        return data["batches"], data["planned_date"], data["into"]
-    return initial["batches"], initial["planned_date"], initial["into"]
+        return data["qty"], data["planned_date"], data["into"]
+    return initial["qty"], initial["planned_date"], initial["into"]
 
 
 @login_required
@@ -55,25 +56,28 @@ def plan_page(request, pk):
     stores = planning.output_stores(company_id, branch_ids(request.user, company_id, CODE))
     into = planning.default_into(product, stores)
     try:
-        planning.recipe_in_use(company_id, product)
+        bom = planning.recipe_in_use(company_id, product)
     except ValidationError as exc:
         return render(request, "inventory/hub/plan.html", {
             "active": "make", "production": True, "item": product, "no_recipe": exc.messages[0],
             "hub_url": hub_url})
     suggestion = planning.suggest(company_id, product, into) if into else None
-    initial = {"batches": (suggestion.batches if suggestion and suggestion.batches else 1),
-               "planned_date": timezone.localdate(), "into": into}
+    # The suggestion, else what the recipe is for.
+    start_qty = suggestion.qty if suggestion and suggestion.qty else bom.batch_size_base
+    initial = {"qty": start_qty, "planned_date": timezone.localdate(), "into": into}
     data = request.POST if request.method == "POST" else None
-    if request.method != "POST" and "batches" in request.GET:
-        # From a link (Make 2 batches): any box it does not say keeps its start.
-        start = {"batches": initial["batches"], "planned_date": initial["planned_date"].isoformat(),
+    if request.method != "POST" and "qty" in request.GET:
+        # From a link (Make 125,000 ML): any box it does not say keeps its start.
+        start = {"qty": format(start_qty.normalize(), "f"), "planned_date": initial["planned_date"].isoformat(),
                  "into": initial["into"].pk if initial["into"] else ""}
         data = {name: request.GET.get(name) or value for name, value in start.items()}
-    form = forms.PlanForm(data, stores=stores, initial=initial)
+    recipe_for = f"{bom.batch_size_base.normalize():,f} {product.base_uom.code}"
+    form = forms.PlanForm(data, stores=stores, product=product, recipe_for=recipe_for,
+                          initial={**initial, "qty": format(start_qty.normalize(), "f")})
     if request.method == "POST":
         return _act(request, company_id, product, form)
-    batches, day, store = _chosen(form, initial)
-    found = planning.plan(company_id, product, batches, store, day) if store else None
+    qty, day, store = _chosen(form, initial)
+    found = planning.plan(company_id, product, qty, store, day) if store else None
     context = {"active": "make", "production": True, "item": product, "form": form, "plan": found,
                "suggestion": suggestion, "hub_url": hub_url, "stores": stores,
                "sees_costs": access.sees_costs(request.user, company_id),
@@ -86,8 +90,7 @@ def _act(request, company_id, product, form):
     if not form.is_valid():
         return fetch.refused(form)
     data = form.cleaned_data
-    values = {"product": product, "batches": data["batches"], "into": data["into"],
-              "day": data["planned_date"]}
+    values = {"product": product, "qty": data["qty"], "into": data["into"], "day": data["planned_date"]}
     try:
         if request.POST.get("action") == "buy":
             requisition = planning.buy_the_rest(actor=request.user, company_id=company_id, **values)
@@ -102,7 +105,7 @@ def _act(request, company_id, product, form):
                 form.add_error(name if name in form.fields else None, [" ".join(e.messages) for e in errors])
             return fetch.refused(form)
         return fetch.refused(message=" ".join(exc.messages))
-    text = f"{order.number} planned: {data['batches']} batch{'es' if data['batches'] != 1 else ''}."
+    text = f"{order.number} planned: {data['qty'].normalize():,f} {product.base_uom.code}, one batch."
     if found.short:
         text += " Some materials are short: it can start once they are in."
     return fetch.saved(text, reverse("production:run", args=[order.pk]))

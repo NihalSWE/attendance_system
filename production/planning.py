@@ -1,8 +1,12 @@
 """Planning a production (2026-10-27, docs/inventory/PRODUCTION_PLAN.md §8.1,
 §8.2, §11; §15 phase 6).
 
-- **How many to make**: stock to keep − in stock − what planned productions
-  will make, in whole batches, and no more than the materials allow.
+- **How much to make** (2026-11-03): any quantity, in the product's own unit.
+  The recipe is written for one quantity (``Bom.batch_size``, "the recipe is
+  for 10,000 ML"); a production of 125,000 ML takes every material × 12.5.
+  Each production is one batch, with one batch number. The suggestion is
+  stock to keep − in stock − what planned productions will make, and no more
+  than the materials allow.
 - **Where the materials come from**: every usable store of the branch the
   products go into - the material's usual store first, then the others - and
   inside a store the batch that expires first. Expired batches, batches
@@ -43,6 +47,11 @@ def _up(qty, item):
     return qty.quantize(Decimal(1).scaleb(-item.base_uom.decimals), rounding=ROUND_CEILING)
 
 
+def _down(qty, item):
+    """``qty`` rounded down to what the item's unit can hold."""
+    return qty.quantize(Decimal(1).scaleb(-item.base_uom.decimals), rounding=ROUND_FLOOR)
+
+
 @dataclass
 class Take:
     store: Warehouse
@@ -62,7 +71,7 @@ class Need:
     """One material of the plan: how much, from where, and what is missing."""
 
     item: Item
-    per_batch: Decimal                # base unit, wastage included
+    per_batch: Decimal                # base unit, wastage included, for the recipe's quantity
     need: Decimal
     available: Decimal
     takes: list = field(default_factory=list)
@@ -71,11 +80,6 @@ class Need:
     @property
     def short(self):
         return max(self.need - self.available, ZERO)
-
-    @property
-    def enough_for(self):
-        """Whole batches the usable stock is enough for."""
-        return int((self.available / self.per_batch).to_integral_value(ROUND_FLOOR)) if self.per_batch else 0
 
     @property
     def stores(self):
@@ -90,23 +94,35 @@ class Need:
 class Plan:
     product: Item
     bom: Bom
-    batches: int
+    makes: Decimal                    # in the product's unit
     into: Warehouse
     day: datetime.date
     needs: list = field(default_factory=list)
 
     @property
-    def makes(self):
-        return self.bom.batch_size_base * self.batches
+    def times(self):
+        """How many times the recipe: 125,000 ML of a recipe for 10,000 = 12.5."""
+        size = self.bom.batch_size_base
+        return (self.makes / size).normalize() if size else Decimal("1")
 
     @property
     def short(self):
         return [need for need in self.needs if need.short > 0]
 
     @property
+    def makes_text(self):
+        return format(self.makes.normalize(), "f")
+
+    @property
+    def possible_text(self):
+        return format(self.possible.normalize(), "f")
+
+    @property
     def possible(self):
-        """The most whole batches the materials allow."""
-        return min((need.enough_for for need in self.needs), default=0)
+        """The most the materials allow, in the product's unit."""
+        size = self.bom.batch_size_base
+        limits = [need.available * size / need.per_batch for need in self.needs if need.per_batch]
+        return _down(min(limits), self.product) if limits else ZERO
 
     @property
     def main_store(self):
@@ -158,17 +174,17 @@ def _wanted_elsewhere(company_id, branch_id, item_ids, exclude=None):
     return found
 
 
-def plan(company_id, product, batches, into, day=None, exclude_order=None, bom=None, makes=None):
-    """What ``batches`` batches of ``product`` into store ``into`` need, and
-    where from; ``bom`` and ``makes`` for a production already planned (its
-    recipe, its quantity in the product's unit)."""
+def plan(company_id, product, qty, into, day=None, exclude_order=None, bom=None):
+    """What making ``qty`` of ``product`` (in its own unit) into store ``into``
+    needs, and where from: every material of the recipe × qty ÷ what the
+    recipe is for. ``bom`` for a production already planned (its recipe)."""
     day = day or timezone.localdate()
     bom = bom or recipe_in_use(company_id, product)
     stores = stores_of(company_id, into.branch_id)
     with use_company(company_id):
         lines = list(bom.lines.select_related("item__base_uom", "item__default_warehouse"))
-    found = Plan(product=product, bom=bom, batches=batches, into=into, day=day)
-    output = makes if makes is not None else bom.batch_size_base * batches
+    found = Plan(product=product, bom=bom, makes=qty, into=into, day=day)
+    output = qty
     others = _wanted_elsewhere(company_id, into.branch_id, [line.item_id for line in lines], exclude_order)
     for line in lines:
         per_batch = line.planned_base(bom.batch_size_base, bom.batch_size_base)
@@ -191,13 +207,17 @@ class Suggestion:
     keep: Decimal
     in_stock: Decimal
     coming: Decimal                   # what open productions will make
-    wanted: int                       # batches the stock to keep asks for
-    possible: int                     # batches the materials allow
+    wanted: Decimal                   # what the stock to keep asks for, in the product's unit
+    possible: Decimal                 # what the materials allow
     per_day: Decimal
 
     @property
-    def batches(self):
+    def qty(self):
         return min(self.wanted, self.possible)
+
+    @property
+    def qty_text(self):
+        return format(self.qty.normalize(), "f")
 
     @property
     def have(self):
@@ -205,7 +225,7 @@ class Suggestion:
 
 
 def suggest(company_id, product, into, today=None):
-    """How many batches to make (plan §8.1); None without a stock to keep."""
+    """How much to make (plan §8.1); None without a stock to keep."""
     today = today or timezone.localdate()
     kept = keep.stock_to_keep(company_id, [product], today).get(product.pk)
     if not kept:
@@ -216,8 +236,8 @@ def suggest(company_id, product, into, today=None):
         coming = sum((order.planned_base for order in ProductionOrder.objects.filter(
             item=product, status__in=OPEN)), ZERO)
     missing = kept - in_stock - coming
-    wanted = int((missing / bom.batch_size_base).to_integral_value(ROUND_CEILING)) if missing > 0 else 0
-    possible = plan(company_id, product, 1, into, today).possible
+    wanted = _up(missing, product) if missing > 0 else ZERO
+    possible = plan(company_id, product, bom.batch_size_base, into, today, bom=bom).possible
     per_day = keep.sold_per_day(company_id, [product.pk], today).get(product.pk, ZERO)
     return Suggestion(kept, in_stock, coming, wanted, possible, per_day)
 
@@ -243,25 +263,38 @@ def default_into(product, stores):
 # --- saving -------------------------------------------------------------------
 
 @transaction.atomic
-def save(*, actor, company_id, product, batches, into, day):
-    """The production, planned: its quantity is whole batches. Saved even when
-    short (it cannot start until the materials are there)."""
-    found = plan(company_id, product, batches, into, day)
+def save(*, actor, company_id, product, qty, into, day):
+    """The production, planned: ``qty`` in the product's unit, one batch.
+    Saved even when short (it cannot start until the materials are there)."""
+    check_qty(product, qty)
+    found = plan(company_id, product, qty, into, day)
     materials = found.main_store or (stores_of(company_id, into.branch_id) or [into])[0]
     order = orders.create_order(actor=actor, company_id=company_id, values={
-        "item": product, "bom": found.bom, "planned_qty": found.makes, "uom": product.base_uom,
+        "item": product, "bom": found.bom, "planned_qty": qty, "uom": product.base_uom,
         "planned_date": day, "material_warehouse": materials, "output_warehouse": into,
-        "line_name": "", "shift_name": "",
-        "note": f"{batches} batch{'es' if batches != 1 else ''}"})
+        "line_name": "", "shift_name": "", "note": ""})
     return order, found
 
 
+def check_qty(product, qty):
+    """Above 0, and in what the product's unit can hold."""
+    unit = product.base_uom
+    if qty is None or qty <= 0:
+        raise ValidationError({"qty": "Write how much to make, above 0."})
+    if qty != _down(qty, product):
+        if unit.decimals:
+            raise ValidationError({"qty": f"{product.name} is counted in {unit.code} with at most "
+                                          f"{unit.decimals} decimals."})
+        raise ValidationError({"qty": f"{product.name} is counted in whole {unit.code}."})
+
+
 @transaction.atomic
-def buy_the_rest(*, actor, company_id, product, batches, into, day):
+def buy_the_rest(*, actor, company_id, product, qty, into, day):
     """A purchase requisition, waiting as a draft, for what the plan is short of."""
     from purchasing import requisitions
 
-    found = plan(company_id, product, batches, into, day)
+    check_qty(product, qty)
+    found = plan(company_id, product, qty, into, day)
     short = found.short
     if not short:
         raise ValidationError("Nothing is short: there is nothing to buy.")
@@ -272,7 +305,7 @@ def buy_the_rest(*, actor, company_id, product, batches, into, day):
     requisition = requisitions.create_requisition(actor=actor, company_id=company_id, values={
         "branch": into.branch, "department": None, "request_date": timezone.localdate(),
         "needed_by": max(day, timezone.localdate()),
-        "reason": f"For {batches} batches of {product.name} on {day:%d %b %Y}."})
+        "reason": f"For {qty.normalize():,f} {product.base_uom.code} of {product.name} on {day:%d %b %Y}."})
     for need in short:
         requisitions.add_line(actor=actor, company_id=company_id, requisition_id=requisition.pk, values={
             "item": need.item, "qty": _up(need.short, need.item), "uom": need.item.base_uom,

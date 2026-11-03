@@ -32,7 +32,7 @@ class MadeMaterialTests(HubFixture, TestCase):
         recipes.set_batch(**self.kw, item=cream, batch_size=Decimal("10"))
         recipes.add_material(**self.kw, item=cream, material=self.sugar, qty=Decimal("4"))
         page = self.client.get(reverse("inventory:material", args=[cream.pk]))
-        self.assertContains(page, "Recipe: one batch makes 10 KG")
+        self.assertContains(page, "Recipe for 10 KG")
         self.assertContains(page, reverse("production:plan", args=[cream.pk]))
         # Sugar 4 kg x 125 for 10 kg of cream: 50 a kg, with none of it in stock.
         self.assertEqual(costing.unit_cost(self.company.pk, cream), Decimal("50"))

@@ -180,7 +180,7 @@ class ProductsTests(HubFixture, TestCase):
         page = self.client.get(reverse("inventory:product", args=[biscuit.pk]))
         self.assertContains(page, "Not set yet")
         # No recipe yet: the page asks first what one batch makes (phase 5).
-        self.assertContains(page, "<strong>How much one batch makes</strong>")
+        self.assertContains(page, "<strong>What quantity the recipe is for</strong>")
 
     def test_the_add_product_form_asks_no_price(self):
         page = self.client.get(reverse("inventory:products")).content.decode()
@@ -215,11 +215,11 @@ class ProductsTests(HubFixture, TestCase):
         page = self.client.get(reverse("inventory:product", args=[self.juice.pk]))
         self.assertContains(page, "J1")
         self.assertContains(page, "Finished goods")              # the store
-        self.assertContains(page, "Recipe: one batch makes 1,000 PCS")
+        self.assertContains(page, "Recipe for 1,000 PCS")
         self.assertContains(page, "Sold, last 30 days")
         self.assertEqual(hub.sold(self.company.pk, self.juice)[0], D("300.00"))
-        # Pulp 130 kg / 45 kg a batch: 2 batches; it limits the recipe.
-        self.assertContains(page, "enough for</span> <strong>2 batches")
+        # Pulp 130 kg / 45 kg for 1,000: 2,888 bottles; it limits the recipe.
+        self.assertContains(page, "enough to make</span> <strong>2,888 PCS")
 
     def batch(self, number):
         from inventory.models import Batch

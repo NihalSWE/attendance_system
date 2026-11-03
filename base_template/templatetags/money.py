@@ -32,3 +32,18 @@ def hm(minutes):
     except (ValueError, TypeError):
         return minutes
     return f"{minutes // 60}h {minutes % 60}m"
+
+
+@register.filter
+def qty(value, places=4):
+    """A quantity: thousands separators and no trailing zeros, at most
+    ``places`` decimals: 112.5000 -> "112.5", 125000 -> "125,000" (2026-11-03)."""
+    if value is None or value == "":
+        return ""
+    try:
+        amount = Decimal(str(value))
+        places = int(places)
+    except (InvalidOperation, ValueError, TypeError):
+        return value
+    text = f"{amount:,.{places}f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text

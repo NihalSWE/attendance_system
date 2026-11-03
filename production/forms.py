@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from django import forms
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 
 from common.forms import StyledFormMixin, date_widget
@@ -216,7 +217,7 @@ class QcForm(StyledFormMixin, forms.Form):
 class RecipeBatchForm(StyledFormMixin, forms.Form):
     """How much one batch of a finished good makes (production.recipes)."""
 
-    batch_size = forms.DecimalField(label="One batch makes", min_value=Decimal("0.0001"),
+    batch_size = forms.DecimalField(label="The recipe is for", min_value=Decimal("0.0001"),
                                     max_digits=18, decimal_places=4)
 
 
@@ -246,7 +247,7 @@ class RecipeMaterialForm(StyledFormMixin, forms.Form):
                                      help_text="Stock is counted in this unit.")
     new_track_batch = forms.BooleanField(label="Keeps batches", required=False)
     new_track_expiry = forms.BooleanField(label="Has an expiry date", required=False)
-    qty = forms.DecimalField(label="How much one batch uses", min_value=Decimal("0.0001"),
+    qty = forms.DecimalField(label="How much the recipe uses", min_value=Decimal("0.0001"),
                              max_digits=18, decimal_places=4,
                              help_text="In the material's own unit, shown when you choose it.")
     scrap_pct = forms.DecimalField(label="Normal wastage %", required=False, min_value=0,
@@ -355,10 +356,11 @@ class CostLineForm(CompanyForm):
         model = CostLine
         fields = ("how", "rate", "people", "hours", "amount", "percent", "label")
         labels = {"how": "How it is worked out", "people": "People", "hours": "Hours per batch",
-                  "amount": "Amount per batch", "percent": "Percent",
+                  "amount": "Amount", "percent": "Percent",
                   "label": "Name (optional)"}
         help_texts = {"label": "Left empty: the rate's name (VAT for VAT).",
-                      "hours": "For one batch.",
+                      "hours": "For the recipe's quantity.",
+                      "amount": "For the recipe's quantity: a production of 12.5 × the recipe counts it 12.5 times.",
                       "percent": "A % of the materials: of the materials only. VAT: of the materials and every "
                                  "other cost (worked out last)."}
 
@@ -388,18 +390,31 @@ class CostLineForm(CompanyForm):
 
 class PlanForm(StyledFormMixin, forms.Form):
     """Plan a production from the product's page (2026-10-27, plan §8.2): how
-    many batches, when, and which store the products go into. The materials
-    are worked out from the recipe (production.planning)."""
+    much to make (2026-11-03: any quantity, in the product's unit - one
+    production is one batch), when, and which store the products go into. The
+    materials are the recipe's, scaled to the quantity (production.planning)."""
 
-    batches = forms.IntegerField(label="How many batches", min_value=1, max_value=100000,
-                                 error_messages={"min_value": "Make at least one batch."})
+    qty = forms.DecimalField(label="How much to make", max_digits=18, decimal_places=4)
     planned_date = forms.DateField(label="Date", widget=date_widget())
     into = forms.ModelChoiceField(queryset=Warehouse.all_objects.none(), label="Products go into",
                                   empty_label=None)
 
-    def __init__(self, *args, stores, **kwargs):
+    def __init__(self, *args, stores, product, recipe_for="", **kwargs):
         super().__init__(*args, **kwargs)
+        self.product = product
         self.fields["into"].queryset = Warehouse.all_objects.filter(pk__in=[store.pk for store in stores])
         self.fields["into"].label_from_instance = lambda store: f"{store.name} ({store.branch.name})"
-        self.fields["batches"].unit_text = "batches"
+        self.fields["qty"].unit_text = product.base_uom.code
+        self.fields["qty"].help_text = (f"Any amount: the recipe is for {recipe_for}, and every material is worked "
+                                        "out for this quantity." if recipe_for else "")
         self.fields["into"].help_text = "Materials come from the stores of the same branch."
+
+    def clean_qty(self):
+        from production import planning
+
+        qty = self.cleaned_data["qty"]
+        try:
+            planning.check_qty(self.product, qty)
+        except ValidationError as exc:
+            raise forms.ValidationError(exc.message_dict["qty"]) from None
+        return qty

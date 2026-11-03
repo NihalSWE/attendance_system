@@ -146,8 +146,8 @@ class PagesTests(CostFixture, TestCase):
     def test_the_product_page_shows_the_recipe_and_the_cost_of_one_batch(self):
         self.costs()
         page = self.client.get(reverse("inventory:product", args=[self.juice.pk]))
-        self.assertContains(page, "Recipe: one batch makes 1,000 PCS")
-        self.assertContains(page, "Cost of one batch")
+        self.assertContains(page, "Recipe for 1,000 PCS")
+        self.assertContains(page, "Cost of 1,000 PCS (the recipe)")
         self.assertContains(page, "18,344.85")
         self.assertContains(page, "4 × 1.5 h × 75")
         self.assertContains(page, "expected: one batch ÷ 1,000")
@@ -207,4 +207,4 @@ class PagesTests(CostFixture, TestCase):
         # Viewing is not setting up: no Add, and no money without "See costs".
         self.assertNotContains(page, "Add product")
         self.assertNotContains(self.client.get(reverse("inventory:product", args=[self.juice.pk])),
-                               "Cost of one batch")
+                               "Cost of 1,000 PCS (the recipe)")
