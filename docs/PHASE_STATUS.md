@@ -7142,3 +7142,14 @@ yet, switch Ask on.
   settings test in `inventory/tests_pages.py`.
 
 **Deploy:** pull, migrate (inventory 0010, purchasing 0004), collectstatic, restart.
+
+### Recipe: wastage optional on screen; VAT as a cost of one batch — 2026-11-03
+
+- Add to the recipe (several materials): the row's red star is gone; "Normal wastage (optional)"
+  (empty = 0). "One batch uses" is still needed, and saying so stays on the server.
+- Cost of one batch → Add cost → **VAT: a % of the batch cost**: worked out last, on the materials
+  and every other cost (production/costing.sheet), named VAT. 15 % of 18,344.85 = 2,751.73. It counts
+  in the cost of one unit, the margin and the price check like any other cost.
+- Tests: `inventory/tests_phase5.py` (VAT line). Tutorial text updated.
+
+**Deploy:** pull, migrate (production 0005: choices only), collectstatic, restart.

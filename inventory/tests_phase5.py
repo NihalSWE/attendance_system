@@ -59,6 +59,20 @@ class CostSheetTests(CostFixture, TestCase):
                                             uom=Uom.objects.get(code="CARTON"), factor=24)
         self.assertEqual(sheet.per_pack([carton]), [(carton, (sheet.per_unit * 24).quantize(D("0.01")))])
 
+    def test_vat_is_worked_out_last_on_everything_above_it(self):
+        """VAT as a cost of one batch (2026-11-03): its % is of the materials
+        and every other cost, wherever it was added."""
+        costing.add_line(**self.kw, item=self.juice, values={"how": "vat", "percent": D("15")})
+        self.costs()
+        sheet = costing.sheet(self.company.pk, self.juice)
+        self.assertEqual([row.name for row in sheet.costs][-1], "VAT")
+        self.assertEqual(sheet.costs[-1].amount, D("2751.73"))      # 15 % of 18,344.85
+        self.assertIn("15 % of 18,344.85", sheet.costs[-1].how)
+        self.assertEqual(sheet.total, D("21096.58"))
+        with self.assertRaises(ValidationError) as caught:
+            costing.add_line(**self.kw, item=self.juice, values={"how": "vat"})
+        self.assertIn("percent", caught.exception.message_dict)
+
     def test_a_new_rate_counts_from_then_on(self):
         self.costs()
         costing.update_rate(**self.kw, pk=self.worker.pk, values={"rate": D("100")})

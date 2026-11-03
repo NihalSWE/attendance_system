@@ -319,6 +319,8 @@ class CostLine(TenantOwned, ActorTracked):
         MACHINE = "machine", "Machine hours × rate"
         FIXED = "fixed", "An amount per batch"
         PERCENT = "percent", "A % of the materials"
+        # 2026-11-03: worked out last, on the materials and every other cost.
+        VAT = "vat", "VAT: a % of the batch cost"
 
     item = models.ForeignKey("inventory.Item", on_delete=models.CASCADE, related_name="cost_lines",
                              verbose_name="Product")
@@ -331,7 +333,7 @@ class CostLine(TenantOwned, ActorTracked):
                                 validators=[MinValueValidator(FOUR)])
     amount = models.DecimalField("Tk per batch", **MONEY, null=True, blank=True,
                                  validators=[MinValueValidator(ZERO)])
-    percent = models.DecimalField("% of materials", max_digits=6, decimal_places=2, null=True, blank=True,
+    percent = models.DecimalField("%", max_digits=6, decimal_places=2, null=True, blank=True,
                                   validators=[MinValueValidator(ZERO), MaxValueValidator(Decimal("1000"))])
 
     class Meta:
@@ -347,13 +349,16 @@ class CostLine(TenantOwned, ActorTracked):
             return self.label
         if self.rate_id:
             return self.rate.name
+        if self.how == self.How.VAT:
+            return "VAT"
         return self.get_how_display()
 
     def clean(self):
         from django.core.exceptions import ValidationError
 
         needs = {self.How.LABOUR: ("rate", "people", "hours"), self.How.MACHINE: ("rate", "hours"),
-                 self.How.FIXED: ("amount",), self.How.PERCENT: ("percent",)}.get(self.how, ())
+                 self.How.FIXED: ("amount",), self.How.PERCENT: ("percent",),
+                 self.How.VAT: ("percent",)}.get(self.how, ())
         errors = {name: "Fill this in." for name in needs if getattr(self, name) in (None, "")}
         if self.rate_id and self.how in (self.How.LABOUR, self.How.MACHINE) and self.rate.kind != self.how:
             errors["rate"] = f"Choose a {'people' if self.how == self.How.LABOUR else 'machine'} rate."

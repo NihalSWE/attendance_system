@@ -59,10 +59,10 @@ document.addEventListener("DOMContentLoaded", function () {
             div.dataset.pick = pk;
             div.innerHTML =
                 '<div class="ui-pick-row__name"></div>' +
-                '<div class="field"><label class="field__label" for="qty_' + pk + '">One batch uses <span class="field__req">*</span></label>' +
+                '<div class="field"><label class="field__label" for="qty_' + pk + '">One batch uses</label>' +
                 '<div class="ui-unit"><input class="input" id="qty_' + pk + '" name="qty_' + pk + '" type="number" step="any" min="0" inputmode="decimal">' +
                 '<span class="ui-unit__label"></span></div></div>' +
-                '<div class="field"><label class="field__label" for="scrap_' + pk + '">Normal wastage</label>' +
+                '<div class="field"><label class="field__label" for="scrap_' + pk + '">Normal wastage (optional)</label>' +
                 '<div class="ui-unit"><input class="input" id="scrap_' + pk + '" name="scrap_' + pk + '" type="number" step="any" min="0" max="100" inputmode="decimal" placeholder="0">' +
                 '<span class="ui-unit__label">%</span></div></div>';
             div.querySelector(".ui-pick-row__name").textContent = option.textContent;

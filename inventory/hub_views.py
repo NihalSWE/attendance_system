@@ -304,7 +304,7 @@ def _making(request, company_id, item, recipe, packs):
             company_id=company_id, product=item, can_create=access.may(request.user, company_id, masters.CODE))
         material_form.fields["qty"].unit_from = "material new_uom"
         material_form.fields["scrap_pct"].unit_text = "%"
-        material_form.fields["scrap_pct"].label = "Normal wastage"
+        material_form.fields["scrap_pct"].label = "Normal wastage (optional)"
         if "new_uom" in material_form.fields:
             material_form.fields["new_uom"].widget.option_attrs = lambda rows: {
                 pk: {"data-unit": code} for pk, code in rows.values_list("pk", "code")}

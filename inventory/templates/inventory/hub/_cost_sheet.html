@@ -14,6 +14,7 @@
         <ol class="ui-cost-steps">
             <li><strong>Materials:</strong> what one batch uses of each material, plus its normal wastage, × the cost of one unit of it ({% if price_cost_from == "average" %}its average cost in stock{% else %}the last price paid for it{% endif %}).</li>
             <li><strong>Other costs:</strong> people, machines, gas, a share of rent: whatever you add with <em>Add cost</em> (rates from Cost rates).</li>
+            <li><strong>VAT</strong> (if you add it: <em>Add cost</em> &rarr; VAT): a % of the materials and the other costs, worked out last.</li>
             <li><strong>One {{ item.base_uom.code }}</strong> = the total for one batch ÷ what one batch makes ({{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}){% if per_pack %}; one pack = one {{ item.base_uom.code }} × how many are in it{% endif %}.</li>
         </ol>
         <div class="table-wrap">

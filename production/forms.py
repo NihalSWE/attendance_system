@@ -355,13 +355,15 @@ class CostLineForm(CompanyForm):
         model = CostLine
         fields = ("how", "rate", "people", "hours", "amount", "percent", "label")
         labels = {"how": "How it is worked out", "people": "People", "hours": "Hours per batch",
-                  "amount": "Amount per batch", "percent": "Share of the materials",
+                  "amount": "Amount per batch", "percent": "Percent",
                   "label": "Name (optional)"}
-        help_texts = {"label": "Left empty: the rate's name.",
-                      "hours": "For one batch."}
+        help_texts = {"label": "Left empty: the rate's name (VAT for VAT).",
+                      "hours": "For one batch.",
+                      "percent": "A % of the materials: of the materials only. VAT: of the materials and every "
+                                 "other cost (worked out last)."}
 
     SHOW = {"rate": "how:labour,machine", "people": "how:labour", "hours": "how:labour,machine",
-            "amount": "how:fixed", "percent": "how:percent"}
+            "amount": "how:fixed", "percent": "how:percent,vat"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
