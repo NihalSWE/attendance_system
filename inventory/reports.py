@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from access_control.branch_access import ALL_BRANCHES
 from inventory import valuation
-from inventory.models import Item, ItemKind, StockBalance, StockMove
+from inventory.models import Item, ItemKind, MoveType, StockBalance, StockMove
 from inventory.posting import UNUSABLE_STORES, settings_for
 from reports.builders import Column, Result
 
@@ -34,6 +34,7 @@ FAR = date(9999, 12, 31)
 
 AS_OF, RANGE, NOW = "as_of", "range", "now"
 STOCK, PURCHASE, PRODUCTION, SALES = "Stock", "Purchase", "Production", "Sales"
+OVERVIEW = "Overview"
 
 STOCK_CODES = "inventory.view"
 PURCHASE_CODES = ("purchase.order", "purchase.approve", "purchase.receive")
@@ -915,6 +916,334 @@ def customer_item_sales(ctx):
 
 
 # --------------------------------------------------------------------------
+# Overview (2026-11-03): profit on every sale, every stock move, the day's
+# summary and who did what - to see what happens in the software.
+# --------------------------------------------------------------------------
+
+#: A stock move's kind in plain words.
+PLAIN_KIND = {
+    "opening": "First count", "receipt": "Bought", "purchase_return": "Returned to supplier",
+    "issue": "Issued to a department", "issue_return": "Returned by a department",
+    "transfer_out": "Moved out", "transfer_in": "Moved in", "adjustment": "Adjusted",
+    "count": "Stock count", "production_consume": "Used in making", "production_output": "Made",
+    "delivery": "Sold", "sales_return": "Returned by a customer", "reversal": "Reversed",
+}
+
+
+def person(user):
+    """A user's name, or their email; "" for none."""
+    if user is None:
+        return ""
+    return user.get_full_name().strip() or user.email
+
+
+@dataclass
+class Sold:
+    """One delivered sale line."""
+
+    day: date
+    number: str
+    customer: str
+    item: Item
+    qty: Decimal            # in the item's base unit
+    amount: Decimal         # before VAT, after discount
+    cost: Decimal           # what the goods went out of stock at
+
+    @property
+    def profit(self):
+        return self.amount - self.cost
+
+
+def sold(ctx):
+    """Every sale delivered in the dates, from the stores the report covers -
+    with or without an invoice; a reversed delivery is left out."""
+    from sales.models import Delivery, DeliveryLine
+
+    f = ctx.f
+    lines = DeliveryLine.all_objects.filter(
+        company_id=ctx.company_id, delivery__status=Delivery.Status.POSTED,
+        delivery__delivery_date__gte=f.date_from, delivery__delivery_date__lte=f.date_to,
+        order_line__warehouse_id__in=ctx.store_ids)
+    if ctx.item_ids is not None:
+        lines = lines.filter(item_id__in=ctx.item_ids)
+    lines = list(lines.select_related("delivery__order__customer", "order_line", "item__base_uom"))
+    costs = dict(StockMove.all_objects.filter(
+        company_id=ctx.company_id, document_type="delivery", move_type="delivery",
+        document_line_id__in=[line.pk for line in lines]).order_by().values("document_line_id")
+        .annotate(v=Sum("value")).values_list("document_line_id", "v"))
+    found = []
+    for line in lines:
+        order_line = line.order_line
+        in_order_unit = line.qty_base / order_line.factor if order_line.factor else line.qty
+        found.append(Sold(line.delivery.delivery_date, line.delivery.number, line.delivery.order.customer.name,
+                          line.item, line.qty_base, (in_order_unit * order_line.net_price).quantize(CENT),
+                          -(costs.get(line.pk) or ZERO)))
+    return found
+
+
+PROFIT_BY = (("item", "By item"), ("customer", "By customer"), ("day", "By day"), ("month", "By month"),
+             ("sale", "Every sale"))
+
+
+def profit(ctx):
+    """Sales less what the goods cost, for every sale delivered - by item,
+    customer, day or month, or sale by sale."""
+    f = ctx.f
+    if not ctx.costs:
+        return _done(ctx, Result(columns=[Column("Profit")], rows=[], empty=(
+            "Profit needs the cost of the goods: you do not see stock costs in every store this covers. "
+            "Pick a store whose costs you see.")))
+    lines = sold(ctx)
+    tail = [Column("Sales", True, kind="money"), Column("Cost", True, kind="money"),
+            Column("Profit", True, kind="money"), Column("Profit %", True, kind="pct")]
+
+    def money(amount, cost):
+        return [amount.quantize(CENT), cost.quantize(CENT), (amount - cost).quantize(CENT), _pct(amount - cost, amount)]
+
+    rows = []
+    if f.by == "sale":
+        columns = [Column("Date", kind="date"), Column("Delivery"), Column("Customer", weight=1.6), Column("Item"),
+                   Column("Name", weight=1.6), Column("Quantity", True, kind="qty"), Column("Unit"), *tail]
+        for line in sorted(lines, key=lambda line: (line.day, line.number)):
+            rows.append([line.day, line.number, line.customer, line.item.code, line.item.name, line.qty,
+                         line.item.base_uom.code, *money(line.amount, line.cost)])
+    else:
+        groups = defaultdict(lambda: [ZERO, ZERO, ZERO, 0])       # qty, amount, cost, sales
+        for line in lines:
+            key = {"item": lambda: line.item, "customer": lambda: line.customer, "day": lambda: line.day,
+                   "month": lambda: line.day.replace(day=1)}[f.by]()
+            group = groups[key]
+            group[0] += line.qty
+            group[1] += line.amount
+            group[2] += line.cost
+            group[3] += 1
+        if f.by == "item":
+            columns = [Column("Item"), Column("Name", weight=1.8), Column("Sold", True, kind="qty"), Column("Unit"),
+                       Column("Average price", True, kind="cost"), Column("Average cost", True, kind="cost"), *tail]
+            for item, (qty, amount, cost, _n) in sorted(groups.items(), key=lambda kv: kv[0].code):
+                rows.append([item.code, item.name, qty, item.base_uom.code,
+                             (amount / qty).quantize(Decimal("0.0001")) if qty else None,
+                             (cost / qty).quantize(Decimal("0.0001")) if qty else None, *money(amount, cost)])
+        elif f.by == "customer":
+            columns = [Column("Customer", weight=2), Column("Sale lines", True), *tail]
+            for name, (_qty, amount, cost, count) in sorted(groups.items()):
+                rows.append([name, count, *money(amount, cost)])
+        else:
+            month = f.by == "month"
+            columns = [Column("Month" if month else "Date", kind="" if month else "date"), Column("Sale lines", True),
+                       *tail]
+            for day, (_qty, amount, cost, count) in sorted(groups.items()):
+                rows.append([day.strftime("%B %Y") if month else day, count, *money(amount, cost)])
+    amount = sum((line.amount for line in lines), ZERO)
+    cost = sum((line.cost for line in lines), ZERO)
+    summary = [("Sales", _money_text(amount)), ("Cost of the goods", _money_text(cost)),
+               ("Profit", _money_text(amount - cost)), ("Profit %", f"{_pct(amount - cost, amount) or 0} %"),
+               ("Sale lines", len(lines))]
+    return _done(ctx, Result(
+        columns=columns, rows=rows, summary=summary,
+        note="Every sale delivered in these dates, with or without an invoice; amounts before VAT and after "
+             "discount. Cost: what the goods went out of stock at (materials, VAT, delivery and making "
+             "included). Profit on the goods only: salaries, rent and power are not taken off. Customer "
+             "returns are not taken off.",
+        empty="No sales delivered in these dates."))
+
+
+MOVE_KINDS = tuple((value, PLAIN_KIND.get(value, label)) for value, label in MoveType.choices)
+
+
+def all_moves(ctx):
+    """Every stock move in the dates, across items: what, where, how much,
+    at what cost, and who."""
+    f = ctx.f
+    _value_note(ctx)
+    moves = (valuation.moves(ctx.company_id, store_ids=ctx.store_ids, item_ids=ctx.item_ids)
+             .filter(work_date__gte=f.date_from, work_date__lte=f.date_to))
+    if f.move:
+        moves = moves.filter(move_type=f.move)
+    if f.person:
+        moves = moves.filter(posted_by_id=int(f.person))
+    moves = list(moves.select_related("item__base_uom", "warehouse", "batch", "posted_by")
+                 .order_by("work_date", "posted_at", "pk"))
+    numbers = valuation.document_numbers((m.document_type, m.document_id) for m in moves)
+    rows, value_in, value_out = [], ZERO, ZERO
+    for move in moves:
+        rows.append([move.work_date, _document_label(move, numbers), PLAIN_KIND.get(move.move_type, move.move_type),
+                     move.item.code, move.item.name, move.warehouse.code, move.batch.batch_no if move.batch else "",
+                     move.qty if move.qty > 0 else None, -move.qty if move.qty < 0 else None,
+                     move.item.base_uom.code,
+                     *([move.unit_cost, move.value.quantize(CENT)] if ctx.costs else []), person(move.posted_by)])
+        if move.value > 0:
+            value_in += move.value
+        else:
+            value_out -= move.value
+    summary = [("Moves", len(moves)), ("Items", len({m.item_id for m in moves}))]
+    if ctx.costs:
+        summary += [("Value in", _money_text(value_in)), ("Value out", _money_text(value_out))]
+    return _done(ctx, Result(
+        columns=[Column("Date", kind="date"), Column("Document", weight=1.3), Column("What", weight=1.3),
+                 Column("Item"), Column("Name", weight=1.6), Column("Store"), Column("Batch"),
+                 Column("In", True, kind="qty"), Column("Out", True, kind="qty"), Column("Unit"),
+                 *_cost(ctx, Column("Unit cost", True, kind="cost"), Column("Value", True, kind="money")),
+                 Column("By")],
+        rows=rows, summary=summary,
+        note="Every stock movement: bought, made, used, sold, moved, counted, adjusted and reversed.",
+        empty="No stock moved in these dates."))
+
+
+#: The day's columns: (heading, move types, sign: 1 as it moved, -1 shown as gone out).
+DAY_PARTS = (
+    ("Bought", ("receipt", "purchase_return"), 1),
+    ("First count", ("opening",), 1),
+    ("Made", ("production_output",), 1),
+    ("Used in making", ("production_consume",), -1),
+    ("Sold (at cost)", ("delivery",), -1),
+    ("Returned by customers", ("sales_return",), 1),
+    ("Issued to departments", ("issue", "issue_return"), -1),
+    ("Moved between stores", ("transfer_out", "transfer_in"), 1),
+    ("Adjusted and counted", ("adjustment", "count"), 1),
+    ("Reversed", ("reversal",), 1),
+)
+ALWAYS = ("Bought", "Made", "Used in making", "Sold (at cost)")
+SUMMARY_BY = (("day", "By day"), ("month", "By month"))
+
+
+def daily_summary(ctx):
+    """Day by day (or month by month): the value bought, made, used, sold and
+    adjusted, the sales and profit, and the stock value at the close."""
+    f = ctx.f
+    if not ctx.costs:
+        return _done(ctx, Result(columns=[Column("Date")], rows=[], empty=(
+            "The summary is in money: you do not see stock costs in every store this covers. "
+            "Pick a store whose costs you see.")))
+    month = f.by == "month"
+
+    def period(day):
+        return day.replace(day=1) if month else day
+
+    opening = sum((value for _qty, value in valuation.at(
+        ctx.company_id, f.date_from - timedelta(days=1), store_ids=ctx.store_ids, item_ids=ctx.item_ids).values()),
+        ZERO)
+    by_type = defaultdict(lambda: ZERO)
+    for day, kind, value in (valuation.moves(ctx.company_id, store_ids=ctx.store_ids, item_ids=ctx.item_ids)
+                             .filter(work_date__gte=f.date_from, work_date__lte=f.date_to).order_by()
+                             .values("work_date", "move_type").annotate(v=Sum("value"))
+                             .values_list("work_date", "move_type", "v")):
+        by_type[(period(day), kind)] += value
+    sales = defaultdict(lambda: [ZERO, ZERO])
+    for line in sold(ctx):
+        sales[period(line.day)][0] += line.amount
+        sales[period(line.day)][1] += line.cost
+    periods = sorted({p for p, _kind in by_type} | set(sales))
+    parts = [(title, kinds, sign) for title, kinds, sign in DAY_PARTS
+             if title in ALWAYS or any(by_type.get((p, kind)) for p in periods for kind in kinds)]
+    rows, close, totals = [], opening, defaultdict(lambda: ZERO)
+    for p in periods:
+        row = [p.strftime("%B %Y") if month else p]
+        for title, kinds, sign in parts:
+            value = sum((by_type.get((p, kind), ZERO) for kind in kinds), ZERO)
+            value = value * sign if value else ZERO      # never "-0.00"
+            row.append(value.quantize(CENT))
+            totals[title] += value
+        amount, cost = sales.get(p, (ZERO, ZERO))
+        close += sum((by_type.get((p, kind), ZERO) for _t, kinds, _s in DAY_PARTS for kind in kinds), ZERO)
+        row += [amount.quantize(CENT), (amount - cost).quantize(CENT), close.quantize(CENT)]
+        totals["Sales"] += amount
+        totals["Profit"] += amount - cost
+        rows.append(row)
+    summary = [("Stock value at the start", _money_text(opening)),
+               *((title, _money_text(totals[title])) for title, _k, _s in parts if title in ALWAYS),
+               ("Sales", _money_text(totals["Sales"])), ("Profit", _money_text(totals["Profit"])),
+               ("Stock value at the end", _money_text(close))]
+    return _done(ctx, Result(
+        columns=[Column("Month" if month else "Date", kind="" if month else "date"),
+                 *(Column(title, True, kind="money") for title, _k, _s in parts),
+                 Column("Sales", True, kind="money"), Column("Profit", True, kind="money"),
+                 Column("Stock value at the close", True, kind="money")],
+        rows=rows, summary=summary,
+        note="In money, at cost: what came into stock and what went out, each day with anything in it. "
+             "Used, sold and issued show what went out. Sales are before VAT; profit is sales less the cost "
+             "of the goods sold. The stock value at the close is the start plus every move.",
+        empty="Nothing happened in these dates."))
+
+
+#: An action's area, by its first word.
+AREAS = (("stock", "Stock and items"), ("production", "Production"), ("purchase", "Buying"),
+         ("sales", "Selling"), ("people", "People and attendance"), ("salary", "Salary"),
+         ("devices", "Devices"), ("other", "Settings and other"))
+_AREA_OF = {"inventory": "stock", "production": "production", "purchase": "purchase", "purchasing": "purchase",
+            "sales": "sales", "employee": "people", "department": "people", "designation": "people",
+            "branch": "people", "shift": "people", "employee_shift": "people", "department_shift": "people",
+            "holiday": "people", "leave": "people", "attendance": "people", "overtime": "people",
+            "payroll": "salary", "salary": "salary", "lfa": "salary", "device": "devices",
+            "device_enrollment": "devices"}
+ACTIVITY_ROLES = ("owner", "company_admin", "auditor")
+
+
+def area_of(action):
+    return _AREA_OF.get(action.split(".", 1)[0], "other")
+
+
+def _words(action):
+    """``inventory.item.price_set`` -> ``Item price set``."""
+    parts = action.split(".")
+    if len(parts) > 1 and parts[0] in _AREA_OF and len(parts) > 2:
+        parts = parts[1:]
+    text = " ".join(parts).replace("_", " ").strip()
+    return text[:1].upper() + text[1:]
+
+
+def _plain(value):
+    if isinstance(value, (dict, list)):
+        return "…"
+    return "—" if value in (None, "") else str(value)
+
+
+def _changes(before, after):
+    """``price: 90 → 95; status: active → inactive``, at most 300 letters."""
+    before, after = before or {}, after or {}
+    said = []
+    for key in list(dict.fromkeys([*before, *after])):
+        old, new = before.get(key), after.get(key)
+        if key in before and key in after:
+            if old != new:
+                said.append(f"{key.replace('_', ' ')}: {_plain(old)} → {_plain(new)}")
+        elif key in after:
+            said.append(f"{key.replace('_', ' ')}: {_plain(new)}")
+        else:
+            said.append(f"{key.replace('_', ' ')} was {_plain(old)}")
+    text = "; ".join(said)
+    return text if len(text) <= 300 else text[:299] + "…"
+
+
+def activity(ctx):
+    """Who did what and when, in every part of the software - newest first."""
+    from auditlog.models import AuditLog
+
+    f = ctx.f
+    rows_q = AuditLog.objects.filter(company_id=ctx.company_id, occurred_at__date__gte=f.date_from,
+                                     occurred_at__date__lte=f.date_to)
+    if f.person:
+        rows_q = rows_q.filter(actor_user_id=int(f.person))
+    events = list(rows_q.select_related("actor_user").order_by("-occurred_at", "-pk"))
+    if f.area:
+        events = [event for event in events if area_of(event.action) == f.area]
+    names = dict(AREAS)
+    rows = []
+    for event in events:
+        when = timezone.localtime(event.occurred_at).replace(tzinfo=None, microsecond=0)
+        rows.append([when, person(event.actor_user) or event.get_actor_type_display(),
+                     names[area_of(event.action)], _words(event.action), event.object_display,
+                     _changes(event.before_data, event.after_data)])
+    return _done(ctx, Result(
+        columns=[Column("When", kind="datetime"), Column("Who", weight=1.3), Column("Area"),
+                 Column("What", weight=1.4), Column("On", weight=1.6), Column("Changes", weight=3)],
+        rows=rows,
+        summary=[("Actions", len(rows)), ("People", len({row[1] for row in rows}))],
+        note="Everything saved in the company, by whom and when: a record can never be changed or removed.",
+        empty="Nothing was done in these dates."))
+
+
+# --------------------------------------------------------------------------
 # The catalogue
 # --------------------------------------------------------------------------
 
@@ -928,6 +1257,8 @@ class Report:
     build: object
     description: str
     extras: tuple = ("store", "item", "category", "kind")
+    by: tuple = ()             # ((value, label), ...): how the rows are grouped; the first is the default
+    roles: tuple = ()          # only these company roles open it (besides the permission)
 
     @property
     def url_name(self):
@@ -937,6 +1268,18 @@ class Report:
 ITEM_FILTERS = ("store", "item", "category", "kind")
 
 REPORTS = (
+    Report("daily-summary", "Daily summary", OVERVIEW, "inventory.valuation", RANGE, daily_summary,
+           "Each day or month in money: bought, made, used, sold, adjusted, the sales, profit and stock value.",
+           by=SUMMARY_BY),
+    Report("profit", "Profit", OVERVIEW, "inventory.valuation", RANGE, profit,
+           "Sales less the cost of the goods, for every sale: by item, customer, day, month or sale by sale.",
+           by=PROFIT_BY),
+    Report("all-moves", "All stock movements", OVERVIEW, STOCK_CODES, RANGE, all_moves,
+           "Every in and out of every item: bought, made, used, sold, moved, adjusted - and who did it.",
+           extras=(*ITEM_FILTERS, "move", "person")),
+    Report("activity", "Activity log", OVERVIEW, STOCK_CODES, RANGE, activity,
+           "Who did what and when, in every part of the software, with what changed.",
+           extras=("person", "area"), roles=ACTIVITY_ROLES),
     Report("stock-on-hand", "Stock on hand", STOCK, STOCK_CODES, NOW, stock_on_hand,
            "Every item in every store now: on hand, reserved and available."),
     Report("item-card", "Stock ledger (item card)", STOCK, STOCK_CODES, RANGE, item_card,
