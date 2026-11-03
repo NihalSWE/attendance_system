@@ -128,3 +128,57 @@ class DeleteItemTests(InventoryFixture, TestCase):
         response = self.client.post(url, follow=True)
         self.assertContains(response, "has stock movements")
         self.assertTrue(Item.all_objects.filter(pk=self.bearing.pk).exists())
+
+
+class DeleteStoreTests(InventoryFixture, TestCase):
+    """Edit and delete a store (2026-11-03): one nothing used goes, with its
+    bins; one stock moved through is only deactivated."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.force_login(self.owner)
+
+    def test_the_store_list_offers_edit_and_delete(self):
+        page = self.client.get(reverse("inventory:stores"))
+        self.assertContains(page, f"{reverse('inventory:stores')}?edit={self.rms.pk}")
+        self.assertContains(page, reverse("inventory:stores_delete", args=[self.rms.pk]))
+
+    def test_a_store_is_renamed(self):
+        response = self.client.post(reverse("inventory:stores_edit", args=[self.rms.pk]), {
+            "branch": self.branch.pk, "code": "RMS", "name": "Main raw store", "kind": "raw", "notes": ""})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.reload(self.rms).name, "Main raw store")
+
+    def test_an_unused_store_is_deleted_with_its_bins(self):
+        from inventory.models import Location, Warehouse
+
+        with self.tenant():
+            Location.objects.create(company=self.company, warehouse=self.rms, code="R1-S1")
+        response = self.client.post(reverse("inventory:stores_delete", args=[self.rms.pk]), follow=True)
+        self.assertContains(response, "RMS is deleted.")
+        self.assertFalse(Warehouse.all_objects.filter(pk=self.rms.pk).exists())
+        self.assertFalse(Location.all_objects.filter(code="R1-S1").exists())
+
+    def test_a_store_stock_moved_through_is_not_deleted(self):
+        from inventory import posting
+        from inventory.models import MoveType, Warehouse
+        from inventory.testing import D
+
+        posting.post(company_id=self.company.pk, actor=self.owner, document_type="opening",
+                     document_id=1, move_type=MoveType.OPENING, work_date=datetime.date(2026, 10, 1),
+                     lines=[posting.Line(item=self.bearing, warehouse=self.rms, qty=D("10"),
+                                         unit_cost=D("100"))])
+        url = reverse("inventory:stores_delete", args=[self.rms.pk])
+        self.assertNotContains(self.client.get(reverse("inventory:stores")), url)
+        response = self.client.post(url, follow=True)
+        self.assertContains(response, "has stock movements")
+        self.assertTrue(Warehouse.all_objects.filter(pk=self.rms.pk).exists())
+
+    def test_without_the_right_it_is_refused(self):
+        from inventory.models import Warehouse
+
+        viewer = self.member("viewer@inv.test", "employee")
+        self.client.force_login(viewer)
+        response = self.client.post(reverse("inventory:stores_delete", args=[self.fgw.pk]))
+        self.assertIn(response.status_code, (302, 403))
+        self.assertTrue(Warehouse.all_objects.filter(pk=self.fgw.pk).exists())

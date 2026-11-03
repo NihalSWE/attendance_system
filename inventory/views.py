@@ -200,12 +200,14 @@ def _items(request):
 
 
 def _stores(request, company_id):
-    from django.db.models import Count, Q
+    from django.db.models import Count, Exists, OuterRef, Q
 
     # What each store holds (2026-11-01): the items with stock in it.
     rows = Warehouse.objects.select_related("branch").annotate(
         bin_count=Count("locations", distinct=True),
-        item_count=Count("balances__item", filter=Q(balances__qty_on_hand__gt=0), distinct=True))
+        item_count=Count("balances__item", filter=Q(balances__qty_on_hand__gt=0), distinct=True),
+        # Never used: it can be deleted (masters.delete_store, 2026-11-03).
+        moved=Exists(StockMove.objects.filter(warehouse=OuterRef("pk"))))
     return access.scope_warehouses(rows, request.user, company_id, "inventory.view")
 
 
@@ -246,7 +248,8 @@ def _list(request, page, *, new_form=None, edit_form=None, edit_row=None, open_d
         "party_sub": PARTY_SUB.get(page.key, ""),
         "edit_row": edit_row, "open_dialog": open_dialog,
         "edit_view": f"inventory:{page.key}_edit", "status_view": f"inventory:{page.key}_status",
-        "delete_view": f"inventory:{page.key}_delete" if page.master is masters.ITEM else "",
+        "delete_view": (f"inventory:{page.key}_delete"
+                        if page.master in (masters.ITEM, masters.WAREHOUSE) else ""),
         "sees_costs": access.sees_costs(request.user, company_id),
         "can_print_labels": access.may(request.user, company_id, "inventory.labels"),
         "print_form": forms.PrintForm(),
@@ -334,8 +337,9 @@ def item_delete(request, key, pk):
     company_id, bail = company_or_bail(request)
     if bail:
         return bail
+    delete = masters.delete_store if page.master is masters.WAREHOUSE else masters.delete_item
     try:
-        code = masters.delete_item(actor=request.user, company_id=company_id, pk=pk)
+        code = delete(actor=request.user, company_id=company_id, pk=pk)
     except ValidationError as exc:
         if fetch.wants_json(request):
             return fetch.refused(message="; ".join(exc.messages))
