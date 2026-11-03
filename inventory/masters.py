@@ -267,6 +267,30 @@ def delete_item(*, actor, company_id, pk):
     return code
 
 
+def delete_store(*, actor, company_id, pk):
+    """Delete a store nothing has used yet (2026-11-03), with its bins. Stock
+    that ever moved in or out of it, or a document, label or setting that
+    names it or one of its bins, stops the delete; deactivate it instead.
+    Returns the deleted store's code."""
+    membership, store = get_for_edit(WAREHOUSE, actor=actor, company_id=company_id, pk=pk)
+    with use_company(company_id):
+        if StockMove.all_objects.filter(warehouse=store).exists():
+            raise ValidationError(f"{store.code} has stock movements, so it cannot be deleted. "
+                                  "Deactivate it instead.")
+        code = store.code
+        record_company_event(actor=actor, membership=membership, company=membership.company,
+                             action="inventory.warehouse.deleted", obj=store,
+                             before=WAREHOUSE.snapshot(store))
+        try:
+            with transaction.atomic():
+                Location.all_objects.filter(warehouse=store).delete()
+                store.delete()
+        except models.ProtectedError:
+            raise ValidationError(f"{code} or one of its bins is on a document, a label or a "
+                                  "setting, so it cannot be deleted. Deactivate it instead.") from None
+    return code
+
+
 @transaction.atomic
 def add_pack_unit(*, actor, company_id, item_id, values):
     """1 CARTON = 24 PCS: a pack the item can be entered in."""

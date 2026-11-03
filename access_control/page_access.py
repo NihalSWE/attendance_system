@@ -159,7 +159,7 @@ BRANCH_PAGES = {
        for key in ("units", "categories", "items", "stores", "bins", "suppliers", "customers",
                    *ITEM_TYPE_PAGES)
        for action in ("edit", "status")},
-    **{f"inventory:{key}_delete": "inventory.items" for key in ("items", *ITEM_TYPE_PAGES)},
+    **{f"inventory:{key}_delete": "inventory.items" for key in ("items", "stores", *ITEM_TYPE_PAGES)},
     # The redesigned pages (2026-10-27, plan §15 phases 4-5): Start here,
     # Materials, Products and their pages to viewers; saving an item to
     # "Set up items"; the cost rates to "Set up BOMs (recipes)".

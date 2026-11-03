@@ -175,7 +175,7 @@
                                             {% if delete_view and not row.moved %}
                                                 {# Never moved: it can go (masters.delete_item says why not if something else uses it). #}
                                                 <form method="post" action="{% url delete_view row.pk %}"
-                                                      data-confirm="{{ row.code }} {{ row.name }} is deleted for good, with its pack units{% if row.kind == 'finished' %} and its materials{% endif %}."
+                                                      data-confirm="{% if page_def.key == 'stores' %}{{ row.code }} {{ row.name }} is deleted for good{% if row.bin_count %}, with its {{ row.bin_count }} bin{{ row.bin_count|pluralize }}{% endif %}.{% else %}{{ row.code }} {{ row.name }} is deleted for good, with its pack units{% if row.kind == 'finished' %} and its materials{% endif %}.{% endif %}"
                                                       data-confirm-title="Delete {{ row.code }}?" data-confirm-button="Delete" data-confirm-tone="danger">
                                                     {% csrf_token %}
                                                     <button class="btn btn--quiet btn--sm" type="submit">Delete</button>
