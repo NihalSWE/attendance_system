@@ -494,7 +494,7 @@ def record_qc(*, actor, company_id, order_id, passed, notes=""):
         notes = (notes or "").strip()
         if not passed and not notes:
             raise ValidationError({"notes": "Say what failed."})
-        # Every batch it made: one per mix when the product says so (2026-10-27).
+        # Every batch it made: one (several from the old per-mix option).
         from production.making import made_batches
 
         for batch in made_batches(output) or [output.batch]:

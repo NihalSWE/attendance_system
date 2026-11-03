@@ -77,7 +77,11 @@ class ShortageReportTests(ReportFixture, TestCase):
 
 class ConversionTests(ProductionFixture, TestCase):
     def convert(self):
-        state = MigrationExecutor(connection).loader.project_state(("production", "0004_convert_existing"))
+        # The data migration against today's inventory tables (a column dropped later is gone).
+        loader = MigrationExecutor(connection).loader
+        nodes = [("production", "0004_convert_existing")]
+        nodes += [node for node in loader.graph.leaf_nodes() if node[0] == "inventory"]
+        state = loader.project_state(nodes)
         migration = importlib.import_module("production.migrations.0004_convert_existing")
         migration.convert(state.apps, None)
 

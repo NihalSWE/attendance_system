@@ -7170,3 +7170,15 @@ yet, switch Ask on.
 - Tests: `inventory/tests_phase6.py` AnyQuantityTests and the plan tests in quantities.
 
 **Deploy:** pull, migrate (production 0006: choices only), collectstatic, restart.
+
+### One production = one batch number (per-mix option removed) — 2026-11-03
+
+- The product switch *Batch number per mix* split a production into one batch per recipe mix: 125,000 ML
+  on a recipe for 10,000 ML became 13 batch numbers, and it hid the Batch number box on Finish. The
+  client counts each production as one batch (1st batch 10,000 ML, 2nd batch 125,000 ML).
+- The switch and the field `Item.batch_per_mix` are gone (inventory 0011). Finish always makes one batch:
+  typed, or `CODE-DDMMYY-N` (ORJ101-031126-2 for the second production of the day). Splitting across
+  stores is allowed for every product. Batches made earlier the per-mix way still pass QC together.
+- `inventory/tests_phase9.py` ConversionTests run the old data migration against today's inventory tables.
+
+**Deploy:** pull, migrate (inventory 0011), restart.

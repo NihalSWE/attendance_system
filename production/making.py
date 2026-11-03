@@ -16,13 +16,13 @@
 - **Full cost**: materials actually used + the day's costs, divided by the
   good quantity. Damaged goods carry no cost of their own. The new stock is
   valued at that cost; the product's page shows expected against actual.
-- **Batch numbers**: one per production, or one per mix when the product says
-  so (then into one store).
+- **Batch numbers**: one per production, whatever its amount (2026-11-03:
+  the per-mix option is gone).
 - **Reverse** (a reason): while none of the made stock has been sold, moved or
   used, every stock move of the production is undone.
 """
 
-from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -212,18 +212,12 @@ def _return_leftovers(company_id, actor, membership, order, leftovers, day):
         row.save(update_fields=["status", "posted_at", "posted_by"])
 
 
-def _mix_split(good, count, item):
-    """``good`` shared over ``count`` mixes, whole to the unit; the last takes the rest."""
-    step = Decimal(1).scaleb(-item.base_uom.decimals)
-    share = (good / count).quantize(step, rounding=ROUND_FLOOR)
-    return [share] * (count - 1) + [good - share * (count - 1)]
-
-
-def _batch_no(company_id, order, day, suffix=""):
+def _batch_no(company_id, order, day):
+    """The product code, the date and a counter: ORJ101-031126-2."""
     base = f"{order.item.code.replace('-', '')}-{day:%d%m%y}"
     n = 1
     while True:
-        number = f"{base}-{n}{suffix}"
+        number = f"{base}-{n}"
         if not Batch.all_objects.filter(company_id=company_id, item=order.item, batch_no=number).exists():
             return number
         n += 1
@@ -272,11 +266,6 @@ def finish(*, actor, company_id, order_id, values):
         for store, _qty in parts:
             if store.kind in UNUSABLE_STORES or store.status != "active":
                 errors["parts"] = f"{store.name} cannot take new stock."
-        # A part of a mix is a mix of its own: 12.5 times the recipe is 13 mixes.
-        mixes = int(batches_of(order).to_integral_value(ROUND_CEILING)) or 1
-        per_mix = item.track_batch and item.batch_per_mix and mixes > 1
-        if per_mix and len(parts) > 1:
-            errors["parts"] = "Every mix gets its own batch number: put them into one store."
     if errors:
         raise ValidationError(errors)
     for store, _qty in parts:
@@ -315,18 +304,12 @@ def finish(*, actor, company_id, order_id, values):
             number = (values.get("batch_no") or "").strip()
             if number and Batch.objects.filter(item=item, batch_no=number).exists():
                 raise ValidationError({"batch_no": f"Batch {number} of {item.name} exists already."})
-            if per_mix:
-                for share in _mix_split(good, mixes, item):
-                    batches.append((posting.batch_for(
-                        company_id=company_id, actor=actor, item=item, batch_no=_batch_no(company_id, order, day),
-                        source=Batch.Source.PRODUCTION, mfg_date=day, expiry_date=expiry, unit_cost=unit_cost,
-                        status=status), parts[0][0], share))
-            else:
-                batch = posting.batch_for(
-                    company_id=company_id, actor=actor, item=item,
-                    batch_no=number or _batch_no(company_id, order, day), source=Batch.Source.PRODUCTION,
-                    mfg_date=day, expiry_date=expiry, unit_cost=unit_cost, status=status)
-                batches = [(batch, store, qty) for store, qty in parts]
+            # One production, one batch number, whatever the amount.
+            batch = posting.batch_for(
+                company_id=company_id, actor=actor, item=item,
+                batch_no=number or _batch_no(company_id, order, day), source=Batch.Source.PRODUCTION,
+                mfg_date=day, expiry_date=expiry, unit_cost=unit_cost, status=status)
+            batches = [(batch, store, qty) for store, qty in parts]
         else:
             batches = [(None, store, qty) for store, qty in parts]
         first = batches[0][0]
@@ -364,7 +347,8 @@ def finish(*, actor, company_id, order_id, values):
 # --- Reverse -------------------------------------------------------------------
 
 def made_batches(output):
-    """The batches a finish made (several when every mix has its own)."""
+    """The batches a finish made: one (several only for a finish made with the
+    old per-mix option, before 2026-11-03)."""
     ids = StockMove.all_objects.filter(document_type=Output.DOC_TYPE, document_id=output.pk,
                                        batch__isnull=False).values_list("batch_id", flat=True)
     return list(Batch.all_objects.filter(pk__in=set(ids)))
