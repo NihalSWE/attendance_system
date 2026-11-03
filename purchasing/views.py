@@ -422,17 +422,33 @@ def receipt_list(request):
                         "open_dialog": "new-dialog" if new_form is not None or initial else ""})
 
 
-def _receipt_page(request, pk, line_form=None, open_dialog=""):
+def _costs_form(row, data=None):
+    """The bill's VAT and delivery boxes, filled with what the draft has."""
+    by_amount = row.vat_by == row.VatBy.AMOUNT
+    return forms.ReceiptCostsForm(data, initial={
+        "vat_rate": None if by_amount or not row.vat_rate else row.vat_rate,
+        "vat_amount": row.vat_amount if by_amount else None,
+        "delivery_cost": row.delivery_cost or None})
+
+
+def _receipt_page(request, pk, line_form=None, open_dialog="", costs_form=None):
+    from purchasing import landed
+
     company_id = request.company_id
     _, row = receipts.get_receipt(actor=request.user, company_id=company_id, pk=pk, code="inventory.view")
     with use_company(company_id):
         lines = list(row.lines.select_related("item__base_uom", "uom", "location", "order_line", "batch")
                      .order_by("pk"))
         made = list(receipts.receipt_labels(row)) if row.status != "draft" else []
+        # The bill and each line's real cost (2026-11-03): as posted, or as
+        # it would be posted now.
+        bill = landed.bill(row, lines)
+        landed.with_real_cost(row, lines, bill)
     may_receive = access.may(request.user, company_id, "purchase.receive", row.warehouse.branch_id)
     can_edit = row.status == row.Status.DRAFT and may_receive
     return render(request, "purchasing/receipt_detail.html", {
-        "doc": row, "lines": lines, "labels": made, "can_edit": can_edit,
+        "doc": row, "lines": lines, "labels": made, "can_edit": can_edit, "bill": bill,
+        "costs_form": costs_form or (_costs_form(row) if can_edit else None),
         "can_post": can_edit and bool(lines),
         "can_reverse": row.status == row.Status.POSTED and may_receive,
         "can_print": made and may_receive,
@@ -471,6 +487,25 @@ def receipt_line_add(request, pk):
             messages.success(request, "Line added.")
             return redirect("purchasing:receipt_detail", pk=pk)
     return _receipt_page(request, pk, line_form=form, open_dialog="line-dialog")
+
+
+@login_required
+@require_POST
+def receipt_costs(request, pk):
+    """The VAT and delivery cost on a draft's bill (2026-11-03)."""
+    company_id, bail = company_or_bail(request)
+    if bail:
+        return bail
+    form = forms.ReceiptCostsForm(request.POST)
+    if form.is_valid():
+        try:
+            receipts.set_costs(actor=request.user, company_id=company_id, receipt_id=pk, values=form.cleaned_data)
+        except ValidationError as exc:
+            apply_service_errors(form, exc)
+        else:
+            messages.success(request, "VAT and delivery cost saved: each line's real cost is worked out again.")
+            return redirect("purchasing:receipt_detail", pk=pk)
+    return _receipt_page(request, pk, costs_form=form)
 
 
 @login_required

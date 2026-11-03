@@ -242,6 +242,20 @@ class GoodsReceipt(TenantOwned, ActorTracked):
                                    validators=[MinValueValidator(ZERO)])
     vat_amount = models.DecimalField("VAT", max_digits=18, decimal_places=2, default=ZERO,
                                      validators=[MinValueValidator(ZERO)])
+    # 2026-11-03 (purchasing/landed.py): which of the two was written - the %
+    # follows the lines, an amount stays as written - and what else was paid
+    # to bring the goods in. Both go into the goods' real cost when posted.
+    class VatBy(models.TextChoices):
+        RATE = "rate", "VAT %"
+        AMOUNT = "amount", "VAT amount"
+
+    vat_by = models.CharField(max_length=8, choices=VatBy.choices, default=VatBy.RATE)
+    delivery_cost = models.DecimalField(
+        "Delivery / carrying cost", max_digits=18, decimal_places=2, default=ZERO,
+        validators=[MinValueValidator(ZERO)],
+        help_text="Transport, loading and unloading paid for this purchase. Added to what the goods cost.")
+    vat_in_cost = models.BooleanField(
+        default=False, help_text="Set when posted: the VAT paid was added to what the goods cost.")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
     posted_at = models.DateTimeField(null=True, blank=True)
     posted_by = _user_fk()
@@ -292,6 +306,9 @@ class GoodsReceiptLine(TenantOwned):
     batch = models.ForeignKey("inventory.Batch", null=True, blank=True, on_delete=models.PROTECT,
                               related_name="+")
     qc_status = models.CharField(max_length=16, choices=Qc.choices, default=Qc.NOT_REQUIRED)
+    # Its share of the delivery cost (and of the VAT, when it is part of the
+    # cost), set when posted: by value, the receipt's shares add up exactly.
+    extra_cost = models.DecimalField("Delivery and VAT share", max_digits=18, decimal_places=2, default=ZERO)
 
     class Meta:
         db_table = "purchasing_goods_receipt_line"
@@ -322,6 +339,26 @@ class GoodsReceiptLine(TenantOwned):
     @property
     def value(self):
         return (self.qty_accepted * self.unit_cost).quantize(CENT)
+
+    @property
+    def real_value(self):
+        """What the accepted goods really cost: the price plus their share
+        of the delivery cost (and VAT)."""
+        return (self.value + self.extra_cost).quantize(CENT)
+
+    @property
+    def real_unit_cost(self):
+        """One unit written in Unit, with its share of the extra costs."""
+        if not self.extra_cost or not self.qty_accepted:
+            return self.unit_cost
+        return (self.real_value / self.qty_accepted).quantize(FOUR)
+
+    @property
+    def real_unit_cost_base(self):
+        """One base unit, with its share of the extra costs: what goes into stock."""
+        if not self.extra_cost or not self.qty_accepted_base:
+            return self.unit_cost_base
+        return (self.real_value / self.qty_accepted_base).quantize(FOUR)
 
 
 class QualityCheck(TenantOwned):

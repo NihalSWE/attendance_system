@@ -13,7 +13,12 @@
    in it (their usual store, else a store of their type, or stock already
    there). A purchase shows each line's quantity x cost, the subtotal, the VAT
    and the total. Stock waiting for a quality check is said apart: it cannot
-   be sold or moved until it passes. */
+   be sold or moved until it passes.
+
+   2026-11-03: and the delivery cost. The delivery - and the VAT, unless the
+   company claims it back - is shared over the lines by their value, and each
+   line says what one really costs: that is what goes into stock
+   (purchasing/landed.py works it out again when it is saved). */
 (function () {
     const form = document.querySelector("form[data-lines-form]");
     if (!form) return;
@@ -146,11 +151,13 @@
         }
     }
 
-    // A purchase's bill (2026-11-02): each line, the subtotal, VAT and total.
+    // A purchase's bill (2026-11-02): each line, the subtotal, VAT, delivery
+    // (2026-11-03) and the total paid; each line's real cost.
     let vatFrom = "";
     function bill() {
         const box = form.querySelector("[data-stock-total]");
         let subtotal = 0;
+        const rows = [];
         form.querySelectorAll("[data-line]").forEach(function (line) {
             const out = line.querySelector("[data-line-total]");
             if (!out) return;
@@ -160,13 +167,21 @@
             const cost = Number((line.querySelector("[data-line-cost]") || {}).value || 0);
             const amount = item && item.value ? qty * cost : 0;
             out.hidden = !(amount > 0) || source() !== "purchase";
-            out.textContent = "Line total: " + qty.toLocaleString() + " " + (unit ? unit.text : "") + " × " +
-                money(cost) + " = " + money(amount) + " Tk";
+            rows.push({ out: out, unit: unit ? unit.text : "", qty: qty, cost: cost, amount: amount });
             subtotal += amount;
         });
-        if (!box) return;
+        const lineText = function (row) {
+            return "Line total: " + row.qty.toLocaleString() + " " + row.unit + " × " + money(row.cost) + " = " +
+                money(row.amount) + " Tk";
+        };
+        if (!box) {
+            rows.forEach(function (row) { row.out.textContent = lineText(row); });
+            return;
+        }
         const rate = form.querySelector('[data-vat="vat_rate"]');
         const amount = form.querySelector('[data-vat="vat_amount"]');
+        const by = form.querySelector("[data-vat-by]");
+        if (by) by.value = vatFrom;
         let vat = 0;
         if (vatFrom === "amount" && amount.value !== "") {
             vat = Number(amount.value);
@@ -177,9 +192,21 @@
         } else if (amount.value !== "") {
             vat = Number(amount.value);
         }
+        const deliveryBox = form.querySelector("[data-delivery]");
+        const delivery = Number((deliveryBox || {}).value || 0);
+        const extra = delivery + (box.dataset.vatInCost === "1" ? vat : 0);
+        // Each line carries the extra costs in proportion to its value.
+        rows.forEach(function (row) {
+            let text = lineText(row);
+            if (extra > 0 && subtotal > 0 && row.amount > 0) {
+                text += " · real cost " + money(row.cost * (1 + extra / subtotal)) + " Tk each";
+            }
+            row.out.textContent = text;
+        });
         box.querySelector("[data-bill-subtotal]").textContent = money(subtotal);
         box.querySelector("[data-bill-vat]").textContent = money(vat) + (rate.value ? " (" + rate.value + " %)" : "");
-        box.querySelector("[data-bill-total]").textContent = money(subtotal + vat);
+        box.querySelector("[data-bill-delivery]").textContent = money(delivery);
+        box.querySelector("[data-bill-total]").textContent = money(subtotal + vat + delivery);
     }
 
     // Stock in fills the line from the item (2026-11-01): the unit it is
@@ -289,7 +316,7 @@
         if (line && event.target.matches('[name^="mfg_"]')) expiry(line);
         if (event.target.matches('[data-vat="vat_rate"]')) vatFrom = "rate";
         if (event.target.matches('[data-vat="vat_amount"]')) vatFrom = "amount";
-        if (event.target.matches('[name^="qty_"], [data-line-cost], [data-vat]')) bill();
+        if (event.target.matches('[name^="qty_"], [data-line-cost], [data-vat], [data-delivery]')) bill();
     });
     if (window.jQuery) {
         window.jQuery(form).on("select2:select", function (event) {

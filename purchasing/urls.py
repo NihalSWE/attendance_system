@@ -31,6 +31,7 @@ urlpatterns = [
     path("receipts/<int:pk>/lines/<int:line_pk>/remove/", views.receipt_line_remove,
          name="receipt_line_remove"),
     path("receipts/<int:pk>/labels/", views.receipt_labels_print, name="receipt_labels"),
+    path("receipts/<int:pk>/costs/", views.receipt_costs, name="receipt_costs"),
     path("receipts/<int:pk>/<slug:action>/", views.receipt_action, name="receipt_action"),
 
     path("quality-check/", views.qc_list, name="qc"),

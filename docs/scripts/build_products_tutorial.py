@@ -429,7 +429,8 @@ story += [fields([
     ("Item, Quantity, Unit", "Yes", "One line per item; <b>Add a line</b> for more.", "Flour, 10, BAG",
      "Only the item's own units are offered."),
     ("Cost", "Some", "What you paid, per the unit chosen (look at \"Tk per ...\" beside it).", "2,500 per DRUM",
-     "Becomes the item's buy price: the next Stock in starts from it, and so do prices and recipes. "
+     "Becomes the item's buy price: the next Stock in starts from it. Prices and recipes count its real cost "
+     "(with its share of the delivery and VAT). "
      "The line total shows under it: 5 DRUM x 2,500 = 12,500."),
     ("Sale price (optional)", "No", "A new sale price, now that the buy price is in. It shows the price now.",
      "now 60", "Empty: the price stays. Below the new cost: refused unless Sell below cost."),
@@ -442,11 +443,13 @@ story += [fields([
     ("Sell below cost / Why below cost", "No", "Only if a sale price below cost is meant.", "on, clearing old stock",
      "Kept with the price change in the audit log."),
     ("VAT % / VAT amount", "No", "A purchase only: the VAT on the bill, if you paid it. Write either one.",
-     "15", "The other is worked out from the subtotal; the total to pay = subtotal + VAT. Kept on the goods "
-     "receipt; the stock is costed before VAT."),
+     "15", "The other is worked out from the subtotal. Part of the goods' real cost, unless the company claims "
+     "VAT back (Inventory settings)."),
+    ("Delivery / carrying cost", "No", "A purchase only: transport, loading and unloading paid for it, in Tk.",
+     "1,550", "Empty: none. Always part of the goods' real cost. Total paid = subtotal + VAT + delivery."),
 ]), Spacer(1, 4), box("The three kinds of Stock in", [
     "<b>A purchase (goods received)</b>: you bought it from a supplier and it arrived. Choose the supplier, write "
-    "what the bill says it cost, and VAT if you paid it. It makes a goods receipt (GRN).",
+    "what the bill says it cost, and the VAT and delivery cost if you paid them. It makes a goods receipt (GRN).",
     "<b>First count (opening stock)</b>: stock you already had on the first day you use the software, counted on "
     "the shelf. Once per item, to start; after that stock comes in by purchase or production.",
     "<b>A customer returned it</b>: a customer sent back what you sold. Good goods go back to stock, damaged ones "
@@ -455,6 +458,22 @@ story += [fields([
     "A purchase is received and posted at once; a first count is posted if you may approve opening stock, otherwise "
     "it waits; a return is posted. If any line is refused, nothing is saved - the line and the box are named.",
 ])]
+
+story += [box("The real cost: what the goods really cost you", [
+    "The cost you write is the supplier's price. What you really paid also has the <b>delivery</b> and - unless "
+    "the company claims it back - the <b>VAT</b>. Both are added to the goods, shared over the lines by their "
+    "value, and each line goes into stock at its <b>real cost</b>. Recipes, the cost of one product, the price "
+    "check and the profit all count the real cost.",
+    "Example: orange pulp 100 KG at 200 (20,000), sugar 50 KG at 120 (6,000), bottles 1,000 PCS at 5 (5,000). "
+    "Subtotal 31,000; VAT 15 % = 4,650; delivery 1,550; <b>total paid 37,200</b>. 6,200 is added - one fifth of "
+    "each line's value - so the real costs are <b>pulp 240, sugar 144, bottle 6.00</b>. Each line shows it under "
+    "its total while you type: &quot;real cost 240.00 Tk each&quot;.",
+    "A VAT-registered company that claims the VAT back sets Inventory settings &rarr; <b>VAT paid on purchases: "
+    "We claim it back</b>: then only the delivery is added, and the VAT is kept apart on the goods receipt.",
+    "A goods receipt against a purchase order works the same way: its VAT comes from the order, and on the "
+    "receipt page, card <b>Bill and real cost</b>, you write the VAT and the delivery cost before Post.",
+    "The next purchase starts from the supplier's price (200), not the real cost, so nothing is counted twice.",
+], "ok"), Spacer(1, 4)]
 
 story += [box("The line fills itself", [
     "Choose the item and the line is filled from what the software already knows: the <b>unit it is bought in</b> "
@@ -705,8 +724,8 @@ story += [grid(("Change", "Where, and how it works"), [
     ("3. Items of the chosen store", "Stock in: choose the store first; the item lists offer the items whose usual "
      "store it is, items of the store's type (raw, packaging, finished, spare) with no usual store, and anything "
      "already in it. Sell and Move stock: only what is in stock in that store. A line already filled keeps its item."),
-    ("4. VAT and the total", "Stock in, a purchase: each line shows quantity x cost; under the lines the subtotal, "
-     "VAT (% or amount) and the total to pay."),
+    ("4. VAT, delivery and the total", "Stock in, a purchase: each line shows quantity x cost and its real cost; "
+     "under the lines the subtotal, VAT (% or amount), the delivery cost and the total paid (see The real cost)."),
     ("5. Materials by type", "Inventory &rarr; Materials: tabs All materials, Raw materials, Packaging, Finished "
      "goods, each with how many; the tiles above open a tab."),
     ("6. The last price counts", "The cost typed on a purchase becomes the item's buy price, and the cost of one "
@@ -759,6 +778,8 @@ story += [CondPageBreak(80 * mm), Spacer(1, 6 * mm), P("Questions people ask", "
     ("I made 500 but cannot sell 480", "The product has Quality check before use: the batch waits. Stock &rarr; "
      "Quality check &rarr; Pass, then sell. Not checking quality? Untick it on the product (Edit)."),
     ("The cost went down after buying", "Look at the unit beside the cost (Tk per BOX or per PCS)."),
+    ("The cost is more than I wrote", "The real cost has the delivery and the VAT added (see The real cost). The "
+     "goods receipt shows each line's share."),
     ("An item is missing from the list", "The store chosen above does not keep it: choose its store, or set the "
      "item's usual store (Edit)."),
     ("No \"See costs\"", "Quantities only: no money on any screen."),

@@ -7119,3 +7119,26 @@ yet, switch Ask on.
 - Tests: `inventory/tests_update_nov2.py`; `tests_pages.test_settings_by_posting_the_form`.
 
 **Deploy:** pull, `migrate` (inventory 0009, purchasing 0003), `collectstatic`, restart.
+
+### Real cost of what is bought: delivery cost and VAT in the cost — 2026-11-03
+
+- A purchase's cost was only the supplier's price: the VAT paid and the delivery were left out, so
+  stock, recipes, the cost of one product, prices and profit were counted too low.
+- **Delivery / carrying cost** (optional) on Stock in (a purchase) and on a goods receipt against a
+  purchase order (card *Bill and real cost*, while it is a draft).
+- **Inventory settings → VAT paid on purchases**: *Part of our cost* (default) or *We claim it back
+  (VAT-registered)*.
+- The delivery cost, and the VAT unless it is claimed back, is shared over the lines **by value**
+  (`purchasing/landed.py`; shares rounded to the paisa, adding up exactly) and each line goes into stock
+  at its **real cost** (`post_receipt`): stock value, average cost, last cost, recipes, the cost of one
+  product, the below-cost check and margins all follow. Example: subtotal 31,000 + VAT 4,650 +
+  delivery 1,550 = 37,200 paid: each line's cost × 1.2.
+- Stock in shows each line's real cost while typing and the total paid; the goods receipt shows
+  *Real cost each* (with the line's share) and the bill. A receipt against an order takes the order's
+  VAT %. The next purchase still starts from the supplier's price, so nothing is counted twice.
+- Receipts posted before keep their cost (their share is 0).
+- Tutorial: *The real cost* box in Step 5 (`docs/scripts/build_products_tutorial.py`).
+- Tests: `inventory/tests_real_cost.py` (13); wording in `inventory/tests_update_nov2.py` and the
+  settings test in `inventory/tests_pages.py`.
+
+**Deploy:** pull, migrate (inventory 0010, purchasing 0004), collectstatic, restart.

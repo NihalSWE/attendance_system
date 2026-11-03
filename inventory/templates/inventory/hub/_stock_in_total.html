@@ -1,15 +1,33 @@
 {% comment %}
-    The bill of a purchase on Stock in (2026-11-02; lines.js): each line's
-    quantity × cost, the subtotal, the VAT (the % or the amount: either fills
-    the other) and the total to pay. Only for "A purchase".
+    The bill of a purchase on Stock in (2026-11-02, real cost 2026-11-03; lines.js):
+    each line's quantity × cost, the subtotal, the VAT (the % or the amount:
+    either fills the other), the delivery cost and the total paid. The delivery
+    cost - and the VAT, unless the company claims it back - is shared over the
+    lines by their value: each line shows what one really costs, and that is
+    what goes into stock (purchasing/landed.py). Only for "A purchase".
 {% endcomment %}
-<div class="ui-bill" data-stock-total data-source-only="purchase">
+<div class="ui-bill" data-stock-total data-source-only="purchase" data-vat-in-cost="{{ vat_in_cost|yesno:'1,0' }}">
     <div class="ui-bill__row"><span>Subtotal <span class="ui-muted">· quantity × cost of each line</span></span><strong data-bill-subtotal>0.00</strong></div>
     <div class="ui-bill__vat">
         {% include "inventory/hub/field.html" with box=form.vat_rate %}
         {% include "inventory/hub/field.html" with box=form.vat_amount %}
     </div>
+    {{ form.vat_by }}
     <div class="ui-bill__row"><span>VAT</span><strong data-bill-vat>0.00</strong></div>
-    <div class="ui-bill__row ui-bill__row--total"><span>Total to pay</span><strong><span data-bill-total>0.00</span> Tk</strong></div>
-    <p class="ui-muted ui-bill__note">The stock is costed at the price before VAT; the VAT is kept on the goods receipt.</p>
+    <div class="ui-bill__vat">
+        {% include "inventory/hub/field.html" with box=form.delivery_cost %}
+    </div>
+    <div class="ui-bill__row"><span>Delivery / carrying</span><strong data-bill-delivery>0.00</strong></div>
+    <div class="ui-bill__row ui-bill__row--total"><span>Total paid</span><strong><span data-bill-total>0.00</span> Tk</strong></div>
+    <p class="ui-muted ui-bill__note">
+        {% if vat_in_cost %}
+            The VAT and the delivery cost are part of what the goods cost: they are shared over the lines by
+            their value, and each line goes into stock at its <strong>real cost</strong> (shown under it).
+        {% else %}
+            The delivery cost is shared over the lines by their value, and each line goes into stock at its
+            <strong>real cost</strong> (shown under it). The VAT is claimed back, so it is kept apart on the goods
+            receipt.
+        {% endif %}
+        <a href="{% url 'inventory:settings' %}">Inventory settings</a> say whether the VAT is part of the cost.
+    </p>
 </div>

@@ -73,6 +73,18 @@ class InventorySettings(TenantOwned, ActorTracked):
         "Cost used for prices and recipes", max_length=8, choices=PriceCost.choices, default=PriceCost.LAST,
         help_text="Last price paid: a new buy price counts at once. Average: old and new stock are averaged.",
     )
+    # 2026-11-03: the real cost of what is bought. The delivery cost paid on a
+    # purchase is always added to what the goods cost; the VAT paid is too,
+    # unless the company claims it back (purchasing/landed.py).
+    class PurchaseVat(models.TextChoices):
+        COST = "cost", "Part of our cost (we cannot claim it back)"
+        CLAIM = "claim", "We claim it back (VAT-registered)"
+
+    purchase_vat = models.CharField(
+        "VAT paid on purchases", max_length=8, choices=PurchaseVat.choices, default=PurchaseVat.COST,
+        help_text="Part of our cost: the VAT paid is added to what the goods cost, with the delivery cost. "
+                  "Claimed back: only the delivery cost is added; the VAT is kept apart on the goods receipt.",
+    )
     warranty_on = models.BooleanField(
         "Warranty", default=False,
         help_text="On: items can carry a warranty and serial numbers, and claims are recorded.")
