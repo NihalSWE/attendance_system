@@ -11,22 +11,22 @@
 
     {% if no_recipe %}
         <div class="ui-card"><div class="ui-card__body"><p>{{ no_recipe }}</p></div></div>
-        {% include "ui/next_step.html" with what="Write the recipe: what one batch makes and the materials it uses." url=hub_url|add:"#recipe" button="Write the recipe" %}
+        {% include "ui/next_step.html" with what="Write the recipe: what quantity it is for and the materials it uses." url=hub_url|add:"#recipe" button="Write the recipe" %}
     {% else %}
         {% if suggestion %}
             <div class="ui-tiles">
                 <div class="ui-tile"><p class="ui-tile__label">Stock to keep</p><p class="ui-tile__value">{{ suggestion.keep|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ item.base_uom.code }}{% if suggestion.per_day %} · sells {{ suggestion.per_day|floatformat:"-2g" }} a day{% endif %}</p></div>
                 <div class="ui-tile"><p class="ui-tile__label">In stock + coming</p><p class="ui-tile__value">{{ suggestion.have|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ suggestion.in_stock|floatformat:"-2g" }} in stock · {{ suggestion.coming|floatformat:"-2g" }} planned</p></div>
-                <div class="ui-tile{% if suggestion.batches %} ui-tile--good{% endif %}"><p class="ui-tile__label">Suggested</p><p class="ui-tile__value">{{ suggestion.batches }}</p><p class="ui-tile__hint">batch{{ suggestion.batches|pluralize:"es" }} · {{ suggestion.wanted }} wanted, materials allow {{ suggestion.possible }}</p></div>
+                <div class="ui-tile{% if suggestion.qty %} ui-tile--good{% endif %}"><p class="ui-tile__label">Suggested</p><p class="ui-tile__value">{{ suggestion.qty|floatformat:"-2g" }}</p><p class="ui-tile__hint">{{ item.base_uom.code }} · {{ suggestion.wanted|floatformat:"-2g" }} wanted, materials allow {{ suggestion.possible|floatformat:"-2g" }}</p></div>
             </div>
         {% endif %}
 
         <form class="ui-card" method="post" action="{{ request.path }}" data-fetch data-plan novalidate>
             {% csrf_token %}
-            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="play" %} What to make</h2><span class="ui-card__note">One batch makes {{ plan.bom.batch_size|floatformat:"-4g" }} {{ plan.bom.batch_uom.code }}</span></div>
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="play" %} What to make</h2><span class="ui-card__note">The recipe is for {{ plan.bom.batch_size|floatformat:"-4g" }} {{ plan.bom.batch_uom.code }}: any amount can be made</span></div>
             <div class="ui-card__body">
                 <div class="ui-grid-2">
-                    {% include "inventory/hub/field.html" with box=form.batches %}
+                    {% include "inventory/hub/field.html" with box=form.qty %}
                     {% include "inventory/hub/field.html" with box=form.planned_date %}
                     {% include "inventory/hub/field.html" with box=form.into %}
                 </div>
@@ -48,14 +48,14 @@
 {% block extra_js %}
     {{ block.super }}
     <script>
-        // The materials follow the batches, date and store as they change (plan §8.2).
+        // The materials follow the quantity, date and store as they change (plan §8.2).
         (function () {
             const form = document.querySelector("form[data-plan]");
             if (!form) return;
             let timer = null;
             async function refresh() {
                 const params = new URLSearchParams();
-                ["batches", "planned_date", "into"].forEach(name => {
+                ["qty", "planned_date", "into"].forEach(name => {
                     const box = form.querySelector('[name="' + name + '"]');
                     if (box) params.set(name, box.value);
                 });
@@ -79,7 +79,7 @@
                 const fewer = event.target.closest("[data-make-fewer]");
                 if (!fewer) return;
                 event.preventDefault();
-                form.querySelector('[name="batches"]').value = fewer.dataset.makeFewer;
+                form.querySelector('[name="qty"]').value = fewer.dataset.makeFewer;
                 refresh();
             });
         })();

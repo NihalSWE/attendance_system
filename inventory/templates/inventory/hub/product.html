@@ -69,15 +69,15 @@
     {% if makes and has_recipe %}
         <div class="ui-card" id="make">
             <div class="ui-card__head">
-                <h2 class="ui-card__title"><span class="ui-stepno">{{ step_no.make }}</span>{% include "ui/icon.html" with name="play" %} {% if suggestion and suggestion.batches %}Suggested: make {{ suggestion.batches }} batch{{ suggestion.batches|pluralize:"es" }}{% elif suggestion %}Enough in stock and planned{% else %}How many to make{% endif %}</h2>
-                {% if can_plan %}<a class="ui-btn ui-btn--main ui-btn--sm" href="{% url 'production:plan' item.pk %}{% if suggestion.batches %}?batches={{ suggestion.batches }}{% endif %}">{% if suggestion.batches %}Make {{ suggestion.batches }} batch{{ suggestion.batches|pluralize:"es" }}{% else %}Plan a production{% endif %}</a>{% endif %}
+                <h2 class="ui-card__title"><span class="ui-stepno">{{ step_no.make }}</span>{% include "ui/icon.html" with name="play" %} {% if suggestion and suggestion.qty %}Suggested: make {{ suggestion.qty|floatformat:"-2g" }} {{ item.base_uom.code }}{% elif suggestion %}Enough in stock and planned{% else %}How much to make{% endif %}</h2>
+                {% if can_plan %}<a class="ui-btn ui-btn--main ui-btn--sm" href="{% url 'production:plan' item.pk %}{% if suggestion.qty %}?qty={{ suggestion.qty_text }}{% endif %}">{% if suggestion.qty %}Make {{ suggestion.qty|floatformat:"-2g" }} {{ item.base_uom.code }}{% else %}Plan a production{% endif %}</a>{% endif %}
             </div>
             <div class="ui-card__body">
                 {% if suggestion %}
-                    <p>Keep {{ suggestion.keep|floatformat:"-2g" }} − {{ suggestion.in_stock|floatformat:"-2g" }} in stock − {{ suggestion.coming|floatformat:"-2g" }} planned = <strong>{{ suggestion.wanted }} batch{{ suggestion.wanted|pluralize:"es" }} wanted</strong>.
-                        The materials allow <strong>{{ suggestion.possible }}</strong>.{% if suggestion.per_day %} You sell about {{ suggestion.per_day|floatformat:"-2g" }} {{ item.base_uom.code }} a day.{% endif %}</p>
+                    <p>Keep {{ suggestion.keep|floatformat:"-2g" }} − {{ suggestion.in_stock|floatformat:"-2g" }} in stock − {{ suggestion.coming|floatformat:"-2g" }} planned = <strong>{{ suggestion.wanted|floatformat:"-2g" }} {{ item.base_uom.code }} wanted</strong>.
+                        The materials allow <strong>{{ suggestion.possible|floatformat:"-2g" }} {{ item.base_uom.code }}</strong>.{% if suggestion.per_day %} You sell about {{ suggestion.per_day|floatformat:"-2g" }} {{ item.base_uom.code }} a day.{% endif %}</p>
                 {% else %}
-                    <p>Set a <strong>stock to keep</strong> (Edit) and the page suggests how many batches to make. Until then, you choose.</p>
+                    <p>Set a <strong>stock to keep</strong> (Edit) and the page suggests how much to make. Until then, you choose any amount.</p>
                 {% endif %}
             </div>
         </div>

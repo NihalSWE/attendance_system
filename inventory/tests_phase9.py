@@ -54,7 +54,7 @@ class ProductionReportTests(ReportFixture, TestCase):
 
     def test_a_failed_production_is_a_loss(self):
         second, _plan = planning.save(actor=self.owner, company_id=self.company.pk, product=self.juice,
-                                      batches=1, into=self.fgw, day=self.today)
+                                      qty=D("1000"), into=self.fgw, day=self.today)
         making.start(actor=self.owner, company_id=self.company.pk, order_id=second.pk, work_date=self.today)
         making.finish(actor=self.owner, company_id=self.company.pk, order_id=second.pk,
                       values={"output_date": self.today, "good": D("0"), "damaged": D("1000"), "reason": "Burnt"})
@@ -65,7 +65,7 @@ class ProductionReportTests(ReportFixture, TestCase):
 
 class ShortageReportTests(ReportFixture, TestCase):
     def test_planned_productions_that_cannot_start(self):
-        planning.save(actor=self.owner, company_id=self.company.pk, product=self.juice, batches=3,
+        planning.save(actor=self.owner, company_id=self.company.pk, product=self.juice, qty=D("3000"),
                       into=self.fgw, day=self.today)
         page = self.report("shortages")
         self.assertContains(page, "RM-0002")

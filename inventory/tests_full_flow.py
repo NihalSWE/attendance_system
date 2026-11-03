@@ -164,8 +164,8 @@ class FullFlow(InventoryFixture):
         self.assertIn("Below cost", refused["errors"]["price"][0])
         self.post("inventory:item_price", {"price": "45"}, juice.pk)
 
-        # 8. Make 2 batches: plan, start (materials out), finish 200 into the finished goods store.
-        body = self.post("production:plan", {"batches": "2", "planned_date": iso(3), "into": self.fgw.pk,
+        # 8. Make 200 bottles (twice the recipe): plan, start (materials out), finish into the store.
+        body = self.post("production:plan", {"qty": "200", "planned_date": iso(3), "into": self.fgw.pk,
                                              "action": "save"}, juice.pk)
         from production.models import ProductionOrder
 

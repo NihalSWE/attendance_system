@@ -12,7 +12,7 @@
         {% if price_cost is None %}
             {# Locked until the cost is known (2026-11-01): a price set blind is how a loss starts. #}
             <div class="ui-locked">
-                <p><strong>Set the price once the cost is known.</strong> {% if makes %}The cost comes from the recipe: what one batch makes, its materials (with a cost: Stock in or their expected buy price) and the other costs of a batch.{% else %}The cost comes from the buy price: put it in stock first{% if item.kind != "finished" %}, or give an expected buy price (Edit){% endif %}.{% endif %}</p>
+                <p><strong>Set the price once the cost is known.</strong> {% if makes %}The cost comes from the recipe: what quantity it is for, its materials (with a cost: Stock in or their expected buy price) and the other costs of a batch.{% else %}The cost comes from the buy price: put it in stock first{% if item.kind != "finished" %}, or give an expected buy price (Edit){% endif %}.{% endif %}</p>
                 {% if makes %}<a class="ui-btn ui-btn--sm" href="#recipe">Go to the recipe</a>{% else %}<a class="ui-btn ui-btn--sm" href="{% url 'inventory:stock_in_new' %}?item={{ item.pk }}">Stock in</a>{% endif %}
             </div>
         {% else %}

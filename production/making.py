@@ -22,7 +22,7 @@
   used, every stock move of the production is undone.
 """
 
-from decimal import ROUND_FLOOR, ROUND_HALF_UP, Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP, Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -51,16 +51,16 @@ LOW, HIGH, OVER_USE = Decimal("0.90"), Decimal("1.05"), Decimal("1.05")
 
 
 def batches_of(order):
-    """How many batches (mixes) the production is: 2,000 bottles at 1,000 a batch = 2."""
+    """How many times the recipe the production is: 125,000 ML of a recipe for
+    10,000 = 12.5 (its costs are the recipe's × this)."""
     size = order.bom.batch_size_base
     return (order.planned_base / size) if size else Decimal("1")
 
 
 def proposal(company_id, order, day):
     """What Start would take, store by store (``production.planning.plan``)."""
-    return planning.plan(company_id, order.item, int(batches_of(order).to_integral_value(ROUND_HALF_UP)) or 1,
-                         order.output_warehouse, day, exclude_order=order.pk, bom=order.bom,
-                         makes=order.planned_base)
+    return planning.plan(company_id, order.item, order.planned_base, order.output_warehouse, day,
+                         exclude_order=order.pk, bom=order.bom)
 
 
 def _execute(actor, company_id, order_id):
@@ -272,7 +272,8 @@ def finish(*, actor, company_id, order_id, values):
         for store, _qty in parts:
             if store.kind in UNUSABLE_STORES or store.status != "active":
                 errors["parts"] = f"{store.name} cannot take new stock."
-        mixes = int(batches_of(order).to_integral_value(ROUND_HALF_UP)) or 1
+        # A part of a mix is a mix of its own: 12.5 times the recipe is 13 mixes.
+        mixes = int(batches_of(order).to_integral_value(ROUND_CEILING)) or 1
         per_mix = item.track_batch and item.batch_per_mix and mixes > 1
         if per_mix and len(parts) > 1:
             errors["parts"] = "Every mix gets its own batch number: put them into one store."

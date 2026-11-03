@@ -258,20 +258,25 @@ PRODUCTION_TONE = {"planned": "info", "released": "wait", "completed": "ok", "cl
 
 
 def recipe(company_id, actor, product):
-    """The recipe in use, each material with what is in stock and how many
-    batches that is enough for; None when there is none."""
+    """The recipe in use, each material with what is in stock and how much of
+    the product that is enough for (2026-11-03: a quantity in the product's
+    unit, not batches); None when there is none."""
     from production import recipes
+    from production.planning import _down
 
     found = recipes.page(company_id, product)
     if found["bom"] is None:
         return None
+    size = found["bom"].batch_size_base
     ids = [line.item_id for line in found["lines"]]
     qty, _value = totals(company_id, actor, ids)
     for line in found["lines"]:
         line.in_stock = qty.get(line.item_id, ZERO)
         need = line.qty_base * (1 + line.scrap_pct / 100)
-        line.enough = int(line.in_stock // need) if need else 0
-    found["enough"] = min((line.enough for line in found["lines"]), default=0)
+        line.enough = _down(line.in_stock * size / need, product) if need else ZERO
+        # Red when there is none, amber below what the recipe is for.
+        line.enough_tone = "bad" if line.enough <= 0 else "wait" if line.enough < size else "ok"
+    found["enough"] = min((line.enough for line in found["lines"]), default=ZERO)
     return found
 
 

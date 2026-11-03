@@ -141,7 +141,7 @@ def section(number, title, menu, what, before="", note=""):
 def flow_diagram():
     d = Drawing(170 * mm, 44 * mm)
     labels = [("Setup", "units, stores"), ("1 Materials", "what you use"), ("2 Products", "what you sell"),
-              ("3 Recipe", "one batch, its cost"), ("4 Stock in", "buy price in"), ("5 Sale price", "cost + margin"),
+              ("3 Recipe", "its quantity, its cost"), ("4 Stock in", "buy price in"), ("5 Sale price", "cost + margin"),
               ("6 Make", "plan, start, finish"), ("7 Sell", "deliver, invoice")]
     w, gap, rows = 38 * mm, 6 * mm, 2
     for i, (title, sub) in enumerate(labels):
@@ -206,8 +206,10 @@ story += [
         ("Product", "Something you sell. Bought ready, made here, or both."),
         ("Base unit", "What stock is counted in, set once per item: packet, kg, piece."),
         ("Bigger unit", "1 bag = 50 kg; 1 carton = 24 packets. A pack can have its own price."),
-        ("Batch (one mix)", "The recipe is for one batch: \"1 batch = 240 packets\". 1,200 packets = 5 batches."),
-        ("Batch number", "Stock that came in together, with its own dates and cost. The one that expires "
+        ("Recipe quantity", "The quantity the recipe is written for: \"the recipe is for 240 packets\". Make any "
+                            "amount: 1,300 packets takes every material x 5.42."),
+        ("Batch number", "Stock that came in together - one purchase line or one production - with its own dates "
+                         "and cost. The one that expires "
                          "first always goes out first."),
         ("Cost of one", "What one unit really costs: the last price paid (or the average, as Inventory settings "
          "say), or for a made item, its recipe "
@@ -250,11 +252,11 @@ story += [
          "Minimum stock 5,000. Shelf life 180 days. New stock goes to: Main store. <b>No price.</b>",
          "The product page opens and asks for its recipe."),
         ("A4", "Product page &rarr; card <b>Recipe</b>",
-         "One batch makes 240. Add material: Flour 18, Sugar 5, Wrapper 240, Carton 10.",
-         "\"Recipe: one batch makes 240 PCS\", each line with its cost and \"enough for N batches\"."),
+         "The recipe is for 240. Add material: Flour 18, Sugar 5, Wrapper 240, Carton 10.",
+         "\"Recipe for 240 PCS\", each line with its cost and how much of the product it is enough for."),
         ("A5", "Inventory &rarr; <b>Setup</b> &rarr; Cost rates (optional)",
          "Line worker 75 per hour; Oven 300 per hour. On the product: Add cost (people, machine, gas).",
-         "The full cost of one batch and of one packet."),
+         "The full cost of the recipe's 240 and of one packet."),
     ]),
 
     P("Part B &middot; Every time: buy, price, make, sell", "h2"),
@@ -268,7 +270,7 @@ story += [
          "Change it to 20 and <b>Save price</b>.",
          "\"Now 20.00 per PCS\" with its margin. The carton's own price: Units and prices &rarr; Add a unit."),
         ("B3", "Product page &rarr; <b>Make this</b>",
-         "How many batches: 5; date; into Main store. <b>Plan it</b>.",
+         "How much to make: 1,200 PCS (any amount); date; into Main store. <b>Plan it</b>.",
          "Each material: needed, in stock, Enough or <b>Short by</b>."),
         ("B4", "Production page &rarr; <b>Start: materials out</b>", "Change a quantity only if the store gave more or less.",
          "The materials leave the stores."),
@@ -356,7 +358,7 @@ story += section(3, "Products", "Inventory &rarr; Products &rarr; Products &rarr
                  "when its price is under its cost.")
 story += [P("Item", "h2"), fields([
     ("How you get it", "Some", "Made here, Bought ready, or Both.", "Made here",
-     "Only with Production. Made here and Both get a recipe, a cost of one batch and Make."),
+     "Only with Production. Made here and Both get a recipe, its cost and Make."),
     ("Product name, Item code, Category", "Yes", "As for materials (code empty: FG-0001 ...).", "Biscuit 100 g", ""),
 ]), P("Units", "h2"), fields([
     ("Base unit", "Yes", "The smallest unit you sell.", "PCS (packet)", "Fixed once stock moves."),
@@ -366,7 +368,7 @@ story += [P("Item", "h2"), fields([
 ]), P("Stock control", "h2"), fields([
     ("Minimum stock as", "No", "A quantity, or days of sales.", "Days of sales", ""),
     ("Minimum stock / Days of sales", "No", "The quantity, or how many days of sales to keep.", "5,000 / 15",
-     "Below it: Low; also used to suggest how many batches to make."),
+     "Below it: Low; also used to suggest how much to make."),
     ("Reorder quantity", "No", "How much you usually make or buy at once.", "", ""),
     ("New stock goes to", "No", "The finished goods store.", "Main store", "Offered first when you make it."),
 ]), P("Batches &amp; expiry", "h2"), fields([
@@ -380,30 +382,32 @@ story += [P("Item", "h2"), fields([
      "Never longer than the warranty. After it, to the warranty's end: repair."),
     ("Serial number per unit", "No", "On when each unit is scanned out.", "", "See step 10."),
 ]), Spacer(1, 4), P("<b>Product page</b>: tiles (cost of one, sale price, margin, in stock, sold per day); the "
-                    "<b>Sale price</b> card; how many batches to make; the recipe; the cost of one batch; stock by "
+                    "<b>Sale price</b> card; how much to make; the recipe; its cost; stock by "
                     "store and batch; units and prices.")]
 
 story += [box("The product's page, step by step", [
     "A bar at the top shows the steps in the order the work is done and stays in view as you scroll: "
-    "<b>1 Details and units</b> &rarr; <b>2 Recipe</b> &rarr; <b>3 Cost of one batch</b> &rarr; <b>4 Sale price</b> "
+    "<b>1 Details and units</b> &rarr; <b>2 Recipe</b> &rarr; <b>3 Cost</b> &rarr; <b>4 Sale price</b> "
     "&rarr; <b>5 Make</b> &rarr; <b>6 Stock and sell</b>. Done steps are green, the next one is blue; click a step "
     "to jump to it. A product that is only bought: Details &rarr; Stock in &rarr; Sale price &rarr; Stock and sell.",
     "A step that needs an earlier one says so and points to it: the <b>Sale price</b> waits until the cost is "
-    "known, <b>Make</b> waits for the recipe, and the recipe asks first what one batch makes, then its materials.",
+    "known, <b>Make</b> waits for the recipe, and the recipe asks first what quantity it is for, then its materials.",
 ], "ok")]
 
 # ------------------------------------------------------------------ recipe and cost
-story += section(4, "Recipe and cost of one batch", "The product (or a made material) &rarr; Recipe / Cost of one batch",
-                 "What one batch makes and uses, and what it costs. It gives the cost of one unit.",
+story += section(4, "Recipe and its cost", "The product (or a made material) &rarr; Recipe / Cost",
+                 "The quantity the recipe is for, what it uses, and what that costs. It gives the cost of one unit. "
+                 "Any amount can be made later: the materials scale.",
                  "the product or material is Made here or Both.")
 story += steps([
-    "With no recipe yet the page asks <b>how much one batch makes</b>: write it and Save.",
+    "With no recipe yet the page asks <b>what quantity the recipe is for</b> (for example the mix you usually "
+    "make, 10,000 ML): write it and Save. It is only the formula: a production can be any amount.",
     "<b>Add material</b>: choose <b>several materials at once</b> in the search list (type a few letters); each "
-    "chosen one gets its own row: how much <b>one batch</b> uses, in its own unit, and its normal wastage % "
+    "chosen one gets its own row: how much <b>the recipe</b> uses, in its own unit, and its normal wastage % "
     "(optional: empty is 0). "
     "Or make a new one right there (A new raw material or packaging item).",
     "<b>Cost rates</b> (Inventory &rarr; Setup &rarr; Cost rates): what an hour of a worker or a machine costs.",
-    "<b>Add cost</b>: people x hours x rate, machine hours x rate, a fixed amount per batch (gas), a % of the "
+    "<b>Add cost</b> (for the recipe's quantity): people x hours x rate, machine hours x rate, a fixed amount (gas), a % of the "
     "materials, or <b>VAT</b>: a % of the materials and every other cost, worked out last (15 % of 18,344.85 = "
     "2,751.73).",
 ])
@@ -411,8 +415,9 @@ story += [box("What you read", [
     "Each material has its own row with its sum written out: <b>500 PCS + 10 % wastage = 550 PCS x 4.00 Tk = "
     "2,200.00</b>. The cost of one unit of a material is the last price paid for it (or its average cost, as "
     "Inventory settings say), else its expected buy price before the first purchase.",
-    "<b>Materials</b> (the rows added up) + <b>other costs</b> (Add cost) = <b>one batch</b>; divided by what one "
-    "batch makes = <b>one unit</b> (the sum is shown: 3,206.00 / 500 = 6.41); x the pack size = <b>one pack</b>.",
+    "<b>Materials</b> (the rows added up) + <b>other costs</b> (Add cost) = the cost of the recipe's quantity; "
+    "divided by that quantity = <b>one unit</b> (the sum is shown: 3,206.00 / 500 = 6.41); x the pack size = "
+    "<b>one pack</b>. A production of any amount costs the same per unit.",
     "A material with no cost yet is named in red: buy it (Stock in) or give its expected buy price.",
 ])]
 
@@ -499,16 +504,19 @@ story += [fields([
 
 # ------------------------------------------------------------------ make
 story += section(7, "Make: Plan, Start, Finish", "Inventory &rarr; Production &rarr; Make, or <b>Make this</b> on the item",
-                 "Making a number of batches: Plan it, Start it when the materials leave the stores, Finish it "
-                 "with what came out.", "the recipe, and the materials in stock.", "Only with Production on.")
+                 "Making any amount - each production is one batch with one batch number: Plan it, Start it "
+                 "when the materials leave the stores, Finish it with what came out.", "the recipe, and the materials in stock.", "Only with Production on.")
 story += steps([
-    "<b>Plan</b>: how many batches, the date and the store. Each material shows needed, in stock, Enough or <b>Short "
-    "by</b>. Short: <b>Make fewer</b>, <b>Buy the rest</b>, or <b>Make it first</b> (something made here). "
+    "<b>Plan</b>: <b>how much to make</b> (any amount, in the product's unit), the date and the store. The recipe "
+    "is scaled: a recipe for 10,000 ML, 125,000 ML to make, every material x 12.5. Each material shows needed, in "
+    "stock, Enough or <b>Short by</b>. Short: <b>Make less</b>, <b>Buy the rest</b>, or <b>Make it first</b> "
+    "(something made here). "
     "<b>Plan it</b>.",
     "<b>Start: materials out</b>: change a quantity only if a store gave more or less (over 5 % needs a reason). "
     "Stock goes down at its real cost.",
-    "<b>Finish: into stock</b>: Good and Damaged; the store (or a split); leftovers back; other costs (filled from "
-    "the cost of one batch). Batch number empty: one is made.",
+    "<b>Finish: into stock</b>: Good (what really came out, into stock) and Damaged (lost: never in stock); the "
+    "store (or a split); leftovers back; other costs (the recipe's, scaled to the amount). Batch number empty: one "
+    "is made.",
 ])
 story += [box("Dates of what is made", [
     "The manufacture date is the day it is made - never a day still to come. Expiry empty: made date + shelf life; "

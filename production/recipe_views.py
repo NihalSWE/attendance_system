@@ -62,7 +62,7 @@ def recipe_batch(request, pk):
         return _back(request, item, "danger", " ".join(exc.messages))
     size = form.cleaned_data["batch_size"].normalize()
     return _back(request, item, "success",
-                 f"Saved: one batch makes {size:f} {item.base_uom.code}. Now add its materials.")
+                 f"Saved: the recipe is for {size:f} {item.base_uom.code}. Now add its materials.")
 
 
 @login_required
@@ -132,7 +132,7 @@ def _add_many(request, company_id, item, picked):
             errors[f"qty_{pk}"] = ["Write a number."]
             continue
         if qty is None or qty <= 0:
-            errors[f"qty_{pk}"] = [f"How much of {material.name} one batch uses, above 0."]
+            errors[f"qty_{pk}"] = [f"How much of {material.name} the recipe uses, above 0."]
         elif scrap is not None and not Decimal("0") <= scrap <= Decimal("100"):
             errors[f"scrap_{pk}"] = ["Wastage is 0 to 100 %."]
         else:

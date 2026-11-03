@@ -7153,3 +7153,20 @@ yet, switch Ask on.
 - Tests: `inventory/tests_phase5.py` (VAT line). Tutorial text updated.
 
 **Deploy:** pull, migrate (production 0005: choices only), collectstatic, restart.
+
+### Make any amount: plan by quantity, "the recipe is for" — 2026-11-03
+
+- "Batch" meant two things: each production (the client's 1st batch, 2nd batch) and the recipe's
+  size ("one batch makes 10,000 ML"), so 125,000 ML had to be planned as "12.5 batches", which
+  the screen refused.
+- **Plan → How much to make**: any quantity in the product's unit (whole where it is counted whole).
+  The recipe is scaled: a recipe for 10,000 ML, 125,000 ML to make, every material × 12.5. Each
+  production is one batch with one batch number. *Make less* gives the most the materials allow; the
+  suggestion from the stock to keep is a quantity too (`production/planning.py`).
+- The recipe says **"Recipe for 10,000 ML"** / *What quantity the recipe is for*; its cost card is the
+  cost of that quantity; Enough for shows a quantity of the product. Finish's other costs are the
+  recipe's × the production's share (unchanged); a part of a mix counts as a mix (per-mix batch numbers).
+- Template filter `qty` (base_template/templatetags/money.py): 112.5000 → 112.5, 125000 → 125,000.
+- Tests: `inventory/tests_phase6.py` AnyQuantityTests and the plan tests in quantities.
+
+**Deploy:** pull, migrate (production 0006: choices only), collectstatic, restart.

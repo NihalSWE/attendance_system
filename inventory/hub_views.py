@@ -167,7 +167,7 @@ def material(request, pk):
     recipe = hub.recipe(company_id, request.user, item) if makes else None
     making = _making(request, company_id, item, recipe, parts["packs"]) if makes else {}
     if makes and recipe is None:
-        next_step = ("Write its recipe: what one batch makes and what it uses.",
+        next_step = ("Write its recipe: what quantity it is for and what it uses.",
                      _page_of(item) + "#recipe", "Write the recipe")
     return render(request, "inventory/hub/material.html", {
         **context, **parts, **making, "line": line, "used": used, "makes": makes, "recipe": recipe,
@@ -227,7 +227,7 @@ def product(request, pk):
     parts = _item_parts(request, company_id, item)
     making = _making(request, company_id, item, recipe, parts["packs"]) if makes else {}
     if makes and recipe is None:
-        next_step = ("Write its recipe: what one batch makes and the materials it uses.",
+        next_step = ("Write its recipe: what quantity it is for and the materials it uses.",
                      reverse("inventory:product", args=[item.pk]) + "#recipe", "Write the recipe")
     elif not item.sale_price and parts["price_cost"] is not None:
         next_step = ("The cost is known: set its sale price.", reverse("inventory:product", args=[item.pk]) + "#price",
@@ -264,7 +264,7 @@ def _product_steps(item, makes, has_recipe, cost, line, productions, sold, sees_
     if makes:
         found += [("recipe", "Recipe", has_recipe, "#recipe")]
         if sees_costs:
-            found += [("cost", "Cost of one batch", cost is not None, "#costs")]
+            found += [("cost", "Cost", cost is not None, "#costs")]
         found += [("price", "Sale price", bool(item.sale_price), "#price"),
                   ("make", "Make", made, "#make")]
     else:

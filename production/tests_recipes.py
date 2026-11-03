@@ -61,7 +61,7 @@ class RecipeTests(ProductionFixture, TestCase):
         # On the product's own page since 2026-10-27 (plan §15 phase 5).
         self.client.force_login(self.owner)
         url = reverse("inventory:product", args=[self.juice.pk])
-        self.assertContains(self.client.get(url), "<strong>How much one batch makes</strong>")
+        self.assertContains(self.client.get(url), "<strong>What quantity the recipe is for</strong>")
         self.client.post(reverse("production:recipe_batch", args=[self.juice.pk]), {"batch_size": "1000"})
         response = self.client.post(reverse("production:recipe_add", args=[self.juice.pk]),
                                     {"material": self.pulp.pk, "qty": "120", "scrap_pct": ""})

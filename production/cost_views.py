@@ -119,7 +119,7 @@ def cost_line_add(request, pk):
         line = costing.add_line(actor=request.user, company_id=company_id, item=item, values=form.cleaned_data)
     except ValidationError as exc:
         return _refused(form, exc)
-    return fetch.saved(f"{line.name} added to the cost of one batch.", _hub(item))
+    return fetch.saved(f"{line.name} added to the costs.", _hub(item))
 
 
 @login_required
@@ -133,4 +133,4 @@ def cost_line_remove(request, pk, line_pk):
         costing.remove_line(actor=request.user, company_id=company_id, item=item, line_id=line_pk)
     except ValidationError as exc:
         return fetch.refused(message=" ".join(exc.messages))
-    return fetch.saved("Removed from the cost of one batch.", _hub(item))
+    return fetch.saved("Removed from the costs.", _hub(item))

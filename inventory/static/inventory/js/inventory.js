@@ -59,7 +59,7 @@ document.addEventListener("DOMContentLoaded", function () {
             div.dataset.pick = pk;
             div.innerHTML =
                 '<div class="ui-pick-row__name"></div>' +
-                '<div class="field"><label class="field__label" for="qty_' + pk + '">One batch uses</label>' +
+                '<div class="field"><label class="field__label" for="qty_' + pk + '">The recipe uses</label>' +
                 '<div class="ui-unit"><input class="input" id="qty_' + pk + '" name="qty_' + pk + '" type="number" step="any" min="0" inputmode="decimal">' +
                 '<span class="ui-unit__label"></span></div></div>' +
                 '<div class="field"><label class="field__label" for="scrap_' + pk + '">Normal wastage (optional)</label>' +

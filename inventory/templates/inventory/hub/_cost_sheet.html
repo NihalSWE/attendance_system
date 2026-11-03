@@ -7,15 +7,15 @@
 {% endcomment %}
 <div class="ui-card" id="costs">
     <div class="ui-card__head">
-        <h2 class="ui-card__title">{% if step %}<span class="ui-stepno">{{ step }}</span>{% endif %}{% include "ui/icon.html" with name="coins" %} Cost of one batch</h2>
+        <h2 class="ui-card__title">{% if step %}<span class="ui-stepno">{{ step }}</span>{% endif %}{% include "ui/icon.html" with name="coins" %} Cost{% if sheet %} of {{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }} (the recipe){% endif %}</h2>
         {% if cost_form and sheet %}<button class="ui-btn ui-btn--sm" type="button" data-open-dialog="cost-dialog">{% include "ui/icon.html" with name="plus" small=True %} Add cost</button>{% endif %}
     </div>
     {% if sheet %}
         <ol class="ui-cost-steps">
-            <li><strong>Materials:</strong> what one batch uses of each material, plus its normal wastage, × the cost of one unit of it ({% if price_cost_from == "average" %}its average cost in stock{% else %}the last price paid for it{% endif %}).</li>
+            <li><strong>Materials:</strong> what the recipe uses of each material, plus its normal wastage, × the cost of one unit of it ({% if price_cost_from == "average" %}its average cost in stock{% else %}the last price paid for it{% endif %}).</li>
             <li><strong>Other costs:</strong> people, machines, gas, a share of rent: whatever you add with <em>Add cost</em> (rates from Cost rates).</li>
             <li><strong>VAT</strong> (if you add it: <em>Add cost</em> &rarr; VAT): a % of the materials and the other costs, worked out last.</li>
-            <li><strong>One {{ item.base_uom.code }}</strong> = the total for one batch ÷ what one batch makes ({{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}){% if per_pack %}; one pack = one {{ item.base_uom.code }} × how many are in it{% endif %}.</li>
+            <li><strong>One {{ item.base_uom.code }}</strong> = the total ÷ what the recipe is for ({{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}); a production of any amount costs the same per {{ item.base_uom.code }}{% if per_pack %}; one pack = one {{ item.base_uom.code }} × how many are in it{% endif %}.</li>
         </ol>
         <div class="table-wrap">
             <table class="table">
@@ -40,7 +40,7 @@
                     {% empty %}
                         <tr><td colspan="{% if cost_form %}4{% else %}3{% endif %}" class="ui-muted">Only materials so far. Add people, machines, gas or a share of rent: <em>Add cost</em>.</td></tr>
                     {% endfor %}
-                    <tr class="ui-total"><td>Total for one batch</td><td class="ui-muted">materials {{ sheet.materials_total|floatformat:"2g" }} + other costs {{ sheet.costs_total|floatformat:"2g" }} · makes {{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}</td><td class="numeric">{{ sheet.total|floatformat:"2g" }}</td>{% if cost_form %}<td></td>{% endif %}</tr>
+                    <tr class="ui-total"><td>Total for {{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}</td><td class="ui-muted">materials {{ sheet.materials_total|floatformat:"2g" }} + other costs {{ sheet.costs_total|floatformat:"2g" }} · makes {{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}</td><td class="numeric">{{ sheet.total|floatformat:"2g" }}</td>{% if cost_form %}<td></td>{% endif %}</tr>
                 </tbody>
             </table>
         </div>
@@ -59,7 +59,7 @@
     <dialog class="modal" id="cost-dialog" aria-labelledby="cost-dialog-title">
         <form class="modal__card" method="post" action="{% url 'production:cost_line_add' item.pk %}" data-fetch novalidate>
             {% csrf_token %}
-            <div class="modal__head"><h2 id="cost-dialog-title">Add a cost of one batch</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
+            <div class="modal__head"><h2 id="cost-dialog-title">Add a cost{% if sheet %} (for {{ sheet.makes|floatformat:"-4g" }} {{ item.base_uom.code }}){% endif %}</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
             <div class="modal__body stack">
                 {% include "inventory/hub/field.html" with box=cost_form.how %}
                 <div class="ui-grid-2">
