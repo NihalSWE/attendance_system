@@ -399,11 +399,13 @@ story += section(4, "Recipe and cost of one batch", "The product (or a made mate
 story += steps([
     "With no recipe yet the page asks <b>how much one batch makes</b>: write it and Save.",
     "<b>Add material</b>: choose <b>several materials at once</b> in the search list (type a few letters); each "
-    "chosen one gets its own row: how much <b>one batch</b> uses, in its own unit, and its normal wastage %. "
+    "chosen one gets its own row: how much <b>one batch</b> uses, in its own unit, and its normal wastage % "
+    "(optional: empty is 0). "
     "Or make a new one right there (A new raw material or packaging item).",
     "<b>Cost rates</b> (Inventory &rarr; Setup &rarr; Cost rates): what an hour of a worker or a machine costs.",
-    "<b>Add cost</b>: people x hours x rate, machine hours x rate, a fixed amount per batch (gas), or a % of the "
-    "materials.",
+    "<b>Add cost</b>: people x hours x rate, machine hours x rate, a fixed amount per batch (gas), a % of the "
+    "materials, or <b>VAT</b>: a % of the materials and every other cost, worked out last (15 % of 18,344.85 = "
+    "2,751.73).",
 ])
 story += [box("What you read", [
     "Each material has its own row with its sum written out: <b>500 PCS + 10 % wastage = 550 PCS x 4.00 Tk = "

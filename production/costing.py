@@ -291,7 +291,16 @@ def sheet(company_id, item, seen=frozenset()):
         how += (f" × {cost.quantize(CENT):,f} Tk = {_amount(need * cost):,.2f}" if cost is not None
                 else " · no cost yet")
         found.materials.append(Row(line.item.name, how, _amount(need * (cost or ZERO)), line, cost is None))
+    # VAT last (2026-11-03): its % is of the materials and every other cost.
+    cost_lines.sort(key=lambda line: line.how == CostLine.How.VAT)
     for line in cost_lines:
+        if line.how == CostLine.How.VAT:
+            base = found.materials_total + sum((row.amount for row in found.costs
+                                                if row.line.how != CostLine.How.VAT), ZERO)
+            amount = base * line.percent / 100
+            found.costs.append(Row(line.name, f"{line.percent.normalize():f} % of {base:,.2f} (the batch cost "
+                                              "above)", _amount(amount), line))
+            continue
         if line.how == CostLine.How.LABOUR:
             amount = line.people * line.hours * line.rate.rate
             how = f"{line.people.normalize():f} × {line.hours.normalize():f} h × {line.rate.rate.normalize():f}"
