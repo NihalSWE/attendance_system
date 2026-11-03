@@ -25,6 +25,7 @@ from inventory import access, flows, hub
 from inventory.models import Batch, Item, ItemKind, ItemUom, StockBalance, Warehouse
 from inventory.posting import UNUSABLE_STORES, settings_for
 from inventory.views import company_or_bail
+from purchasing import landed
 
 LINES = 30
 ROWS_SHOWN = 3
@@ -264,6 +265,12 @@ class StockInForm(_HeadForm):
                                          decimal_places=2, help_text="Optional: only if you paid VAT.")
     vat_amount = django_forms.DecimalField(label="VAT amount", required=False, min_value=0, max_digits=18,
                                            decimal_places=2, help_text="Tk. Write the % or the amount.")
+    # Which VAT box was typed in last (lines.js), and the delivery cost
+    # (2026-11-03): both go into what the goods really cost.
+    vat_by = django_forms.CharField(required=False, widget=django_forms.HiddenInput(attrs={"data-vat-by": ""}))
+    delivery_cost = django_forms.DecimalField(
+        label="Delivery / carrying cost", required=False, min_value=0, max_digits=18, decimal_places=2,
+        help_text="Optional: transport, loading and unloading paid for this purchase, in Tk.")
 
     def clean(self):
         data = super().clean()
@@ -284,6 +291,7 @@ class StockInForm(_HeadForm):
         self.fields["below_cost_reason"].widget.attrs["data-show-when"] = "below_cost:on"
         for name in ("vat_rate", "vat_amount"):
             self.fields[name].widget.attrs.update({"data-vat": name, "placeholder": "0"})
+        self.fields["delivery_cost"].widget.attrs.update({"data-delivery": "", "placeholder": "0"})
 
 
 @login_required
@@ -336,12 +344,14 @@ def stock_in_new(request):
             actor=request.user, company_id=company_id, source=data["source"], store=data["store"], day=data["day"],
             lines=lines, supplier=data["supplier"], customer=data["customer"], reason=data["reason"],
             below_reason=data["below_cost_reason"] if data["below_cost"] else "",
-            vat_rate=data["vat_rate"], vat_amount=data["vat_amount"]),
+            vat_rate=data["vat_rate"], vat_amount=data["vat_amount"], vat_by=data["vat_by"],
+            delivery_cost=data["delivery_cost"]),
             lambda done: done[2], reverse("inventory:stock_in"))
     access.require(request.user, company_id, ("purchase.receive", "inventory.adjust", "sales.deliver"))
     return render(request, "inventory/hub/stock_in_new.html", {
         **_common(request, company_id, "stock_in"),
         "form": StockInForm(company_id=company_id, stores=stores, initial={"day": timezone.localdate()}),
+        "vat_in_cost": landed.vat_in_cost(company_id),
         "items": _item_options(company_id), "rows": range(1, ROWS_SHOWN + 1), "most": LINES,
         "balances": _balances_json(request, company_id, stores), "store_kinds": _store_kinds(stores),
         "source_help": flows.STOCK_IN_HELP,

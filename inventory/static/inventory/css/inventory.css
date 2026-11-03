@@ -206,3 +206,14 @@
 /* A page link's colour and underline (.ui-page a) would win without !important. */
 .ui-tile--link { color: inherit !important; text-decoration: none !important; transition: transform .15s ease, box-shadow .15s ease; }
 .ui-tile--link:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0, 0, 0, .06); }
+
+/* A goods receipt's bill and real cost (2026-11-03, purchasing/receipt_detail.html) */
+.grn-bill { display: grid; gap: var(--s4, 16px); }
+.grn-bill__sum { margin: 0; max-width: 460px; }
+.grn-bill__sum > div { display: flex; justify-content: space-between; gap: var(--s3, 12px); padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.grn-bill__sum dt { font-weight: 400; }
+.grn-bill__sum dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 600; }
+.grn-bill__total { border-bottom: 0 !important; font-size: 15px !important; }
+.grn-bill__total dt { font-weight: 600; }
+.grn-bill__note { margin: 0; }
+.grn-bill__form { display: grid; gap: var(--s3, 12px); padding-top: var(--s3, 12px); border-top: 1px solid var(--border); }

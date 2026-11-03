@@ -30,7 +30,7 @@ class StockInBillTests(FlowFixture, TestCase):
         self.assertTrue(body["ok"], body)
         receipt = GoodsReceipt.all_objects.get(company=self.company)
         self.assertEqual((receipt.vat_rate, receipt.vat_amount), (D("15"), D("600")))
-        self.assertIn("Total 4,600.00 Tk with VAT 600.00.", body["message"])
+        self.assertIn("Total paid 4,600.00 Tk with VAT 600.00.", body["message"])
 
     def test_the_vat_amount_gives_the_rate(self):
         self.buy("80", "SB1", vat_amount="400")
@@ -57,7 +57,7 @@ class StockInBillTests(FlowFixture, TestCase):
         self.assertContains(page, 'id="store-kinds"')
         self.assertContains(page, 'data-lines-mode="in"')
         self.assertContains(page, 'name="vat_rate"')
-        self.assertContains(page, "Total to pay")
+        self.assertContains(page, "Total paid")
 
 
 class SellQualityCheckTests(FlowFixture, TestCase):

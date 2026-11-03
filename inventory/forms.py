@@ -508,7 +508,7 @@ class StatusForm(StyledFormMixin, forms.Form):
 class SettingsForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = InventorySettings
-        fields = ("valuation_scope", "price_cost", "expiry_alert_days", "slow_moving_days", "alert_emails",
+        fields = ("valuation_scope", "price_cost", "purchase_vat", "expiry_alert_days", "slow_moving_days", "alert_emails",
                   "small_label", "large_label", "gs1_labels", "warranty_on")
         labels = {"valuation_scope": "Average cost", "expiry_alert_days": "Warn before expiry (days)"}
         widgets = {"alert_emails": forms.Textarea(attrs={"rows": 3})}

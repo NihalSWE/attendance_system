@@ -21,7 +21,7 @@
             <p class="page__sub">
                 {{ doc.supplier.name }} · into {{ doc.warehouse }} · {{ doc.received_date|date:"d M Y" }}
                 {% if doc.order %} · against <a href="{% url 'purchasing:order_detail' doc.order_id %}">{{ doc.order.number }}</a>{% else %} · direct{% endif %}
-                {% if doc.challan_no %}<br>Challan {{ doc.challan_no }}{% endif %}{% if doc.invoice_no %} · invoice {{ doc.invoice_no }}{% endif %}{% if doc.vehicle_no %} · vehicle {{ doc.vehicle_no }}{% endif %}{% if doc.vat_amount %}<br>VAT paid {{ doc.vat_amount|floatformat:"2g" }} Tk ({{ doc.vat_rate|floatformat:"-2" }} %){% endif %}
+                {% if doc.challan_no %}<br>Challan {{ doc.challan_no }}{% endif %}{% if doc.invoice_no %} · invoice {{ doc.invoice_no }}{% endif %}{% if doc.vehicle_no %} · vehicle {{ doc.vehicle_no }}{% endif %}
                 {% if doc.posted_at %}<br>Posted {{ doc.posted_at|date:"d M Y H:i" }}{% endif %}
                 {% if doc.reversed_at %} · reversed {{ doc.reversed_at|date:"d M Y H:i" }}: {{ doc.reverse_reason }}{% endif %}
             </p>
@@ -75,7 +75,7 @@
                     <thead>
                         <tr>
                             <th>Item</th><th class="numeric">Received</th><th class="numeric">Refused</th><th class="numeric">Accepted</th>
-                            {% if sees_costs %}<th class="numeric">Unit cost</th><th class="numeric">Value</th>{% endif %}
+                            {% if sees_costs %}<th class="numeric">Unit cost</th><th class="numeric">Value</th><th class="numeric">Real cost each</th>{% endif %}
                             <th>Batch</th><th>Expiry</th><th class="numeric">Packages</th><th>QC</th><th><span class="sr-only">Actions</span></th>
                         </tr>
                     </thead>
@@ -86,7 +86,7 @@
                                 <td class="numeric">{{ line.qty_received.normalize }} {{ line.uom.code }}</td>
                                 <td class="numeric">{{ line.qty_rejected.normalize }}</td>
                                 <td class="numeric">{{ line.qty_accepted_base.normalize }} {{ line.item.base_uom.code }}</td>
-                                {% if sees_costs %}<td class="numeric">{{ line.unit_cost|floatformat:2 }}</td><td class="numeric">{{ line.value|floatformat:2 }}</td>{% endif %}
+                                {% if sees_costs %}<td class="numeric">{{ line.unit_cost|floatformat:"2g" }}</td><td class="numeric">{{ line.value|floatformat:"2g" }}</td><td class="numeric"><strong>{{ line.real_unit_cost|floatformat:"2g" }}</strong>{% if line.extra_cost %}<div class="t-muted">+ {{ line.extra_cost|floatformat:"2g" }} share</div>{% endif %}</td>{% endif %}
                                 <td>{{ line.batch_no|default:"—" }}{% if line.supplier_batch_no %}<div class="t-muted">Supplier {{ line.supplier_batch_no }}</div>{% endif %}</td>
                                 <td>{{ line.expiry_date|date:"d M Y"|default:"—" }}</td>
                                 <td class="numeric">{{ line.packages|default:"—" }}</td>
@@ -118,6 +118,42 @@
             <div class="empty"><div class="empty__text">Add what arrived, or scan it.</div></div>
         {% endif %}
     </div>
+
+    {# The bill and the real cost (2026-11-03, purchasing/landed.py). #}
+    {% if sees_costs and lines %}
+        <div class="card">
+            <div class="card__head"><h2>Bill and real cost</h2></div>
+            <div class="card__body">
+                <div class="grn-bill">
+                    <dl class="grn-bill__sum">
+                        <div><dt>Subtotal <span class="t-muted">· accepted quantity × unit cost</span></dt><dd>{{ bill.subtotal|floatformat:"2g" }}</dd></div>
+                        <div><dt>VAT{% if bill.vat_rate %} <span class="t-muted">· {{ bill.vat_rate|floatformat:"-2" }} %</span>{% endif %}</dt><dd>{{ bill.vat|floatformat:"2g" }}</dd></div>
+                        <div><dt>Delivery / carrying</dt><dd>{{ bill.delivery|floatformat:"2g" }}</dd></div>
+                        <div class="grn-bill__total"><dt>Total paid</dt><dd>{{ bill.total|floatformat:"2g" }} Tk</dd></div>
+                    </dl>
+                    <p class="t-muted grn-bill__note">
+                        {% if bill.extra %}
+                            {{ bill.extra|floatformat:"2g" }} Tk ({% if bill.vat_in_cost and bill.vat %}VAT{% if bill.delivery %} and delivery{% endif %}{% else %}delivery{% endif %})
+                            {% if doc.status == "posted" %}was{% else %}is{% endif %} shared over the lines by their value: each goes into stock at its <strong>real cost each</strong>.
+                        {% else %}
+                            Nothing is added to the goods' cost: they go into stock at their unit cost.
+                        {% endif %}
+                        {% if bill.vat and not bill.vat_in_cost %}The VAT is claimed back, so it is kept apart.{% endif %}
+                    </p>
+                    {% if costs_form %}
+                        <form class="grn-bill__form" method="post" action="{% url 'purchasing:receipt_costs' doc.pk %}" novalidate>
+                            {% csrf_token %}
+                            {% if costs_form.non_field_errors %}<div class="alert alert--danger">{{ costs_form.non_field_errors }}</div>{% endif %}
+                            <div class="grid grid--3">
+                                {% for field in costs_form.visible_fields %}{% include "leaves/includes/field.html" %}{% endfor %}
+                            </div>
+                            <div><button class="btn btn--ghost" type="submit">Save VAT and delivery</button></div>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% endif %}
 
     {% if can_edit %}
         {% url 'purchasing:receipt_line_add' doc.pk as line_url %}

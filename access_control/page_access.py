@@ -263,7 +263,7 @@ BRANCH_PAGES = {
                     "requisition_cancel", "orders", "order_from_requisitions", "order_detail",
                     "order_line_add", "order_line_remove", "order_pdf", "order_email",
                     "order_action", "receipts", "receipt_detail", "receipt_line_add",
-                    "receipt_line_remove", "receipt_labels", "receipt_action", "qc", "qc_record",
+                    "receipt_line_remove", "receipt_labels", "receipt_costs", "receipt_action", "qc", "qc_record",
                     "returns", "return_detail", "return_line_add", "return_line_remove",
                     "return_action")},
 }

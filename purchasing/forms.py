@@ -177,6 +177,18 @@ class ReceiptForm(BranchScoped):
         return data
 
 
+class ReceiptCostsForm(StyledFormMixin, forms.Form):
+    """The VAT and delivery cost on a draft receipt's bill (2026-11-03)."""
+
+    vat_rate = forms.DecimalField(label="VAT %", required=False, min_value=0, max_value=100, max_digits=5,
+                                  decimal_places=2, help_text="Write the % or the amount (the amount wins).")
+    vat_amount = forms.DecimalField(label="VAT amount (Tk)", required=False, min_value=0, max_digits=18,
+                                    decimal_places=2, help_text="As the bill says, when it gives an amount.")
+    delivery_cost = forms.DecimalField(
+        label="Delivery / carrying cost (Tk)", required=False, min_value=0, max_digits=18, decimal_places=2,
+        help_text="Transport, loading and unloading paid for this purchase. Leave empty if none.")
+
+
 class ReceiptLineForm(ItemLineMixin, CompanyForm):
     EITHER = (("source", "What", (("line", "A line of the order", ("order_line",)),
                                   ("item", "Another item", ("item",)))),)

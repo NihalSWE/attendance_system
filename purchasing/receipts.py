@@ -7,8 +7,10 @@ from the order's open quantities); **posting** it:
 1. makes each line's batch - the number given, or ``YYMMDD-NN`` from the
    date received - in **Quarantine** when the item needs QC, else Released;
 2. puts the accepted quantity (received less refused at the gate) on hand
-   through ``inventory.posting`` at the line's cost, which updates the
-   average cost;
+   through ``inventory.posting`` at the line's **real cost** - its price plus
+   its share of the delivery cost and, unless the company claims it back,
+   the VAT (``purchasing.landed``, 2026-11-03) - which updates the average
+   cost;
 3. adds it to the order line's received quantity (Partly received ->
    Received);
 4. makes one **package label** per package when the line says how many
@@ -59,7 +61,8 @@ from purchasing.models import (
 Status = GoodsReceipt.Status
 Qc = GoodsReceiptLine.Qc
 HEADER_FIELDS = ("order", "supplier", "warehouse", "received_date", "challan_no", "invoice_no",
-                 "vehicle_no", "note", "vat_rate", "vat_amount")
+                 "vehicle_no", "note", "vat_rate", "vat_amount", "vat_by", "delivery_cost")
+COST_FIELDS = ("vat_rate", "vat_amount", "vat_by", "delivery_cost")
 LINE_FIELDS = ("order_line", "item", "location", "qty_received", "qty_rejected", "uom", "unit_cost",
                "batch_no", "supplier_batch_no", "mfg_date", "expiry_date", "packages", "note")
 
@@ -118,9 +121,50 @@ def create_receipt(*, actor, company_id, values, fill_from_order=True):
                 GoodsReceiptLine.objects.create(
                     company=membership.company, receipt=receipt, order_line=line, item=line.item,
                     qty_received=qty, uom=uom, factor=factor, unit_cost=cost)
+        if order is not None and not receipt.vat_rate and not receipt.vat_amount:
+            _vat_from_order(receipt, order)
         audit(actor, membership, "purchase.receipt.created", receipt,
               after={"number": receipt.number, "order": receipt.order_id,
                      "warehouse": receipt.warehouse_id})
+    return receipt
+
+
+def _vat_from_order(receipt, order):
+    """The VAT the order was placed with (2026-11-03): its % when every line
+    has the same, else the amount on the open quantities filled in."""
+    rates = {line.vat_rate for line in order.lines.all()}
+    if rates == {Decimal("0")} or not rates:
+        return
+    if len(rates) == 1:
+        receipt.vat_rate, receipt.vat_by = rates.pop(), GoodsReceipt.VatBy.RATE
+    else:
+        receipt.vat_by = GoodsReceipt.VatBy.AMOUNT
+        receipt.vat_amount = sum(((line.value * line.order_line.vat_rate / 100).quantize(Decimal("0.01"))
+                                  for line in receipt.lines.select_related("order_line")), Decimal("0"))
+    receipt.save(update_fields=["vat_rate", "vat_amount", "vat_by"])
+
+
+@transaction.atomic
+def set_costs(*, actor, company_id, receipt_id, values):
+    """The VAT and the delivery cost on a draft's bill (2026-11-03): either the
+    VAT % or the VAT amount; the delivery cost, or nothing."""
+    membership, receipt = get_receipt(actor=actor, company_id=company_id, pk=receipt_id)
+    with use_company(company_id):
+        receipt = GoodsReceipt.objects.select_for_update().get(pk=receipt.pk)
+        _draft(receipt)
+        before = {name: plain(getattr(receipt, name)) for name in COST_FIELDS}
+        rate, amount = values.get("vat_rate"), values.get("vat_amount")
+        if amount is not None:
+            receipt.vat_by, receipt.vat_amount, receipt.vat_rate = GoodsReceipt.VatBy.AMOUNT, amount, Decimal("0")
+        else:
+            receipt.vat_by, receipt.vat_rate, receipt.vat_amount = (GoodsReceipt.VatBy.RATE, rate or Decimal("0"),
+                                                                    Decimal("0"))
+        receipt.delivery_cost = values.get("delivery_cost") or Decimal("0")
+        receipt.updated_by = actor
+        receipt.full_clean()
+        receipt.save()
+        audit(actor, membership, "purchase.receipt.costs", receipt, before=before,
+              after={name: plain(getattr(receipt, name)) for name in COST_FIELDS})
     return receipt
 
 
@@ -236,6 +280,12 @@ def post_receipt(*, actor, company_id, receipt_id):
         if receipt.order_id and not receipt.order.receivable:
             raise ValidationError(f"{receipt.order.number} is "
                                   f"{receipt.order.get_status_display().lower()}.")
+        # The real cost (2026-11-03): each line's share of the delivery cost
+        # and, unless it is claimed back, the VAT.
+        from purchasing import landed
+
+        found = landed.bill(receipt, lines)
+        landed.with_real_cost(receipt, lines, found)
         to_post = []
         for line in lines:
             # The order may have been received meanwhile by another GRN.
@@ -256,14 +306,14 @@ def post_receipt(*, actor, company_id, receipt_id):
                     company_id=company_id, actor=actor, item=line.item, batch_no=number,
                     source=Batch.Source.GRN, supplier_batch_no=line.supplier_batch_no,
                     mfg_date=line.mfg_date, expiry_date=line.expiry_date,
-                    unit_cost=line.unit_cost_base,
+                    unit_cost=line.real_unit_cost_base,
                     status=Batch.Status.QUARANTINE if line.item.qc_required else Batch.Status.RELEASED)
                 line.batch, line.batch_no = batch, number
             line.qc_status = Qc.PENDING if line.item.qc_required else Qc.NOT_REQUIRED
-            line.save(update_fields=["batch", "batch_no", "qc_status"])
+            line.save(update_fields=["batch", "batch_no", "qc_status", "extra_cost"])
             to_post.append(posting.Line(
                 item=line.item, warehouse=receipt.warehouse, location=line.location, batch=batch,
-                qty=line.qty_accepted_base, unit_cost=line.unit_cost_base, line_id=line.pk,
+                qty=line.qty_accepted_base, unit_cost=line.real_unit_cost_base, line_id=line.pk,
                 note=f"{receipt.number}{' · ' + line.note if line.note else ''}"))
         moves = posting.post(company_id=company_id, actor=actor, document_type=GoodsReceipt.DOC_TYPE,
                              document_id=receipt.pk, move_type=MoveType.RECEIPT, lines=to_post,
@@ -285,10 +335,15 @@ def post_receipt(*, actor, company_id, receipt_id):
                     source_id=line.pk, permission="purchase.receive")
         receipt.status = Status.POSTED
         receipt.posted_at, receipt.posted_by, receipt.updated_by = moves[0].posted_at, actor, actor
+        # The bill as posted: the VAT on the lines that came, and whether it
+        # went into the goods' cost.
+        receipt.vat_rate, receipt.vat_amount, receipt.vat_in_cost = found.vat_rate, found.vat, found.vat_in_cost
         receipt.save()
         audit(actor, membership, "purchase.receipt.posted", receipt, before={"status": "draft"},
               after={"status": "posted", "lines": len(lines),
-                     "value": plain(sum((m.value for m in moves), Decimal("0")))})
+                     "value": plain(sum((m.value for m in moves), Decimal("0"))),
+                     "subtotal": plain(found.subtotal), "vat": plain(found.vat),
+                     "delivery": plain(found.delivery), "vat_in_cost": found.vat_in_cost})
     return receipt
 
 
