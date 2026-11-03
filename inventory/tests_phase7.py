@@ -127,6 +127,15 @@ class FinishTests(RunFixture, TestCase):
         self.assertEqual((order.status, order.material_cost), (ProductionOrder.Status.FAILED, MATERIALS))
         self.assertEqual(self.have(self.juice), D("0"))
 
+    def test_damaged_are_not_in_good(self):
+        # 2,000 planned: 2,000 good + 150 damaged is more than came out - Good was meant to drop.
+        with self.assertRaises(ValidationError) as caught:
+            self.finish(damaged=D("150"))
+        self.assertIn("lower it to 1850", caught.exception.message_dict["damaged"][0])
+        order, _output = self.finish(good=D("1850"), damaged=D("150"), parts=[(self.fgw, D("1850"))])
+        self.assertEqual((order.good_qty_base, order.rejected_qty_base, self.have(self.juice)),
+                         (D("1850"), D("150"), D("1850")))
+
     def test_one_batch_number_per_production(self):
         # 2026-11-03: twice the recipe is still one batch, and the next production is the next number.
         _order, output = self.finish(good=D("1999"))

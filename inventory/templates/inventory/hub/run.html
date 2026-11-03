@@ -77,19 +77,19 @@
         {% endif %}
 
     {% elif order.status == Status.RELEASED %}
-        <form method="post" action="{% url 'production:run_finish' order.pk %}" data-fetch novalidate>
+        <form method="post" action="{% url 'production:run_finish' order.pk %}" data-fetch novalidate data-finish-form data-planned="{{ order.planned_base|floatformat:'-4' }}" data-decimals="{{ item.base_uom.decimals }}" data-unit="{{ unit }}">
             {% csrf_token %}
             <div class="ui-card">
                 <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} What came out</h2><span class="ui-card__note">Planned: {{ order.planned_base|qty }} {{ unit }}</span></div>
                 <div class="ui-card__body">
                     <div class="ui-grid-2">
-                        <div class="field"><label class="field__label" for="f-good">Good <span class="field__req">*</span></label><div class="ui-unit"><input class="input" id="f-good" name="good" type="number" step="any" min="0" value="{{ order.planned_base|floatformat:'-4' }}"><span class="ui-unit__label">{{ unit }}</span></div><span class="field__help">0 when nothing good came out: it is recorded as failed.</span></div>
-                        <div class="field"><label class="field__label" for="f-damaged">Damaged</label><div class="ui-unit"><input class="input" id="f-damaged" name="damaged" type="number" step="any" min="0" value="0"><span class="ui-unit__label">{{ unit }}</span></div><span class="field__help">Their cost is spread over the good ones.</span></div>
+                        <div class="field"><label class="field__label" for="f-good">Good <span class="field__req">*</span></label><div class="ui-unit"><input class="input" id="f-good" name="good" type="number" step="any" min="0" value="{{ order.planned_base|floatformat:'-4' }}"><span class="ui-unit__label">{{ unit }}</span></div><span class="field__help">What came out fine and goes into stock. Typing Damaged takes them off this: planned − damaged. 0 when nothing good came out (recorded as failed).</span></div>
+                        <div class="field"><label class="field__label" for="f-damaged">Damaged</label><div class="ui-unit"><input class="input" id="f-damaged" name="damaged" type="number" step="any" min="0" value="0"><span class="ui-unit__label">{{ unit }}</span></div><span class="field__help" data-finish-count>Broken or spilled: never in stock. Their cost is spread over the good ones.</span></div>
                         <div class="field"><label class="field__label" for="f-date">Date</label><input class="input" id="f-date" name="output_date" type="date" data-datepicker value="{{ today|date:'Y-m-d' }}"></div>
                         {% if item.track_batch %}<div class="field"><label class="field__label" for="f-batch">Batch number</label><input class="input" id="f-batch" name="batch_no" type="text"><span class="field__help">This production is one batch. Left empty, one is made from the product code, the date and a counter (ORJ101-031126-2).</span></div>{% endif %}
                         <div class="field"><label class="field__label" for="f-reason">Why (below 90 %, above 105 %, or failed)</label><input class="input" id="f-reason" name="reason" type="text"></div>
                     </div>
-                    <p class="ui-muted">Into which store; split across stores if you like, they must add up to Good:</p>
+                    <p class="ui-muted">Into which store; split across stores if you like, they must add up to Good (one store follows Good by itself):</p>
                     <div class="ui-grid-2">
                         {% for store in into_stores %}
                             <div class="field"><label class="field__label" for="into-{{ store.pk }}">{{ store.name }} <span class="ui-muted">({{ store.branch.name }})</span></label><div class="ui-unit"><input class="input" id="into-{{ store.pk }}" name="into-{{ store.pk }}" type="number" step="any" min="0" value="{% if store.pk == order.output_warehouse_id %}{{ order.planned_base|floatformat:'-4' }}{% endif %}"{% if store.pk == order.output_warehouse_id %} data-into-main{% endif %}><span class="ui-unit__label">{{ unit }}</span></div></div>
@@ -234,4 +234,43 @@
             </form>
         </dialog>
     {% endif %}
+    <script>
+        // Finish (2026-11-03): Damaged comes off Good (planned − damaged) until
+        // Good is typed by hand; a single store follows Good; the count is shown.
+        (function () {
+            const form = document.querySelector("[data-finish-form]");
+            if (!form) return;
+            const planned = Number(form.dataset.planned);
+            const places = Number(form.dataset.decimals) || 0;
+            const good = form.querySelector("[name=good]");
+            const damaged = form.querySelector("[name=damaged]");
+            const count = form.querySelector("[data-finish-count]");
+            const stores = [...form.querySelectorAll("input[name^=into-]")];
+            const plain = n => String(Number(n.toFixed(Math.max(places, 0))));
+            let byHand = false;
+            function followStore() {
+                const filled = stores.filter(box => box.value.trim() !== "");
+                if (filled.length <= 1) (filled[0] || form.querySelector("[data-into-main]") || stores[0]).value = good.value;
+            }
+            function say() {
+                const g = Number(good.value) || 0, d = Number(damaged.value) || 0;
+                const unit = form.dataset.unit;
+                if (!d) { count.textContent = "Broken or spilled: never in stock. Their cost is spread over the good ones."; count.style.color = ""; return; }
+                const out = g + d;
+                count.textContent = plain(g) + " good + " + plain(d) + " damaged = " + plain(out) + " " + unit
+                    + " came out, of " + plain(planned) + " planned. Only the " + plain(g) + " good go into stock."
+                    + (out > planned * 1.05 ? " That is more than planned: lower Good, or say why." : "");
+                count.style.color = out > planned * 1.05 ? "var(--danger)" : "";
+            }
+            good.addEventListener("input", function () { byHand = true; followStore(); say(); });
+            damaged.addEventListener("input", function () {
+                if (!byHand) {
+                    good.value = plain(Math.max(planned - (Number(damaged.value) || 0), 0));
+                    followStore();
+                }
+                say();
+            });
+            say();
+        })();
+    </script>
 {% endblock %}
