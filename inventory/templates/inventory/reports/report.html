@@ -102,6 +102,33 @@
                     <option value="store" {% if f.view == "store" %}selected{% endif %}>By item and store</option>
                 </select>
             {% endif %}
+            {% if report.by %}
+                <label class="sr-only" for="report-by">Show</label>
+                <select class="input select js-select" id="report-by" name="by">
+                    {% for value, label in report.by %}<option value="{{ value }}" {% if f.by == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+            {% endif %}
+            {% if "move" in report.extras %}
+                <label class="sr-only" for="report-move">What</label>
+                <select class="input select js-select" id="report-move" name="move">
+                    <option value="">Every kind of move</option>
+                    {% for value, label in move_kinds %}<option value="{{ value }}" {% if f.move == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+            {% endif %}
+            {% if "area" in report.extras %}
+                <label class="sr-only" for="report-area">Area</label>
+                <select class="input select js-select" id="report-area" name="area">
+                    <option value="">Every area</option>
+                    {% for value, label in areas %}<option value="{{ value }}" {% if f.area == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+                </select>
+            {% endif %}
+            {% if "person" in report.extras %}
+                <label class="sr-only" for="report-person">Who</label>
+                <select class="input select js-select2" id="report-person" name="person">
+                    <option value="">Everyone</option>
+                    {% for user in people %}<option value="{{ user.pk }}" {% if f.person == user.pk|stringformat:"s" %}selected{% endif %}>{% firstof user.get_full_name user.email %}</option>{% endfor %}
+                </select>
+            {% endif %}
             <button class="btn btn--primary" type="submit">Show</button>
             <a class="btn btn--quiet" href="{% url report.url_name %}">Clear</a>
         </form>

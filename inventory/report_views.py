@@ -8,13 +8,13 @@ table pages through, searched and sorted as it was on screen.
 
 import zoneinfo
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Count, Sum
 from django.http import Http404
 from django.shortcuts import redirect
@@ -67,6 +67,10 @@ class Filters:
     kind: str = ""
     days: int = 0
     view: str = ""
+    by: str = ""          # how the rows are grouped (the report's ``by``)
+    move: str = ""        # a stock move type
+    person: str = ""      # a user's id
+    area: str = ""        # a part of the software (the activity log)
     errors: list = field(default_factory=list)
 
     @property
@@ -120,6 +124,15 @@ def read_filters(source, report, today):
         f.days = min(int(days), 3650) if days else 0
     if "view" in extras and source.get("view") == "store":
         f.view = "store"
+    if report.by:
+        values = [value for value, _label in report.by]
+        f.by = source.get("by") if source.get("by") in values else values[0]
+    if "move" in extras and source.get("move") in dict(catalogue.MOVE_KINDS):
+        f.move = source.get("move")
+    if "person" in extras:
+        f.person = _digits(source.get("person"))
+    if "area" in extras and source.get("area") in dict(catalogue.AREAS):
+        f.area = source.get("area")
     return f
 
 
@@ -139,6 +152,14 @@ def _described(f, report, choices):
         said.append(f"Days: {f.days}")
     if f.view == "store":
         said.append("By store")
+    if report.by:
+        said.append(dict(report.by)[f.by])
+    if f.move:
+        said.append("What: " + dict(catalogue.MOVE_KINDS)[f.move])
+    if f.person:
+        said.append("By: " + next((catalogue.person(u) for u in choices["people"] if str(u.pk) == f.person), ""))
+    if f.area:
+        said.append("Area: " + dict(catalogue.AREAS)[f.area])
     return said
 
 
@@ -150,6 +171,8 @@ def display(value, column):
     """A cell's text, by the column's kind: what the page and the PDF show."""
     if value is None or value == "":
         return ""
+    if isinstance(value, datetime):
+        return value.strftime("%d %b %Y %H:%M")
     if isinstance(value, date):
         return value.strftime("%d %b %Y")
     if isinstance(value, Decimal):
@@ -209,9 +232,18 @@ def _sees_costs_in(user, company_id, stores):
     return allowed is ALL_BRANCHES or all(store.branch_id in allowed for store in stores)
 
 
+def _role(user, company_id):
+    from accounts.models import CompanyMembership
+
+    return (CompanyMembership.all_objects.filter(user=user, company_id=company_id, status="active")
+            .values_list("role", flat=True).first())
+
+
 def visible_reports(user, company_id):
+    role = _role(user, company_id)
     return [report for report in catalogue.REPORTS
-            if any(access.may(user, company_id, code) for code in _codes(report.code))]
+            if any(access.may(user, company_id, code) for code in _codes(report.code))
+            and (not report.roles or role in report.roles)]
 
 
 @login_required
@@ -229,11 +261,21 @@ def report_index(request):
     return render(request, "inventory/reports/index.html", {"groups": groups})
 
 
+def _people(company_id):
+    """The company's people who can sign in, by name."""
+    from accounts.models import User
+
+    return sorted(User.objects.filter(company_memberships__company_id=company_id).distinct(),
+                  key=lambda user: catalogue.person(user).lower())
+
+
 def build(user, company_id, report, params):
     """Run ``report`` for ``user`` with the filters in ``params`` (the page's
     query string, or the API's): ``(membership, filters, result, described, choices)``.
     The panel page and the API both call it, so they show the same figures."""
     membership = access.require(user, company_id, report.code)
+    if report.roles and membership.role not in report.roles:
+        raise PermissionDenied("Only the owner, a company administrator or an auditor sees this report.")
     company = membership.company
     zone = zoneinfo.ZoneInfo(company.timezone or "Asia/Dhaka")
     today = local_today(company)
@@ -246,6 +288,7 @@ def build(user, company_id, report, params):
             "items": list(Item.objects.order_by("code").only("pk", "code", "name"))
             if "item" in report.extras else [],
             "categories": list(ItemCategory.objects.order_by("name")) if "category" in report.extras else [],
+            "people": _people(company_id) if "person" in report.extras else [],
         }
     # A filter outside the viewer's reach is dropped, not trusted.
     if f.store and not any(str(s.pk) == f.store for s in stores):
@@ -254,6 +297,8 @@ def build(user, company_id, report, params):
         f.item = ""
     if f.category and not any(str(c.pk) == f.category for c in choices["categories"]):
         f.category = ""
+    if f.person and not any(str(u.pk) == f.person for u in choices["people"]):
+        f.person = ""
     covered = [s for s in stores if str(s.pk) == f.store] if f.store else stores
     item_ids = None
     if f.item or f.category or f.kind:
@@ -302,6 +347,7 @@ def report(request, slug):
         "report": report, "result": result, "page": page, "f": f, "described": described,
         "cells": [[cell(v, c) for v, c in zip(row, result.columns)] for row in page.object_list],
         "query": query.urlencode(), "kinds": ItemKind.choices, "today": today, **choices,
+        "move_kinds": catalogue.MOVE_KINDS, "areas": catalogue.AREAS,
     })
 
 

@@ -7213,3 +7213,22 @@ yet, switch Ask on.
   a single store box follows Good; under Damaged: "475 good + 25 damaged = 500 came out, of 500 planned".
 - `production/making.py finish`: Good + Damaged above the plan (+5 %) without a reason is refused on Damaged:
   "lower it to 475, or say why". Test: `inventory/tests_phase7.py` test_damaged_are_not_in_good.
+
+### Reports part 1: Overview — 2026-11-03
+
+The client wants to see everything that happens through reports. Inventory → Reports → **Overview**
+(`inventory/reports.py`, top of `REPORTS`):
+
+- **Daily summary** (`daily-summary`, needs "See stock costs and values"): per day or month in money -
+  bought, first count, made, used in making, sold at cost, customer returns, issues, moves, adjustments,
+  reversals (columns with nothing are left out), sales, profit, stock value at the close (start + every move).
+- **Profit** (`profit`, same permission): every delivered sale with or without an invoice (reversed deliveries
+  left out), amount before VAT after discount, cost = what the goods went out at; by item, customer, day,
+  month or sale by sale. `sold(ctx)` is shared with the daily summary.
+- **All stock movements** (`all-moves`): every move in the dates in plain words (`PLAIN_KIND`), with document,
+  batch, in/out, cost and who; filters for kind of move and person.
+- **Activity log** (`activity`): the company's `auditlog.AuditLog`, newest first - when, who, area, what, on,
+  changes (before → after). Filters person and area. Only owner, company admin and auditor (`Report.roles`).
+- Framework: `Report.by` (grouping select), `Report.roles`; filters `move`, `person`, `area`; datetime cells.
+- Tests: `inventory/tests_overview_reports.py`. Part 2 (supplier, item sales, write-offs, below cost, QC, batch
+  trace) waits for the client's go.
