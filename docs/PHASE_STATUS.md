@@ -7200,3 +7200,7 @@ yet, switch Ask on.
 - Tests: `production/tests_bottling.py`.
 
 **Deploy:** pull, restart (no migration).
+- 2026-11-03 later: the dialog shows **Cost of one filled bottle** as you choose (juice × its cost per ML +
+  each empty bottle, cap, label at its cost + bottling, the same costs as the bottle's cost sheet), then
+  **Sale price of one filled bottle** with its margin live. A material's Sale price card says it is only for
+  selling the material itself (making uses its cost, never that price).

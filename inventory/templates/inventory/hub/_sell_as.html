@@ -43,7 +43,8 @@
 
 {% if bottle_form %}
     <dialog class="modal modal--wide" id="bottle-dialog" aria-labelledby="bottle-dialog-title">
-        <form class="modal__card" method="post" action="{% url 'inventory:bottle_size_add' item.pk %}" data-fetch novalidate>
+        <form class="modal__card" method="post" action="{% url 'inventory:bottle_size_add' item.pk %}" data-fetch novalidate
+              data-bottle-form data-bulk="{{ item.name }}" data-unit="{{ item.base_uom.code }}" data-bulk-cost="{% if bottle_form.bulk_cost is not None %}{{ bottle_form.bulk_cost }}{% endif %}" data-costs="{{ bottle_form.costs_json }}">
             {% csrf_token %}
             <div class="modal__head"><h2 id="bottle-dialog-title">Add a bottle size of {{ item.name }}</h2><button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button></div>
             <div class="modal__body stack">
@@ -53,9 +54,15 @@
                     {% include "inventory/hub/field.html" with box=bottle_form.unit %}
                 </div>
                 {% include "inventory/hub/field.html" with box=bottle_form.containers %}
+                <div class="ui-grid-2">{% include "inventory/hub/field.html" with box=bottle_form.bottling_cost %}</div>
+                {# What one filled bottle costs, worked out as you choose: then its price. #}
+                <div class="field field--wide">
+                    <span class="field__label">Cost of one filled bottle</span>
+                    <dl class="grn-bill__sum" data-bottle-sum></dl>
+                    <span class="field__help" data-bottle-note></span>
+                </div>
                 <div class="ui-grid-2">
-                    {% include "inventory/hub/field.html" with box=bottle_form.bottling_cost %}
-                    {% include "inventory/hub/field.html" with box=bottle_form.sale_price %}
+                    <div>{% include "inventory/hub/field.html" with box=bottle_form.sale_price %}<span class="field__help" data-bottle-answer></span></div>
                 </div>
                 <div class="ui-grid-2">
                     {% include "inventory/hub/field.html" with box=bottle_form.name %}
@@ -67,4 +74,71 @@
             <div class="modal__foot"><button class="ui-btn" type="button" data-close-dialog>Cancel</button><button class="ui-btn ui-btn--main" type="submit">{% include "ui/icon.html" with name="check" %} Add</button></div>
         </form>
     </dialog>
+    <script>
+        // The cost of one filled bottle as you choose (2026-11-03): the juice in
+        // it + the empty bottle, cap, label + bottling; then the margin of the price.
+        (function () {
+            const form = document.querySelector("[data-bottle-form]");
+            if (!form) return;
+            const bulkCost = form.dataset.bulkCost === "" ? null : Number(form.dataset.bulkCost);
+            const costs = JSON.parse(form.dataset.costs || "{}");
+            const size = form.querySelector("[name=bottle-size]");
+            const picked = form.querySelector("[name=bottle-containers]");
+            const bottling = form.querySelector("[name=bottle-bottling_cost]");
+            const price = form.querySelector("[name=bottle-sale_price]");
+            const sum = form.querySelector("[data-bottle-sum]");
+            const note = form.querySelector("[data-bottle-note]");
+            const answer = form.querySelector("[data-bottle-answer]");
+            const money = n => n.toLocaleString("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            const rate = n => String(Number(n.toFixed(4)));
+            function row(name, amount, total) {
+                const line = document.createElement("div");
+                if (total) line.className = "grn-bill__total";
+                const dt = document.createElement("dt"), dd = document.createElement("dd");
+                dt.textContent = name;
+                dd.textContent = amount;
+                line.append(dt, dd);
+                sum.append(line);
+            }
+            function render() {
+                sum.replaceChildren();
+                let total = 0;
+                const missing = [];
+                const amount = Number(size.value) || 0;
+                if (bulkCost === null) {
+                    missing.push(form.dataset.bulk);
+                    row(form.dataset.bulk, "no cost yet");
+                } else {
+                    total += amount * bulkCost;
+                    row(form.dataset.bulk + " " + amount.toLocaleString("en-US") + " " + form.dataset.unit
+                        + " × " + rate(bulkCost), money(amount * bulkCost));
+                }
+                const chosen = [...picked.selectedOptions];
+                chosen.forEach(function (option) {
+                    const name = option.textContent.split(" · ").slice(1).join(" · ") || option.textContent;
+                    if (costs[option.value] === undefined) { missing.push(name); row(name, "no cost yet"); return; }
+                    total += Number(costs[option.value]);
+                    row(name, money(Number(costs[option.value])));
+                });
+                const work = Number(bottling.value) || 0;
+                if (work) { total += work; row("Bottling", money(work)); }
+                row("One filled bottle", money(total), true);
+                note.textContent = !chosen.length
+                    ? "No empty bottle chosen yet: pick it above, or the cost has no bottle in it."
+                    : missing.length ? "No cost yet for " + missing.join(", ") + ": Stock in first, or the cost is short." : "";
+                note.style.color = chosen.length && !missing.length ? "" : "var(--danger)";
+                if (!price.value) { answer.textContent = ""; return; }
+                const left = Number(price.value) - total;
+                answer.textContent = left < 0
+                    ? "Below cost: a loss of " + money(-left) + " on each bottle."
+                    : "Margin " + money(left) + " (" + (left / Number(price.value) * 100).toFixed(1) + "%) on each bottle.";
+                answer.style.color = left < 0 ? "var(--danger)" : "";
+            }
+            form.addEventListener("input", render);
+            form.addEventListener("change", render);
+            // Select2 announces its changes through jQuery only.
+            if (window.jQuery) window.jQuery(picked).on("change", render);
+            render();
+        })();
+    </script>
 {% endif %}

@@ -9,6 +9,7 @@
         <span class="ui-card__note">{% if item.sale_price %}Now {{ item.sale_price|floatformat:"2g" }} per {{ item.base_uom.code }}{% else %}Not set yet{% endif %}</span>
     </div>
     <div class="ui-card__body">
+        {% if item.kind != "finished" %}<p class="ui-muted">Only if you sell the {{ item.name }} itself, as it is, to a customer. Making a product uses its cost, never this price.</p>{% endif %}
         {% if price_cost is None %}
             {# Locked until the cost is known (2026-11-01): a price set blind is how a loss starts. #}
             <div class="ui-locked">
