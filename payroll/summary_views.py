@@ -23,7 +23,7 @@ from access_control.branch_access import ALL_BRANCHES
 from attendance.services import settle_due
 from attendance.views import month_context, read_month
 from base_template import fetch
-from base_template.tables import Sortable, paginate_rows, render
+from base_template.tables import Sortable, paginate_rows, render, sort_key
 from common.tenant import use_company
 from employees.models import EmployeeCompensation
 from organization.models import Branch, Department
@@ -109,7 +109,7 @@ def _shown(person):
 
 
 def _query(request, **extra):
-    keep = [(key, value) for key in ("year", "month", "group", "week", "branch", "department", "show")
+    keep = [(key, value) for key in ("year", "month", "group", "week", "branch", "department", "employee", "show")
             for value in request.GET.getlist(key) if value and key not in extra]
     keep += list(extra.items())
     return urlencode(keep)
@@ -140,32 +140,39 @@ def attendance_summary(request):
         people = [p for p in people if p["placement"].branch_id in branch]
     if department:
         people = [p for p in people if p["placement"].department_id in department]
+    # The employee picker (2026-11-04): everybody in the period, before it narrows.
+    choosable = sorted(((p["employee"].pk, p["placement"].employee_code or "", p["employee"].full_name)
+                        for p in people), key=lambda c: (sort_key(c[1]), c[2].lower()))
+    employee = [int(v) for v in request.GET.getlist("employee") if v.isdigit()]
+    if employee:
+        people = [p for p in people if p["employee"].pk in employee]
     counts = {"all": len(people), "need": sum(1 for p in people if p["need"]),
               "hand": sum(1 for p in people if p["override"])}
     listed = [p for p in people if show == "all" or (show == "need" and p["need"])
               or (show == "hand" and p["override"])]
-    # Cells 0-10 are the columns, searched and sorted (the ID is searched with
-    # the name and shown under it); the rest feed the row.
+    # Cells 0-11 are the columns, searched and sorted (the ID on its own,
+    # sorted as a number, 2026-11-04); the rest feed the row.
     rows = []
     for p in listed:
-        shown, scans, employee = p["shown"], p["scans"], p["employee"]
+        shown, scans, person = p["shown"], p["scans"], p["employee"]
         code = p["placement"].employee_code or ""
         rows.append([
-            Sortable(f"{employee.full_name} {code}", employee.full_name.lower()), p["placement"].department.name,
+            code, Sortable(person.full_name, person.full_name.lower()), p["placement"].department.name,
             scans["working"], Sortable(str(shown["present"]), shown["present"]), shown["half_day"],
             shown["incomplete"], shown["absent"], scans["leave"],
             Sortable(f"{shown['hours']:.2f}", shown["hours"]),
             "By hand" if p["override"] else "Scans", "",
-            employee.pk, scans, p["override"], p["basis"], employee.public_id, employee.full_name, code,
+            person.pk, scans, p["override"], p["basis"], person.public_id, person.full_name, code,
         ])
-    # One cell per column on the page (11): the table's own requests - search,
+    # One cell per column on the page (12): the table's own requests - search,
     # sort, the next page - are answered with exactly those cells.
-    page = paginate_rows(request, rows, columns=11)
+    page = paginate_rows(request, rows, columns=12)
     state, tone, locked = _salary_state(company_id, first, last, pay["pay_group"])
     return render(request, "payroll/attendance_summary.html", {
         **month_context(year, month), **pay, "first": first, "last": last, "page": page,
         "counts": counts, "show": show, "shows": SHOW, "branches": branch_list,
         "departments": departments, "branch": branch, "department": department,
+        "employees": choosable, "employee": employee,
         "salary_state": state, "salary_tone": tone, "locked": locked,
         "changed": request.GET.get("changed", ""), "query": _query(request),
         "people": len(people),

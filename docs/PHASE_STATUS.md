@@ -7272,3 +7272,14 @@ Optional bonus for full attendance (Ajay's request; decisions by the user the sa
   `calculation_snapshot["attendance_bonus"]` (paid, why not, source).
 - Code: `payroll/attendance_bonus.py`, `calculate_pay(attendance_bonus=)`, `generate_payroll`. Tests:
   `payroll/tests_attendance_bonus.py`. **Deploy:** migrate (payroll 0017), collectstatic, restart.
+
+### Sort by ID, full-name search, employee picker — 2026-11-04
+
+- **Sort by Employee ID** (as a number: 9, 10, 100, then IDs with letters): Attendance → Summary and Salary by
+  month / week now have their own **ID** column (`code_sort_key` on the salary table, `sort_key` on the
+  summary rows). The Employees list already had it (column header and the Sort choice).
+- **Full-name search**: every table search and the Employees search box match each word typed in any field
+  (`base_template.tables.words_clause`, and the same in `_search_and_order_rows`): "Rahim Uddin" finds
+  him although first and last names are separate fields; one word works as before.
+- **Attendance summary**: an employee picker (Select2, several at once, "ID · name"), carried by the tabs.
+- Salary table's totals row widened by the new column. Tests: `payroll/tests_id_sort_search.py`.

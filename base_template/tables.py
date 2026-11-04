@@ -36,6 +36,19 @@ def code_sort_key(field):
     )
 
 
+def words_clause(query, fields):
+    """Every word of ``query`` found in one of ``fields`` (2026-11-04): "Rahim
+    Uddin" finds Rahim Uddin although the first and last names are two fields;
+    one word works as before."""
+    clause = Q()
+    for word in query.split()[:10]:
+        any_field = Q()
+        for field in fields:
+            any_field |= Q(**{f"{field}__icontains": word})
+        clause &= any_field
+    return clause
+
+
 def integer(value, default, low=0, high=2_147_483_647):
     try:
         return min(high, max(low, int(value)))
@@ -53,10 +66,7 @@ def _search_and_order(request, queryset, *, search, order, query_param, use_orde
     """
     query = request.GET.get(query_param, "").strip()[:200]
     if query and search:
-        clause = Q()
-        for field in search:
-            clause |= Q(**{f"{field}__icontains": query})
-        queryset = queryset.filter(clause).distinct()
+        queryset = queryset.filter(words_clause(query, search)).distinct()
     ordering, sorted_by = [], []
     if use_order:
         for index in range(min(len(order), 8)):
@@ -190,9 +200,9 @@ def _search_and_order_rows(request, rows, *, columns, query_param, use_order):
     to the cells' text. Returns ``(rows, query, sorted_by)``."""
     query = request.GET.get(query_param, "").strip()[:200]
     if query:
-        needle = query.casefold()
+        words = query.casefold().split()
         rows = [row for row in rows
-                if needle in " ".join(str(cell) for cell in row).casefold()]
+                if all(word in " ".join(str(cell) for cell in row).casefold() for word in words)]
     sorted_by = []
     if use_order:
         for index in range(min(columns, 8)):
