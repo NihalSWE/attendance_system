@@ -445,12 +445,13 @@ class PartyForm(CompanyForm):
 class SupplierForm(PartyForm):
     # "Items supplied" left the form (2026-11-02): a typed list of codes
     # confused people, and what a supplier brings shows on its stock in.
-    REQUIRED = ("code", "name", "contact_person", "phone", "email", "address", "payment_terms_days")
+    # Payment terms optional (2026-11-04): left empty it is 0, no terms on the purchase order.
+    REQUIRED = ("code", "name", "contact_person", "phone", "email", "address")
     SECTIONS = (
         ("Business", "Who they are.", ("code", "name")),
         ("Contact", "Who to call or email about orders and deliveries.",
          ("contact_person", "phone", "email", "address")),
-        ("Terms and tax", "BIN and TIN are optional.", ("payment_terms_days", "bin", "tin")),
+        ("Terms and tax", "All optional.", ("payment_terms_days", "bin", "tin")),
         ("Notes", "", ("notes",)),
     )
 
@@ -460,7 +461,9 @@ class SupplierForm(PartyForm):
                   "bin", "tin", "notes")
         labels = {"name": "Company / shop name", "contact_person": "Contact person",
                   "phone": "Phone number"}
-        help_texts = {"code": "Your own short code, e.g. SUP-001."}
+        help_texts = {"code": "Your own short code, e.g. SUP-001.",
+                      "payment_terms_days": "Optional. Days they give you to pay; a purchase order then says "
+                                            "\"Payment N days after delivery\". Empty: none."}
         widgets = {"address": forms.Textarea(attrs={"rows": 2})}
 
 

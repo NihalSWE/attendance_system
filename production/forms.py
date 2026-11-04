@@ -355,7 +355,7 @@ class CostLineForm(CompanyForm):
     class Meta:
         model = CostLine
         fields = ("how", "rate", "people", "hours", "amount", "percent", "label")
-        labels = {"how": "How it is worked out", "people": "People", "hours": "Hours per batch",
+        labels = {"how": "How it is worked out", "people": "People", "hours": "Hours",
                   "amount": "Amount", "percent": "Percent",
                   "label": "Name (optional)"}
         help_texts = {"label": "Left empty: the rate's name (VAT for VAT).",

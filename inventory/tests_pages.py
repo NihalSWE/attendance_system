@@ -104,13 +104,18 @@ class MasterPageTests(InventoryFixture, TestCase):
         self.assertContains(page, "A company or shop you buy from.")
         self.assertNotContains(page, "items_supplied")
         form = page.context["new_form"]
+        # Payment terms optional (2026-11-04): left empty, 0 - no terms on a purchase order.
         self.assertEqual([name for name, box in form.fields.items() if box.required],
-                         ["code", "name", "contact_person", "phone", "email", "address", "payment_terms_days"])
+                         ["code", "name", "contact_person", "phone", "email", "address"])
         refused = self.client.post(reverse("inventory:suppliers"), {"code": "SUP-2", "name": "Half filled"})
         self.assertContains(refused, 'data-open-on-load="new-dialog"')
         self.assertEqual(set(refused.context["new_form"].errors),
-                         {"contact_person", "phone", "email", "address", "payment_terms_days"})
+                         {"contact_person", "phone", "email", "address"})
         self.assertFalse(Supplier.all_objects.filter(code="SUP-2").exists())
+        self.client.post(reverse("inventory:suppliers"), {
+            "code": "SUP-3", "name": "No terms", "contact_person": "Rafiq", "phone": "01711000001",
+            "email": "x@terms.test", "address": "Dhaka", "payment_terms_days": ""})
+        self.assertEqual(Supplier.all_objects.get(code="SUP-3").payment_terms_days, 0)
 
     def test_customer_form_asks_for_what_is_needed(self):
         page = self.client.get(reverse("inventory:customers"))
