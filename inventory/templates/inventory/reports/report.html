@@ -122,6 +122,13 @@
                     {% for value, label in areas %}<option value="{{ value }}" {% if f.area == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
                 </select>
             {% endif %}
+            {% if "batch" in report.extras %}
+                <label class="sr-only" for="report-batch">Batch</label>
+                <select class="input select js-select2" id="report-batch" name="batch">
+                    <option value="">Pick a batch</option>
+                    {% for batch in batches %}<option value="{{ batch.pk }}" {% if f.batch == batch.pk|stringformat:"s" %}selected{% endif %}>{{ batch.item.code }} · {{ batch.batch_no }} · {{ batch.item.name }}</option>{% endfor %}
+                </select>
+            {% endif %}
             {% if "person" in report.extras %}
                 <label class="sr-only" for="report-person">Who</label>
                 <select class="input select js-select2" id="report-person" name="person">

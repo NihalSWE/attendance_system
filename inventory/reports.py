@@ -948,6 +948,7 @@ class Sold:
     qty: Decimal            # in the item's base unit
     amount: Decimal         # before VAT, after discount
     cost: Decimal           # what the goods went out of stock at
+    note: str = ""          # the order's note ("Sold below cost: ...")
 
     @property
     def profit(self):
@@ -977,7 +978,7 @@ def sold(ctx):
         in_order_unit = line.qty_base / order_line.factor if order_line.factor else line.qty
         found.append(Sold(line.delivery.delivery_date, line.delivery.number, line.delivery.order.customer.name,
                           line.item, line.qty_base, (in_order_unit * order_line.net_price).quantize(CENT),
-                          -(costs.get(line.pk) or ZERO)))
+                          -(costs.get(line.pk) or ZERO), line.delivery.order.note))
     return found
 
 
@@ -1244,6 +1245,516 @@ def activity(ctx):
 
 
 # --------------------------------------------------------------------------
+# Part 2 (2026-11-04): purchases by supplier, sales by item, write-offs,
+# below-cost sales and price changes, quality checks and batch trace.
+# --------------------------------------------------------------------------
+
+SUPPLIER_BY = (("supplier", "By supplier"), ("item", "By supplier and item"))
+OPEN_ORDERS = ("approved", "partly_received")
+
+
+def purchases_by_supplier(ctx):
+    """What came in from each supplier in the dates - at the supplier's price
+    and at its real cost (VAT and delivery) - what went back, and what is
+    still to come on open orders."""
+    from purchasing.models import GoodsReceipt, GoodsReceiptLine, PurchaseOrderLine
+
+    f = ctx.f
+    lines = GoodsReceiptLine.all_objects.filter(
+        company_id=ctx.company_id, receipt__status=GoodsReceipt.Status.POSTED,
+        receipt__received_date__gte=f.date_from, receipt__received_date__lte=f.date_to,
+        receipt__warehouse_id__in=ctx.store_ids)
+    if ctx.item_ids is not None:
+        lines = lines.filter(item_id__in=ctx.item_ids)
+    by_item = f.by == "item"
+    found = defaultdict(lambda: {"receipts": set(), "qty": ZERO, "value": ZERO, "extra": ZERO, "last": None,
+                                 "returned": ZERO, "coming": ZERO})
+    names, items = {}, {}
+    for line in lines.select_related("receipt__supplier", "item__base_uom"):
+        supplier = line.receipt.supplier
+        key = (supplier.pk, line.item_id if by_item else None)
+        names[supplier.pk], items[line.item_id] = supplier.name, line.item
+        row = found[key]
+        row["receipts"].add(line.receipt_id)
+        row["qty"] += line.qty_accepted_base
+        row["value"] += line.value
+        row["extra"] += line.extra_cost
+        row["last"] = max(filter(None, [row["last"], line.receipt.received_date]))
+    # Sent back to the supplier in the dates, at the cost it went out at.
+    returns = (StockMove.all_objects.filter(company_id=ctx.company_id, move_type="purchase_return",
+                                            work_date__gte=f.date_from, work_date__lte=f.date_to,
+                                            warehouse_id__in=ctx.store_ids))
+    if ctx.item_ids is not None:
+        returns = returns.filter(item_id__in=ctx.item_ids)
+    from purchasing.models import PurchaseReturn
+
+    supplier_of = dict(PurchaseReturn.all_objects.filter(
+        company_id=ctx.company_id, pk__in={m.document_id for m in returns}).values_list("pk", "supplier_id"))
+    for move in returns.select_related("item"):
+        supplier_id = supplier_of.get(move.document_id)
+        if supplier_id is None:
+            continue
+        key = (supplier_id, move.item_id if by_item else None)
+        items[move.item_id] = move.item
+        found[key]["returned"] -= move.value
+    # Still to come: what open orders have not brought yet (their branches only).
+    open_lines = ctx.in_branches(PurchaseOrderLine.all_objects.filter(
+        company_id=ctx.company_id, order__status__in=OPEN_ORDERS), "order__branch_id")
+    if ctx.item_ids is not None:
+        open_lines = open_lines.filter(item_id__in=ctx.item_ids)
+    for line in open_lines.select_related("order__supplier", "item__base_uom"):
+        left = line.qty - (line.qty_received_base / line.factor if line.factor else ZERO)
+        if left <= 0:
+            continue
+        supplier = line.order.supplier
+        key = (supplier.pk, line.item_id if by_item else None)
+        names[supplier.pk], items[line.item_id] = supplier.name, line.item
+        found[key]["coming"] += (left * line.unit_price * (HUNDRED - line.discount_pct) / HUNDRED)
+    from purchasing.models import Supplier
+
+    missing = {key[0] for key in found} - set(names)
+    names.update(Supplier.all_objects.filter(pk__in=missing).values_list("pk", "name"))
+    rows, totals = [], defaultdict(lambda: ZERO)
+    for (supplier_id, item_id), row in sorted(found.items(), key=lambda kv: (
+            names.get(kv[0][0], ""), items[kv[0][1]].code if kv[0][1] else "")):
+        real = row["value"] + row["extra"]
+        cells = [names.get(supplier_id, "")]
+        if by_item:
+            item = items[item_id]
+            cells += [item.code, item.name, row["qty"], item.base_uom.code]
+        cells += [len(row["receipts"]), row["value"].quantize(CENT), row["extra"].quantize(CENT),
+                  real.quantize(CENT), row["returned"].quantize(CENT), row["coming"].quantize(CENT), row["last"]]
+        rows.append(cells)
+        for name, value in (("value", row["value"]), ("extra", row["extra"]), ("real", real),
+                            ("returned", row["returned"]), ("coming", row["coming"])):
+            totals[name] += value
+    return _done(ctx, Result(
+        columns=[Column("Supplier", weight=1.8),
+                 *([Column("Item"), Column("Name", weight=1.6), Column("Received", True, kind="qty"),
+                    Column("Unit")] if by_item else []),
+                 Column("Receipts", True), Column("At the supplier's price", True, kind="money"),
+                 Column("VAT and delivery", True, kind="money"), Column("Real cost", True, kind="money"),
+                 Column("Returned", True, kind="money"), Column("Still to come", True, kind="money"),
+                 Column("Last received", kind="date")],
+        rows=rows,
+        summary=[("Suppliers", len({key[0] for key in found})), ("Bought", _money_text(totals["value"])),
+                 ("VAT and delivery", _money_text(totals["extra"])), ("Real cost", _money_text(totals["real"])),
+                 ("Returned", _money_text(totals["returned"])), ("Still to come", _money_text(totals["coming"]))],
+        note="Goods received in these dates, after what was refused at the gate. Real cost adds the VAT and "
+             "delivery paid on them. Still to come: approved orders not received yet, at the order's price, "
+             "whatever their date.",
+        empty="Nothing was received or ordered in these dates."))
+
+
+def sales_by_item(ctx):
+    """Which products sell most: quantity, how many sales and customers,
+    the amount and its share of all sales."""
+    lines = sold(ctx)
+    found = defaultdict(lambda: {"qty": ZERO, "amount": ZERO, "lines": 0, "customers": set()})
+    for line in lines:
+        row = found[line.item.pk]
+        row["item"] = line.item
+        row["qty"] += line.qty
+        row["amount"] += line.amount
+        row["lines"] += 1
+        row["customers"].add(line.customer)
+    total = sum((row["amount"] for row in found.values()), ZERO)
+    packs = packs_of(ctx.company_id, list(found))
+    rows = []
+    for rank, row in enumerate(sorted(found.values(), key=lambda row: (-row["amount"], row["item"].code)), 1):
+        item = row["item"]
+        rows.append([rank, item.code, item.name, row["qty"], item.base_uom.code,
+                     in_biggest_pack(row["qty"], packs.get(item.pk, [])), row["lines"], len(row["customers"]),
+                     (row["amount"] / row["qty"]).quantize(Decimal("0.0001")) if row["qty"] else None,
+                     row["amount"].quantize(CENT), _pct(row["amount"], total)])
+    return _done(ctx, Result(
+        columns=[Column("Rank", True), Column("Item"), Column("Name", weight=1.8), Column("Sold", True, kind="qty"),
+                 Column("Unit"), Column("In packs"), Column("Sale lines", True), Column("Customers", True),
+                 Column("Average price", True, kind="cost"), Column("Sales", True, kind="money"),
+                 Column("Share", True, kind="pct")],
+        rows=rows,
+        summary=[("Items sold", len(rows)), ("Sales", _money_text(total)),
+                 ("Customers", len({line.customer for line in lines}))],
+        note="Every sale delivered in these dates, with or without an invoice; amounts before VAT and after "
+             "discount. The best seller first.",
+        empty="No sales delivered in these dates."))
+
+
+def packs_of(company_id, item_ids):
+    from inventory.models import ItemUom
+
+    found = defaultdict(list)
+    for pack in ItemUom.all_objects.filter(company_id=company_id, item_id__in=item_ids).select_related("uom"):
+        found[pack.item_id].append(pack)
+    return found
+
+
+def in_biggest_pack(qty, packs):
+    """``"48 CARTON"`` when it fills one of its packs; else ""."""
+    biggest = max((p for p in packs if p.factor and qty >= p.factor), key=lambda p: p.factor, default=None)
+    if biggest is None:
+        return ""
+    return f"{(qty / biggest.factor).quantize(Decimal('0.01')).normalize():,f} {biggest.uom.code}"
+
+
+def write_offs(ctx):
+    """Stock that was lost: adjusted out (damaged, expired, lost, samples,
+    count differences), material wasted in making, damaged output and failed
+    productions - with the reason, the value and who."""
+    from inventory.models_store import StockAdjustment
+    from production.models import Leftover, ProductionOrder
+
+    f = ctx.f
+    _value_note(ctx)
+    rows = []
+    out = (valuation.moves(ctx.company_id, store_ids=ctx.store_ids, item_ids=ctx.item_ids)
+           .filter(work_date__gte=f.date_from, work_date__lte=f.date_to, move_type__in=("adjustment", "count"),
+                   qty__lt=0).select_related("item__base_uom", "warehouse", "batch", "posted_by"))
+    out = list(out)
+    adjustments = {a.pk: a for a in StockAdjustment.all_objects.filter(
+        company_id=ctx.company_id, pk__in={m.document_id for m in out if m.document_type == StockAdjustment.DOC_TYPE})}
+    numbers = valuation.document_numbers((m.document_type, m.document_id) for m in out)
+    for move in out:
+        adjustment = adjustments.get(move.document_id) if move.document_type == StockAdjustment.DOC_TYPE else None
+        what = adjustment.get_reason_display() if adjustment else "Stock count difference"
+        why = " · ".join(filter(None, [adjustment.note if adjustment else "", move.note]))
+        rows.append([move.work_date, what, _document_label(move, numbers), move.item.code, move.item.name,
+                     move.warehouse.code, move.batch.batch_no if move.batch else "", -move.qty, move.item.base_uom.code,
+                     -move.value.quantize(CENT), why, person(move.posted_by)])
+    # Production: wasted material, damaged output, failed runs (by the day they were finished).
+    orders = ctx.in_branches(ProductionOrder.all_objects.filter(
+        company_id=ctx.company_id, completed_at__date__gte=f.date_from, completed_at__date__lte=f.date_to,
+        status__in=("completed", "closed", "failed"), output_warehouse_id__in=ctx.store_ids),
+        "output_warehouse__branch_id").select_related("item__base_uom", "output_warehouse", "completed_by")
+    orders = list(orders)
+    wanted = ctx.item_ids
+    used_at = defaultdict(lambda: [ZERO, ZERO])
+    for order_id, item_id, qty, value in StockMove.all_objects.filter(
+            company_id=ctx.company_id, move_type="production_consume",
+            document_type="production_consumption").filter(
+            document_id__in=_consumptions(ctx.company_id, [o.pk for o in orders])).values_list(
+            "document_id", "item_id", "qty", "value"):
+        used_at[(order_id, item_id)][0] -= qty
+        used_at[(order_id, item_id)][1] -= value
+    consumption_of = _consumption_orders(ctx.company_id, [o.pk for o in orders])
+    unit_cost = defaultdict(lambda: [ZERO, ZERO])
+    for (consumption_id, item_id), (qty, value) in used_at.items():
+        key = (consumption_of.get(consumption_id), item_id)
+        unit_cost[key][0] += qty
+        unit_cost[key][1] += value
+    by_order = {o.pk: o for o in orders}
+    for left in Leftover.all_objects.filter(order_id__in=list(by_order), wasted__gt=0).select_related("item__base_uom"):
+        if wanted is not None and left.item_id not in wanted:
+            continue
+        order = by_order[left.order_id]
+        qty, value = unit_cost.get((order.pk, left.item_id), (ZERO, ZERO))
+        each = value / qty if qty else ZERO
+        rows.append([order.completed_at.date(), "Wasted in making", order.number, left.item.code, left.item.name,
+                     order.output_warehouse.code, "", left.wasted, left.item.base_uom.code,
+                     (left.wasted * each).quantize(CENT), left.reason, person(order.completed_by)])
+    for order in orders:
+        if wanted is not None and order.item_id not in wanted:
+            continue
+        if order.status == "failed":
+            rows.append([order.completed_at.date(), "Failed production", order.number, order.item.code,
+                         order.item.name, order.output_warehouse.code, "", order.rejected_qty_base or ZERO,
+                         order.item.base_uom.code, ((order.material_cost or ZERO) + (order.other_cost or ZERO))
+                         .quantize(CENT), order.reason, person(order.completed_by)])
+        elif order.rejected_qty_base:
+            rows.append([order.completed_at.date(), "Damaged in making", order.number, order.item.code,
+                         order.item.name, order.output_warehouse.code, "", order.rejected_qty_base,
+                         order.item.base_uom.code, (order.rejected_qty_base * (order.unit_cost or ZERO)).quantize(CENT),
+                         order.reason, person(order.completed_by)])
+    rows.sort(key=lambda row: (row[0], row[2]))
+    if not ctx.costs:
+        rows = [row[:9] + row[10:] for row in rows]
+    total = sum((row[9] for row in rows), ZERO) if ctx.costs else None
+    by_what = defaultdict(lambda: ZERO)
+    for row in rows:
+        by_what[row[1]] += 1
+    summary = [("Lines", len(rows)), *sorted(by_what.items())]
+    if ctx.costs:
+        summary.insert(1, ("Value lost", _money_text(total)))
+    return _done(ctx, Result(
+        columns=[Column("Date", kind="date"), Column("What", weight=1.3), Column("Document"), Column("Item"),
+                 Column("Name", weight=1.6), Column("Store"), Column("Batch"), Column("Quantity", True, kind="qty"),
+                 Column("Unit"), *_cost(ctx, Column("Value", True, kind="money")), Column("Why", weight=2),
+                 Column("By")],
+        rows=rows, summary=summary,
+        note="Adjusted out and count differences at the cost they left stock at; wasted material at what it "
+             "cost the production; damaged output at the production's cost per unit (carried by the good "
+             "ones); a failed production at all it cost.",
+        empty="Nothing was written off in these dates."))
+
+
+def _consumptions(company_id, order_ids):
+    from production.models import Consumption
+
+    return list(Consumption.all_objects.filter(company_id=company_id, order_id__in=order_ids)
+                .values_list("pk", flat=True))
+
+
+def _consumption_orders(company_id, order_ids):
+    from production.models import Consumption
+
+    return dict(Consumption.all_objects.filter(company_id=company_id, order_id__in=order_ids)
+                .values_list("pk", "order_id"))
+
+
+PRICE_BY = (("below", "Sales below cost"), ("prices", "Price changes"))
+
+
+def below_cost(ctx):
+    """Sales at a price under what the goods cost, with the reason given; or
+    every change of a sale price, with who made it."""
+    f = ctx.f
+    if f.by == "prices":
+        return _price_changes(ctx)
+    if not ctx.costs:
+        return _done(ctx, Result(columns=[Column("Date")], rows=[], empty=(
+            "Below cost needs the cost of the goods: you do not see stock costs in every store this covers.")))
+    rows, loss = [], ZERO
+    for line in sorted(sold(ctx), key=lambda line: (line.day, line.number)):
+        if line.amount >= line.cost:
+            continue
+        loss += line.cost - line.amount
+        rows.append([line.day, line.number, line.customer, line.item.code, line.item.name, line.qty,
+                     line.item.base_uom.code, line.amount.quantize(CENT), line.cost.quantize(CENT),
+                     (line.amount - line.cost).quantize(CENT), line.note.removeprefix("Sold below cost:").strip()])
+    return _done(ctx, Result(
+        columns=[Column("Date", kind="date"), Column("Delivery"), Column("Customer", weight=1.5), Column("Item"),
+                 Column("Name", weight=1.5), Column("Quantity", True, kind="qty"), Column("Unit"),
+                 Column("Sales", True, kind="money"), Column("Cost", True, kind="money"),
+                 Column("Loss", True, kind="money"), Column("Why", weight=2)],
+        rows=rows, summary=[("Sales below cost", len(rows)), ("Loss", _money_text(loss))],
+        note="Every sale delivered in these dates whose amount (before VAT, after discount) is under what the "
+             "goods went out of stock at, with the reason written when it was sold.",
+        empty="No sale below cost in these dates."))
+
+
+def _price_changes(ctx):
+    from auditlog.models import AuditLog
+
+    f = ctx.f
+    events = AuditLog.objects.filter(company_id=ctx.company_id, action="inventory.item.price_set",
+                                     occurred_at__date__gte=f.date_from, occurred_at__date__lte=f.date_to)
+    if ctx.item_ids is not None:
+        events = events.filter(object_id__in=[str(pk) for pk in ctx.item_ids])
+    events = list(events.select_related("actor_user").order_by("-occurred_at", "-pk"))
+    items = _items({int(event.object_id) for event in events if event.object_id.isdigit()})
+    from inventory.models import Uom
+
+    units = dict(Uom.all_objects.filter(company_id=ctx.company_id).values_list("pk", "code"))
+    rows = []
+    for event in events:
+        item = items.get(int(event.object_id)) if event.object_id.isdigit() else None
+        before, after = event.before_data or {}, event.after_data or {}
+        number = (lambda text: Decimal(text) if text not in (None, "") else None)
+        old, new, cost = number(before.get("price")), number(after.get("price")), number(after.get("cost"))
+        rows.append([timezone.localtime(event.occurred_at).replace(tzinfo=None, microsecond=0),
+                     item.code if item else "", item.name if item else event.object_display,
+                     units.get(after.get("unit"), item.base_uom.code if item else ""), old, new,
+                     (new - old) if old is not None and new is not None else None,
+                     *([cost] if ctx.costs else []), after.get("below_cost_reason") or "",
+                     person(event.actor_user)])
+    return _done(ctx, Result(
+        columns=[Column("When", kind="datetime"), Column("Item"), Column("Name", weight=1.6), Column("Per"),
+                 Column("Old price", True, kind="cost"), Column("New price", True, kind="cost"),
+                 Column("Change", True, kind="cost"), *_cost(ctx, Column("Cost then", True, kind="cost")),
+                 Column("Below cost because", weight=1.6), Column("By")],
+        rows=rows, summary=[("Price changes", len(rows)), ("Items", len({row[1] for row in rows}))],
+        note="Every sale price set on a product or material, newest first; a carton's own price shows per CARTON.",
+        empty="No price was changed in these dates."))
+
+
+QC_RESULT = {"passed": "Passed", "failed": "Failed"}
+
+
+def quality_checks(ctx):
+    """Every quality check decided in the dates - bought, made or other - and
+    every batch still waiting for one."""
+    from auditlog.models import AuditLog
+    from inventory.models import Batch
+    from production.models import ProductionOrder
+
+    f = ctx.f
+    events = list(AuditLog.objects.filter(
+        company_id=ctx.company_id, occurred_at__date__gte=f.date_from, occurred_at__date__lte=f.date_to,
+        action__in=[f"{area}.qc.{result}" for area in ("purchase", "production", "inventory")
+                    for result in QC_RESULT]).select_related("actor_user").order_by("-occurred_at", "-pk"))
+    order_items = dict(ProductionOrder.all_objects.filter(
+        company_id=ctx.company_id, pk__in=[int(e.object_id) for e in events
+                                           if e.action.startswith("production.") and e.object_id.isdigit()])
+        .values_list("pk", "item_id"))
+    codes = dict(Item.all_objects.filter(company_id=ctx.company_id).values_list("code", "pk"))
+    came = {"purchase": "Bought", "production": "Made", "inventory": "Other"}
+    wanted, rows = ctx.item_ids, []
+    item_ids = set()
+    found = []
+    for event in events:
+        area, _qc, result = event.action.split(".")
+        after = event.after_data or {}
+        if area == "production":
+            item_id = order_items.get(int(event.object_id)) if event.object_id.isdigit() else None
+        else:
+            item_id = codes.get(after.get("item"))
+        if wanted is not None and item_id not in wanted:
+            continue
+        item_ids.add(item_id)
+        found.append((event, area, result, item_id, after))
+    waiting = Batch.all_objects.filter(company_id=ctx.company_id, status=Batch.Status.QUARANTINE)
+    if wanted is not None:
+        waiting = waiting.filter(item_id__in=wanted)
+    held = dict(StockBalance.all_objects.filter(company_id=ctx.company_id, batch__in=waiting,
+                                                warehouse_id__in=ctx.store_ids).order_by().values("batch_id")
+                .annotate(q=Sum("qty_on_hand")).values_list("batch_id", "q"))
+    waiting = [batch for batch in waiting.select_related("item__base_uom") if held.get(batch.pk)]
+    items = _items(item_ids - {None})
+    for batch in waiting:
+        source = {"grn": "Bought", "production": "Made"}.get(batch.source, "Other")
+        rows.append([batch.created_at.date(), batch.item.code, batch.item.name, batch.batch_no, source,
+                     held[batch.pk], batch.item.base_uom.code, "Waiting for QC", "", ""])
+    for event, area, result, item_id, after in found:
+        item = items.get(item_id)
+        rows.append([timezone.localtime(event.occurred_at).date(), item.code if item else after.get("item", ""),
+                     item.name if item else "", after.get("batch", ""), came[area], None,
+                     item.base_uom.code if item else "", QC_RESULT[result], after.get("notes", ""),
+                     person(event.actor_user)])
+    count = defaultdict(int)
+    for row in rows:
+        count[row[7]] += 1
+    return _done(ctx, Result(
+        columns=[Column("Date", kind="date"), Column("Item"), Column("Name", weight=1.6), Column("Batch"),
+                 Column("Came from"), Column("In stock", True, kind="qty"), Column("Unit"),
+                 Column("Result", kind="status"), Column("Notes", weight=2), Column("By")],
+        rows=rows,
+        summary=[("Passed", count["Passed"]), ("Failed", count["Failed"]), ("Waiting now", count["Waiting for QC"])],
+        note="Checks decided in these dates, and every batch waiting now (counted in stock, never usable until "
+             "it passes). A failed batch is blocked.",
+        empty="No quality check in these dates, and nothing waiting."))
+
+
+TRACE_DEPTH = 6
+
+
+def batch_trace(ctx):
+    """One batch: where it came from (the supplier, or the production and
+    the material batches it used, back to the start) and where it went
+    (customers, productions it went into and their batches, and what is
+    left in stock)."""
+    from inventory.models import Batch
+
+    f = ctx.f
+    if not f.batch:
+        return Result(columns=[Column("Step")], rows=[], empty="Pick a batch to trace.")
+    batch = Batch.all_objects.select_related("item__base_uom").filter(company_id=ctx.company_id,
+                                                                      pk=int(f.batch)).first()
+    if batch is None:
+        return Result(columns=[Column("Step")], rows=[], empty="Pick a batch to trace.")
+    rows = []
+    _back(ctx, batch, 0, rows, set())
+    _forward(ctx, batch, 0, rows, set())
+    return _done(ctx, Result(
+        columns=[Column("Step"), Column("Direction"), Column("Date", kind="date"), Column("What", weight=1.3),
+                 Column("Document"), Column("Item"), Column("Batch"), Column("Quantity", True, kind="qty"),
+                 Column("Unit"), Column("From / to", weight=1.6)],
+        rows=rows,
+        summary=[("Batch", f"{batch.item.code} {batch.batch_no}"), ("Status", batch.get_status_display()),
+                 ("Made / received", f"{batch.mfg_date:%d %b %Y}" if batch.mfg_date else "—"),
+                 ("Expires", f"{batch.expiry_date:%d %b %Y}" if batch.expiry_date else "—")],
+        note="Back: where the batch came from, step by step to the materials' own batches. Forward: every "
+             "customer and production it went to, and the batches those made. Step 0 is the batch itself.",
+        empty="Nothing recorded for this batch."))
+
+
+def _moves_of(ctx, batch):
+    return list(StockMove.all_objects.filter(company_id=ctx.company_id, batch=batch)
+                .select_related("warehouse").order_by("work_date", "posted_at", "pk"))
+
+
+def _back(ctx, batch, depth, rows, seen):
+    from production.models import Consumption, Output
+    from purchasing.models import GoodsReceipt
+
+    if batch.pk in seen or depth > TRACE_DEPTH:
+        return
+    seen.add(batch.pk)
+    unit = batch.item.base_uom.code
+    for move in _moves_of(ctx, batch):
+        if move.qty <= 0 or move.move_type not in ("receipt", "opening", "production_output"):
+            continue
+        if move.move_type == "receipt":
+            receipt = GoodsReceipt.all_objects.select_related("supplier").filter(pk=move.document_id).first()
+            rows.append([depth, "Back", move.work_date, "Bought", receipt.number if receipt else "",
+                         batch.item.code, batch.batch_no, move.qty, unit,
+                         receipt.supplier.name if receipt else ""])
+        elif move.move_type == "opening":
+            rows.append([depth, "Back", move.work_date, "First count", "", batch.item.code, batch.batch_no,
+                         move.qty, unit, move.warehouse.name])
+        else:
+            output = Output.all_objects.select_related("order").filter(pk=move.document_id).first()
+            order = output.order if output else None
+            rows.append([depth, "Back", move.work_date, "Made", order.number if order else "", batch.item.code,
+                         batch.batch_no, move.qty, unit, move.warehouse.name])
+            if order is None:
+                continue
+            used = (StockMove.all_objects.filter(
+                company_id=ctx.company_id, move_type="production_consume", document_type=Consumption.DOC_TYPE,
+                document_id__in=Consumption.all_objects.filter(order=order).values_list("pk", flat=True))
+                .select_related("item__base_uom", "batch__item__base_uom", "warehouse"))
+            for use in used:
+                rows.append([depth + 1, "Back", use.work_date, "Used to make it", order.number, use.item.code,
+                             use.batch.batch_no if use.batch else "", -use.qty, use.item.base_uom.code,
+                             use.warehouse.name])
+                if use.batch is not None:
+                    _back(ctx, use.batch, depth + 2, rows, seen)
+
+
+def _forward(ctx, batch, depth, rows, seen):
+    from production.models import Consumption, Output
+    from sales.models import DeliveryLine
+
+    if batch.pk in seen or depth > TRACE_DEPTH:
+        return
+    seen.add(batch.pk)
+    unit = batch.item.base_uom.code
+    moves = _moves_of(ctx, batch)
+    sold_to = {line.pk: line for line in DeliveryLine.all_objects.filter(
+        pk__in=[m.document_line_id for m in moves if m.move_type == "delivery" and m.document_line_id])
+        .select_related("delivery__order__customer", "delivery")}
+    for move in moves:
+        if move.qty >= 0:
+            continue
+        if move.move_type == "delivery":
+            line = sold_to.get(move.document_line_id)
+            rows.append([depth, "Forward", move.work_date, "Sold", line.delivery.number if line else "",
+                         batch.item.code, batch.batch_no, -move.qty, unit,
+                         line.delivery.order.customer.name if line else ""])
+        elif move.move_type == "production_consume":
+            consumption = Consumption.all_objects.select_related("order__item").filter(pk=move.document_id).first()
+            order = consumption.order if consumption else None
+            rows.append([depth, "Forward", move.work_date, "Used in making", order.number if order else "",
+                         batch.item.code, batch.batch_no, -move.qty, unit,
+                         order.item.name if order else ""])
+            if order is None:
+                continue
+            for output in Output.all_objects.filter(order=order).select_related("batch__item__base_uom"):
+                made = output.batch
+                if made is None:
+                    continue
+                rows.append([depth + 1, "Forward", output.output_date, "Made from it", order.number, made.item.code,
+                             made.batch_no, output.qty_good, made.item.base_uom.code, made.item.name])
+                _forward(ctx, made, depth + 2, rows, seen)
+        elif move.move_type not in ("transfer_out",):
+            rows.append([depth, "Forward", move.work_date, PLAIN_KIND.get(move.move_type, move.move_type), "",
+                         batch.item.code, batch.batch_no, -move.qty, unit, move.warehouse.name])
+    for store, qty in (StockBalance.all_objects.filter(company_id=ctx.company_id, batch=batch, qty_on_hand__gt=0)
+                       .values_list("warehouse__name", "qty_on_hand")):
+        rows.append([depth, "Forward", ctx.today, "In stock now", "", batch.item.code, batch.batch_no, qty, unit,
+                     store])
+
+
+# --------------------------------------------------------------------------
 # The catalogue
 # --------------------------------------------------------------------------
 
@@ -1280,6 +1791,13 @@ REPORTS = (
     Report("activity", "Activity log", OVERVIEW, STOCK_CODES, RANGE, activity,
            "Who did what and when, in every part of the software, with what changed.",
            extras=("person", "area"), roles=ACTIVITY_ROLES),
+    Report("write-offs", "Damaged, lost and written off", STOCK, STOCK_CODES, RANGE, write_offs,
+           "Stock adjusted out, wasted or damaged in making and failed productions - with why, value and who."),
+    Report("quality-checks", "Quality checks", STOCK, ("purchase.qc", "inventory.view"), RANGE, quality_checks,
+           "Batches passed and failed in any dates, and every batch waiting for its check now."),
+    Report("batch-trace", "Batch trace", STOCK, STOCK_CODES, NOW, batch_trace,
+           "One batch back to its supplier or its materials' batches, and forward to customers and products.",
+           extras=("batch",)),
     Report("stock-on-hand", "Stock on hand", STOCK, STOCK_CODES, NOW, stock_on_hand,
            "Every item in every store now: on hand, reserved and available."),
     Report("item-card", "Stock ledger (item card)", STOCK, STOCK_CODES, RANGE, item_card,
@@ -1299,6 +1817,9 @@ REPORTS = (
     Report("reorder", "Reorder report", STOCK, STOCK_CODES, NOW, reorder,
            "Items at or below their reorder point, with what is on order and what to order.",
            extras=("store", "item", "category", "kind")),
+    Report("supplier-purchases", "Purchases by supplier", PURCHASE, GRN_CODES, RANGE, purchases_by_supplier,
+           "What came in from each supplier, at its price and real cost, what went back and what is still to come.",
+           by=SUPPLIER_BY),
     Report("purchase-register", "Purchase register", PURCHASE, PURCHASE_CODES, RANGE, purchase_register,
            "Purchase order lines placed in any dates, with amounts and what has come in.",
            extras=("item", "category", "kind")),
@@ -1316,6 +1837,11 @@ REPORTS = (
            "Wasted material, damaged output and failed productions, with the reason."),
     Report("shortages", "Shortages", PRODUCTION, PRODUCTION_CODES, NOW, shortages,
            "Planned productions that cannot start yet, and what each is short of."),
+    Report("sales-by-item", "Sales by item", SALES, SALES_CODES, RANGE, sales_by_item,
+           "Which products and sizes sell most: quantity, sales, customers and share."),
+    Report("below-cost", "Below-cost sales and price changes", SALES, "inventory.valuation", RANGE, below_cost,
+           "Sales under what the goods cost, with the reason; or every sale price change and who made it.",
+           by=PRICE_BY),
     Report("sales-register", "Sales register", SALES, SALES_CODES, RANGE, sales_register,
            "Invoices issued in any dates, with VAT and what is unpaid.", extras=("store",)),
     Report("customer-sales", "Customer and item sales", SALES, SALES_CODES, RANGE, customer_item_sales,

@@ -32,7 +32,7 @@ from inventory import access, periods, valuation
 from inventory import reports as catalogue
 from inventory.doc_common import local_today
 from inventory.forms import ReasonForm
-from inventory.models import Item, ItemCategory, ItemKind, PeriodLock, StockBalance, Warehouse
+from inventory.models import Batch, Item, ItemCategory, ItemKind, PeriodLock, StockBalance, Warehouse
 from inventory.posting import ledger_differences, settings_for
 from inventory.views import company_or_bail
 
@@ -71,6 +71,7 @@ class Filters:
     move: str = ""        # a stock move type
     person: str = ""      # a user's id
     area: str = ""        # a part of the software (the activity log)
+    batch: str = ""       # a batch's id (the batch trace)
     errors: list = field(default_factory=list)
 
     @property
@@ -133,6 +134,8 @@ def read_filters(source, report, today):
         f.person = _digits(source.get("person"))
     if "area" in extras and source.get("area") in dict(catalogue.AREAS):
         f.area = source.get("area")
+    if "batch" in extras:
+        f.batch = _digits(source.get("batch"))
     return f
 
 
@@ -160,6 +163,9 @@ def _described(f, report, choices):
         said.append("By: " + next((catalogue.person(u) for u in choices["people"] if str(u.pk) == f.person), ""))
     if f.area:
         said.append("Area: " + dict(catalogue.AREAS)[f.area])
+    if f.batch:
+        said.append("Batch: " + next((f"{b.item.code} {b.batch_no}" for b in choices["batches"]
+                                      if str(b.pk) == f.batch), ""))
     return said
 
 
@@ -289,6 +295,8 @@ def build(user, company_id, report, params):
             if "item" in report.extras else [],
             "categories": list(ItemCategory.objects.order_by("name")) if "category" in report.extras else [],
             "people": _people(company_id) if "person" in report.extras else [],
+            "batches": list(Batch.objects.select_related("item").order_by("item__code", "-created_at"))
+            if "batch" in report.extras else [],
         }
     # A filter outside the viewer's reach is dropped, not trusted.
     if f.store and not any(str(s.pk) == f.store for s in stores):
@@ -299,6 +307,8 @@ def build(user, company_id, report, params):
         f.category = ""
     if f.person and not any(str(u.pk) == f.person for u in choices["people"]):
         f.person = ""
+    if f.batch and not any(str(b.pk) == f.batch for b in choices["batches"]):
+        f.batch = ""
     covered = [s for s in stores if str(s.pk) == f.store] if f.store else stores
     item_ids = None
     if f.item or f.category or f.kind:
