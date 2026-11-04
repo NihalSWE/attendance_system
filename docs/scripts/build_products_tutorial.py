@@ -513,9 +513,13 @@ story += steps([
     "<b>Plan it</b>.",
     "<b>Start: materials out</b>: change a quantity only if a store gave more or less (over 5 % needs a reason). "
     "Stock goes down at its real cost.",
-    "<b>Finish: into stock</b>: Good (what really came out, into stock) and Damaged (lost: never in stock); the "
-    "store (or a split); leftovers back; other costs (the recipe's, scaled to the amount). Batch number empty: one "
-    "is made.",
+    "<b>Finish: into stock</b>: Good (what really came out, into stock) and Damaged (lost: never in stock). Good "
+    "starts at the planned amount; <b>typing Damaged takes it off Good</b> (500 planned, 25 damaged: Good 475) and "
+    "the store follows. Under Damaged: &quot;475 good + 25 damaged = 500 came out, of 500 planned&quot;. Good + "
+    "Damaged above the plan needs a reason. Then the store (or a split), leftovers back, other costs (the recipe's, "
+    "scaled to the amount).",
+    "<b>Batch number</b>: one production is <b>one batch</b>, whatever its amount. Empty: the product code, the "
+    "date and a counter - ORJ101-031126-1 for the first production of the day, -2 for the second; or type your own.",
 ])
 story += [box("Dates of what is made", [
     "The manufacture date is the day it is made - never a day still to come. Expiry empty: made date + shelf life; "
@@ -702,8 +706,29 @@ story += steps([
 
 # ------------------------------------------------------------------ reports
 story += section(16, "Reports", "Inventory &rarr; Reports",
-                 "Every report has filters, Excel and PDF; money only with \"See stock costs and values\".")
-story += [grid(("Report", "What it shows"), [
+                 "Every report has dates, filters, search, pages, Excel and PDF; money only with \"See stock costs "
+                 "and values\". 28 reports in five groups.")
+story += [P("Overview: what happens, day by day", "h2"), grid(("Report", "What it shows"), [
+    ("Daily summary", "Each day or month in money: bought, made, used in making, sold (at cost), returned, "
+     "adjusted; the sales, the profit and the stock value at the close."),
+    ("Profit", "Sales less the cost of the goods, for <b>every</b> sale delivered (with or without an invoice): by "
+     "item, customer, day, month, or sale by sale. Profit on the goods only - salaries and rent are not taken off."),
+    ("All stock movements", "Every in and out of every item in plain words (Bought, Made, Used in making, Sold, "
+     "Moved, Adjusted...), with document, batch, cost and <b>who</b>. Filter by kind of move and by person."),
+    ("Activity log", "Who did what and when in the whole software - stock, production, buying, selling, people, "
+     "salary, devices - with what changed (price: 90 &rarr; 95). Only the owner, a company admin or an auditor."),
+], (45, 125)), P("Stock, buying, making, selling", "h2"), grid(("Report", "What it shows"), [
+    ("Damaged, lost and written off", "Stock adjusted out (damaged, expired, lost, samples), count differences, "
+     "material wasted in making, damaged output and failed productions - with why, value and who."),
+    ("Quality checks", "Batches passed and failed in the dates, and every batch waiting for its check now."),
+    ("Batch trace", "Pick one batch: back to its supplier or to the material batches it was made from, and forward "
+     "to the customers and products it went to, and what is left in stock. For a recall."),
+    ("Purchases by supplier", "From each supplier: at its price, VAT and delivery, real cost, returned, still to "
+     "come on open orders; or by supplier and item."),
+    ("Sales by item", "Which products and bottle sizes sell most: quantity, in packs, customers, sales and share."),
+    ("Below-cost sales and price changes", "Sales under what the goods cost, with the reason; or every sale price "
+     "change, old and new, and who made it."),
+
     ("Stock on hand", "What is in each store now, by item and batch."),
     ("Stock ledger (item card)", "Every movement of one item in a period, with the running balance."),
     ("Movement summary", "Opening, in, out and closing per item for a period."),
@@ -775,6 +800,53 @@ story += [P("General items and spare parts", "h2"), P(
         "&bull; They are not on Materials (raw, packaging) or Products, not in recipes, not on Sell.",
     ], "ok")]
 
+# ------------------------------------------------------------------ 2026-11-03: bulk and bottles
+story += section(18, "Sell it as it is and in bottles", "A product made here &rarr; card <b>How you sell it</b>",
+                 "Make the juice once in bulk (ML), then sell it three ways at the same time: the liquid by the ML "
+                 "or L, bottles by the PCS, and bottles by the CARTON. Each bottle size is a product of its own, "
+                 "with its own stock, cost, price and batches.", "the bulk product made here, with its recipe; the "
+                 "empty bottles, caps and labels as packaging materials (Stock in).")
+story += [grid(("Sold as", "Holds", "Cost of one", "Sale price", "Margin"), [
+    ("<b>As it is</b> - by the ML and the L", "-", "0.27 / ML", "0.40 / ML", "32.5 %"),
+    ("Orange Juice 250 ml - by the PCS and the CARTON (24)", "250 ML", "73.60 / PCS", "95.00 (= 0.38 a ML)", "22.5 %"),
+    ("Orange Juice 1 L - by the PCS and the CARTON (12)", "1,000 ML", "274.10 / PCS", "300.00 (= 0.30 a ML)", "8.6 %"),
+], (58, 20, 28, 36, 18))]
+story += steps([
+    "<b>Add a bottle size</b> on the card: one bottle holds (250 ML), counted in (PCS), the <b>empty</b> bottle, cap "
+    "and label, a bottling cost (optional). The box <b>Cost of one filled bottle</b> adds them up as you choose: "
+    "juice 250 x 0.27 = 67.50 + bottle 3.20 + cap 0.90 + bottling 2.00 = <b>73.60</b>.",
+    "Then <b>Sale price of one filled bottle</b> (optional): the margin shows as you type; below cost is refused. "
+    "Bottles in a carton (optional). <b>Add</b>: the product, its recipe for 1 bottle and the carton are made in one go.",
+    "<b>Fill bottles</b> on its row: how many bottles &rarr; Plan, Start, Finish, as for any production. The juice "
+    "and the empty bottles, caps and labels leave stock; the filled bottles come in as their own batch.",
+    "<b>Sell</b> on any row opens a sale with it on line 1: liquid in ML or L, bottles in PCS or CARTON - several "
+    "lines on one sale if you like. Each takes from its own stock.",
+])
+story += [box("Two different prices", [
+    "The <b>Sale price</b> card of the empty bottle (a material) is only for selling empty bottles themselves. "
+    "Making uses what you <b>paid</b> for it (the last price paid), never that price.",
+    "The price in the bottle dialog is for one <b>filled</b> bottle: juice and bottle together.",
+], "warn")]
+
+# ------------------------------------------------------------------ 2026-11-03/04
+story += section(19, "What changed on 3 and 4 November 2026", "Everywhere in Inventory",
+                 "Asked for while making orange juice in bulk and bottling it.")
+story += [grid(("Change", "Where, and how it works"), [
+    ("1. Make any amount", "Make &rarr; <b>How much to make</b> in the product's unit (125,000 ML), not a number of "
+     "batches; the recipe says what quantity it is for (Recipe for 10,000 ML) and every material is scaled."),
+    ("2. One production, one batch", "The 1st production is batch 1, the 2nd is batch 2 - whatever their amount. "
+     "The switch <b>Batch number per mix</b> is gone (it made 13 batch numbers for 12.5 times the recipe), and the "
+     "Batch number box is always on Finish."),
+    ("3. How you sell it", "On a product made here: the bulk and every bottle size, each with cost, price, margin, "
+     "stock and carton, with Add a bottle size, Fill bottles and Sell (Step 18)."),
+    ("4. Cost of one filled bottle", "The bottle dialog shows the cost before asking the price, and the margin of "
+     "the price as you type."),
+    ("5. Damaged come off Good", "Finish: typing Damaged lowers Good to planned - damaged; Good + Damaged above the "
+     "plan needs a reason (Step 7)."),
+    ("6. Ten new reports", "Daily summary, Profit, All stock movements, Activity log, Damaged/lost/written off, "
+     "Quality checks, Batch trace, Purchases by supplier, Sales by item, Below-cost sales and price changes (Step 16)."),
+], (45, 125))]
+
 story += [CondPageBreak(80 * mm), Spacer(1, 6 * mm), P("Questions people ask", "h1"), grid(("When", "What happens"), [
     ("I don't know the price when adding", "Right: no price is asked. Buy it (Stock in), then set the price."),
     ("I typed a price below cost", "Refused, with the loss shown. Fix it, or Sell below cost with a reason."),
@@ -792,6 +864,14 @@ story += [CondPageBreak(80 * mm), Spacer(1, 6 * mm), P("Questions people ask", "
     ("An item is missing from the list", "The store chosen above does not keep it: choose its store, or set the "
      "item's usual store (Edit)."),
     ("No \"See costs\"", "Quantities only: no money on any screen."),
+    ("Damaged 25, but stock is still 500", "Good was left at 500: Good is only what goes into stock. Now typing "
+     "Damaged lowers Good by itself. For one already finished: Reverse it (while nothing was sold) and finish again."),
+    ("Why 13 batch numbers?", "The old switch Batch number per mix. It is gone: one production is one batch."),
+    ("Where do I see my profit?", "Reports &rarr; Profit (every sale) and Daily summary (each day in money)."),
+    ("Who changed this price?", "Reports &rarr; Activity log, or Below-cost sales and price changes &rarr; Price "
+     "changes."),
+    ("A customer complains about one bottle", "Reports &rarr; Batch trace: its juice batch, the pulp, sugar and "
+     "bottles it was made from, and every customer who got the same batch."),
 ], (60, 110))]
 
 
