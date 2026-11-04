@@ -7232,3 +7232,18 @@ The client wants to see everything that happens through reports. Inventory → R
 - Framework: `Report.by` (grouping select), `Report.roles`; filters `move`, `person`, `area`; datetime cells.
 - Tests: `inventory/tests_overview_reports.py`. Part 2 (supplier, item sales, write-offs, below cost, QC, batch
   trace) waits for the client's go.
+
+### Reports part 2 and the tutorial — 2026-11-04
+
+- `inventory/reports.py`: **Purchases by supplier** (`supplier-purchases`, by supplier or supplier and item:
+  price, VAT and delivery, real cost, returned, still to come on approved orders), **Sales by item**
+  (`sales-by-item`, best first, in packs, share), **Damaged, lost and written off** (`write-offs`: adjusted out
+  with the adjustment's reason, count differences, wasted in making at what it cost, damaged output at the
+  production's unit cost, failed productions), **Below-cost sales and price changes** (`below-cost`; the reason
+  from the order's "Sold below cost:" note; price changes from the audit log), **Quality checks**
+  (`quality-checks`: decisions from the audit log + batches waiting now) and **Batch trace** (`batch-trace`,
+  new `batch` filter: back through production output and consumption to receipts / first counts, forward to
+  deliveries, productions and their batches, and what is left in stock).
+- Tests: `inventory/tests_reports_part2.py`. All 32 reports were run on the local data (read only).
+- `docs/scripts/build_products_tutorial.py` → PDF rebuilt: Finish (damaged off Good, one batch number), Reports
+  (28, Overview first), Step 18 sell as it is and in bottles, Step 19 what changed on 3-4 November, new questions.
