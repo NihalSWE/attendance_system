@@ -6,6 +6,10 @@
 {% block extra_css %}
     <link rel="stylesheet" href="{% static 'base_template/css/platform.css' %}">
 {% endblock %}
+{% block extra_js %}
+    {{ block.super }}
+    <script defer src="{% static 'payroll/js/attendance_bonus.js' %}"></script>
+{% endblock %}
 {% block page %}
     <div class="crumbs">
         <a href="{% url 'dashboard' %}">
@@ -211,7 +215,7 @@
                     </div>
                     <div class="stack">
                         {% for field in rules_form %}
-                            {% if field.widget_type == "checkbox" and field.name != "allow_negative_net_pay" %}
+                            {% if field.widget_type == "checkbox" and field.name != "allow_negative_net_pay" and "bonus_" not in field.name %}
                                 <label class="check">
                                     {{ field }}
                                     <span>
@@ -232,6 +236,38 @@
                             {{ rules_form.allow_negative_net_pay.label }}
                         </span>
                     </label>
+                    <h3 class="t-card-head" id="attendance-bonus">
+                        Attendance bonus
+                    </h3>
+                    <p class="field__help">
+                        Optional: a bonus for being present on every working day (or at least the days you set).
+                        Present days are Present (late included) and days without a check-out; a half day, any
+                        leave and an absence are not. Holidays and weekly offs are not working days. Nobody gets
+                        it for a month or week they joined or left in. It is added to the payslip after the
+                        penalties.
+                    </p>
+                    <div class="stack" data-bonus-settings>
+                        <label class="check">{{ rules_form.bonus_monthly }}<span>{{ rules_form.bonus_monthly.label }}</span></label>
+                        <div class="grid grid--2">
+                            {% include "leaves/includes/field.html" with field=rules_form.bonus_monthly_rule %}
+                            {% include "leaves/includes/field.html" with field=rules_form.bonus_monthly_days %}
+                        </div>
+                        <label class="check">{{ rules_form.bonus_weekly }}<span>{{ rules_form.bonus_weekly.label }}</span></label>
+                        <div class="grid grid--2">
+                            {% include "leaves/includes/field.html" with field=rules_form.bonus_weekly_rule %}
+                            {% include "leaves/includes/field.html" with field=rules_form.bonus_weekly_days %}
+                        </div>
+                        <label class="check">{{ rules_form.bonus_weekly_by_month }}<span>{{ rules_form.bonus_weekly_by_month.label }}</span></label>
+                        {% for error in rules_form.bonus_weekly_by_month.errors %}<p class="field__error">{{ error }}</p>{% endfor %}
+                        <p class="field__help" data-only-one-note hidden>Weekly workers get the bonus every week or once a month, not both: the other one was switched off.</p>
+                        <div class="grid grid--2">
+                            {% include "leaves/includes/field.html" with field=rules_form.bonus_percent %}
+                        </div>
+                        <p class="field__help">
+                            Each department's own % or flat amount is set in <a href="#bonus-departments">Attendance bonus by department</a>
+                            below; one employee's on their Edit page, under Salary.
+                        </p>
+                    </div>
                     <h3 class="t-card-head" id="overtime-rules">
                         Overtime
                     </h3>
@@ -254,6 +290,70 @@
                     </button>
                 </div>
             </form>
+        </div>
+
+        {# A department's own attendance bonus (2026-11-04, payroll/attendance_bonus.py). #}
+        <div class="card" id="bonus-departments">
+            <div class="card__head">
+                <h2>
+                    Attendance bonus by department
+                </h2>
+                <span class="badge badge--neutral">{{ bonus_departments|length }} department{{ bonus_departments|length|pluralize }}</span>
+            </div>
+            <div class="card__body stack">
+                <p class="field__help">
+                    Optional: a department's own bonus, a % of basic pay <strong>or</strong> a flat amount for each
+                    bonus (a month's or a week's). It wins over the company's % above; one employee's own wins over
+                    it. Who gets a bonus at all is the rule above. Empty both and save to go back to the company's %.
+                    Any month you generate (or regenerate) uses what is set here.
+                </p>
+                {% if bonus_note %}
+                    <div class="alert alert--{{ bonus_note.0 }}">{{ bonus_note.1 }}</div>
+                {% endif %}
+                <div class="table-wrap">
+                    <table class="table" data-local-table>
+                        <thead>
+                            <tr>
+                                <th>Department</th>
+                                <th>Branch</th>
+                                <th>Now</th>
+                                <th class="no-sort">Bonus %</th>
+                                <th class="no-sort">Or flat amount</th>
+                                <th class="no-sort"><span class="sr-only">Save</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for department in bonus_departments %}
+                                <tr>
+                                    <td>{{ department.name }}</td>
+                                    <td>{{ department.branch.name }}</td>
+                                    <td>
+                                        {% if department.bonus.percent is not None %}{{ department.bonus.percent|floatformat:"-2" }}%
+                                        {% elif department.bonus.amount is not None %}{{ department.bonus.amount|floatformat:"2g" }} {{ currency }}
+                                        {% else %}<span class="t-faint">The company's %</span>{% endif %}
+                                    </td>
+                                    <td>
+                                        <input class="input" form="bonus-dep-{{ department.pk }}" type="number" name="bonus_percent" min="0.01" max="100" step="0.01" inputmode="decimal" data-either="bonus_amount" value="{% if department.bonus.percent is not None %}{{ department.bonus.percent|floatformat:'-2' }}{% endif %}" aria-label="Bonus % for {{ department.name }}" style="max-width: 8rem">
+                                    </td>
+                                    <td>
+                                        <input class="input" form="bonus-dep-{{ department.pk }}" type="number" name="bonus_amount" min="0.01" step="0.01" inputmode="decimal" data-either="bonus_percent" value="{% if department.bonus.amount is not None %}{{ department.bonus.amount|floatformat:'-2' }}{% endif %}" aria-label="Flat amount for {{ department.name }}" style="max-width: 9rem">
+                                    </td>
+                                    <td>
+                                        <form method="post" id="bonus-dep-{{ department.pk }}">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="section" value="bonus_department">
+                                            <input type="hidden" name="department" value="{{ department.pk }}">
+                                            <button class="btn btn--ghost btn--sm" type="submit">Save</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="6">No departments yet.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         {# One box, edited any time (2026-10-26). #}

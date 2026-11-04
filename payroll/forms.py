@@ -24,6 +24,15 @@ ROUNDING_STEPS = (
 )
 
 
+#: Who gets the attendance bonus: every working day, or at least some days.
+BONUS_RULES = {
+    "month": (("all", "Present every working day of the month (100%)"),
+              ("min", "Present at least a number of days")),
+    "week": (("all", "Present every working day of the week (100%)"),
+             ("min", "Present at least a number of days")),
+}
+
+
 class SalaryRulesForm(StyledFormMixin, forms.Form):
     """New salary rules from a month. Saving never edits the rules in force."""
 
@@ -111,8 +120,37 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
         ),
     )
 
+    # Attendance bonus (2026-11-04, payroll/attendance_bonus.py).
+    bonus_monthly = forms.BooleanField(required=False, label="Monthly staff: a bonus every salary month")
+    bonus_monthly_rule = forms.ChoiceField(
+        label="Monthly bonus: who gets it", choices=BONUS_RULES["month"], required=False,
+        help_text="Also the rule of weekly workers' once-a-month bonus.")
+    bonus_monthly_days = forms.IntegerField(
+        label="Present at least (days in the month)", required=False, min_value=1, max_value=31,
+        help_text="A month with fewer working days needs all of them.")
+    bonus_weekly = forms.BooleanField(required=False, label="Weekly workers: a bonus every week")
+    bonus_weekly_rule = forms.ChoiceField(label="Weekly bonus: who gets it", choices=BONUS_RULES["week"],
+                                          required=False)
+    bonus_weekly_days = forms.IntegerField(
+        label="Present at least (days in the week)", required=False, min_value=1, max_value=7,
+        help_text="A week with fewer working days needs all of them.")
+    bonus_weekly_by_month = forms.BooleanField(
+        required=False,
+        label="Weekly workers: a bonus once a month instead (paid in the last week of the month)")
+    bonus_percent = forms.DecimalField(
+        label="Bonus (% of basic pay)", required=False,
+        min_value=Decimal("0.01"), max_value=Decimal("100"), decimal_places=2,
+        help_text=("Needed when a bonus is on. Of the month's basic salary, or the pay for the days or hours "
+                   "of that week or month. A department's or an employee's own % or amount wins over it."))
+
     def __init__(self, *args, years=None, **kwargs):
         super().__init__(*args, **kwargs)
+        for name in ("bonus_monthly_days", "bonus_weekly_days"):
+            self.fields[name].widget.attrs["data-show-when"] = f"{name.replace('_days', '_rule')}:min"
+        # Weekly workers: every week or once a month, never both (the page
+        # switches the other one off; the rules refuse both).
+        self.fields["bonus_weekly"].widget.attrs["data-only-one"] = "bonus_weekly_by_month"
+        self.fields["bonus_weekly_by_month"].widget.attrs["data-only-one"] = "bonus_weekly"
         # Only for "a fixed number of days" (dependent.js shows/hides it).
         self.fields["monthly_divisor"].widget.attrs["data-show-when"] = (
             f"monthly_proration_method:{Version.MonthlyProration.FIXED_DIVISOR}"
@@ -150,11 +188,37 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
             "holiday_overtime_multiplier": plain(version.holiday_overtime_multiplier),
             "minimum_overtime_minutes": version.minimum_overtime_minutes,
             "overtime_rounding_minutes": version.overtime_rounding_minutes,
+            "bonus_monthly": version.config("bonus_monthly"),
+            "bonus_monthly_rule": "min" if version.config("bonus_monthly_days") else "all",
+            "bonus_monthly_days": version.config("bonus_monthly_days"),
+            "bonus_weekly": version.config("bonus_weekly"),
+            "bonus_weekly_rule": "min" if version.config("bonus_weekly_days") else "all",
+            "bonus_weekly_days": version.config("bonus_weekly_days"),
+            "bonus_weekly_by_month": version.config("bonus_weekly_by_month"),
+            "bonus_percent": version.config("bonus_percent"),
         }
+
+    def clean(self):
+        data = super().clean()
+        on = data.get("bonus_monthly") or data.get("bonus_weekly") or data.get("bonus_weekly_by_month")
+        if data.get("bonus_weekly") and data.get("bonus_weekly_by_month"):
+            self.add_error("bonus_weekly_by_month", "Weekly workers get the bonus every week or once a month, "
+                                                    "not both: switch one off.")
+        for period in ("monthly", "weekly"):
+            if data.get(f"bonus_{period}_rule") == "min" and not data.get(f"bonus_{period}_days"):
+                used = data.get(f"bonus_{period}") or (period == "monthly" and data.get("bonus_weekly_by_month"))
+                if used:
+                    self.add_error(f"bonus_{period}_days", "Give the number of days.")
+        if on and data.get("bonus_percent") is None and "bonus_percent" not in self.errors:
+            self.add_error("bonus_percent", "Give the bonus %: it is needed when the bonus is on.")
+        return data
 
     def service_values(self):
         data = dict(self.cleaned_data)
         data["effective_from"] = datetime.date(data.pop("applies_year"), data.pop("applies_month"), 1)
+        for period in ("monthly", "weekly"):
+            if data.pop(f"bonus_{period}_rule") != "min":
+                data[f"bonus_{period}_days"] = None
         return data
 
 
@@ -451,3 +515,21 @@ class GiveComponentForm(StyledFormMixin, forms.Form):
 
 class EndComponentForm(StyledFormMixin, forms.Form):
     last_day = forms.DateField(label="Last day", widget=date_widget("Choose a date"))
+
+
+class AttendanceBonusForm(StyledFormMixin, forms.Form):
+    """One employee's own attendance bonus (2026-11-04): a % of basic pay or a
+    flat amount per bonus; both empty goes back to the department's or the
+    company's. Typing in one box empties the other (attendance_bonus.js)."""
+
+    bonus_percent = forms.DecimalField(label="Bonus % of basic pay", required=False,
+                                       min_value=Decimal("0.01"), max_value=Decimal("100"), decimal_places=2)
+    bonus_amount = forms.DecimalField(label="Or a flat amount per bonus", required=False,
+                                      min_value=Decimal("0.01"), decimal_places=2)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["bonus_percent"].widget.attrs["data-either"] = "bonus_amount"
+        self.fields["bonus_amount"].widget.attrs["data-either"] = "bonus_percent"
+        self.fields["bonus_percent"].widget.attrs["data-bonus-percent"] = ""
+        self.fields["bonus_amount"].widget.attrs["data-bonus-amount"] = ""

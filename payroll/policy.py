@@ -76,6 +76,13 @@ class SalaryRules:
     day_off_multiplier: Decimal = Decimal("2")
     overtime_minimum: int = 0
     overtime_step: int = 0
+    # Attendance bonus (2026-11-04): who gets it, after how many days, how much.
+    bonus_monthly: bool = False
+    bonus_monthly_days: object = None       # int, or None for every working day
+    bonus_weekly: bool = False
+    bonus_weekly_days: object = None
+    bonus_weekly_by_month: bool = False
+    bonus_percent: object = None            # Decimal, or None
 
     @classmethod
     def from_version(cls, version):
@@ -98,6 +105,15 @@ class SalaryRules:
             rounding_increment=Decimal(source.money_rounding_increment),
             rounding_mode=source.money_rounding_mode,
             max_penalty_percent=source.maximum_period_deduction_percent,
+            bonus_monthly=bool(source.config("bonus_monthly")),
+            bonus_monthly_days=source.config("bonus_monthly_days"),
+            bonus_weekly=bool(source.config("bonus_weekly")),
+            bonus_weekly_days=source.config("bonus_weekly_days"),
+            # Both on cannot be saved; if it ever is, the weekly bonus wins.
+            bonus_weekly_by_month=bool(source.config("bonus_weekly_by_month"))
+            and not bool(source.config("bonus_weekly")),
+            bonus_percent=(Decimal(str(source.config("bonus_percent")))
+                           if source.config("bonus_percent") not in (None, "") else None),
         )
 
     def payable_overtime(self, minutes):
@@ -137,6 +153,14 @@ class SalaryRules:
             "max_penalty_percent": (
                 plain(self.max_penalty_percent) if self.max_penalty_percent is not None else None
             ),
+            "attendance_bonus": {
+                "monthly": self.bonus_monthly,
+                "monthly_days": self.bonus_monthly_days,
+                "weekly": self.bonus_weekly,
+                "weekly_days": self.bonus_weekly_days,
+                "weekly_by_month": self.bonus_weekly_by_month,
+                "percent": plain(self.bonus_percent) if self.bonus_percent is not None else None,
+            },
             "overtime": {
                 "paid": self.pays_overtime,
                 "multiplier": plain(self.overtime_multiplier),
@@ -254,6 +278,11 @@ def change_salary_rules(*, actor, company_id, values):
         config = {field: values[field] for field in CONFIG_FIELDS if field in values}
         if "half_day_pay_percent" in config:
             config["half_day_pay_percent"] = plain(config["half_day_pay_percent"])
+        if config.get("bonus_percent") not in (None, ""):
+            config["bonus_percent"] = plain(config["bonus_percent"])
+        if not any(config.get(key) for key in Version.BONUS_SWITCHES):
+            # Bonus off: nothing of it is kept, so turning it on starts clean.
+            config.update(bonus_percent=None, bonus_monthly_days=None, bonus_weekly_days=None)
         version = create_validated(
             Version,
             company=membership.company,

@@ -718,6 +718,31 @@ def salary_settings(request):
         return back("success", (
             f"Saved. From {periods.name(year, month)} ({first:%d %b} - {last:%d %b %Y}) every "
             f"salary month starts on day {day}."))
+    elif section == "bonus_department":
+        # A department's own attendance bonus (2026-11-04): said in its card.
+        from organization.models import Department
+        from payroll import attendance_bonus
+
+        def said(tone, text):
+            request.session["bonus_note"] = [tone, text]
+            return redirect(f"{reverse('payroll:salary_settings')}#bonus-departments")
+
+        with use_company(company_id):
+            department = Department.objects.filter(pk=request.POST.get("department", "") or 0).first()
+        if department is None:
+            return said("danger", "That department is not in this company.")
+        percent, amount = (request.POST.get(name, "").strip() for name in ("bonus_percent", "bonus_amount"))
+        try:
+            row = attendance_bonus.set_department_rate(
+                actor=request.user, company_id=company_id, department=department,
+                percent=percent or None, amount=amount or None)
+        except (ValidationError, ArithmeticError) as exc:
+            reasons = exc.messages if isinstance(exc, ValidationError) else ["Write a number."]
+            return said("danger", f"{department.name} not saved: " + " ".join(reasons))
+        if row is None:
+            return said("success", f"{department.name}: back to the company's %.")
+        what = f"{policy.plain(row.percent)}% of basic pay" if row.percent is not None else f"{row.amount:,.2f} flat"
+        return said("success", f"{department.name}: attendance bonus {what}. Regenerate a month's salary to apply it.")
     elif section == "rules" and rules_form.is_valid():
         values = rules_form.service_values()
         try:
@@ -764,9 +789,25 @@ def salary_settings(request):
         "general_form": general_form,
         "salary_month_form": salary_month_form,
         "salary_month_note": request.session.pop("salary_month_note", None),
+        "bonus_note": request.session.pop("bonus_note", None),
+        "bonus_departments": _bonus_departments(company_id),
         **month_page,
         "penalty_rules": _penalty_rows(company_id, today, page["currency"], request=request),
     })
+
+
+def _bonus_departments(company_id):
+    """Active departments, each with its own attendance bonus (or None)."""
+    from organization.models import Department
+    from payroll import attendance_bonus
+
+    _by_employee, by_department = attendance_bonus.rates(company_id)
+    with use_company(company_id):
+        departments = list(Department.objects.filter(status="active").select_related("branch")
+                           .order_by("branch__name", "name"))
+    for department in departments:
+        department.bonus = by_department.get(department.pk)
+    return departments
 
 
 def _salary_month_page(company_id, today):
