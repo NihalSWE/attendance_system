@@ -55,7 +55,7 @@ from payroll.models import (
     PayrollRun,
     PayrollSettings,
 )
-from payroll import overrides, paygroups, periods
+from payroll import attendance_bonus, overrides, paygroups, periods
 from payroll.penalties import PayValue, assess, rules_in_force
 from payroll.policy import STANDARD_RULES, plain, rules_for
 
@@ -323,7 +323,7 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                   penalty_rules=(), waived=frozenset(), employee_key="", adjustments=(),
                   employed_days=None, basic_segments=None, components=(), inactive_days=(),
-                  worked_hours=None):
+                  worked_hours=None, attendance_bonus=None):
     """Lines and totals for one employee. Pure: no database writes.
 
     ``inactive_days`` are the employed days of the month they were inactive
@@ -340,6 +340,10 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
     ``(line index, Occurrence)`` so the caller can store them. Approved
     overtime (``AttendanceRecord.approved_overtime_minutes``) adds earning
     lines; the per-day working comes back in ``result["overtime"]``.
+
+    ``attendance_bonus`` (``payroll.attendance_bonus.Bonus``, 2026-11-04) adds
+    its earning after the penalties - their cap is a percent of the gross
+    without it - and what was decided comes back in ``result["attendance_bonus"]``.
     """
     rules = rules or STANDARD_RULES
     counts = summarise(records)
@@ -481,6 +485,13 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                 occurrence.amount,
             ))
 
+    bonus_detail = None
+    if attendance_bonus is not None:
+        bonus_line, bonus_detail = attendance_bonus.line(basic_earned, records)
+        if bonus_line is not None:
+            lines.append(bonus_line)
+            gross += bonus_line[-1]
+
     deductions = sum((amount for kind, *_, amount in lines if kind == "deduction"), Decimal("0"))
     if not rules.allow_negative:
         # A month of absences cannot produce a negative salary.
@@ -505,6 +516,7 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
         "penalties": penalties,
         "overtime": overtime,
         "adjustments": adjustment_lines,
+        "attendance_bonus": bonus_detail,
     }
 
 
@@ -954,6 +966,26 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
         else:
             components_by_employee = {}
 
+        # Attendance bonus (2026-11-04, payroll/attendance_bonus.py).
+        bonus_kind = attendance_bonus.kind_for(
+            rules, pay_group, last, pay_group is not None and paygroups.is_last_week_of_month(last))
+        bonus_rates = attendance_bonus.rates(company_id) if bonus_kind else None
+        bonus_window = None
+        if bonus_kind == attendance_bonus.WEEKLY_BY_MONTH:
+            # The weeks that end in this month: their days, read as each week's run reads them.
+            window_first = paygroups.weeks_in_month(pay_group, last.year, last.month)[0][0]
+            window_records, window_other = period_records(
+                company_id, window_first, last, pay_group,
+                employee_ids=[employee.pk for employee in records_by_employee],
+                groups=paygroups.Groups(company_id, window_first, last))
+            window_inactive = inactive_periods.periods(
+                company_id, [employee.pk for employee in records_by_employee], window_first, last)
+            weeks = [(week_first, week_last, overrides.active(
+                         company_id, week_first, week_last, [employee.pk for employee in records_by_employee]))
+                     for week_first, week_last in paygroups.weeks_in_month(pay_group, last.year, last.month)]
+            bonus_window = (window_first, {e.pk: days for e, days in window_records.items()}, window_inactive,
+                            window_other, weeks)
+
         skipped = dict(previous_skipped)
         on_monthly = {}
         skipped_now = []
@@ -986,6 +1018,36 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 _monthly_segments(employee, start, end)
                 if compensation.pay_basis == EmployeeCompensation.PayBasis.MONTHLY else None
             )
+            bonus = None
+            if bonus_kind:
+                source, percent, amount = attendance_bonus.pick(
+                    rules, bonus_rates, employee.pk, records[-1].employee_assignment.department_id)
+                bonus = attendance_bonus.Bonus(
+                    kind=bonus_kind, min_days=attendance_bonus.min_days_for(rules, bonus_kind),
+                    percent=percent, amount=amount, source=source)
+                if bonus_window is not None:
+                    window_first, window_days, window_inactive, window_other, weeks = bonus_window
+                    # Week by week, as each week's payslip sees it: its days set
+                    # by hand applied, its basic worked out the same way.
+                    bonus.records, bonus.basic = [], Decimal("0")
+                    mine = window_days.get(employee.pk, [])
+                    for week_first, week_last, by_hand_then in weeks:
+                        week_override = by_hand_then.get(employee.pk)
+                        week_days = overrides.apply(
+                            [r for r in mine if week_first <= r.work_date <= week_last], week_override)
+                        bonus.records.extend(week_days)
+                        bonus.basic += attendance_bonus.basic_of(calculate_pay(
+                            compensation.pay_basis, compensation.base_rate, week_days,
+                            rules=rules, days_in_month=full_days,
+                            worked_hours=(week_override.hours if week_override is not None
+                                          and week_override.present_days is None else None))["lines"])
+                    bonus.blocked = attendance_bonus.blocked_by(
+                        employee, window_first, last, inactive=bool(window_inactive.get(employee.pk)),
+                        other_run=bool(window_other.get(employee.pk)))
+                else:
+                    bonus.blocked = attendance_bonus.blocked_by(
+                        employee, first, last, inactive=bool(inactive_by_employee.get(employee.pk)),
+                        other_run=bool(weekly_days.get(employee.pk)))
             result = calculate_pay(
                 compensation.pay_basis, compensation.base_rate, records,
                 rules=rules, days_in_month=full_days,
@@ -996,6 +1058,7 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 basic_segments=basic_segments,
                 inactive_days=sorted(inactive_by_employee.get(employee.pk, ())),
                 worked_hours=override.hours if override is not None and override.present_days is None else None,
+                attendance_bonus=bonus,
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,
@@ -1019,6 +1082,7 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                     "rules": result["rules"],
                     "overtime": result["overtime"],
                     "override": overrides.describe(override),
+                    "attendance_bonus": result["attendance_bonus"],
                 },
             )
             currency = compensation.currency or default_currency

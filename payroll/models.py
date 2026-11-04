@@ -96,7 +96,17 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
         "incomplete_day_treatment": "pay_full",
         "daily_paid_days_off": False,
         "hourly_paid_days_off": False,
+        # Attendance bonus (2026-11-04, payroll/attendance_bonus.py): off by
+        # default. Days None = every working day of the period; else at least
+        # that many present days. The percent is of the period's basic pay.
+        "bonus_monthly": False,             # monthly staff, every salary month
+        "bonus_monthly_days": None,
+        "bonus_weekly": False,              # weekly workers, every week
+        "bonus_weekly_days": None,
+        "bonus_weekly_by_month": False,     # weekly workers, once a month instead
+        "bonus_percent": None,
     }
+    BONUS_SWITCHES = ("bonus_monthly", "bonus_weekly", "bonus_weekly_by_month")
     INCOMPLETE_CHOICES = (
         ("pay_full", "Paid in full until reviewed"),
         ("pay_half", "Paid as a half day"),
@@ -211,6 +221,29 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
     def config(self, key):
         return (self.calculation_config or {}).get(key, self.CONFIG_DEFAULTS[key])
 
+    @classmethod
+    def _bonus_errors(cls, config):
+        """The attendance bonus settings' mistakes, by box name."""
+        errors = {}
+        if config.get("bonus_weekly") and config.get("bonus_weekly_by_month"):
+            errors["bonus_weekly_by_month"] = (
+                "Weekly workers get the bonus every week or once a month, not both: switch one off.")
+        for key, most in (("bonus_monthly_days", 31), ("bonus_weekly_days", 7)):
+            days = config.get(key)
+            if days is not None and (not isinstance(days, int) or not 1 <= days <= most):
+                errors[key] = f"Use a number of days from 1 to {most}."
+        percent = config.get("bonus_percent")
+        if any(config.get(key) for key in cls.BONUS_SWITCHES):
+            try:
+                value = Decimal(str(percent)) if percent not in (None, "") else None
+            except ArithmeticError:
+                value = None
+            if value is None:
+                errors["bonus_percent"] = "Give the bonus %: it is needed when the bonus is on."
+            elif not (Decimal("0") < value <= Decimal("100")):
+                errors["bonus_percent"] = "Use a percentage above 0 and up to 100."
+        return errors
+
     def clean(self):
         super().clean()
         errors = {}
@@ -230,6 +263,7 @@ class PayrollPolicyVersion(TenantOwned, ActorTracked):
             errors["calculation_config"] = "A half day's pay must be between 0% and 100%."
         if config.get("incomplete_day_treatment", "pay_full") not in dict(self.INCOMPLETE_CHOICES):
             errors["calculation_config"] = "Unknown treatment for an incomplete day."
+        errors.update(self._bonus_errors(config))
         cap = self.maximum_period_deduction_percent
         if cap is not None and not (Decimal("0") < cap <= Decimal("100")):
             errors["maximum_period_deduction_percent"] = "Use a percentage above 0 and up to 100."
@@ -1212,3 +1246,52 @@ class GenerateJob(TenantOwned):
 
     def __str__(self):
         return f"generate {self.year}-{self.month:02d}: {self.stage} {self.done_count}/{self.total}"
+
+
+class AttendanceBonusRate(TenantOwned, ActorTracked):
+    """A department's, or one employee's, own attendance bonus (2026-11-04).
+
+    A percent of the period's basic pay or a flat amount for each bonus (a
+    month's, or a week's). One employee's row wins over their department's,
+    which wins over the company's percent (Salary settings); on one row the
+    percent wins over the amount. It only changes how much: who gets a bonus
+    at all is the company's rule. The current value applies to every month
+    generated - a finalised month is never generated again.
+    """
+
+    department = models.ForeignKey("organization.Department", null=True, blank=True,
+                                   on_delete=models.CASCADE, related_name="+")
+    employee = models.ForeignKey("employees.Employee", null=True, blank=True,
+                                 on_delete=models.CASCADE, related_name="+")
+    percent = models.DecimalField("Bonus %", max_digits=6, decimal_places=2, null=True, blank=True)
+    amount = models.DecimalField("Flat amount", max_digits=14, decimal_places=2, null=True, blank=True)
+
+    class Meta:
+        db_table = "payroll_attendance_bonus_rate"
+        constraints = [
+            models.CheckConstraint(
+                condition=(models.Q(department__isnull=False, employee__isnull=True)
+                           | models.Q(department__isnull=True, employee__isnull=False)),
+                name="chk_attendance_bonus_one_target"),
+            models.CheckConstraint(
+                condition=models.Q(percent__isnull=False) | models.Q(amount__isnull=False),
+                name="chk_attendance_bonus_has_value"),
+            models.UniqueConstraint(fields=["company", "department"], condition=models.Q(department__isnull=False),
+                                    name="uniq_attendance_bonus_department"),
+            models.UniqueConstraint(fields=["company", "employee"], condition=models.Q(employee__isnull=False),
+                                    name="uniq_attendance_bonus_employee"),
+        ]
+
+    def __str__(self):
+        who = f"employee {self.employee_id}" if self.employee_id else f"department {self.department_id}"
+        return f"{who}: {self.percent}% / {self.amount}"
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.percent is not None and not (Decimal("0") < self.percent <= Decimal("100")):
+            errors["percent"] = "Use a percentage above 0 and up to 100."
+        if self.amount is not None and self.amount <= 0:
+            errors["amount"] = "Use an amount above 0."
+        if errors:
+            raise ValidationError(errors)

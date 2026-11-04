@@ -82,6 +82,23 @@ def employee_edit(request, pk):
     return render(request, "organization/employee_edit.html", result)
 
 
+def _bonus_from(company_id, own, assignment):
+    """Where this person's attendance bonus comes from, in words."""
+    from payroll import attendance_bonus
+    from payroll.policy import plain, rules_for
+
+    if own is not None:
+        return "their own"
+    department = attendance_bonus.rates(company_id)[1].get(assignment.department_id if assignment else None)
+    if department is not None:
+        return (f"the department's: {plain(department.percent)}%" if department.percent is not None
+                else f"the department's: {department.amount:,.2f} flat")
+    rules = rules_for(company_id, timezone.localdate().replace(day=1))
+    if rules.bonus_percent is not None:
+        return f"the company's: {plain(rules.bonus_percent)}%"
+    return "none: the attendance bonus is off in Salary settings"
+
+
 def edit_sections(request, company_id, pk, *, back):
     """Every Edit employee form for this person, and the posted one saved.
 
@@ -98,7 +115,7 @@ def edit_sections(request, company_id, pk, *, back):
     today = timezone.localdate()
     # A12 part 4: which cards this person may use for this employee.
     may = services.card_permissions(request.user, company_id, membership, assignment)
-    needs = {"salary": "salary", "shift": "shift", "shift_end": "shift",
+    needs = {"salary": "salary", "attendance_bonus": "salary", "shift": "shift", "shift_end": "shift",
              "component_give": "salary", "component_end": "salary",
              "login_give": "logins", "login_password": "logins", "login_disable": "logins",
              "login_enable": "logins", "login_role": "role"}
@@ -147,6 +164,29 @@ def edit_sections(request, company_id, pk, *, back):
             salary.fields["salary_from"].help_text = (
                 "The salary counts from this date. It starts, by default, when they were placed."
             )
+
+        # Their own attendance bonus (2026-11-04): same permission as their salary.
+        from payroll import attendance_bonus
+        from payroll.forms import AttendanceBonusForm
+
+        own_bonus = attendance_bonus.rates(company_id)[0].get(employee.pk)
+        bonus_form = AttendanceBonusForm(
+            request.POST if section == "attendance_bonus" else None,
+            initial={"bonus_percent": own_bonus.percent if own_bonus else None,
+                     "bonus_amount": own_bonus.amount if own_bonus else None})
+        if section == "attendance_bonus" and bonus_form.is_valid():
+            try:
+                saved = attendance_bonus.set_employee_rate(
+                    actor=request.user, company_id=company_id, employee_id=employee.pk,
+                    percent=bonus_form.cleaned_data["bonus_percent"],
+                    amount=bonus_form.cleaned_data["bonus_amount"])
+            except ValidationError as exc:
+                apply_service_errors(bonus_form, exc)
+            else:
+                messages.success(request, (
+                    "Attendance bonus saved. Regenerate a month's salary to apply it." if saved else
+                    "Their own attendance bonus is removed: the department's or the company's applies."))
+                return redirect(back("attendance-bonus"))
 
         # Allowances and recurring deductions (A11): the company's list, and
         # what this person has. Same permission as their salary.
@@ -342,6 +382,9 @@ def edit_sections(request, company_id, pk, *, back):
             "works_from": works_from,
             "own_shifts": own_shifts,
             "give_component_form": give_component_form,
+            "bonus_form": bonus_form,
+            "own_bonus": own_bonus,
+            "bonus_from": _bonus_from(company_id, own_bonus, assignment),
             "end_component_form": end_component_form,
             "employee_components": employee_components,
             # The one "End" acts on: the own shift in force today, else the next one.

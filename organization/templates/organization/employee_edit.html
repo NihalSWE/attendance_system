@@ -301,6 +301,51 @@
         </div>
 
         {% if may.salary_view %}
+            {# Their own attendance bonus (2026-11-04, payroll/attendance_bonus.py). #}
+            <div class="card" id="attendance-bonus">
+                <div class="card__head">
+                    <h2>
+                        Attendance bonus
+                    </h2>
+                    <span class="badge badge--neutral">
+                        {% if own_bonus.percent is not None %}{{ own_bonus.percent|floatformat:"-2" }}% of basic pay{% elif own_bonus.amount is not None %}{{ own_bonus.amount|money }} flat{% else %}From {{ bonus_from }}{% endif %}
+                    </span>
+                </div>
+                <div class="card__body stack">
+                    <p class="field__help">
+                        Optional: this employee's own bonus for full attendance, a % of basic pay <strong>or</strong> a
+                        flat amount for each bonus (a month's or a week's). It wins over the department's and the
+                        company's. Who gets a bonus at all is the rule in Salary settings. Empty both to use
+                        {% if own_bonus %}the department's or the company's{% else %}{{ bonus_from }}{% endif %}.
+                    </p>
+                    {% if may.salary %}
+                        <form method="post" class="stack" novalidate
+                              {% if compensation and compensation.pay_basis == "monthly" %}data-bonus-base="{{ compensation.base_rate }}"{% endif %}>
+                            {% csrf_token %}
+                            <input type="hidden" name="section" value="attendance_bonus">
+                            <div class="grid grid--2">
+                                {% include "leaves/includes/field.html" with field=bonus_form.bonus_percent %}
+                                {% include "leaves/includes/field.html" with field=bonus_form.bonus_amount %}
+                            </div>
+                            {% if compensation and compensation.pay_basis == "monthly" %}
+                                <p class="field__help" data-bonus-same>
+                                    On the monthly salary of {{ compensation.base_rate|money }}: <span data-bonus-same-text>type a % or an amount to see the other.</span>
+                                </p>
+                            {% else %}
+                                <p class="field__help">The % is of the pay for the days or hours of that week or month.</p>
+                            {% endif %}
+                            <div class="row">
+                                <button class="btn btn--primary" type="submit">
+                                    Save attendance bonus
+                                </button>
+                            </div>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% if may.salary_view %}
         <div class="card" id="allowances">
             <div class="card__head">
                 <h2>
@@ -546,4 +591,5 @@
 {% block extra_js %}
     <script defer src="{% static 'organization/js/employee_form.js' %}">
     </script>
+    <script defer src="{% static 'payroll/js/attendance_bonus.js' %}"></script>
 {% endblock %}

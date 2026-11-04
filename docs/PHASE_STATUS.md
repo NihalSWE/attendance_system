@@ -7247,3 +7247,28 @@ The client wants to see everything that happens through reports. Inventory → R
 - Tests: `inventory/tests_reports_part2.py`. All 32 reports were run on the local data (read only).
 - `docs/scripts/build_products_tutorial.py` → PDF rebuilt: Finish (damaged off Good, one batch number), Reports
   (28, Overview first), Step 18 sell as it is and in bottles, Step 19 what changed on 3-4 November, new questions.
+
+### Attendance bonus — 2026-11-04
+
+Optional bonus for full attendance (Ajay's request; decisions by the user the same day):
+
+- **Company** (Salary settings → Change the rules → Attendance bonus; saved with the salary rules from a
+  month, `calculation_config`): Monthly staff every salary month; weekly workers every week **or** once a
+  month (never both: `Version.clean` and the form refuse it, `attendance_bonus.js` unticks the other; if
+  both were ever saved, weekly wins in `SalaryRules`). Each: every working day (100 %) or at least N days
+  (capped at the period's working days). Bonus % of basic pay, needed when any bonus is on.
+- **Department** (Salary settings → Attendance bonus by department) and **employee** (Edit employee →
+  Attendance bonus): a % or a flat amount per bonus (`payroll.AttendanceBonusRate`, current value, audit
+  logged); employee > department > company; on one row the % wins (only one is kept). The employee card
+  shows the % as an amount of a monthly salary and back, as you type.
+- **Who**: present days = Present (late included) + Incomplete; half day, any leave and absence break it;
+  holidays/weekly offs are not working days; present days set by hand count. No bonus for a period the
+  person joined or left in, was inactive in, or was partly paid by the other run.
+- **How much**: % of the period's basic pay (monthly basic; the pay for days/hours of the week; for the
+  weekly workers' monthly bonus, the weeks ending in the month, each week as its payslip reads it, days set
+  by hand included), paid in the last week ending in the month.
+- **Payslip**: one earning `ATTENDANCE_BONUS` "Attendance bonus (23 of 23 days present, 10% of basic …)",
+  added after the penalties so their cap and every other line are unchanged; the decision is kept in
+  `calculation_snapshot["attendance_bonus"]` (paid, why not, source).
+- Code: `payroll/attendance_bonus.py`, `calculate_pay(attendance_bonus=)`, `generate_payroll`. Tests:
+  `payroll/tests_attendance_bonus.py`. **Deploy:** migrate (payroll 0017), collectstatic, restart.
