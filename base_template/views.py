@@ -16,7 +16,7 @@ from django.contrib.auth.views import LogoutView
 from django.db.models import CharField, Count, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.shortcuts import redirect
-from base_template.tables import code_sort_key, paginate, render
+from base_template.tables import code_sort_key, paginate, render, words_clause
 from django.views.decorators.http import require_POST
 
 from access_control.page_access import may_open
@@ -200,12 +200,9 @@ def employee_list_query(request):
 
     search = request.GET.get("q", "").strip()
     if search:
-        qs = qs.filter(
-            Q(first_name__icontains=search)
-            | Q(last_name__icontains=search)
-            | Q(work_email__icontains=search)
-            | Q(assignments__employee_code__icontains=search)
-        ).distinct()
+        # Every word, in any of them: a full name finds the person (2026-11-04).
+        qs = qs.filter(words_clause(search, ("first_name", "last_name", "work_email",
+                                             "assignments__employee_code"))).distinct()
 
     status = request.GET.get("status", "").strip()
     if status:

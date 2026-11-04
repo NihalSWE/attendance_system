@@ -57,6 +57,10 @@
         <select class="input select js-select2" id="sum-department" name="department" multiple data-placeholder="All departments">
             {% for option in departments %}<option value="{{ option.pk }}"{% if option.pk in department %} selected{% endif %}>{{ option.name }}{% if branches|length > 1 %} · {{ option.branch.name }}{% endif %}</option>{% endfor %}
         </select>
+        <label class="sr-only" for="sum-employee">Employee</label>
+        <select class="input select js-select2" id="sum-employee" name="employee" multiple data-placeholder="All employees" data-search="always">
+            {% for pk, code, name in employees %}<option value="{{ pk }}"{% if pk in employee %} selected{% endif %}>{% if code %}{{ code }} · {% endif %}{{ name }}</option>{% endfor %}
+        </select>
         <input type="hidden" name="show" value="{{ show }}">
         <button class="ui-btn" type="submit">Show</button>
     </form>
@@ -82,29 +86,30 @@
             <span class="ui-card__note">Search, sort and pages below</span>
         </div>
         <div class="table-wrap">
-            <table class="table summary__table" data-server-table data-orderable="0,1,2,3,4,5,6,7,8,9" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
+            <table class="table summary__table" data-server-table data-orderable="0,1,2,3,4,5,6,7,8,9,10" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}">
                 <thead><tr>
-                    <th>Employee</th><th>Department</th><th class="numeric" title="Working days">Work days</th><th class="numeric">Present</th>
+                    <th>ID</th><th>Employee</th><th>Department</th><th class="numeric" title="Working days">Work days</th><th class="numeric">Present</th>
                     <th class="numeric">Half</th><th class="numeric" title="No check-out">No out</th><th class="numeric">Absent</th><th class="numeric">Leave</th><th class="numeric">Hours</th>
                     <th class="no-sort">Source</th><th class="no-sort"><span class="sr-only">Change</span></th>
                 </tr></thead>
                 <tbody>
                     {% for row in page %}
-                        <tr class="summary__row{% if row.13 %} is-hand{% endif %}{% if row.11|stringformat:'s' == changed %} is-changed{% endif %}">
-                            <td><a href="{% url 'organization:employee_detail' row.15 %}">{{ row.16 }}</a>{% if row.17 %}<span class="summary__code">{{ row.17 }}</span>{% endif %}</td>
-                            <td>{{ row.1 }}</td>
-                            <td class="numeric">{{ row.2 }}</td>
-                            <td class="numeric">{% if row.13 and row.13.present_days is not None %}<span class="summary__was" title="By the scans">{{ row.12.present }}</span> <strong>{{ row.3 }}</strong>{% else %}{{ row.3 }}{% endif %}</td>
-                            <td class="numeric">{{ row.4 }}</td>
-                            <td class="numeric{% if row.5 %} summary__warn{% endif %}">{{ row.5 }}</td>
-                            <td class="numeric">{{ row.6 }}</td>
+                        <tr class="summary__row{% if row.14 %} is-hand{% endif %}{% if row.12|stringformat:'s' == changed %} is-changed{% endif %}">
+                            <td>{{ row.0|default:"—" }}</td>
+                            <td><a href="{% url 'organization:employee_detail' row.16 %}">{{ row.17 }}</a></td>
+                            <td>{{ row.2 }}</td>
+                            <td class="numeric">{{ row.3 }}</td>
+                            <td class="numeric">{% if row.14 and row.14.present_days is not None %}<span class="summary__was" title="By the scans">{{ row.13.present }}</span> <strong>{{ row.4 }}</strong>{% else %}{{ row.4 }}{% endif %}</td>
+                            <td class="numeric">{{ row.5 }}</td>
+                            <td class="numeric{% if row.6 %} summary__warn{% endif %}">{{ row.6 }}</td>
                             <td class="numeric">{{ row.7 }}</td>
-                            <td class="numeric">{% if row.13 and row.13.hours is not None %}<span class="summary__was" title="By the scans">{{ row.12.hours }}</span> <strong>{{ row.8 }}</strong>{% else %}{{ row.8 }}{% endif %}</td>
-                            <td>{% if row.13 %}<span class="ui-chip ui-chip--info" title="By {{ row.13.created_by.get_full_name|default:row.13.created_by.email }}, {{ row.13.created_at|date:'d M Y H:i' }}: {{ row.13.reason }}">By hand</span>{% else %}<span class="ui-chip">Scans</span>{% endif %}</td>
-                            <td><button class="ui-btn ui-btn--sm" type="button" data-summary-open="{% url 'payroll:attendance_summary_person' row.11 %}?{{ query }}">{% include "ui/icon.html" with name="edit" small=True %} {% if locked %}See{% else %}Change{% endif %}</button></td>
+                            <td class="numeric">{{ row.8 }}</td>
+                            <td class="numeric">{% if row.14 and row.14.hours is not None %}<span class="summary__was" title="By the scans">{{ row.13.hours }}</span> <strong>{{ row.9 }}</strong>{% else %}{{ row.9 }}{% endif %}</td>
+                            <td>{% if row.14 %}<span class="ui-chip ui-chip--info" title="By {{ row.14.created_by.get_full_name|default:row.14.created_by.email }}, {{ row.14.created_at|date:'d M Y H:i' }}: {{ row.14.reason }}">By hand</span>{% else %}<span class="ui-chip">Scans</span>{% endif %}</td>
+                            <td><button class="ui-btn ui-btn--sm" type="button" data-summary-open="{% url 'payroll:attendance_summary_person' row.12 %}?{{ query }}">{% include "ui/icon.html" with name="edit" small=True %} {% if locked %}See{% else %}Change{% endif %}</button></td>
                         </tr>
                     {% empty %}
-                        <tr><td colspan="11">{% if show == "need" %}Nobody needs a look: every working day has its check-in and check-out.{% elif show == "hand" %}Nobody's days were changed by hand in this period.{% else %}Nobody has attendance days in this period.{% endif %}</td></tr>
+                        <tr><td colspan="12">{% if show == "need" %}Nobody needs a look: every working day has its check-in and check-out.{% elif show == "hand" %}Nobody's days were changed by hand in this period.{% else %}Nobody has attendance days in this period.{% endif %}</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

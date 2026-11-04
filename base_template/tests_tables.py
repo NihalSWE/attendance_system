@@ -83,7 +83,7 @@ class TableTests(OvertimeBase):
         generate_payroll(actor=self.admin, company_id=self.company.pk, year=2026, month=8)
         screens = {"employee_list": 11, "organization:branch_list": 7, "organization:adoption_list": 7,
             "leaves:leave_list": 8, "leaves:leave_type_list": 6, "scheduling:holiday_list": 5,
-            "payroll:payroll_home": 11, "payroll:salary_settings": 5, "payroll:overtime_list": 7}
+            "payroll:payroll_home": 12, "payroll:salary_settings": 5, "payroll:overtime_list": 7}
         for name, columns in screens.items():
             with self.subTest(screen=name):
                 data = self.draw(name)

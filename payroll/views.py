@@ -14,7 +14,7 @@ from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect
-from base_template.tables import paginate, render
+from base_template.tables import code_sort_key, paginate, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -125,13 +125,16 @@ def payroll_home(request):
         records = paginate(request,
             shown.select_related("employee", "employee_assignment_at_period_end__department")
             .annotate(table_rate=Cast(KT("calculation_snapshot__base_rate"), DecimalField(max_digits=18, decimal_places=2)),
+                      # The Employee ID sorts as a number: 9, 10, 100 (2026-11-04).
+                      table_code_sort=code_sort_key("employee_assignment_at_period_end__employee_code"),
                 **{f"table_{key}": Coalesce(Cast(KT(f"calculation_snapshot__counts__{key}"), IntegerField()), 0)
                    for key in ("present", "half_day", "absent", "unpaid_leave")})
             .order_by("employee__first_name", "employee__last_name"),
             search=("employee__first_name", "employee__last_name", "calculation_snapshot__pay_basis",
                     "employee_assignment_at_period_end__employee_code",
                     "employee_assignment_at_period_end__department__name"),
-            order=(("employee__first_name", "employee__last_name"), "calculation_snapshot__pay_basis", "table_rate",
+            order=("table_code_sort", ("employee__first_name", "employee__last_name"),
+                   "calculation_snapshot__pay_basis", "table_rate",
                    "table_present", "table_half_day", "table_absent",
                    "table_unpaid_leave", "gross_earnings", "total_deductions", "net_pay", None))
 

@@ -309,7 +309,7 @@
             <div class="table-wrap">
                 <table data-server-table data-orderable="{{ server_table.orderable }}" data-length="{{ server_table.page.paginator.per_page }}" data-start="{{ server_table.start }}" data-query="{{ server_table.query }}" class="table salary__table">
                     <thead><tr>
-                        <th>Employee</th><th>Pay basis</th><th class="numeric">Rate</th><th class="numeric">Present</th>
+                        <th>ID</th><th>Employee</th><th>Pay basis</th><th class="numeric">Rate</th><th class="numeric">Present</th>
                         <th class="numeric">Half</th><th class="numeric">Absent</th><th class="numeric">Unpaid leave</th>
                         <th class="numeric">Gross</th><th class="numeric">Deductions</th><th class="numeric">Net pay</th>
                         <th class="no-sort">Payslip</th>
@@ -317,7 +317,8 @@
                     <tbody>
                         {% for record in records %}
                             <tr>
-                                <td>{{ record.employee.full_name }}{% if record.calculation_snapshot.override %} <span class="ui-chip ui-chip--info" title="Present days set by hand">by hand</span>{% endif %}<span class="salary__code">{{ record.employee_assignment_at_period_end.employee_code }} · {{ record.employee_assignment_at_period_end.department.name }}</span></td>
+                                <td>{{ record.employee_assignment_at_period_end.employee_code|default:"—" }}</td>
+                                <td>{{ record.employee.full_name }}{% if record.calculation_snapshot.override %} <span class="ui-chip ui-chip--info" title="Present days set by hand">by hand</span>{% endif %}<span class="salary__code">{{ record.employee_assignment_at_period_end.department.name }}</span></td>
                                 <td>{{ record.calculation_snapshot.pay_basis|title }}</td>
                                 <td class="numeric">{{ record.calculation_snapshot.base_rate|money }}</td>
                                 <td class="numeric">{{ record.calculation_snapshot.counts.present|default:0 }}</td>
@@ -332,7 +333,7 @@
                         {% endfor %}
                     </tbody>
                     <tfoot><tr class="salary__total">
-                        <td colspan="8">Total · {{ totals.employees }} employee{{ totals.employees|pluralize }}, {{ currency }}{% if not company_wide %}, in your branches{% endif %}</td>
+                        <td colspan="9">Total · {{ totals.employees }} employee{{ totals.employees|pluralize }}, {{ currency }}{% if not company_wide %}, in your branches{% endif %}</td>
                         <td class="numeric">{{ totals.gross|money }}</td>
                         <td class="numeric">{{ totals.deductions|money }}</td>
                         <td class="numeric">{{ totals.net|money }}</td>
