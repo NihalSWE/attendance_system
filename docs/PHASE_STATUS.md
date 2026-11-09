@@ -7283,3 +7283,10 @@ Optional bonus for full attendance (Ajay's request; decisions by the user the sa
   him although first and last names are separate fields; one word works as before.
 - **Attendance summary**: an employee picker (Select2, several at once, "ID · name"), carried by the tabs.
 - Salary table's totals row widened by the new column. Tests: `payroll/tests_id_sort_search.py`.
+
+### Salary page: overtime columns — 2026-11-09
+
+- Salary by month / week: **OT hours** and **OT pay** on each payslip row (sortable), in the totals row, in
+  the By department view (per department and per person) and in the Excel/PDF download. Both are the sum of
+  the payslip's overtime lines (`OVERTIME` and `DAY_OFF_WORK`: work on holidays and weekly offs), so they
+  are exactly what was paid (`payroll/views.py _with_overtime`). Tests: `payroll/tests_salary_overtime_columns.py`.

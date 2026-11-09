@@ -9,7 +9,7 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Count, DecimalField, Exists, IntegerField, OuterRef, Q, Sum
+from django.db.models import Count, DecimalField, Exists, IntegerField, OuterRef, Q, Subquery, Sum, Value
 from django.db.models.fields.json import KT
 from django.db.models.functions import Cast, Coalesce
 from django.http import JsonResponse
@@ -51,6 +51,7 @@ from payroll.models import (
     OvertimeDecision,
     PayGroup,
     PayrollAdjustment,
+    PayrollLine,
     PayrollPeriod,
     PayrollPolicyVersion,
     PayrollRecord,
@@ -119,11 +120,14 @@ def payroll_home(request):
                                  deductions=Sum("total_deductions"), net=Sum("net_pay"))
         shown_ids = list(shown.values_list("employee_id", flat=True))
         by_department = _by_department(shown) if run else []
+        # Overtime over the payslips shown (2026-11-09).
+        totals["ot_hours"] = sum((group["ot_hours"] for group in by_department), Decimal("0"))
+        totals["ot_pay"] = sum((group["ot_pay"] for group in by_department), Decimal("0"))
         currency = shown.values_list("currency", flat=True).first() or ""
         if request.GET.get("format") in (exports.XLSX, exports.PDF) and run:
             return _salary_download(request, membership, run, pay, by_department, totals, currency)
         records = paginate(request,
-            shown.select_related("employee", "employee_assignment_at_period_end__department")
+            _with_overtime(shown).select_related("employee", "employee_assignment_at_period_end__department")
             .annotate(table_rate=Cast(KT("calculation_snapshot__base_rate"), DecimalField(max_digits=18, decimal_places=2)),
                       # The Employee ID sorts as a number: 9, 10, 100 (2026-11-04).
                       table_code_sort=code_sort_key("employee_assignment_at_period_end__employee_code"),
@@ -136,7 +140,8 @@ def payroll_home(request):
             order=("table_code_sort", ("employee__first_name", "employee__last_name"),
                    "calculation_snapshot__pay_basis", "table_rate",
                    "table_present", "table_half_day", "table_absent",
-                   "table_unpaid_leave", "gross_earnings", "total_deductions", "net_pay", None))
+                   "table_unpaid_leave", "table_ot_hours", "table_ot_pay",
+                   "gross_earnings", "total_deductions", "net_pay", None))
 
     if company_wide:
         decides_overtime = membership.role in overtime.OVERTIME_ROLES
@@ -209,20 +214,40 @@ def payroll_home(request):
     })
 
 
+#: The payslip lines that pay overtime: after the shift, and on a holiday or weekly off.
+OVERTIME_CODES = ("OVERTIME", "DAY_OFF_WORK")
+
+
+def _overtime_sum(field):
+    """A payslip's overtime ``field`` (``quantity`` = hours, ``amount`` = pay), 0 for none."""
+    lines = (PayrollLine.objects.filter(payroll_record=OuterRef("pk"), code__in=OVERTIME_CODES)
+             .order_by().values("payroll_record").annotate(total=Sum(field)).values("total"))
+    return Coalesce(Subquery(lines, output_field=DecimalField(max_digits=14, decimal_places=2)),
+                    Value(Decimal("0")), output_field=DecimalField(max_digits=14, decimal_places=2))
+
+
+def _with_overtime(records):
+    """The payslips with their overtime hours and pay (2026-11-09)."""
+    return records.annotate(table_ot_hours=_overtime_sum("quantity"), table_ot_pay=_overtime_sum("amount"))
+
+
 def _by_department(shown):
     """The payslips grouped by the department each person was in at the end of
     the period: ``[{name, branch, people, gross, deductions, net, records}]``."""
     groups = {}
-    for record in (shown.select_related("employee", "employee_assignment_at_period_end__department",
-                                        "employee_assignment_at_period_end__branch")
+    for record in (_with_overtime(shown).select_related(
+            "employee", "employee_assignment_at_period_end__department", "employee_assignment_at_period_end__branch")
                    .order_by("employee__first_name", "employee__last_name")):
         placement = record.employee_assignment_at_period_end
         key = placement.department_id if placement else None
         group = groups.setdefault(key, {
             "id": key, "name": placement.department.name if placement else "No department",
             "branch": placement.branch.name if placement else "", "people": 0,
-            "gross": Decimal("0"), "deductions": Decimal("0"), "net": Decimal("0"), "records": []})
+            "gross": Decimal("0"), "deductions": Decimal("0"), "net": Decimal("0"),
+            "ot_hours": Decimal("0"), "ot_pay": Decimal("0"), "records": []})
         group["people"] += 1
+        group["ot_hours"] += record.table_ot_hours
+        group["ot_pay"] += record.table_ot_pay
         group["gross"] += record.gross_earnings
         group["deductions"] += record.total_deductions
         group["net"] += record.net_pay
@@ -231,7 +256,7 @@ def _by_department(shown):
 
 
 SALARY_HEADERS = ["Department", "Employee", "Employee ID", "Pay basis", "Present", "Half day", "Absent",
-                  "Gross", "Deductions", "Net pay"]
+                  "OT hours", "OT pay", "Gross", "Deductions", "Net pay"]
 
 
 def _salary_download(request, membership, run, pay, by_department, totals, currency):
@@ -253,22 +278,24 @@ def _salary_download(request, membership, run, pay, by_department, totals, curre
             rows.append([group["name"], record.employee.full_name, placement.employee_code if placement else "",
                          snapshot.get("pay_basis", "").capitalize(),
                          counts.get("present", 0), counts.get("half_day", 0), counts.get("absent", 0),
+                         record.table_ot_hours, record.table_ot_pay,
                          record.gross_earnings, record.total_deductions, record.net_pay])
         rows.append([f"{group['name']}: subtotal", f"{group['people']} people", "", "", "", "", "",
-                     group["gross"], group["deductions"], group["net"]])
+                     group["ot_hours"], group["ot_pay"], group["gross"], group["deductions"], group["net"]])
     rows.append(["Total", f"{totals['employees']} people", "", "", "", "", "",
+                 totals["ot_hours"], totals["ot_pay"],
                  totals["gross"] or 0, totals["deductions"] or 0, totals["net"] or 0])
     title = f"Salary by department · {pay['run_title']}"
     period = run.payroll_period
     lines = [f"{period.start_date:%d %b %Y} - {period.end_date:%d %b %Y}",
              f"Status: {run.get_status_display()}" + (f" · {currency}" if currency else "")]
-    numeric = (4, 5, 6, 7, 8, 9)
+    numeric = (4, 5, 6, 7, 8, 9, 10, 11)
     if fmt == exports.XLSX:
         content = exports.table_xlsx(title=title, lines=lines, headers=SALARY_HEADERS, rows=rows,
                                      numeric=numeric)
     else:
         content = exports.table_pdf(title=title, lines=lines, headers=SALARY_HEADERS, rows=rows,
-                                    numeric=numeric, widths={0: 2, 1: 2.4, 7: 1.4, 8: 1.4, 9: 1.4})
+                                    numeric=numeric, widths={0: 2, 1: 2.4, 8: 1.3, 9: 1.4, 10: 1.4, 11: 1.4})
     exports.record(actor=request.user, membership=membership, page="salary-by-department", fmt=fmt,
                    filters={key: ",".join(request.GET.getlist(key)) for key in
                             ("month", "year", "group", "week", "branch", "department")},
