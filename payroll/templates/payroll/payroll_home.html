@@ -249,12 +249,14 @@
             <div class="table-wrap">
                 <table class="table salary__departments">
                     <colgroup>
-                        <col class="salary__col-sl"><col><col><col class="salary__col-num"><col class="salary__col-money">
+                        <col class="salary__col-sl"><col><col><col class="salary__col-num"><col class="salary__col-num">
+                        <col class="salary__col-money"><col class="salary__col-money">
                         <col class="salary__col-money"><col class="salary__col-money"><col class="salary__col-action">
                     </colgroup>
                     <thead><tr>
                         <th class="numeric">SL</th><th>Department / employee</th><th>Branch / pay basis</th>
-                        <th class="numeric">People</th><th class="numeric">Gross</th><th class="numeric">Deductions</th>
+                        <th class="numeric">People</th><th class="numeric" title="Overtime hours paid">OT hours</th>
+                        <th class="numeric" title="Overtime pay">OT pay</th><th class="numeric">Gross</th><th class="numeric">Deductions</th>
                         <th class="numeric">Net pay</th><th><span class="sr-only">Payslip</span></th>
                     </tr></thead>
                     {% for group in by_department %}
@@ -264,6 +266,8 @@
                                 <td><span class="salary__chevron" aria-hidden="true">›</span><strong>{{ group.name }}</strong></td>
                                 <td>{{ group.branch }}</td>
                                 <td class="numeric">{{ group.people }}</td>
+                                <td class="numeric">{{ group.ot_hours|floatformat:"-2" }}</td>
+                                <td class="numeric">{{ group.ot_pay|money }}</td>
                                 <td class="numeric">{{ group.gross|money }}</td>
                                 <td class="numeric">{{ group.deductions|money }}</td>
                                 <td class="numeric"><strong>{{ group.net|money }}</strong></td>
@@ -276,6 +280,8 @@
                                         <td class="salary__person-name">{{ record.employee.full_name }}{% if record.calculation_snapshot.override %} <span class="ui-chip ui-chip--info" title="Present days set by hand">by hand</span>{% endif %}<span class="salary__code">{{ record.employee_assignment_at_period_end.employee_code }}</span></td>
                                         <td>{{ record.calculation_snapshot.pay_basis|title }}</td>
                                         <td class="numeric"></td>
+                                        <td class="numeric">{{ record.table_ot_hours|floatformat:"-2" }}</td>
+                                        <td class="numeric">{{ record.table_ot_pay|money }}</td>
                                         <td class="numeric">{{ record.gross_earnings|money }}</td>
                                         <td class="numeric">{{ record.total_deductions|money }}</td>
                                         <td class="numeric">{{ record.net_pay|money }}</td>
@@ -285,14 +291,16 @@
                             {% endwith %}
                         </tbody>
                     {% empty %}
-                        <tbody><tr><td colspan="8">Nobody matches these filters.</td></tr></tbody>
+                        <tbody><tr><td colspan="10">Nobody matches these filters.</td></tr></tbody>
                     {% endfor %}
-                    <tbody data-dept-none hidden><tr><td colspan="8" class="salary__none">No matching results.</td></tr></tbody>
+                    <tbody data-dept-none hidden><tr><td colspan="10" class="salary__none">No matching results.</td></tr></tbody>
                     <tfoot><tr class="salary__total">
                         <td></td>
                         <td>Total{% if not company_wide %} <span class="salary__code">in your branches</span>{% endif %}</td>
                         <td>{{ by_department|length }} department{{ by_department|length|pluralize }}</td>
                         <td class="numeric">{{ totals.employees }}</td>
+                        <td class="numeric">{{ totals.ot_hours|floatformat:"-2" }}</td>
+                        <td class="numeric">{{ totals.ot_pay|money }}</td>
                         <td class="numeric">{{ totals.gross|money }}</td>
                         <td class="numeric">{{ totals.deductions|money }}</td>
                         <td class="numeric">{{ totals.net|money }}</td>
@@ -311,6 +319,7 @@
                     <thead><tr>
                         <th>ID</th><th>Employee</th><th>Pay basis</th><th class="numeric">Rate</th><th class="numeric">Present</th>
                         <th class="numeric">Half</th><th class="numeric">Absent</th><th class="numeric">Unpaid leave</th>
+                        <th class="numeric" title="Overtime hours paid">OT hours</th><th class="numeric" title="Overtime pay">OT pay</th>
                         <th class="numeric">Gross</th><th class="numeric">Deductions</th><th class="numeric">Net pay</th>
                         <th class="no-sort">Payslip</th>
                     </tr></thead>
@@ -325,6 +334,8 @@
                                 <td class="numeric">{{ record.calculation_snapshot.counts.half_day|default:0 }}</td>
                                 <td class="numeric">{{ record.calculation_snapshot.counts.absent|default:0 }}</td>
                                 <td class="numeric">{{ record.calculation_snapshot.counts.unpaid_leave|default:0 }}</td>
+                                <td class="numeric">{{ record.table_ot_hours|floatformat:"-2" }}</td>
+                                <td class="numeric">{{ record.table_ot_pay|money }}</td>
                                 <td class="numeric">{{ record.gross_earnings|money }}</td>
                                 <td class="numeric">{{ record.total_deductions|money }}</td>
                                 <td class="numeric"><strong>{{ record.net_pay|money }}</strong></td>
@@ -334,6 +345,8 @@
                     </tbody>
                     <tfoot><tr class="salary__total">
                         <td colspan="9">Total · {{ totals.employees }} employee{{ totals.employees|pluralize }}, {{ currency }}{% if not company_wide %}, in your branches{% endif %}</td>
+                        <td class="numeric">{{ totals.ot_hours|floatformat:"-2" }}</td>
+                        <td class="numeric">{{ totals.ot_pay|money }}</td>
                         <td class="numeric">{{ totals.gross|money }}</td>
                         <td class="numeric">{{ totals.deductions|money }}</td>
                         <td class="numeric">{{ totals.net|money }}</td>
