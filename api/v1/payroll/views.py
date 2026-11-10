@@ -22,7 +22,7 @@ from api.v1.payroll import serializers as s
 from attendance.services import month_bounds
 from common.tenant import use_company
 from organization.services import STRUCTURE_ROLES
-from payroll import overtime, periods, services
+from payroll import overtime, overtime_overrides, periods, services
 from payroll.models import (
     OvertimeDecision, PayrollAdjustment, PayrollRecord, PayrollRun, PenaltyAssessment,
 )
@@ -550,6 +550,53 @@ def _line_input(request):
 
 
 LINE_NAMES = {"adjustment_type": "type"}
+
+
+class CycleOvertimeView(SalaryView):
+    permission_classes = [PanelRule]
+    panel_page = "payroll:cycle_overtime"
+
+    def output(self, request, record):
+        run = record.payroll_run
+        row = overtime_overrides.active(request.company_id, run.payroll_period, run.pay_group,
+                                         [record.employee_id]).get(record.employee_id)
+        changed = (record.calculation_snapshot.get("overtime_override") or {}).get("id") != getattr(row, "pk", None)
+        changed = changed or (run.status != PayrollRun.Status.POSTED
+                              and bool(overtime_overrides.rules_changed_since(request.company_id, run)))
+        return Response(s.CycleOvertimeSerializer({"override": overtime_overrides.describe(row),
+                                                    "regenerate_required": changed}).data)
+
+    @endpoint(id="salary-cycle-overtime-read", area=AREA, title="Cycle overtime totals",
+              summary="Read one employee's manual overtime totals for a salary cycle.",
+              what_it_does=["Returns the current manual totals and whether they require regeneration."],
+              description="For salary preparers in this person's branch. Attendance is unchanged.",
+              roles=PREPARERS, scopes=["payroll:read"], params=[PAYSLIP_PARAM],
+              response=s.CycleOvertimeSerializer,
+              response_example={"override": None, "regenerate_required": False}, errors=ERRORS + ONE)
+    def get(self, request, payslip_id):
+        record = overtime_overrides.record_for(request.user, request.company_id, payslip_id)
+        return self.output(request, record)
+
+    @endpoint(id="salary-cycle-overtime-save", area=AREA, title="Set cycle overtime hours",
+              summary="Replace a salary cycle's overtime hours, or return to attendance totals.",
+              what_it_does=["Saves audited payable cycle totals without changing daily attendance.",
+                            "Regenerate the draft cycle before submitting or approving it."],
+              description="Draft cycles only. Hours must fit the cycle's blocks. Regular and day-off hours replace both automatic totals; 0 pays none.",
+              roles=PREPARERS, scopes=["payroll:write"], params=[PAYSLIP_PARAM],
+              request=s.CycleOvertimeInputSerializer, response=s.CycleOvertimeSerializer,
+              request_example={"action": "save", "hours": "4", "day_off_hours": "0", "reason": "Checked timesheet"},
+              response_example={"override": {"id": 1, "hours": "4.00", "day_off_hours": "0.00", "reason": "Checked timesheet"},
+                                "regenerate_required": True}, errors=WRITE_ERRORS + ONE)
+    def post(self, request, payslip_id):
+        data = s.CycleOvertimeInputSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        values = dict(data.validated_data)
+        reverting = values.pop("action") == "revert"
+        with service_errors():
+            overtime_overrides.save(actor=request.user, company_id=request.company_id,
+                                     record_id=payslip_id, revert=reverting, **values)
+        record = overtime_overrides.record_for(request.user, request.company_id, payslip_id)
+        return self.output(request, record)
 
 
 class AdjustmentAddView(SalaryView):

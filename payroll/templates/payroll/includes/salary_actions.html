@@ -1,0 +1,5 @@
+<div class="salary__actions">
+<a class="ui-btn ui-btn--sm" href="{% url 'payroll:payslip' record.pk %}">Payslip</a>
+{% if record.can_set_overtime %}<a class="ui-btn ui-btn--sm" href="{% url 'payroll:cycle_overtime' record.pk %}">Set overtime hours</a>{% endif %}
+{% if record.calculation_snapshot.overtime_override %}<span class="ui-chip ui-chip--info" title="Overtime hours set for the whole salary cycle">Manual OT</span>{% endif %}
+</div>

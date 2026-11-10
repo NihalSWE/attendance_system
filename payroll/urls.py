@@ -1,6 +1,6 @@
 from django.urls import path
 
-from payroll import lfa_views, paygroup_views, summary_views, views
+from payroll import lfa_views, overtime_override_views, paygroup_views, summary_views, views
 
 app_name = "payroll"
 
@@ -32,6 +32,7 @@ urlpatterns = [
     path("penalties/<int:pk>/waive/", views.penalty_waive, name="penalty_waive"),
     path("penalties/<int:pk>/waive/undo/", views.penalty_unwaive, name="penalty_unwaive"),
     path("payslips/<int:pk>/", views.payslip, name="payslip"),
+    path("payslips/<int:pk>/overtime/", overtime_override_views.cycle_overtime, name="cycle_overtime"),
     path("payslips/<int:pk>/email/", views.payslip_email, name="payslip_email"),
     path("payslips/<int:pk>/adjustments/add/", views.payslip_adjustment_add, name="payslip_adjustment_add"),
     path("payslips/<int:pk>/corrections/add/", views.payslip_correction_add, name="payslip_correction_add"),

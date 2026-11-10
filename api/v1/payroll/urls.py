@@ -14,6 +14,7 @@ urlpatterns = [
     path(f"{MONTH}/send-back", views.SendBackView.as_view(), name="payroll_send_back"),
     path(f"{MONTH}/reopen", views.ReopenView.as_view(), name="payroll_reopen"),
     path("payroll/payslips/<int:payslip_id>", views.PayslipView.as_view(), name="payslip"),
+    path("payroll/payslips/<int:payslip_id>/overtime", views.CycleOvertimeView.as_view(), name="payslip_overtime"),
     path("payroll/payslips/<int:payslip_id>/pdf", views.PayslipPdfView.as_view(),
          name="payslip_pdf"),
     path("payroll/payslips/<int:payslip_id>/email", views.PayslipEmailView.as_view(),

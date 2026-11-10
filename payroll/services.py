@@ -55,7 +55,7 @@ from payroll.models import (
     PayrollRun,
     PayrollSettings,
 )
-from payroll import attendance_bonus, overrides, paygroups, periods
+from payroll import attendance_bonus, overrides, overtime_overrides, paygroups, periods
 from payroll.penalties import PayValue, assess, rules_in_force
 from payroll.policy import STANDARD_RULES, plain, rules_for
 
@@ -259,7 +259,7 @@ def shift_hours(record):
     return Decimal(minutes or 480) / Decimal("60")
 
 
-def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
+def _overtime_lines(pay_basis, rate, rules, records, days_in_month, overtime_override=None):
     """Earning lines for approved overtime, and the per-day evidence.
 
     Each day's approved minutes pass the minimum and rounding, then pay
@@ -273,6 +273,42 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
     per_day = None
     if pay_basis == EmployeeCompensation.PayBasis.MONTHLY:
         per_day = _per_day(rules, rate, records, days_in_month) or rate / rules.divisor
+    def hourly_rate(record):
+        if pay_basis == EmployeeCompensation.PayBasis.HOURLY:
+            return rate
+        daily = rate if pay_basis == EmployeeCompensation.PayBasis.DAILY else per_day
+        return daily / shift_hours(record)
+
+    if overtime_override is not None:
+        # These are already payable cycle totals, not a fabricated daily scan.
+        # Use the latest applicable shift for each category; display that rate
+        # on the input page and retain it in the generated calculation evidence.
+        if not overtime_override.hours and not overtime_override.day_off_hours:
+            return [], []
+        eligible = [r for r in records if r.attendance_status != Status.INACTIVE]
+        if not eligible:
+            raise ValidationError("There are no eligible shift days for this cycle's manual overtime.")
+        lines, details = [], []
+        for day_off, hours, code, label, multiplier in (
+            (False, overtime_override.hours, "OVERTIME", "Overtime", rules.overtime_multiplier),
+            (True, overtime_override.day_off_hours, "DAY_OFF_WORK", "Work on holidays / weekly offs", rules.day_off_multiplier),
+        ):
+            if not hours:
+                continue
+            if rules.overtime_step and hours * 60 % rules.overtime_step:
+                raise ValidationError("Manual overtime hours no longer match the cycle's blocks. Update the totals first.")
+            category = [r for r in eligible if (r.attendance_status in (Status.HOLIDAY, Status.WEEKLY_OFF)) == day_off]
+            reference = max(category or eligible, key=lambda r: r.work_date)
+            hourly = hourly_rate(reference)
+            paid_rate = hourly * multiplier
+            amount = money(hours * paid_rate)
+            lines.append(("earning", code, f"{label} (cycle hours set by hand, {plain(multiplier)}× the hourly rate)",
+                          hours, paid_rate, amount))
+            details.append({"source": "cycle_override", "paid_minutes": str(hours * 60),
+                            "hourly_rate": str(money(hourly)), "multiplier": plain(multiplier),
+                            "day_off": day_off, "amount": str(amount),
+                            "rate_reference_date": reference.work_date.isoformat()})
+        return lines, details
     groups = {}
     details = []
     for record in records:
@@ -280,12 +316,7 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
         paid = rules.payable_overtime(approved)
         if not paid:
             continue
-        if pay_basis == EmployeeCompensation.PayBasis.HOURLY:
-            hourly = rate
-        elif pay_basis == EmployeeCompensation.PayBasis.DAILY:
-            hourly = rate / shift_hours(record)
-        else:
-            hourly = per_day / shift_hours(record)
+        hourly = hourly_rate(record)
         day_off = record.attendance_status in (Status.HOLIDAY, Status.WEEKLY_OFF)
         multiplier = rules.day_off_multiplier if day_off else rules.overtime_multiplier
         amount = hourly * multiplier * Decimal(paid) / Decimal("60")
@@ -323,7 +354,7 @@ def _overtime_lines(pay_basis, rate, rules, records, days_in_month):
 def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                   penalty_rules=(), waived=frozenset(), employee_key="", adjustments=(),
                   employed_days=None, basic_segments=None, components=(), inactive_days=(),
-                  worked_hours=None, attendance_bonus=None):
+                  worked_hours=None, attendance_bonus=None, overtime_override=None):
     """Lines and totals for one employee. Pure: no database writes.
 
     ``inactive_days`` are the employed days of the month they were inactive
@@ -433,7 +464,7 @@ def calculate_pay(pay_basis, rate, records, rules=None, days_in_month=30,
                     money(off_hours), rate, money(off_hours * rate),
                 ))
 
-    overtime_lines, overtime = _overtime_lines(pay_basis, rate, rules, records, days_in_month)
+    overtime_lines, overtime = _overtime_lines(pay_basis, rate, rules, records, days_in_month, overtime_override)
     lines.extend(overtime_lines)
 
     # Allowances and recurring deductions (A11). After basic, because a
@@ -897,6 +928,12 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 if records and records[-1].employee_assignment.branch_id in branch_ids
             }
         rebuilt = {employee.pk for employee in records_by_employee}
+        overtime_by_hand = overtime_overrides.active(company_id, period, pay_group, list(rebuilt))
+        # Validate before replacing any payslips: generation is incremental.
+        for employee, employee_days in records_by_employee.items():
+            manual = overtime_by_hand.get(employee.pk)
+            if manual is not None:
+                overtime_overrides.validate_for_generation(manual, employee, employee_days, rules, last)
 
         run = runs_here.filter(status=PayrollRun.Status.DRAFT).first()
         previous_skipped = {}
@@ -1013,6 +1050,7 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 on_monthly[employee.pk] = employee.full_name
                 continue
             override = by_hand.get(employee.pk)
+            overtime_override = overtime_by_hand.get(employee.pk)
             records = overrides.apply(records, override)
             basic_segments = (
                 _monthly_segments(employee, start, end)
@@ -1059,6 +1097,7 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                 inactive_days=sorted(inactive_by_employee.get(employee.pk, ())),
                 worked_hours=override.hours if override is not None and override.present_days is None else None,
                 attendance_bonus=bonus,
+                overtime_override=overtime_override,
             )
             payroll_record = PayrollRecord.objects.create(
                 company=membership.company, payroll_run=run, employee=employee,
@@ -1082,6 +1121,7 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                     "rules": result["rules"],
                     "overtime": result["overtime"],
                     "override": overrides.describe(override),
+                    "overtime_override": overtime_overrides.describe(overtime_override),
                     "attendance_bonus": result["attendance_bonus"],
                 },
             )
@@ -1100,10 +1140,11 @@ def generate_payroll(*, actor, company_id, year=None, month=None, branch_ids=Non
                     quantity=money(quantity), rate=rate, amount=amount, sequence=index,
                     penalty_assessment=assessments.get(index),
                     payroll_adjustment_id=adjusted.get(index),
-                    is_manual=index in adjusted,
+                    is_manual=index in adjusted or (overtime_override is not None and code in ("OVERTIME", "DAY_OFF_WORK")),
                     source_type=(
                         "penalty" if index in assessments
-                        else "adjustment" if index in adjusted else ""
+                        else "adjustment" if index in adjusted
+                        else "overtime_override" if overtime_override is not None and code in ("OVERTIME", "DAY_OFF_WORK") else ""
                     ),
                 )
                 for index, (kind, code, label, quantity, rate, amount) in enumerate(result["lines"])
@@ -1274,6 +1315,7 @@ def submit_payroll(*, actor, company_id, year=None, month=None, pay_group=None, 
             if _run_for_month(company_id, year, month, PayrollRun.Status.SUBMITTED, pay_group, week):
                 raise ValidationError("This month's salary is already waiting for approval.")
             raise ValidationError("Generate this month's salary before submitting it.")
+        overtime_overrides.require_current(company_id, run)
         if overtime.decided_after(company_id, run):
             raise ValidationError(
                 "Overtime was decided after this salary was generated. "
@@ -1311,6 +1353,7 @@ def approve_payroll(*, actor, company_id, year=None, month=None, pay_group=None,
         refusal = approval_blocker(actor, company_id, run)
         if refusal:
             raise ValidationError(refusal)
+        overtime_overrides.require_current(company_id, run)
         if overtime.decided_after(company_id, run):
             raise ValidationError(
                 "Overtime was decided after this salary was generated. "

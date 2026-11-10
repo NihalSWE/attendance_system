@@ -121,7 +121,8 @@ table.salary__departments { table-layout: fixed; width: 100%; }
 .salary__col-sl { width: 64px; }
 .salary__col-num { width: 90px; }
 .salary__col-money { width: 140px; }
-.salary__col-action { width: 110px; }
+.salary__col-action { width: 170px; }
+.salary__actions { display: grid; gap: 6px; justify-items: start; }
 table.salary__departments th,
 table.salary__departments td { padding: 12px 14px; vertical-align: middle; }
 .salary__sl { color: var(--muted); font-variant-numeric: tabular-nums; }

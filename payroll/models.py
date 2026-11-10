@@ -1203,6 +1203,44 @@ class DaysOverride(TenantOwned, ActorTracked):
         return f"{self.employee_id} {self.start_date:%Y-%m-%d}..{self.end_date:%Y-%m-%d}: {value}"
 
 
+class OvertimeOverride(TenantOwned, ActorTracked):
+    """Payable overtime totals for one employee's salary cycle, with history.
+
+    Independent of generated payslips (which are replaced on regeneration)
+    and of daily attendance evidence. Regular and day-off hours retain their
+    own pay multipliers.
+    """
+
+    class Status(models.TextChoices):
+        ACTIVE = "active", "In force"
+        REPLACED = "replaced", "Changed again"
+        REVERTED = "reverted", "Back to attendance"
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.PROTECT, related_name="overtime_overrides")
+    payroll_period = models.ForeignKey(PayrollPeriod, on_delete=models.PROTECT, related_name="overtime_overrides")
+    pay_group = models.ForeignKey(PayGroup, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    hours = models.DecimalField(max_digits=7, decimal_places=2)
+    day_off_hours = models.DecimalField(max_digits=7, decimal_places=2, default=Decimal("0"))
+    reason = models.CharField(max_length=255)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
+    ended_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "payroll_overtime_override"
+        ordering = ("-created_at", "-pk")
+        constraints = [
+            models.UniqueConstraint(fields=["company", "employee", "payroll_period"],
+                                    condition=models.Q(status="active", pay_group__isnull=True),
+                                    name="uniq_monthly_ot_override"),
+            models.UniqueConstraint(fields=["company", "employee", "payroll_period", "pay_group"],
+                                    condition=models.Q(status="active", pay_group__isnull=False),
+                                    name="uniq_weekly_ot_override"),
+            models.CheckConstraint(condition=models.Q(hours__gte=0, day_off_hours__gte=0),
+                                   name="ot_override_nonnegative"),
+        ]
+
+
 class GenerateJob(TenantOwned):
     """Generate salary, done in the background (2026-11-01): a month for 2,000
     people takes minutes, past the server's time limit, with nothing on screen.

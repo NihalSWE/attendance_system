@@ -108,7 +108,7 @@ COMPANY_MENUS = (
     ("salary", "Salary", (
         item("Salary by month", "payroll:payroll_home", "payroll:payslip", "payroll:penalty_waive",
              "payroll:payroll_submit", "payroll:payroll_finalise", "payroll:payroll_return",
-             "payroll:payroll_reopen", salary=True),
+             "payroll:payroll_reopen", "payroll:cycle_overtime", salary=True),
         item("Salary settings", "payroll:salary_settings", manage=True),
         # Who is paid weekly (2026-10-25).
         item("Pay groups", "payroll:pay_groups", manage=True),

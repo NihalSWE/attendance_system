@@ -2,6 +2,17 @@
 
 Every endpoint added or changed, newest first.
 
+## 2026-11-10 — Overtime threshold blocks and cycle totals
+
+- Daily overtime now earns the next block when the remainder reaches the
+  minimum: 40-minute minimum + hourly blocks pays 50 minutes as 1 hour and
+  2 hours 40 minutes as 3 hours. Exact-minute mode remains available.
+- `GET/POST /payroll/payslips/{payslip_id}/overtime`: read, set or revert
+  audited payable cycle totals, with separate regular and day-off hours.
+  Reuses panel permissions and draft locks. Regenerate after changing totals.
+- Submit and approve refuse payslips with stale cycle overtime or overtime
+  rules. Historical posted payslips are not recalculated automatically.
+
 ## 2026-10-17 — Working days on a weekly off
 
 - **New:** `GET/POST /api/v1/working-days`, `GET /working-days/{id}` and

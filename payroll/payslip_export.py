@@ -67,6 +67,10 @@ def build_payslip_pdf(context, *, company, by=""):
     if counts.get("overtime_minutes"):
         attendance.append(["Approved overtime minutes", counts["overtime_minutes"]])
     by_hand = context.get("by_hand")
+    manual_ot = (record.calculation_snapshot or {}).get("overtime_override")
+    if manual_ot:
+        attendance.append(["Payable cycle overtime (set by hand)",
+                           f"{manual_ot['hours']} regular hours + {manual_ot['day_off_hours']} day-off hours"])
     if by_hand:
         attendance.append(["Set by hand", (
             f"{by_hand['present_days']} present days (scans {by_hand['scan_present_days']})"

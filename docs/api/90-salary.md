@@ -77,14 +77,43 @@ POST /api/v1/payroll/overtime/9001/decide
 {"decision": "reject"}
 ```
 
-`paid_minutes` is what the salary rules pay (a minimum, whole blocks).
+`paid_minutes` is what the salary rules pay, calculated separately per day.
+With a 40-minute minimum and 60-minute blocks: 39 minutes pays nothing,
+40–99 minutes pays 60, 100–159 pays 120, and 160 pays 180. Complete blocks
+count; a remainder reaching the minimum earns the next block. With a zero
+minimum, only complete blocks count. Without blocks, eligible minutes are exact.
 Generate a draft month again to include a decision.
+
+### Set overtime hours for a salary cycle
+
+`GET/POST /api/v1/payroll/payslips/{payslip_id}/overtime` mirrors **Salary by
+month → Set overtime hours** (also available for weekly pay groups).
+
+```json
+{"action": "save", "hours": "4", "day_off_hours": "0", "reason": "Checked the cycle timesheet"}
+```
+
+These are payable totals, replacing both regular and day-off overtime for
+one employee and cycle. The daily threshold is not applied again. Hours must
+fit the configured blocks; 0 means pay none. Regular and day-off hours retain
+their respective multipliers; manual totals use the salary's base rate and the
+latest applicable shift for each category, falling back to the latest eligible
+shift if that category has no days. The input page shows the rates.
+
+Return to attendance with `{"action": "revert", "reason": "Use attendance"}`.
+Both operations require salary preparation access in the employee's branch,
+are audited, and only work while the cycle is a draft. The totals survive
+regeneration without editing scans or daily attendance. Regenerate the cycle
+after saving: submission and approval refuse stale totals or overtime rules.
 
 ### Salary rules
 
 The rules that turn attendance into pay are **dated**: each change applies
 from the 1st of a month, and the months before keep the rules they were paid
-under.
+under. Payroll selects the rules effective on the **cycle's first date**, which
+may be in the previous calendar month. Saving new settings does not rewrite
+generated payslips: regenerate an open cycle to apply them. Salary by month
+shows its applicable rules and flags generated figures that need refreshing.
 
 ```json
 POST /api/v1/payroll/settings/rules

@@ -1,0 +1,62 @@
+{% extends "base_template/base.html" %}
+{% load money %}
+{% block title %}Set overtime hours · Salary{% endblock %}
+{% block page %}
+<div class="ui-page">
+    <div class="ui-head">
+        <div>
+            <p class="ui-head__crumbs"><a href="{{ back_url }}">Salary</a> / Set overtime hours</p>
+            <h1 class="ui-head__title">{{ record.employee.full_name }} · Overtime hours</h1>
+            <p class="ui-head__sub">{{ period.start_date|date:"d M Y" }} – {{ period.end_date|date:"d M Y" }} · {{ period.name }}</p>
+        </div>
+        <a class="ui-btn" href="{{ back_url }}">Back to salary</a>
+    </div>
+    <section class="card">
+        <div class="card__body stack">
+            <p>Enter the <strong>payable hours for the whole cycle</strong>. These replace this salary's attendance totals. Enter 0 to pay none.</p>
+            <p>Attendance totals under this cycle's rules:
+                {% for line in automatic %}{{ line.2 }}: <strong>{{ line.3|floatformat:"-2" }} hours</strong>{% if not forloop.last %}; {% endif %}{% empty %}0 payable hours{% endfor %}.
+            </p>
+            <p>Pay per overtime hour:
+                {% for line in rates %}<strong>{% if line.1 == 'OVERTIME' %}Regular overtime{% else %}Holiday / weekly-off work{% endif %}: {{ line.4|money }} {{ record.currency }}/hour</strong>{% if not forloop.last %}; {% endif %}{% endfor %}.
+            </p>
+            <details>
+                <summary>How the hours and rates work</summary>
+                <p>{{ rules_summary }}</p>
+                <p>For example, 50 minutes on one day and 2 hours 40 minutes on another give <strong>4 payable hours</strong> with a 40-minute threshold and one-hour blocks. Enter 4, not 3.5; the daily threshold is not applied again to a manual total.</p>
+                <p>Regular and day-off hours are separate because their pay rates can differ. Manual totals use the salary's base rate and the latest applicable shift in this cycle for each category. If that category has no days, the latest eligible shift is used. Daily scans and attendance stay as recorded.</p>
+            </details>
+            {% if current %}<p class="alert alert--info">Current manual totals: {{ current.hours|floatformat:"-2" }} regular hours + {{ current.day_off_hours|floatformat:"-2" }} day-off hours. Reason: {{ current.reason }}</p>{% endif %}
+            {% if editable %}
+                <form method="post" class="stack" novalidate>
+                    {% csrf_token %}
+                    {{ form.non_field_errors }}
+                    <div class="grid grid--2">
+                        {% include "leaves/includes/field.html" with field=form.hours %}
+                        {% include "leaves/includes/field.html" with field=form.day_off_hours %}
+                    </div>
+                    {% include "leaves/includes/field.html" with field=form.reason %}
+                    <div class="row">
+                        <button class="btn btn--primary" name="action" value="save" type="submit">Save cycle hours</button>
+                        {% if current %}<button class="btn btn--quiet" name="action" value="revert" type="submit" formnovalidate>Use attendance totals again</button>{% endif %}
+                    </div>
+                    <p class="field__help">After saving, regenerate the cycle on Salary. Submission and approval are blocked until its payslips include the change.</p>
+                </form>
+            {% else %}
+                <p class="alert alert--info">This salary is awaiting approval or finalised. Send it back or undo finalise before changing overtime hours.</p>
+            {% endif %}
+        </div>
+    </section>
+    {% if history %}
+        <section class="card">
+            <div class="card__body">
+                <h2>Overtime changes for this cycle</h2>
+                <div class="table-wrap"><table class="table">
+                    <thead><tr><th>When / who</th><th>Regular hours</th><th>Day-off hours</th><th>Reason</th><th>Status</th></tr></thead>
+                    <tbody>{% for row in history %}<tr><td>{{ row.created_at|date:"d M Y H:i" }} · {{ row.created_by }}</td><td>{{ row.hours|floatformat:"-2" }}</td><td>{{ row.day_off_hours|floatformat:"-2" }}</td><td>{{ row.reason }}</td><td>{{ row.get_status_display }}</td></tr>{% endfor %}</tbody>
+                </table></div>
+            </div>
+        </section>
+    {% endif %}
+</div>
+{% endblock %}

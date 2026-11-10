@@ -35,7 +35,7 @@ from common import exports
 from common.choices import ActiveStatus
 from organization.models import Branch, Department
 from organization.views import _company_or_redirect
-from payroll import generate_jobs, overtime, paygroups, penalties, periods, policy
+from payroll import generate_jobs, overtime, overtime_overrides, paygroups, penalties, periods, policy
 from payroll.forms import (
     _ordinal,
     GeneralSettingsForm,
@@ -143,6 +143,16 @@ def payroll_home(request):
                    "table_unpaid_leave", "table_ot_hours", "table_ot_pay",
                    "gross_earnings", "total_deductions", "net_pay", None))
 
+    for record in list(records) + [record for department_group in by_department for record in department_group["records"]]:
+        record.can_set_overtime = (
+            run.status == PayrollRun.Status.DRAFT and (
+                prepare_branches is ALL_BRANCHES or record_branch_id(record) in prepare_branches))
+    cycle_rules = policy.rules_for(company_id, first)
+    overtime_changed = (
+        overtime_overrides.changed_since(company_id, run)
+        + overtime_overrides.rules_changed_since(company_id, run)
+        if run and run.status != PayrollRun.Status.POSTED else 0
+    )
     if company_wide:
         decides_overtime = membership.role in overtime.OVERTIME_ROLES
         overtime_branches = ALL_BRANCHES
@@ -167,6 +177,9 @@ def payroll_home(request):
         "period_preview": first <= timezone.localdate() < last and run is not None
                           and run.status != PayrollRun.Status.POSTED,
         "run": run,
+        "cycle_overtime_rules": overtime_summary(cycle_rules),
+        "cycle_rules_from": cycle_rules.version.effective_from if cycle_rules.version else None,
+        "cycle_overtime_changed": overtime_changed,
         "generate_job": generate_jobs.describe(job) if job is not None and job.status == GenerateJob.Status.RUNNING else None,
         "records": records,
         "totals": totals,
@@ -1155,6 +1168,10 @@ def overtime_summary(rules):
             "paid in whole hours" if rules.overtime_step == 60
             else f"paid in {rules.overtime_step}-minute blocks"
         )
+        if 0 < rules.overtime_minimum < rules.overtime_step:
+            parts.append(f"a remainder of {rules.overtime_minimum} minutes earns the next block")
+    else:
+        parts.append("eligible overtime paid by exact minutes")
     return " · ".join(parts)
 
 

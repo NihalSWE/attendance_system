@@ -119,14 +119,19 @@ class SalaryRules:
     def payable_overtime(self, minutes):
         """Approved minutes of one day, after the minimum and the rounding.
 
-        A day under the minimum pays none; otherwise the minutes are rounded
-        down to whole blocks (30 → 95 min pays 90).
+        A day under the minimum pays none. Complete blocks count; a remainder
+        reaching the minimum earns one more block (40-minute threshold and
+        60-minute blocks: 50 -> 60, 160 -> 180). With a zero threshold, only
+        complete blocks count. No blocks means exact eligible minutes.
         """
         minutes = int(minutes or 0)
         if not self.pays_overtime or minutes <= 0 or minutes < self.overtime_minimum:
             return 0
         if self.overtime_step:
-            minutes -= minutes % self.overtime_step
+            blocks, remainder = divmod(minutes, self.overtime_step)
+            if self.overtime_minimum and remainder >= self.overtime_minimum:
+                blocks += 1
+            minutes = blocks * self.overtime_step
         return minutes
 
     def round_net(self, value):
@@ -167,6 +172,10 @@ class SalaryRules:
                 "day_off_multiplier": plain(self.day_off_multiplier),
                 "minimum_minutes": self.overtime_minimum,
                 "rounding_minutes": self.overtime_step,
+                "block_rule": (
+                    "remainder_threshold" if 0 < self.overtime_minimum < self.overtime_step
+                    else "completed_blocks"
+                ),
             },
         }
 

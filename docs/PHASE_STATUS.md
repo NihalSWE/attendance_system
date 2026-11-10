@@ -7290,3 +7290,31 @@ Optional bonus for full attendance (Ajay's request; decisions by the user the sa
   the By department view (per department and per person) and in the Excel/PDF download. Both are the sum of
   the payslip's overtime lines (`OVERTIME` and `DAY_OFF_WORK`: work on holidays and weekly offs), so they
   are exactly what was paid (`payroll/views.py _with_overtime`). Tests: `payroll/tests_salary_overtime_columns.py`.
+
+### Overtime threshold blocks and manual cycle hours — 2026-11-10
+
+- Corrected `SalaryRules.payable_overtime`: complete blocks plus a remainder reaching the
+  configured minimum are payable. With minimum 40 and blocks 60: 39 -> 0, 50 -> 60,
+  160 -> 180 minutes. Applied separately per day, then summed. Zero minimum keeps completed
+  blocks; block size 0 keeps exact eligible minutes. The user's monthly example (30,000,
+  8 paid shift hours, multiplier 1, 50m + 2h40m on separate days) earns 500 overtime.
+- Salary by month/week: each draft employee row has **Set overtime hours**. Audited regular
+  and holiday/weekly-off payable cycle totals replace automatic overtime, survive regeneration,
+  and can be returned to attendance totals. The rates shown use the salary base rate and latest
+  applicable shift per category. Daily attendance is unchanged. Salary preparation permission,
+  company/branch scope, draft locks, reasons, finite values and block increments are enforced.
+- `OvertimeOverride`, migration `payroll.0018_overtime_override`, retains change history and is
+  independent of replaced payslips. Payslips, salary totals, Excel/PDF and API earnings all use
+  the same generated lines. Preflight rejects incompatible manual totals before replacing a draft.
+- Salary shows the overtime rules selected at the cycle's **first date**, including custom
+  monthly cycles. Submission/approval refuse outdated overtime totals or rules. Saved payslips
+  are never silently recalculated. The local fractional-hour examples were generated with
+  minimum 0, blocks 0 and multiplier 2; no company rules or existing salaries were changed.
+- API parity: `GET/POST /api/v1/payroll/payslips/{payslip_id}/overtime`; see the salary API guide.
+- Verified: 47 focused tests, then 421 regression tests (all payroll, salary API/settings,
+  new cycle API, API documentation/downloads and attendance calculation/make-up); all passed.
+  Final rerun after the UI/API refinements: 21 focused tests passed.
+  Django check and migration drift check clean. Migration applied locally. Rendered form checked
+  at 1440px and 390px, no horizontal overflow. Existing business data was not regenerated.
+- Deploy: migrate, collectstatic, restart. Ensure the desired salary rules are effective at
+  the target cycle's start, then regenerate open cycles. No new dependencies or environment keys.

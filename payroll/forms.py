@@ -106,8 +106,9 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
     minimum_overtime_minutes = forms.IntegerField(
         label="Don't pay overtime shorter than (minutes)", min_value=0, max_value=1440,
         help_text=(
-            "Per day. With 30, someone who leaves at 18:20 gets nothing and the day "
-            "doesn't wait for a decision. 0 = every minute counts."
+            "Per day: less than this earns nothing. With blocks, a remainder reaching "
+            "this many minutes earns the next block. With 40 minutes and 1-hour blocks, "
+            "50 minutes pays 1 hour; 2 hours 40 minutes pays 3 hours."
         ),
     )
     overtime_rounding_minutes = forms.TypedChoiceField(
@@ -115,8 +116,9 @@ class SalaryRulesForm(StyledFormMixin, forms.Form):
         choices=[(0, "Every minute (no blocks)"), (15, "15 minutes"),
                  (30, "30 minutes"), (60, "1 hour")],
         help_text=(
-            "Per day, minutes left over after the last full block are not paid. "
-            "With 30-minute blocks, 95 minutes pays 90; with 1-hour blocks, 95 pays 60."
+            "Applied separately each day, before adding the cycle's hours. Complete blocks "
+            "plus a remainder reaching the minimum are paid. If the minimum is 0, only "
+            "complete blocks are paid. No blocks pays exact minutes after the daily minimum."
         ),
     )
 

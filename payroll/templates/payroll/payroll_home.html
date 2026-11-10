@@ -80,6 +80,16 @@
         </div>
     </div>
 
+    <p class="field__help">Overtime rules for this cycle (selected at {{ period_first|date:"d M Y" }}):
+        {{ cycle_overtime_rules }}.
+        {% if cycle_rules_from %}Rules effective {{ cycle_rules_from|date:"d M Y" }}.{% else %}Standard rules; no saved rules were effective at the cycle's start.{% endif %}
+        Generated payslips keep their calculated amounts until regenerated.
+    </p>
+    {% if cycle_overtime_changed %}
+        <p class="alert alert--info">Overtime totals or rules changed since this salary was generated.
+            Regenerate this cycle to update its overtime hours and pay{% if run.status == 'submitted' %}; send it back first{% endif %}.
+            Submission and approval require the updated figures.</p>
+    {% endif %}
     {# Where the month stands. #}
     <ol class="ui-steps salary__steps" aria-label="Where this salary stands">
         <li class="ui-steps__step{% if run %} ui-steps__step--done{% else %} ui-steps__step--now{% endif %}">
@@ -285,7 +295,7 @@
                                         <td class="numeric">{{ record.gross_earnings|money }}</td>
                                         <td class="numeric">{{ record.total_deductions|money }}</td>
                                         <td class="numeric">{{ record.net_pay|money }}</td>
-                                        <td><a class="ui-btn ui-btn--sm" href="{% url 'payroll:payslip' record.pk %}">Payslip</a></td>
+                                        <td>{% include "payroll/includes/salary_actions.html" %}</td>
                                     </tr>
                                 {% endfor %}
                             {% endwith %}
@@ -339,7 +349,7 @@
                                 <td class="numeric">{{ record.gross_earnings|money }}</td>
                                 <td class="numeric">{{ record.total_deductions|money }}</td>
                                 <td class="numeric"><strong>{{ record.net_pay|money }}</strong></td>
-                                <td><a class="ui-btn ui-btn--sm" href="{% url 'payroll:payslip' record.pk %}">Payslip</a></td>
+                                <td>{% include "payroll/includes/salary_actions.html" %}</td>
                             </tr>
                         {% endfor %}
                     </tbody>

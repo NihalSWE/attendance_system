@@ -12,6 +12,20 @@ RUN_STATUS_HELP = "draft, submitted (waiting for approval) or posted (finalised)
 
 # --- salary by month ----------------------------------------------------------------------
 
+class CycleOvertimeInputSerializer(serializers.Serializer):
+    action = serializers.ChoiceField(choices=["save", "revert"], default="save", help_text="Save cycle totals or return to attendance.")
+    hours = serializers.DecimalField(max_digits=7, decimal_places=2, min_value=0, required=False,
+                                      help_text="Payable regular overtime hours for the whole cycle; required when saving.")
+    day_off_hours = serializers.DecimalField(max_digits=7, decimal_places=2, min_value=0, default=0,
+                                              help_text="Payable holiday and weekly-off hours; separate rate.")
+    reason = serializers.CharField(max_length=255, help_text="Why the cycle totals are changing.")
+
+
+class CycleOvertimeSerializer(serializers.Serializer):
+    override = serializers.JSONField(allow_null=True, help_text="Current manual totals and audit details; null means attendance totals.")
+    regenerate_required = serializers.BooleanField(help_text="Regenerate the salary cycle before submitting or approving it.")
+
+
 class PayrollTotalsSerializer(serializers.Serializer):
     employees = serializers.IntegerField(help_text="Payslips you see.")
     gross = serializers.DecimalField(allow_null=True, help_text="Their gross pay.", **MONEY)
