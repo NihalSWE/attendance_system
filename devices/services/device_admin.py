@@ -13,7 +13,8 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from auditlog.models import AuditLog
-from devices.models import BiometricDevice, DeviceDepartment, DevicePunchRetention
+from devices.models import (BiometricDevice, DeviceDepartment, DeviceEnrollment,
+                            DeviceOutboxCommand, DevicePunchRetention, DeviceSyncState)
 from devices.services import panel_access
 
 OVERLAP_MESSAGE = (
@@ -69,6 +70,56 @@ def update_device(*, actor, company_id, device, form, ip=None):
         audit(actor=actor, company_id=company_id, action="device.updated", obj=device,
               before=before, after=_device_snapshot(device), ip=ip)
     return device
+
+
+@transaction.atomic
+def set_terminal_verification(*, actor, company_id, device, card, fingerprint, ip=None):
+    from django.db.models import Q
+
+    from devices.services import biometric_pilot, commands, templates, terminal_card, verification
+
+    panel_access.assert_may_manage_devices(actor, company_id)
+    device = BiometricDevice.all_objects.select_for_update().get(company_id=company_id, pk=device.pk)
+    if (card or fingerprint) and not terminal_card.compatible(device):
+        raise ValidationError("Terminal verification controls require an active reader with supported firmware.")
+    if fingerprint and templates.key_problem():
+        raise ValidationError("Fingerprint updates require a valid biometric encryption key on the server.")
+    DeviceSyncState.all_objects.select_for_update().get(pk=commands._sync_state(device).pk)
+    fields = {"terminal_card_control": card, "terminal_fingerprint_control": fingerprint}
+    before = {name: getattr(device, name) for name in fields}
+    if before == fields:
+        return
+    disabled = {
+        method for method, name in ((verification.Method.CARD, "terminal_card_control"),
+                                     (verification.Method.FINGERPRINT, "terminal_fingerprint_control"))
+        if not fields[name] and before[name] is not False
+        and (before[name] is True or terminal_card.supported(device))
+    }
+    if disabled:
+        now = timezone.now()
+        employee_ids = DeviceEnrollment.all_objects.filter(
+            company_id=company_id, device=device, effective_from__lte=now,
+        ).filter(Q(effective_to__isnull=True) | Q(effective_to__gt=now)).exclude(
+            enrollment_status=DeviceEnrollment.EnrollmentStatus.REMOVED,
+        ).values_list("employee_id", flat=True)
+        prefixes = Q()
+        if verification.Method.CARD in disabled:
+            prefixes |= Q(key__startswith=terminal_card.COMMAND_PREFIX)
+        if verification.Method.FINGERPRINT in disabled:
+            prefixes |= (Q(key__startswith=biometric_pilot.FINGERPRINT_PREFIX)
+                         | Q(key__regex=biometric_pilot.BACKUP_REQUEST_PATTERN))
+        waiting = DeviceOutboxCommand.all_objects.filter(
+            prefixes, company_id=company_id, device=device,
+            status__in=[DeviceOutboxCommand.Status.QUEUED, DeviceOutboxCommand.Status.SENT],
+        ).exists()
+        if waiting or any(disabled.intersection(methods) for methods in
+                          verification.blocked_methods_by_employee(company_id, employee_ids, now).values()):
+            raise ValidationError("Unblock the affected methods and wait for any pending terminal updates before turning off these controls.")
+    for name, value in fields.items():
+        setattr(device, name, value)
+    device.save(update_fields=[*fields, "updated_at"])
+    audit(actor=actor, company_id=company_id, action="device.terminal_verification_updated",
+          obj=device, before=before, after=fields, ip=ip)
 
 
 @transaction.atomic

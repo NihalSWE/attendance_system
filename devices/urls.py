@@ -46,6 +46,7 @@ ui_urlpatterns = [
     path("devices/<uuid:public_id>/", ui.device_detail, name="device_detail"),
     path("devices/<uuid:public_id>/edit/", ui.device_edit, name="device_edit"),
     path("devices/<uuid:public_id>/punch-retention/", ui.device_punch_retention, name="device_punch_retention"),
+    path("devices/<uuid:public_id>/terminal-verification/", ui.device_terminal_verification, name="device_terminal_verification"),
     path(
         "devices/<uuid:public_id>/connection/test/",
         ui.device_connection_test,

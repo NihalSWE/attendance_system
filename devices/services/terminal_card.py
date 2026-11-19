@@ -10,6 +10,7 @@ from devices.services import commands, protocol, resolution
 COMMAND_PREFIX = "terminal_card:"
 RECOVERY_KEY = "terminal_card_recovery"
 DEFAULT_FIELDS = {"disable": "0", "verify": "0", "starttime": "0", "endtime": "0", "password": ""}
+TESTED_FIRMWARE = "ZAM70-NF24HA-Ver3.0.15"
 
 
 class CardEnrollmentUnavailable(ValidationError):
@@ -17,6 +18,8 @@ class CardEnrollmentUnavailable(ValidationError):
 
 
 def enabled(device, pin, *, include_card_only=True):
+    if include_card_only and device.terminal_card_control is not None:
+        return device.terminal_card_control and compatible(device)
     allowed = pin in settings.TERMINAL_CARD_PILOT_USER_IDS or (
         include_card_only and (settings.TERMINAL_CARD_DEVICE_WIDE_ENABLED
                                or pin in settings.TERMINAL_CARD_ONLY_PILOT_USER_IDS)
@@ -25,11 +28,14 @@ def enabled(device, pin, *, include_card_only=True):
 
 
 def supported(device):
+    return device.serial_number == settings.TERMINAL_CARD_PILOT_SERIAL and compatible(device)
+
+
+def compatible(device):
     return (
-        device.serial_number == settings.TERMINAL_CARD_PILOT_SERIAL
-        and device.status == BiometricDevice.Status.ACTIVE
+        device.status == BiometricDevice.Status.ACTIVE
         and device.device_model.model_code == "senseface-2a"
-        and device.firmware_version == "ZAM70-NF24HA-Ver3.0.15"
+        and device.firmware_version == TESTED_FIRMWARE
         and protocol.dialect(device) == protocol.PUSH3
     )
 

@@ -33,6 +33,7 @@ from devices.forms import (
     DevicePunchRetentionForm,
     DeviceScopeForm,
     RecheckPunchesForm,
+    TerminalVerificationForm,
 )
 from devices.models import (
     BiometricDevice,
@@ -52,6 +53,8 @@ from devices.services import (
     server_address,
     setup_instructions,
     templates,
+    terminal_card,
+    biometric_pilot,
 )
 from devices.services.commands import (
     COMMAND_LABELS,
@@ -374,6 +377,12 @@ def device_detail(request, public_id):
     retention_days = DevicePunchRetention.objects.filter(device=device).values_list("days", flat=True).first()
     from devices.services import punch_cleanup
     retention_progress = punch_cleanup.progress(device)
+    terminal_controls_supported = terminal_card.compatible(device)
+    from django.conf import settings
+
+    card_control = device.terminal_card_control
+    if card_control is None:
+        card_control = settings.TERMINAL_CARD_DEVICE_WIDE_ENABLED and terminal_card.supported(device)
     retention_cutoff = timezone.now() - datetime.timedelta(days=retention_days) if retention_days else None
     retained_punches_before_cutoff = (PunchEvent.objects.filter(device=device, punched_at_utc__lt=retention_cutoff).count()
                                       if retention_cutoff else None)
@@ -393,6 +402,11 @@ def device_detail(request, public_id):
         "recent_messages": recent_messages,
         "punch_counts": punch_counts,
         "retention_form": DevicePunchRetentionForm(initial={"days": retention_days}),
+        "terminal_controls_supported": terminal_controls_supported,
+        "terminal_controls_form": TerminalVerificationForm(initial={
+            "card": card_control, "fingerprint": biometric_pilot.device_wide_enabled(device),
+        }),
+        "terminal_firmware": device.firmware_version,
         "retention_cutoff": retention_cutoff,
         "retention_progress": retention_progress,
         "punches_before_retention_cutoff": retained_punches_before_cutoff,
@@ -426,6 +440,25 @@ def device_detail(request, public_id):
 @require_POST
 @login_required
 @company_user_required
+def device_terminal_verification(request, public_id):
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    form = TerminalVerificationForm(request.POST)
+    if form.is_valid():
+        try:
+            device_admin.set_terminal_verification(
+                actor=request.user, company_id=request.company_id, device=device,
+                ip=request.META.get("REMOTE_ADDR"), **form.cleaned_data,
+            )
+        except ValidationError as exc:
+            messages.error(request, " ".join(exc.messages))
+        else:
+            messages.success(request, "Terminal verification controls saved. Apply a block from Blocked verification methods.")
+    return redirect(reverse("devices:device_detail", args=[device.public_id]) + "#terminal-verification")
+
+
+@require_POST
+@login_required
+@company_user_required
 def device_punch_retention(request, public_id):
     device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
     form = DevicePunchRetentionForm(request.POST)
@@ -442,7 +475,9 @@ def device_punch_retention(request, public_id):
 @login_required
 @company_user_required
 def device_edit(request, public_id):
-    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    device = get_object_or_404(
+        BiometricDevice.objects.defer("terminal_card_control", "terminal_fingerprint_control"), public_id=public_id,
+    )
     form = BiometricDeviceForm(request.POST or None, instance=device)
     if request.method == "POST" and form.is_valid():
         device = device_admin.update_device(actor=request.user, company_id=request.company_id,

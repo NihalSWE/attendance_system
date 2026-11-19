@@ -1104,20 +1104,20 @@ def _take_outbox(device, room):
     """
     from devices.models import DeviceOutboxCommand
     from devices.services import biometric_pilot, templates, terminal_card
-    from django.conf import settings
 
     if room <= 0:
         return [], []
     now = timezone.now()
     lines, entries = [], []
     with transaction.atomic():
-        if settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED and terminal_card.supported(device):
+        device_wide_fingerprint = biometric_pilot.device_wide_enabled(device)
+        if device_wide_fingerprint:
             # Serialize handoff with fingerprint policy changes and recovery.
             DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
         queued = DeviceOutboxCommand.all_objects.select_for_update().filter(
             device=device, status=DeviceOutboxCommand.Status.QUEUED,
         )
-        if settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED and terminal_card.supported(device):
+        if device_wide_fingerprint:
             # This reader acknowledges a batch of scoped reads but can upload
             # only the last template. Leave unrelated commands eligible.
             from django.db.models import Q

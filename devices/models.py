@@ -135,6 +135,9 @@ class BiometricDevice(TenantOwned, ActorTracked):
     authentication_key_id = models.CharField(max_length=100, blank=True)
     authentication_secret_hash = models.CharField(max_length=255, blank=True)
     firmware_version = models.CharField(max_length=64, blank=True)
+    # Null preserves eligibility on installations that still use pilot settings.
+    terminal_card_control = models.BooleanField(null=True, blank=True)
+    terminal_fingerprint_control = models.BooleanField(null=True, blank=True)
     ip_address_last_seen = models.GenericIPAddressField(null=True, blank=True)
 
     # Where this device has been told to reach us. Blank until an address has

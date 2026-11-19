@@ -108,6 +108,26 @@
 
     {% include "devices/includes/connection_panel.html" %}
 
+    <section class="card" id="terminal-verification" aria-labelledby="terminal-verification-title">
+        <div class="card__head"><h2 id="terminal-verification-title">Terminal verification controls</h2></div>
+        <div class="card__body stack">
+            {% if terminal_controls_supported %}
+                <p>Enable the methods HRM can block on this reader. Updates are sent when it checks in.</p>
+                <form method="post" action="{% url 'devices:device_terminal_verification' device.public_id %}" class="stack">
+                    {% csrf_token %}
+                    {% for field in terminal_controls_form %}
+                        <label class="check">{{ field }} {{ field.label }}</label>
+                    {% endfor %}
+                    <div><button class="btn btn--primary" type="submit">Save terminal controls</button></div>
+                </form>
+            {% elif terminal_firmware %}
+                <p>Terminal blocking is unavailable for this reader’s model, firmware ({{ terminal_firmware }}), or current status. HRM can still block methods for attendance.</p>
+            {% else %}
+                <p>Waiting for the reader to report its firmware version. HRM can still block methods for attendance.</p>
+            {% endif %}
+            <p class="t-muted">Face blocking applies in HRM only. The reader can still accept face scans.</p>
+        </div>
+    </section>
     <section class="card" id="punch-retention" aria-labelledby="punch-retention-title">
         <div class="card__head">
             <h2 id="punch-retention-title">Device punch retention</h2>

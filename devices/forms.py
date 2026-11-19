@@ -309,6 +309,11 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         return device
 
 
+class TerminalVerificationForm(forms.Form):
+    card = forms.BooleanField(required=False, label="Send Card blocks to this reader")
+    fingerprint = forms.BooleanField(required=False, label="Send Fingerprint blocks to this reader")
+
+
 class DevicePunchRetentionForm(StyledFormMixin, forms.Form):
     days = forms.IntegerField(label="Keep punches for (days)", required=False, min_value=1,
                               help_text="Leave blank to turn off the retention plan.")

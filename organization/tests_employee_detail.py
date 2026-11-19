@@ -242,11 +242,20 @@ class PageTests(DetailTestCase):
             if pin != "4":
                 selected.append(employee.pk)
         url = reverse("organization:employee_verification_bulk")
-        with self.settings(TERMINAL_CARD_PILOT_SERIAL=self.device.serial_number,
+        with self.settings(TERMINAL_CARD_PILOT_SERIAL="",
                            TERMINAL_CARD_PILOT_USER_IDS=[],
-                           TERMINAL_FINGERPRINT_PILOT_ENABLED=True,
-                           TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED=True,
+                           TERMINAL_FINGERPRINT_PILOT_ENABLED=False,
+                           TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED=False,
                            BIOMETRIC_TEMPLATE_KEY=Fernet.generate_key().decode("ascii")):
+            from devices.services import terminal_card
+
+            controls = reverse("devices:device_terminal_verification", args=[self.device.public_id])
+            response = self.client.post(controls, {"card": "on", "fingerprint": "on"}, follow=True)
+            self.assertContains(response, "Terminal verification controls saved")
+            self.device.refresh_from_db()
+            self.assertTrue(terminal_card.enabled(self.device, "2"))
+            self.assertTrue(biometric_pilot.fingerprint_enabled(self.device, "2"))
+            self.assertEqual(commands.take_pending_commands(self.device), ("", []))
             data = {"employee": selected, "blocked_methods": ["fingerprint"]}
             response = self.client.post(url, {**data, "operation": "block"}, follow=True)
             self.assertContains(response, "Waiting for fingerprint backup")
@@ -283,6 +292,8 @@ class PageTests(DetailTestCase):
             response = self.client.get(reverse("employee_list"), {"blocked_method": "fingerprint"})
             self.assertContains(response, "Acknowledged · verify at the reader", count=2)
             self.assertContains(response, "HRM only")
+            response = self.client.post(controls, {"card": "on"}, follow=True)
+            self.assertContains(response, "Unblock the affected methods")
             self.client.post(url, {**data, "operation": "block"}, follow=True)
             wire, retry = commands.take_pending_commands(self.device)
             self.assertEqual(len(retry), 1)

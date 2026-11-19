@@ -75,10 +75,20 @@ def capture_reply(device, command_id, body):
 
 
 def fingerprint_enabled(device, pin):
+    if device.terminal_fingerprint_control is not None:
+        return device_wide_enabled(device)
     return settings.TERMINAL_FINGERPRINT_PILOT_ENABLED and (
-        (settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED and terminal_card.supported(device))
+        device_wide_enabled(device)
         or terminal_card.enabled(device, pin, include_card_only=False)
     )
+
+
+def device_wide_enabled(device):
+    if device.terminal_fingerprint_control is not None:
+        return device.terminal_fingerprint_control and terminal_card.compatible(device)
+    return (settings.TERMINAL_FINGERPRINT_PILOT_ENABLED
+            and settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED
+            and terminal_card.supported(device))
 
 
 def _fingerprint_backups(device, pin, query=None):
@@ -119,7 +129,7 @@ def queue_fingerprint_change(*, enrollment, actor, blocked, backup_query=None):
 
     try:
         if blocked:
-            if settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED and backup_query is None:
+            if device_wide_enabled(device) and backup_query is None:
                 clean_pin, error = commands._validated_user_id(pin)
                 if error or not clean_pin.isascii() or clean_pin != pin:
                     raise FingerprintEnrollmentUnavailable("Invalid terminal user ID")
@@ -137,7 +147,7 @@ def queue_fingerprint_change(*, enrollment, actor, blocked, backup_query=None):
             state.state_data = data
             state.save(update_fields=["state_data", "updated_at"])
         elif key in recovery:
-            if settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED:
+            if device_wide_enabled(device):
                 previous = _fingerprint_writes(enrollment).order_by("-command_id").first()
                 if previous is None or "\tValid=0\t" not in previous.description or not previous.sent_at:
                     return []
@@ -195,7 +205,7 @@ def backup_in_flight(device, now):
 @transaction.atomic
 def finish_fingerprint_backups(device):
     """Turn acknowledged scoped reads into writes once, at the next reader poll."""
-    if not settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED or not terminal_card.supported(device):
+    if not device_wide_enabled(device):
         return
     now = timezone.now()
     requests = backup_requests(device).filter(

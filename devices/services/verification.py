@@ -3,7 +3,6 @@
 from dataclasses import dataclass, field
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.conf import settings
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
@@ -115,7 +114,7 @@ def _change(actor, company_id, employee_ids, methods, operation):
         changed = added | removed
         retry_fingerprint = (
             operation == "block" and Method.FINGERPRINT in requested
-            and Method.FINGERPRINT in previous and settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED
+            and Method.FINGERPRINT in previous
         )
         if operation != "set":
             result.terminal_updates.extend(
@@ -163,11 +162,6 @@ def _queue_terminal_method(company_id, employee_id, actor, now, method, blocked,
     from devices.services import biometric_pilot, terminal_card
 
     update = {"employee_id": employee_id, "method": method.value}
-    if not settings.TERMINAL_CARD_PILOT_SERIAL or (
-        method == Method.FINGERPRINT and not settings.TERMINAL_FINGERPRINT_PILOT_ENABLED
-    ):
-        updates.append({**update, "result": "hrm_only"})
-        return 0, True
     if method == Method.FINGERPRINT:
         enabled, queue = biometric_pilot.fingerprint_enabled, biometric_pilot.queue_fingerprint_change
     else:
@@ -184,8 +178,14 @@ def _queue_terminal_method(company_id, employee_id, actor, now, method, blocked,
     for enrollment in enrollments:
         target = {**update, "device_id": enrollment.device_id, "device_name": enrollment.device.name,
                   "user_id": enrollment.device_user_id}
+        if retry and not biometric_pilot.device_wide_enabled(enrollment.device):
+            updates.append({**target, "result": "unchanged"})
+            continue
         if not enabled(enrollment.device, enrollment.device_user_id):
-            updates.append({**target, "result": "hrm_only", "reason": "Automatic updates are unavailable for this enrollment"})
+            reason = ("Enable this method under Devices → Manage → Terminal verification controls."
+                      if terminal_card.compatible(enrollment.device)
+                      else "This device needs a supported model, firmware and active status for terminal updates.")
+            updates.append({**target, "result": "hrm_only", "reason": reason})
             continue
         if retry and not biometric_pilot.can_retry_fingerprint_block(enrollment, now):
             command = biometric_pilot.latest_fingerprint_command(enrollment)
