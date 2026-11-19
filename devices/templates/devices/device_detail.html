@@ -1,4 +1,5 @@
 {% extends "devices/base.html" %}
+{% load tz %}
 {% block title %}
     {{ device.name }} · Devices
 {% endblock %}
@@ -106,6 +107,41 @@
     {% endif %}
 
     {% include "devices/includes/connection_panel.html" %}
+
+    <section class="card" id="punch-retention" aria-labelledby="punch-retention-title">
+        <div class="card__head">
+            <h2 id="punch-retention-title">Device punch retention</h2>
+            {% if retention_cutoff %}{% if retention_progress.job.phase == 'paused' %}<span class="badge badge--warning">Cleanup paused — review required</span>{% elif retention_progress.supported %}<span class="badge badge--success">Automatic cleanup enabled</span>{% else %}<span class="badge badge--warning">Automatic cleanup unavailable</span>{% endif %}{% endif %}
+        </div>
+        <div class="card__body stack">
+            <form method="post" action="{% url 'devices:device_punch_retention' device.public_id %}" class="stack">
+                {% csrf_token %}
+                <div class="field">
+                    <label class="field__label" for="{{ retention_form.days.id_for_label }}">{{ retention_form.days.label }}</label>
+                    {{ retention_form.days }}
+                    <p class="t-faint">{{ retention_form.days.help_text }}</p>
+                </div>
+                <div><button class="btn btn--primary" type="submit">Save retention plan</button></div>
+            </form>
+            {% if retention_cutoff %}
+                <p>Punches before <strong>{{ retention_cutoff|timezone:device.timezone|date:"j M Y, H:i:s" }}</strong> ({{ device.timezone }}) fall outside the retention window.</p>
+                <p class="t-muted">HRM has {{ punches_before_retention_cutoff }} punch{{ punches_before_retention_cutoff|pluralize:"es" }} for this reader before the cutoff. This count comes from HRM’s records.</p>
+            {% endif %}
+            {% if retention_progress.supported %}
+                <p class="t-muted">The reader is checked automatically when it connects. Only punches older than this window and verified as saved in HRM are removed, in batches of 25. HRM attendance records and employee credentials are kept.</p>
+            {% else %}
+                <p class="t-muted">Saving the plan calculates a cutoff in HRM. Automatic cleanup requires verified support on the reader.</p>
+            {% endif %}
+            {% if retention_progress.job %}
+                <p><strong>Cleanup status: {{ retention_progress.job.phase|capfirst }}</strong> — {{ retention_progress.job.message }}</p>
+                <p class="t-muted">Total verified deletions: {{ retention_progress.job.verified_deleted }}.
+                {% if retention_progress.job.state.skipped %}{{ retention_progress.job.state.skipped }} older records retained because they are not verified HRM punches.{% endif %}
+                {% if retention_progress.job.phase == 'idle' and retention_progress.job.next_check_at and retention_cutoff %}Next check on or after {{ retention_progress.job.next_check_at|timezone:device.timezone|date:"j M Y, H:i:s" }}, when the device connects.{% endif %}</p>
+            {% elif retention_progress.supported and retention_cutoff %}
+                <p class="t-muted">Ready — waiting for the next device connection.</p>
+            {% endif %}
+        </div>
+    </section>
 
     <div class="grid grid--2">
         <div class="card">

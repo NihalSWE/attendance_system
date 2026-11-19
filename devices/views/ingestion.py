@@ -20,7 +20,7 @@ from django.views.decorators.http import require_http_methods
 from devices.adapters import UnknownAdapterError, get_adapter
 from devices.adapters.base import ParsedMessage
 from devices.models import BiometricDevice, DeviceMessage, DeviceServerAddressChange
-from devices.services import protocol, server_address, templates
+from devices.services import biometric_pilot, protocol, server_address, templates
 from devices.services.commands import (
     catch_up_after_gap,
     note_poll,
@@ -75,6 +75,17 @@ def _body_text(request):
     return request.body.decode(encoding, errors="replace"), encoding
 
 
+def _biometric_pilot_reply(request, device, body):
+    if request.method != "POST" or not request.GET.get("cmdid"):
+        return None
+    try:
+        acknowledgement = biometric_pilot.capture_reply(device, request.GET["cmdid"], body)
+    except templates.TemplateKeyMissing:
+        logger.warning("Device %s: biometric pilot reply could not be stored encrypted", device.pk)
+        return _text("biodata=0")
+    return _text(acknowledgement) if acknowledgement is not None else None
+
+
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def cdata(request):
@@ -109,6 +120,9 @@ def cdata(request):
         )
 
     raw_body, encoding = _body_text(request)
+    pilot_reply = _biometric_pilot_reply(request, device, raw_body)
+    if pilot_reply is not None:
+        return pilot_reply
     parsed = adapter.parse(
         path_name="cdata_upload",
         query=request.GET,
@@ -188,6 +202,13 @@ def getrequest(request):
     from devices.services import load_jobs
 
     load_jobs.on_device_poll(device)
+    from devices.services import punch_cleanup
+    punch_cleanup.on_device_poll(device)
+
+    try:
+        biometric_pilot.finish_fingerprint_backups(device)
+    except Exception:
+        logger.exception("Device %s: could not process fingerprint backup results", device.pk)
 
     body, issued = take_pending_commands(device)
     if issued:
@@ -322,6 +343,10 @@ def capture(request, tail=""):
         return _unauthorized()
 
     raw_body, encoding = _body_text(request)
+    if tail == "querydata":
+        pilot_reply = _biometric_pilot_reply(request, device, raw_body)
+        if pilot_reply is not None:
+            return pilot_reply
     parsed = ParsedMessage(
         message_type=DeviceMessage.MessageType.UNKNOWN,
         payload_json={

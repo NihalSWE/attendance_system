@@ -30,6 +30,7 @@ from devices.forms import (
     BiometricDeviceForm,
     DeviceDepartmentForm,
     DeviceEnrollmentForm,
+    DevicePunchRetentionForm,
     DeviceScopeForm,
     RecheckPunchesForm,
 )
@@ -38,6 +39,7 @@ from devices.models import (
     DeviceDepartment,
     DeviceEnrollment,
     DeviceMessage,
+    DevicePunchRetention,
     DeviceSyncState,
     PunchEvent,
 )
@@ -72,6 +74,7 @@ from devices.services.user_sync import SyncNotPossible, sync_device_users
 
 # Punch states that need a human before they can feed attendance.
 UNRESOLVED_STATUSES = (
+    PunchEvent.AuthorizationStatus.METHOD_UNVERIFIED,
     PunchEvent.AuthorizationStatus.UNKNOWN_EMPLOYEE,
     PunchEvent.AuthorizationStatus.EXPIRED_ENROLLMENT,
     PunchEvent.AuthorizationStatus.POLICY_UNRESOLVED,
@@ -368,6 +371,12 @@ def device_detail(request, public_id):
             processing_status=PunchEvent.ProcessingStatus.NEEDS_REVIEW,
         ).count(),
     }
+    retention_days = DevicePunchRetention.objects.filter(device=device).values_list("days", flat=True).first()
+    from devices.services import punch_cleanup
+    retention_progress = punch_cleanup.progress(device)
+    retention_cutoff = timezone.now() - datetime.timedelta(days=retention_days) if retention_days else None
+    retained_punches_before_cutoff = (PunchEvent.objects.filter(device=device, punched_at_utc__lt=retention_cutoff).count()
+                                      if retention_cutoff else None)
 
     from devices.services.ingestion import INGESTING_STATUSES, serial_used_elsewhere
 
@@ -383,6 +392,10 @@ def device_detail(request, public_id):
         "comm_key": comm_key,
         "recent_messages": recent_messages,
         "punch_counts": punch_counts,
+        "retention_form": DevicePunchRetentionForm(initial={"days": retention_days}),
+        "retention_cutoff": retention_cutoff,
+        "retention_progress": retention_progress,
+        "punches_before_retention_cutoff": retained_punches_before_cutoff,
         "department_links": DeviceDepartment.objects.filter(device=device)
         .select_related("department")
         .order_by("-effective_from"),
@@ -408,6 +421,22 @@ def device_detail(request, public_id):
         "connection": connection.connection_of(device),
         "connection_test": _test_from_query(request, device),
     })
+
+
+@require_POST
+@login_required
+@company_user_required
+def device_punch_retention(request, public_id):
+    device = get_object_or_404(BiometricDevice.objects, public_id=public_id)
+    form = DevicePunchRetentionForm(request.POST)
+    if form.is_valid():
+        device_admin.set_punch_retention(actor=request.user, company_id=request.company_id, device=device,
+                                        days=form.cleaned_data["days"], ip=request.META.get("REMOTE_ADDR"))
+        messages.success(request, "Punch retention plan saved.")
+    else:
+        messages.error(request, " ".join(form.errors["days"]))
+    url = reverse("devices:device_detail", args=[device.public_id])
+    return redirect(f"{url}#punch-retention")
 
 
 @login_required
@@ -779,7 +808,15 @@ def punch_list(request):
     # carry future dates — either buries the punch that just came in.
     # received_at is our clock, so the latest entry is always on top.
     queryset = (
-        PunchEvent.objects.select_related("device", "employee", "device_message", "duplicate_of")
+        PunchEvent.objects.select_related("device", "employee", "duplicate_of")
+        .only(
+            "id", "received_at", "punched_at_device", "punched_at_utc",
+            "device_timezone", "device_user_id", "verification_method",
+            "authorization_status", "processing_status", "dedupe_status",
+            "device__id", "device__name",
+            "employee__id", "employee__first_name", "employee__middle_name", "employee__last_name",
+            "duplicate_of__id", "duplicate_of__punched_at_utc",
+        )
         .order_by("-received_at", "-id")
     )
 

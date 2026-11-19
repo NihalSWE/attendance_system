@@ -60,6 +60,16 @@ CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS')
 # A Fernet key; blank means templates are refused, never stored in plain text.
 BIOMETRIC_TEMPLATE_KEY = env('BIOMETRIC_TEMPLATE_KEY', default='')
 
+# Hardware pilot. No terminal credential writes are enabled by default.
+TERMINAL_CARD_PILOT_SERIAL = env('TERMINAL_CARD_PILOT_SERIAL', default='')
+TERMINAL_CARD_PILOT_USER_IDS = env.list('TERMINAL_CARD_PILOT_USER_IDS', default=[])
+TERMINAL_CARD_ONLY_PILOT_USER_IDS = env.list('TERMINAL_CARD_ONLY_PILOT_USER_IDS', default=[])
+TERMINAL_CARD_DEVICE_WIDE_ENABLED = env.bool('TERMINAL_CARD_DEVICE_WIDE_ENABLED', default=False)
+# Explicit opt-in only for serials whose index-only cleanup was verified.
+DEVICE_PUNCH_CLEANUP_SERIALS = env.list('DEVICE_PUNCH_CLEANUP_SERIALS', default=[])
+TERMINAL_FINGERPRINT_PILOT_ENABLED = env.bool('TERMINAL_FINGERPRINT_PILOT_ENABLED', default=False)
+TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED = env.bool('TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED', default=False)
+
 
 # Application definition
 

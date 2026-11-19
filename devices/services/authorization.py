@@ -34,6 +34,7 @@ from django.utils import timezone
 from common.choices import DeviceAttendanceScope
 from devices.models import DeviceDepartment, PunchEvent
 from devices.services.policy_history import is_missing, value_at_or_unresolved
+from devices.services.verification import blocked_at
 from employees import inactive
 from employees.models import EmployeeAssignment
 from organization.models import Branch
@@ -170,6 +171,19 @@ def evaluate(*, punch, enrollment, policy_at=None):
         "enrollment_id": enrollment.pk,
         "employee_id": enrollment.employee_id,
     }
+
+    # An offline upload or a scope re-check uses the verification settings
+    # in force when the scan happened, even after this method is unblocked.
+    blocked_methods = blocked_at(device.company_id, enrollment.employee_id, at)
+    if blocked_methods:
+        method = punch.verification_method
+        snapshot.update(blocked_methods=blocked_methods, verification_method=method)
+        if method in blocked_methods:
+            snapshot["decision_reason"] = "This verification method was blocked for the employee."
+            return AuthorizationOutcome(PunchEvent.AuthorizationStatus.METHOD_BLOCKED, snapshot)
+        if method == PunchEvent.VerificationMethod.UNKNOWN:
+            snapshot["decision_reason"] = "The device did not identify the verification method."
+            return AuthorizationOutcome(PunchEvent.AuthorizationStatus.METHOD_UNVERIFIED, snapshot)
 
     # 2. The hard denial, checked before any scope is even resolved.
     attendance_enabled, reason = value_at_or_unresolved(

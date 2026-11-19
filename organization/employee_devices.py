@@ -21,9 +21,19 @@ from common.forms import StyledFormMixin
 from common.tenant import use_company
 from devices.models import DeviceEnrollment
 from devices.services.panel_access import may_manage_devices
+from devices.services.verification import METHODS
 from organization.employee_edit_services import get_employee_for_edit
 
 FIELDS = ("attendance_enabled", "assigned_device_authorized", "card_number", "device_privilege")
+
+
+class VerificationMethodsForm(StyledFormMixin, forms.Form):
+    blocked_methods = forms.MultipleChoiceField(
+        choices=[(method.value, method.label) for method in METHODS],
+        widget=forms.CheckboxSelectMultiple, required=False,
+        label="Block these methods",
+        help_text="Choose any methods to block for this employee on all linked devices.",
+    )
 
 
 class DevicePermissionForm(StyledFormMixin, forms.ModelForm):

@@ -25,6 +25,7 @@ EXCLUDING_STATUSES = {
     PunchEvent.AuthorizationStatus.BRANCH_MISMATCH,
     PunchEvent.AuthorizationStatus.ENROLLMENT_DISABLED,
     PunchEvent.AuthorizationStatus.EMPLOYEE_INACTIVE,
+    PunchEvent.AuthorizationStatus.METHOD_BLOCKED,
 }
 
 
@@ -37,7 +38,8 @@ def _processing_status(*, authorization_status, dedupe_status):
     """
     if dedupe_status == PunchEvent.DedupeStatus.CONFIRMED_DUPLICATE:
         return PunchEvent.ProcessingStatus.EXCLUDED
-    if authorization_status == PunchEvent.AuthorizationStatus.POLICY_UNRESOLVED:
+    if authorization_status in (PunchEvent.AuthorizationStatus.POLICY_UNRESOLVED,
+                                 PunchEvent.AuthorizationStatus.METHOD_UNVERIFIED):
         return PunchEvent.ProcessingStatus.NEEDS_REVIEW
     if authorization_status in EXCLUDING_STATUSES:
         return PunchEvent.ProcessingStatus.EXCLUDED

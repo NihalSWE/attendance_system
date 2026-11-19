@@ -287,3 +287,18 @@ class DeviceCommandTests(TestCase):
         # with Return=-629; the table form returns a row count.
         self.assertIn("tablename=user", SAFE_COMMANDS["query_users"])
         self.assertNotIn("USERINFO", SAFE_COMMANDS["query_users"])
+
+    def test_transaction_inspection_is_read_only_and_does_not_enable_cleanup(self):
+        entry = queue_command(device=self.device, command_key="query_transactions")
+        self.assertEqual(entry["body"], "DATA QUERY tablename=transaction,fielddesc=*,filter=*")
+        self.assertIsNone(queue_command(device=self.device, command_key="clear_log"))
+        self.assertIsNone(queue_command(device=self.device, command_key="delete_transactions"))
+        response = self.client.get("/iclock/getrequest?SN=NYU7251601501")
+        self.assertIn(entry["body"], response.content.decode())
+        self.assertNotIn("DELETE", response.content.decode())
+
+    def test_attendance_dialect_does_not_receive_security_transaction_query(self):
+        self.device.settings = {"push_protocol": "2"}
+        self.device.save(update_fields=["settings"])
+        self.assertIsNone(queue_command(device=self.device, command_key="query_transactions"))
+        self.assertEqual(pending_summary(self.device), [])

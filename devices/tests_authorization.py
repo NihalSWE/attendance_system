@@ -5,7 +5,8 @@ Each one below names the scenario it covers. All of this is simulator/unit
 evidence — no physical device is involved.
 """
 
-from datetime import datetime, time, timezone as dt_timezone
+from datetime import datetime, time, timedelta, timezone as dt_timezone
+from zoneinfo import ZoneInfo
 
 from django.test import TestCase
 from django.utils import timezone
@@ -20,6 +21,7 @@ from devices.models import (
     DeviceMessage,
     DeviceModel,
     DeviceVendor,
+    EmployeeVerificationPolicy,
     PunchEvent,
 )
 from devices.services.processing import resolve_and_authorize
@@ -35,6 +37,77 @@ def dt(year, month, day, hour=0, minute=0):
 
 
 class AuthorizationTests(TestCase):
+    def test_blocked_methods_follow_punch_time_across_devices_and_rechecks(self):
+        start = timezone.now()
+        finish = start + timedelta(minutes=10)
+        status = PunchEvent.AuthorizationStatus
+        method = PunchEvent.VerificationMethod
+        with use_company(self.company):
+            self._enroll(self.hq_device, granted=True)
+            self._enroll(self.other_device, granted=True)
+            EmployeeVerificationPolicy.objects.create(
+                employee=self.alice, effective_at=start, blocked_methods=[method.CARD, method.FACE],
+            )
+            EmployeeVerificationPolicy.objects.create(employee=self.alice, effective_at=finish)
+            for device in (self.hq_device, self.other_device):
+                for at, verification, expected in (
+                    (start - timedelta(seconds=1), method.CARD, status.AUTHORIZED),
+                    (start, method.CARD, status.METHOD_BLOCKED),
+                    (start, method.FACE, status.METHOD_BLOCKED),
+                    (start, method.FINGERPRINT, status.AUTHORIZED),
+                    (start, method.UNKNOWN, status.METHOD_UNVERIFIED),
+                    (finish, method.CARD, status.AUTHORIZED),
+                ):
+                    with self.subTest(device=device.name, at=at, method=verification):
+                        punch = self._punch(device, at=at)
+                        punch.verification_method = verification
+                        resolve_and_authorize(punch, policy_at=finish)
+                        self.assertEqual(punch.authorization_status, expected)
+
+    def test_attendance_block_preserves_card_in_normal_sync_and_drops_old_card_change(self):
+        from devices.services import commands
+        from devices.models import DeviceOutboxCommand
+
+        with use_company(self.company):
+            self._enroll(self.hq_device, granted=True)
+            entry, error = commands.queue_user_push(
+                device=self.hq_device, device_user_id="7", name="Alice", card_number="123456",
+            )
+            self.assertTrue(entry, error)
+            EmployeeVerificationPolicy.objects.create(
+                employee=self.alice, effective_at=timezone.now(), blocked_methods=["card"],
+            )
+            key = f"verification_card:7:{self.alice.pk}"
+            entries, error = commands._queue_group(
+                device=self.hq_device,
+                commands=[(key, commands.build_user_update(device_user_id="7", name="Alice"))],
+            )
+            self.assertTrue(entries, error)
+            lines, _ = commands._take_outbox(self.hq_device, 10)
+            self.assertEqual(DeviceOutboxCommand.objects.get(key=key).status, "dropped")
+        self.assertEqual(len(lines), 1)
+        self.assertIn("\tCardNo=123456\t", lines[0])
+
+    def test_blocked_card_cannot_consume_an_allowed_scan_in_the_repeat_window(self):
+        at = timezone.now() - timedelta(minutes=2)
+        with use_company(self.company):
+            self._enroll(self.hq_device, granted=True)
+            EmployeeVerificationPolicy.objects.create(
+                employee=self.alice, effective_at=at - timedelta(minutes=1), blocked_methods=["card"],
+            )
+        local = at.astimezone(ZoneInfo(self.hq_device.timezone))
+        response = self.client.post(
+            "/iclock/cdata?SN=SN-HQ&table=ATTLOG&Stamp=1",
+            f"7\t{local:%Y-%m-%d %H:%M:%S}\t0\t2\t0\n"
+            f"7\t{local + timedelta(seconds=1):%Y-%m-%d %H:%M:%S}\t0\t1\t0\n",
+            content_type="text/plain",
+        )
+        self.assertEqual(response.status_code, 200)
+        card, finger = PunchEvent.all_objects.filter(device=self.hq_device).order_by("punched_at_utc")
+        self.assertEqual(card.authorization_status, PunchEvent.AuthorizationStatus.METHOD_BLOCKED)
+        self.assertEqual(finger.authorization_status, PunchEvent.AuthorizationStatus.AUTHORIZED)
+        self.assertEqual(finger.dedupe_status, PunchEvent.DedupeStatus.UNIQUE)
+
     def setUp(self):
         self.vendor = DeviceVendor.objects.get_or_create(
             code="zkteco",

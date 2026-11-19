@@ -78,7 +78,7 @@ def decrypt(data):
         ) from exc
 
 
-def _save_rows(device, rows):
+def _save_rows(device, rows, *, refresh_capture=False):
     """Upsert parsed biodata rows. Returns (added, updated, unchanged)."""
     latest = {}
     for fields in rows:
@@ -116,7 +116,7 @@ def _save_rows(device, rows):
                 "template_length": len(template),
             }
             row = existing.get(key)
-            if row is not None and row.template_sha256 == digest:
+            if row is not None and row.template_sha256 == digest and not refresh_capture:
                 unchanged += 1
                 continue
             values["template_encrypted"] = cipher.encrypt(template.encode("ascii"))
@@ -137,8 +137,8 @@ def _save_rows(device, rows):
     return added, updated, unchanged
 
 
-def save_from_payload(device, payload):
-    """Save the templates in one upload (``biodata …`` / ``BIODATA …`` lines)."""
+def save_from_payload(device, payload, *, refresh_capture=False):
+    """Save an upload. A scoped recapture also records unchanged templates as fresh."""
     rows = []
     for line in (payload or "").splitlines():
         line = line.strip()
@@ -146,7 +146,7 @@ def save_from_payload(device, payload):
             if line.startswith(prefix):
                 fields = parse_kv_row(line[len(prefix):].strip())
                 rows.append({key.lower(): value for key, value in fields.items()})
-    return _save_rows(device, rows)
+    return _save_rows(device, rows, refresh_capture=refresh_capture)
 
 
 def save_from_messages(device):

@@ -1164,6 +1164,26 @@ select.input:disabled {
     background: var(--surface-sunken);
     border-radius: 0 0 var(--r-lg) var(--r-lg);
 }
+.modal__foot--verification {
+    flex-wrap: wrap;
+}
+.modal__foot--verification > [data-close-dialog] {
+    margin-inline-end: auto;
+}
+@media (max-width: 420px) {
+    .modal__foot--verification {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .modal__foot--verification > [data-close-dialog] {
+        grid-column: 1 / -1;
+    }
+    .modal__foot--verification > .btn {
+        justify-content: center;
+        text-align: center;
+        white-space: normal;
+    }
+}
 .modal__body {
     padding: 20px;
     overflow-y: auto;

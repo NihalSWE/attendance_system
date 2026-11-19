@@ -43,12 +43,15 @@ SAFE_COMMANDS = {
     "query_biodata": "DATA QUERY tablename=biodata,fielddesc=*,filter=*",
     # Re-send the device's own options/capability block.
     "query_options": "DATA QUERY tablename=options,fielddesc=*,filter=*",
+    # Read-only inventory for retention reconciliation. This does NOT clear logs.
+    "query_transactions": "DATA QUERY tablename=transaction,fielddesc=*,filter=*",
 }
 
 COMMAND_LABELS = {
     "query_users": "Refresh user list",
     "query_biodata": "Refresh biometric inventory",
     "query_options": "Refresh device settings",
+    "query_transactions": "Inspect stored punch records (read only)",
     "query_attlog": "Fetch attendance history (last 31 days)",
 }
 
@@ -1100,23 +1103,59 @@ def _take_outbox(device, room):
     allowed to stop the device getting the rest.
     """
     from devices.models import DeviceOutboxCommand
-    from devices.services import templates
+    from devices.services import biometric_pilot, templates, terminal_card
+    from django.conf import settings
 
     if room <= 0:
         return [], []
     now = timezone.now()
     lines, entries = [], []
     with transaction.atomic():
-        rows = list(
-            DeviceOutboxCommand.all_objects.select_for_update()
-            .filter(device=device, status=DeviceOutboxCommand.Status.QUEUED)
-            .order_by("command_id")[:room]
+        if settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED and terminal_card.supported(device):
+            # Serialize handoff with fingerprint policy changes and recovery.
+            DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
+        queued = DeviceOutboxCommand.all_objects.select_for_update().filter(
+            device=device, status=DeviceOutboxCommand.Status.QUEUED,
         )
+        if settings.TERMINAL_FINGERPRINT_DEVICE_WIDE_ENABLED and terminal_card.supported(device):
+            # This reader acknowledges a batch of scoped reads but can upload
+            # only the last template. Leave unrelated commands eligible.
+            from django.db.models import Q
+
+            scoped = Q(key__regex=biometric_pilot.BACKUP_REQUEST_PATTERN)
+            next_backup = None
+            if not biometric_pilot.backup_in_flight(device, now):
+                next_backup = queued.filter(scoped).order_by("command_id").values_list("pk", flat=True).first()
+            queued = queued.filter(~scoped | Q(pk=next_backup))
+        rows = list(queued.order_by("command_id")[:room])
         for row in rows:
-            try:
-                body = templates.decrypt(row.body_encrypted) if row.body_encrypted else row.body
-            except templates.TemplateKeyMissing:
-                row.status, row.return_code = DeviceOutboxCommand.Status.DROPPED, "template key missing"
+            # Commands queued by the older policy code must never change a
+            # terminal credential after switching to attendance-only blocking.
+            drop_reason = "attendance-only verification policy" if row.key.startswith("verification_card:") else ""
+            if row.key.startswith(biometric_pilot.QUERY_PREFIX) and (
+                (not biometric_pilot.is_fingerprint_backup_request(row)
+                 and now - row.queued_at > biometric_pilot.QUERY_WINDOW)
+                or not biometric_pilot.query_allowed(device, row.key)
+            ):
+                drop_reason = "Biometric pilot query expired or unavailable"
+            if (not drop_reason and biometric_pilot.is_fingerprint_backup_request(row)
+                    and not biometric_pilot._block_request_enrollment(device, row, now)):
+                drop_reason = "Fingerprint setting or terminal mapping changed"
+            if not drop_reason:
+                try:
+                    body = templates.decrypt(row.body_encrypted) if row.body_encrypted else row.body
+                except templates.TemplateKeyMissing:
+                    drop_reason = "template key missing"
+                else:
+                    if row.key.startswith((terminal_card.COMMAND_PREFIX, "push_user:")):
+                        body, drop_reason = terminal_card.prepare_write(device, row, now)
+                    elif row.key.startswith((biometric_pilot.FINGERPRINT_PREFIX, "push_template:")):
+                        drop_reason = biometric_pilot.fingerprint_write_problem(device, row, body, now)
+                    elif row.key.startswith("retention_delete:"):
+                        from devices.services import punch_cleanup
+                        drop_reason = punch_cleanup.write_problem(device, row, body, now)
+            if drop_reason:
+                row.status, row.return_code = DeviceOutboxCommand.Status.DROPPED, drop_reason
                 row.answered_at = now
             else:
                 lines.append(f"C:{row.command_id}:{body}")
@@ -1165,6 +1204,8 @@ def note_results(device, raw_body):
         return []
     now = timezone.now().isoformat()
     with transaction.atomic():
+        # Match enqueue/retention lock order: sync state before outbox rows.
+        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
         outbox = {
             row.command_id: row for row in DeviceOutboxCommand.all_objects.select_for_update()
             .filter(device=device, command_id__in=[r[0] for r in results])
@@ -1176,7 +1217,6 @@ def note_results(device, raw_body):
                               else DeviceOutboxCommand.Status.REFUSED)
                 row.return_code, row.answered_at = code, timezone.now()
                 row.save(update_fields=["status", "return_code", "answered_at", "updated_at"])
-        state = DeviceSyncState.all_objects.select_for_update().get(pk=_sync_state(device).pk)
         data = dict(state.state_data or {})
         sent = {e.get("id"): e for e in data.get("in_flight_commands") or []}
         remembered = list(data.get("command_results") or [])

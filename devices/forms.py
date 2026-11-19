@@ -10,6 +10,7 @@ to hand-write JSON to change a push interval — and named fields are what makes
 """
 
 import secrets
+from datetime import timedelta
 
 from django import forms
 from django.contrib.auth.hashers import make_password
@@ -306,6 +307,20 @@ class BiometricDeviceForm(StyledFormMixin, forms.ModelForm):
         if commit:
             device.save()
         return device
+
+
+class DevicePunchRetentionForm(StyledFormMixin, forms.Form):
+    days = forms.IntegerField(label="Keep punches for (days)", required=False, min_value=1,
+                              help_text="Leave blank to turn off the retention plan.")
+
+    def clean_days(self):
+        days = self.cleaned_data["days"]
+        if days is not None:
+            try:
+                timezone.now() - timedelta(days=days)
+            except OverflowError as exc:
+                raise forms.ValidationError("Enter a smaller number of days.") from exc
+        return days
 
 
 class DeviceEnrollmentForm(StyledFormMixin, forms.ModelForm):

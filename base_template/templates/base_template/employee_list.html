@@ -1,6 +1,7 @@
 {% extends "base_template/base.html" %}
 {% load money %}
 {% load static %}
+{% load tz %}
 {% block title %}
     Employees · Attendance
 {% endblock %}
@@ -30,13 +31,21 @@
                 </span>
             </nav>
             <h1 class="page__title">
-                Employees
+                {% if blocked_method %}Blocked verification methods{% else %}Employees{% endif %}
             </h1>
             <p class="page__sub">
                 {{ active_company.name }}
             </p>
         </div>
         <div class="page__actions">
+            {% if can_change_verification %}
+                {% if blocked_method %}
+                    <button class="btn btn--ghost" type="button" data-refresh-verification-page>Refresh Page</button>
+                    <a class="btn btn--ghost" href="{% url 'employee_list' %}">Back to employees</a>
+                {% else %}
+                    <a class="btn btn--ghost" href="{% url 'employee_list' %}?blocked_method=all">Blocked verification methods</a>
+                {% endif %}
+            {% endif %}
             {# The same view with ?format=: same permissions, same filters, same sort. #}
             <a class="btn btn--ghost" data-export
                href="{% url 'employee_list' %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=xlsx">
@@ -46,12 +55,12 @@
                href="{% url 'employee_list' %}?{% if export_query %}{{ export_query }}&amp;{% endif %}format=pdf">
                 Download PDF
             </a>
-            {% if map_branches %}
+            {% if map_branches and not blocked_method %}
                 <button class="btn btn--ghost" type="button" data-open-dialog="bulk-map-dialog">
                     Bulk map to devices
                 </button>
             {% endif %}
-            {% if can_create %}
+            {% if can_create and not blocked_method %}
                 <a class="btn btn--ghost" href="{% url 'organization:employee_import' %}">
                     Import from a file
                 </a>
@@ -61,6 +70,47 @@
             {% endif %}
         </div>
     </div>
+    {% if bulk_terminal_updates %}
+        <section class="card" id="terminal-updates" aria-labelledby="terminal-updates-title">
+            <div class="toolbar">
+                <div class="toolbar__grow">
+                    <h2 id="terminal-updates-title">Terminal updates · Bulk {{ bulk_terminal_updates.action|lower }}</h2>
+                    <p class="t-faint">
+                        {% if bulk_terminal_updates.selected_count %}{{ bulk_terminal_updates.selected_count }} selected · {% endif %}
+                        {{ bulk_terminal_updates.command_count }} terminal command{{ bulk_terminal_updates.command_count|pluralize }}
+                    </p>
+                </div>
+                <form method="get" action="{% url 'employee_list' %}#terminal-updates">
+                    {% for key, values in terminal_update_filters %}
+                        {% for value in values %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+                    {% endfor %}
+                    <button class="btn btn--ghost" type="submit">Refresh status</button>
+                </form>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr><th>Employee</th><th>Terminal user ID</th><th>Device</th><th>Method</th><th>Status</th><th>Device response time</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for update in bulk_terminal_updates.rows %}
+                            <tr>
+                                <td>{{ update.employee.full_name|default:"—" }}</td>
+                                <td>{{ update.user_id|default:"—" }}</td>
+                                <td>{{ update.device_name|default:"—" }}</td>
+                                <td>{{ update.method }}</td>
+                                <td>
+                                    <span class="badge badge--{{ update.tone }}">{{ update.status }}</span>
+                                    {% if update.reason %}<div class="t-faint">{{ update.reason }}</div>{% endif %}
+                                </td>
+                                <td>{% if update.command.answered_at %}{{ update.command.answered_at|timezone:active_company.timezone|date:"M j, g:i:s A" }}{% else %}—{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    {% endif %}
     {# The live refresh of the "Now" column uses Nihal's attendance endpoint. A #}
     {# branch viewer gets it once that endpoint is a branch page (A12 part 7); #}
     {# until then the column shows the state when the page was opened. #}
@@ -108,6 +158,16 @@
                     </option>
                 {% endfor %}
             </select>
+            {% if blocked_method %}
+                <label class="sr-only" for="blocked-method">Blocked method</label>
+                <select class="input" id="blocked-method" name="blocked_method" style="width:auto">
+                    <option value="all" {% if blocked_method == 'all' %}selected{% endif %}>All employees</option>
+                    <option value="any" {% if blocked_method == 'any' %}selected{% endif %}>Any blocked method</option>
+                    {% for method in verification_methods %}
+                        <option value="{{ method.value }}" {% if method == blocked_method %}selected{% endif %}>{{ method.label }} blocked</option>
+                    {% endfor %}
+                </select>
+            {% endif %}
             {# Sorts the table as its headers do; no name, so Apply ignores it. #}
             <label class="sr-only" for="employee-sort">
                 Sort by
@@ -136,20 +196,29 @@
                 Apply
             </button>
             {% if search or status or setup or branch %}
-                <a class="btn btn--quiet" href="{% url 'employee_list' %}">
+                <a class="btn btn--quiet" href="{% url 'employee_list' %}{% if blocked_method %}?blocked_method={{ blocked_method }}{% endif %}">
                     Clear
                 </a>
             {% endif %}
         </form>
-        <nav class="setup-filter" aria-label="Needs setup">
-            {% for link in setup_links %}
-                <a class="setup-filter__item{% if link.active %} is-active{% endif %}"
-                   href="{{ link.url }}"{% if link.active %} aria-current="page"{% endif %}>
-                    {{ link.label }}
-                    <span class="setup-filter__count">{{ link.count }}</span>
-                </a>
-            {% endfor %}
-        </nav>
+        {% if verification_scope_links %}
+            <nav class="setup-filter" aria-label="Verification status">
+                {% for link in verification_scope_links %}
+                    <a class="setup-filter__item{% if link.active %} is-active{% endif %}"
+                       href="{{ link.url }}"{% if link.active %} aria-current="page"{% endif %}>{{ link.label }}</a>
+                {% endfor %}
+            </nav>
+        {% else %}
+            <nav class="setup-filter" aria-label="Needs setup">
+                {% for link in setup_links %}
+                    <a class="setup-filter__item{% if link.active %} is-active{% endif %}"
+                       href="{{ link.url }}"{% if link.active %} aria-current="page"{% endif %}>
+                        {{ link.label }}
+                        <span class="setup-filter__count">{{ link.count }}</span>
+                    </a>
+                {% endfor %}
+            </nav>
+        {% endif %}
         {% if not rows %}
             <div class="empty server-table-empty">
                 <div class="empty__icon">
@@ -159,7 +228,7 @@
                     </svg>
                 </div>
                 <div class="empty__title">
-                    No employees match
+                    {% if blocked_method and blocked_method != 'all' %}No employees match with a blocked method{% else %}No employees match{% endif %}
                 </div>
                 <div class="empty__text">
                     {% if search or status or setup or branch %}
@@ -176,7 +245,7 @@
                     <thead>
                         <tr>
                             <th class="pick-cell no-sort">
-                                {% if map_branches %}
+                                {% if map_branches or blocked_method %}
                                     <label class="pick" title="Select everyone on this page">
                                         <input type="checkbox" data-pick-all aria-label="Select everyone on this page">
                                         <span class="pick__box"></span>
@@ -212,6 +281,7 @@
                             <th class="no-sort">
                                 Devices
                             </th>
+                            {% if blocked_method %}<th class="no-sort">Blocked methods</th>{% endif %}
                             <th class="no-sort">
                                 Action
                             </th>
@@ -221,7 +291,7 @@
                         {% for r in rows %}
                             <tr>
                                 <td class="pick-cell">
-                                    {% if r.can_map %}
+                                    {% if r.can_map or blocked_method %}
                                         <label class="pick" title="Select {{ r.e.full_name }}">
                                             <input type="checkbox" name="employee" value="{{ r.e.pk }}" form="send-form" data-pick
                                                    aria-label="Select {{ r.e.full_name }}">
@@ -334,6 +404,15 @@
                                         </div>
                                     {% endif %}
                                 </td>
+                                {% if blocked_method %}
+                                    <td>
+                                        {% for label in r.blocked_method_labels %}
+                                            <span class="badge badge--danger">{{ label }}</span>
+                                        {% empty %}
+                                            <span class="t-faint">All allowed</span>
+                                        {% endfor %}
+                                    </td>
+                                {% endif %}
                                 <td>
                                     <div class="row-actions">
                                         {% if r.can_edit %}
@@ -341,7 +420,7 @@
                                                 Edit
                                             </a>
                                         {% endif %}
-                                        {% if r.can_map %}
+                                        {% if r.can_map and not blocked_method %}
                                             <button class="btn btn--quiet btn--sm" type="button"
                                                     data-map-employee="{{ r.e.pk }}"
                                                     data-map-name="{{ r.e.full_name }}"
@@ -358,7 +437,7 @@
                 </table>
             </div>
         {% include "base_template/includes/table_pagination.html" %}
-        {% if map_branches %}
+        {% if map_branches or blocked_method %}
             <form class="selection-bar" id="send-form" method="post" action="{% url 'devices:employees_send' %}" data-selection-bar hidden>
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
@@ -375,10 +454,16 @@
                     </button>
                 </div>
                 <div class="selection-bar__action">
-                    <button class="btn btn--primary" type="submit"
-                            title="Puts them on every device of their branch: Employee ID and name, plus card, fingerprint and face when the company has them">
-                        Send to devices
-                    </button>
+                    {% if blocked_method %}
+                        <button class="btn btn--ghost" type="button" data-open-dialog="bulk-verification-dialog" data-verification-mode="block">Block verification methods</button>
+                        <button class="btn btn--ghost" type="button" data-open-dialog="bulk-verification-dialog" data-verification-mode="unblock">Unblock verification methods</button>
+                    {% endif %}
+                    {% if map_branches and not blocked_method %}
+                        <button class="btn btn--primary" type="submit"
+                                title="Puts them on every device of their branch: Employee ID and name, plus card, fingerprint and face when the company has them">
+                            Send to devices
+                        </button>
+                    {% endif %}
                 </div>
             </form>
         {% endif %}
@@ -405,7 +490,29 @@
             </div>
         {% endif %}
     </div>
-    {% if map_branches %}
+    {% if blocked_method %}
+        {% url 'organization:employee_verification_bulk' as bulk_verification_url %}
+        <dialog class="modal" id="bulk-verification-dialog" aria-labelledby="bulk-verification-title" data-preferred-method="{{ blocked_method }}">
+            <div class="modal__card">
+                <div class="modal__head">
+                    <h2 id="bulk-verification-title">Attendance verification methods</h2>
+                    <button class="modal__close" type="button" data-close-dialog aria-label="Close">×</button>
+                </div>
+                <div class="modal__body stack">
+                    <p><strong data-bulk-pick-count>0</strong> selected. <span data-verification-help aria-live="polite"></span></p>
+                    <p id="bulk-face-verification-note"><strong>Face blocking applies in HRM only.</strong> The reader can still accept face scans. HRM excludes them from attendance while Face is blocked.</p>
+                    {% for method in verification_methods %}
+                        <label class="check"><input type="checkbox" class="check__input" name="blocked_methods" value="{{ method.value }}" form="send-form"{% if method.value == 'face' %} aria-describedby="bulk-face-verification-note"{% endif %}> {{ method.label }} <span class="t-faint" data-blocked-count></span></label>
+                    {% endfor %}
+                </div>
+                <div class="modal__foot modal__foot--verification">
+                    <button class="btn btn--ghost" type="button" data-close-dialog>Cancel</button>
+                    <button class="btn btn--primary" type="submit" form="send-form" formaction="{{ bulk_verification_url }}{% if export_query %}?{{ export_query }}{% endif %}" data-bulk-verification name="operation" value="block" disabled>Block methods</button>
+                </div>
+            </div>
+        </dialog>
+    {% endif %}
+    {% if map_branches and not blocked_method %}
         {{ map_branches|json_script:"map-branches" }}
         <dialog class="modal" id="map-dialog" aria-labelledby="map-dialog-title">
             <form class="modal__card" method="post" action="{% url 'devices:employee_map' %}">

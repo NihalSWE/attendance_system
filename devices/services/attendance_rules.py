@@ -42,7 +42,7 @@ from scheduling.models import CompanyAttendanceSettings
 Status = PunchEvent.AuthorizationStatus
 
 #: Every status a re-check looks at: whatever keeps a punch out of attendance.
-RECHECKABLE = frozenset(EXCLUDING_STATUSES) | {Status.POLICY_UNRESOLVED}
+RECHECKABLE = (frozenset(EXCLUDING_STATUSES) - {Status.METHOD_BLOCKED}) | {Status.POLICY_UNRESOLVED}
 
 #: A year and a bit: enough for any correction, small enough to stay one
 #: transaction.
@@ -86,6 +86,14 @@ EXCLUSION_HELP = {
     Status.ENROLLMENT_DISABLED: (
         "Attendance is switched off on the enrollment",
         "Switch “Attendance enabled” back on for that enrollment, then re-check.",
+    ),
+    Status.METHOD_BLOCKED: (
+        "Verification method was blocked for this employee",
+        "Check the employee profile under Device permissions. Changes apply to future scans.",
+    ),
+    Status.METHOD_UNVERIFIED: (
+        "The device did not identify the verification method",
+        "Use a supported method and check how the terminal reports its scans.",
     ),
     Status.UNKNOWN_EMPLOYEE: (
         "Nobody is enrolled with that number on that device",
@@ -195,7 +203,7 @@ def excluded_summary(company_id, *, start, end):
     with use_company(company_id):
         counts = dict(
             PunchEvent.objects.filter(
-                authorization_status__in=RECHECKABLE,
+                authorization_status__in=RECHECKABLE | {Status.METHOD_BLOCKED, Status.METHOD_UNVERIFIED},
                 punched_at_utc__gte=since, punched_at_utc__lt=until,
             )
             .values_list("authorization_status")

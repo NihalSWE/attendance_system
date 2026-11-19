@@ -182,6 +182,25 @@ class BiometricDevice(TenantOwned, ActorTracked):
             raise ValidationError({"settings": "Must be a JSON object."})
 
 
+class DevicePunchRetention(TenantOwned):
+    """The desired retention window for punches stored on a reader."""
+
+    device = models.OneToOneField(BiometricDevice, on_delete=models.CASCADE, related_name="punch_retention")
+    days = models.PositiveIntegerField()
+
+
+class DevicePunchCleanup(TenantOwned):
+    """Durable polling state; completed batches are retained in the audit log."""
+
+    device = models.OneToOneField(BiometricDevice, on_delete=models.PROTECT,
+                                 related_name="punch_cleanup")
+    phase = models.CharField(max_length=20, default="idle")
+    state = models.JSONField(default=dict)
+    message = models.CharField(max_length=255, blank=True)
+    next_check_at = models.DateTimeField(null=True, blank=True)
+    verified_deleted = models.PositiveIntegerField(default=0)
+
+
 class DeviceDepartment(TenantOwned, ActorTracked):
     """Dated mapping restricting a device to one or more departments.
 
@@ -1013,6 +1032,17 @@ class DeviceMessage(TenantOwned):
         return f"{self.message_type} from {self.device_id} at {self.received_at}"
 
 
+class EmployeeVerificationPolicy(TenantOwned):
+    """An employee's blocked attendance methods from an instant onward."""
+
+    employee = models.ForeignKey("employees.Employee", on_delete=models.PROTECT)
+    effective_at = models.DateTimeField()
+    blocked_methods = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["company", "employee", "-effective_at"])]
+
+
 class PunchEvent(TenantOwned):
     """One raw punch record extracted from a DeviceMessage.
 
@@ -1041,6 +1071,8 @@ class PunchEvent(TenantOwned):
         POLICY_UNRESOLVED = "policy_unresolved", "Policy unresolved"
         # The employee was inactive that day (EmployeeInactivePeriod, 2026-09-29).
         EMPLOYEE_INACTIVE = "employee_inactive", "Blocked: employee inactive"
+        METHOD_BLOCKED = "method_blocked", "Blocked verification method"
+        METHOD_UNVERIFIED = "method_unverified", "Unidentified verification method"
 
     class DedupeStatus(models.TextChoices):
         UNIQUE = "unique", "Unique"
@@ -1127,6 +1159,9 @@ class PunchEvent(TenantOwned):
         ]
         indexes = [
             models.Index(fields=["company", "device", "punched_at_utc"]),
+            models.Index(fields=["company", "-received_at", "-id"], name="punch_company_received_idx"),
+            models.Index(fields=["company", "device", "-received_at", "-id"], name="punch_device_received_idx"),
+            models.Index(fields=["company", "device", "device_user_id", "punched_at_utc"], name="punch_identity_time_idx"),
             models.Index(fields=["company", "employee", "punched_at_utc"]),
             models.Index(fields=["company", "authorization_status"]),
             models.Index(fields=["company", "dedupe_status"]),

@@ -13,7 +13,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from auditlog.models import AuditLog
-from devices.models import BiometricDevice, DeviceDepartment
+from devices.models import BiometricDevice, DeviceDepartment, DevicePunchRetention
 from devices.services import panel_access
 
 OVERLAP_MESSAGE = (
@@ -69,6 +69,23 @@ def update_device(*, actor, company_id, device, form, ip=None):
         audit(actor=actor, company_id=company_id, action="device.updated", obj=device,
               before=before, after=_device_snapshot(device), ip=ip)
     return device
+
+
+@transaction.atomic
+def set_punch_retention(*, actor, company_id, device, days, ip=None):
+    panel_access.assert_may_manage_devices(actor, company_id)
+    device = BiometricDevice.all_objects.select_for_update().get(company_id=company_id, pk=device.pk)
+    policy = DevicePunchRetention.all_objects.filter(company_id=company_id, device=device).first()
+    previous = policy.days if policy else None
+    if previous == days:
+        return
+    if days is None:
+        policy.delete()
+    else:
+        DevicePunchRetention.all_objects.update_or_create(company_id=company_id, device=device,
+                                                          defaults={"days": days})
+    audit(actor=actor, company_id=company_id, action="device.punch_retention_updated", obj=device,
+          before={"days": previous}, after={"days": days}, ip=ip)
 
 
 def retire_device(*, actor, company_id, device, ip=None):

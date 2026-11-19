@@ -120,6 +120,11 @@ urlpatterns = [
     path("employees/<employee:pk>/devices/<int:enrollment>/",
          employee_records_views.employee_device_permission,
          name="employee_device_permission"),
+    path("employees/<employee:pk>/devices/verification/",
+         employee_records_views.employee_verification_methods,
+         name="employee_verification_methods"),
+    path("employees/verification/bulk/", employee_records_views.employee_verification_bulk,
+         name="employee_verification_bulk"),
     path("employees/<employee:pk>/reports/", employee_detail_views.employee_report_visibility,
          name="employee_report_visibility"),
     # Feed the dependent branch -> department -> designation selects.

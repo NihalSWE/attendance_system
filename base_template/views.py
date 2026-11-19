@@ -16,6 +16,7 @@ from django.contrib.auth.views import LogoutView
 from django.db.models import CharField, Count, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.shortcuts import redirect
+from django.utils import timezone
 from base_template.tables import code_sort_key, paginate, render, words_clause
 from django.views.decorators.http import require_POST
 
@@ -147,6 +148,8 @@ class EmployeeListQuery:
     status: str
     branch: str
     setup: str
+    blocked_method: str
+    can_change_verification: bool
     branches: list = field(default_factory=list)
     chosen_branch: object = None
     setup_counts: dict = field(default_factory=dict)
@@ -164,6 +167,8 @@ def employee_list_query(request):
     """
     from access_control.branch_access import ALL_BRANCHES, branches_for
     from devices.services.mapping import UNASSIGNED_CODE
+    from devices.services.panel_access import may_manage_devices
+    from devices.services.verification import METHODS, current_policy
     from organization.models import Branch
 
     company_wide, view_branches = _employee_list_scope(request)
@@ -219,6 +224,18 @@ def employee_list_query(request):
     else:
         branch = ""
 
+    can_change_verification = may_manage_devices(request.user, request.company_id)
+    blocked_method = request.GET.get("blocked_method", "")
+    if can_change_verification and (blocked_method in ("all", "any") or blocked_method in METHODS):
+        latest = current_policy(request.company_id, OuterRef("pk"), timezone.now())
+        qs = qs.annotate(blocked_verification_methods=Subquery(latest.values("blocked_methods")[:1]))
+        if blocked_method == "any":
+            qs = qs.filter(blocked_verification_methods__isnull=False).exclude(blocked_verification_methods=[])
+        elif blocked_method in METHODS:
+            qs = qs.filter(blocked_verification_methods__contains=[blocked_method])
+    else:
+        blocked_method = ""
+
     # A12 part 4: the pay column only exists for someone who may see pay
     # somewhere (Ajay, 2026-09-20). Seeing every employee is not seeing their
     # pay: HR sees everyone and pay only where granted (Ajay, 2026-09-27).
@@ -256,6 +273,8 @@ def employee_list_query(request):
         # so it is sortable only for a viewer who may see every row's rate.
         columns.append("table_rate" if salary_branches is ALL_BRANCHES else None)
     columns += [None, None]
+    if blocked_method:
+        columns.append(None)
 
     # What a download is named after: the one branch this viewer sees, or the
     # company when they see more than one.
@@ -270,6 +289,7 @@ def employee_list_query(request):
         search_fields=("first_name", "last_name", "work_email", "table_code", "table_branch",
                        "table_department", "table_designation", "employment_status"),
         search=search, status=status, branch=branch, setup=setup,
+        blocked_method=blocked_method, can_change_verification=can_change_verification,
         setup_counts=setup_counts, branches=branches, chosen_branch=chosen_branch,
         scope_name=scope_name,
     )
@@ -285,6 +305,43 @@ def setup_gaps(employee, assignment, compensation, show_rate):
     if show_rate and compensation is None:
         gaps.append("No salary")
     return gaps
+
+
+def _bulk_terminal_updates(request):
+    from devices.models import DeviceOutboxCommand
+    from devices.services import biometric_pilot
+    from devices.services.verification import BULK_UPDATE_SESSION_KEY, Method, terminal_update_status
+
+    receipt = request.session.get(BULK_UPDATE_SESSION_KEY, {})
+    if receipt.get("company_id") != request.company_id:
+        return None
+    updates = receipt["updates"]
+    employees = Employee.objects.in_bulk(update["employee_id"] for update in updates)
+    queued = [update for update in updates if "command_id" in update]
+    commands = {(command.device_id, command.command_id): command for command in
+                DeviceOutboxCommand.objects.filter(
+                    device_id__in={update["device_id"] for update in queued},
+                    command_id__in={update["command_id"] for update in queued},
+                ).select_related("device")}
+    unblocking = receipt["operation"] == "unblock"
+    rows = []
+    for update in updates:
+        command = commands.get((update.get("device_id"), update.get("command_id")))
+        if command and biometric_pilot.is_fingerprint_backup_request(command):
+            command = biometric_pilot.fingerprint_backup_write(command) or command
+        if update.get("result") == "hrm_only":
+            status, tone = "HRM updated · no terminal command", "warning"
+        elif update.get("result") == "unchanged":
+            state = "allowed" if unblocking else "blocked"
+            status, tone = f"Already {state} in HRM · no new command", "neutral"
+        else:
+            status, tone = terminal_update_status(command)
+        rows.append({"employee": employees.get(update["employee_id"]), "user_id": update.get("user_id", ""),
+                     "method": Method(update["method"]).label, "command": command,
+                     "device_name": update.get("device_name") or (command.device.name if command else ""),
+                     "status": status, "tone": tone, "reason": update.get("reason", "")})
+    return {"rows": rows, "action": "Unblock" if unblocking else "Block",
+            "selected_count": receipt.get("selected_count"), "command_count": len(queued)}
 
 
 @login_required
@@ -338,6 +395,7 @@ def employee_list(request):
     # viewer may map in, and what each row already has.
     from devices.models import BiometricDevice
     from devices.services.mapping import device_badges
+    from devices.services.verification import METHODS
 
     devices_by_branch = {}
     for device in BiometricDevice.objects.exclude(status__in=["retired", "suspended"]).select_related(
@@ -356,6 +414,9 @@ def employee_list(request):
         row["device"] = badges.get(row["e"].pk)
         row["can_map"] = row["can_edit"] and branch_id in devices_by_branch
         row["gaps"] = setup_gaps(row["e"], row["a"], row["c"], row["show_rate"])
+        if listing.blocked_method:
+            row["blocked_method_labels"] = [method.label for method in METHODS
+                                            if method in (row["e"].blocked_verification_methods or [])]
 
     # The setup filter keeps the other filters; the salary options only exist
     # for a viewer who may see pay somewhere.
@@ -376,6 +437,17 @@ def employee_list(request):
     export_params = request.GET.copy()
     for drop in ("page", "per_page", "table", "draw", "start", "length", "format"):
         export_params.pop(drop, None)
+    verification_scope_links = []
+    if listing.blocked_method:
+        params = export_params.copy()
+        params.pop("setup", None)
+        active_scope = "all" if listing.blocked_method == "all" else "any"
+        for value, label in (("all", "All employees"), ("any", "Blocked employees")):
+            params["blocked_method"] = value
+            verification_scope_links.append({
+                "label": label, "url": f"?{params.urlencode()}",
+                "active": value == active_scope,
+            })
 
     return render(request, "base_template/employee_list.html", {
         "rows": rows,
@@ -389,11 +461,18 @@ def employee_list(request):
         "setup": listing.setup,
         "setup_links": setup_links,
         "export_query": export_params.urlencode(),
+        "terminal_update_filters": list(export_params.lists()),
         "per_page": per_page,
         "statuses": Employee.EmploymentStatus.choices,
         "company_wide": company_wide,
         "show_rate_column": listing.show_rate_column,
         "can_create": bool(edit_branches),
+        "can_change_verification": listing.can_change_verification,
+        "blocked_method": listing.blocked_method,
+        "verification_scope_links": verification_scope_links,
+        "verification_methods": METHODS,
+        "bulk_terminal_updates": (_bulk_terminal_updates(request)
+                                  if listing.blocked_method and not request.server_table["ajax"] else None),
         "map_branches": [
             {"id": pk, "name": value["name"], "devices": value["devices"]}
             for pk, value in sorted(devices_by_branch.items(), key=lambda item: item[1]["name"])

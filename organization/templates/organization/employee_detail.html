@@ -914,6 +914,25 @@
     <section class="profile-panel" id="device-permissions" role="tabpanel" data-panel="device-permissions">
         <div class="card">
             <div class="card__head">
+                <h2>Attendance verification methods</h2>
+                {% if manages_devices %}
+                    <a class="btn btn--quiet btn--sm" href="{% url 'employee_list' %}?blocked_method=all&amp;q={{ device_pin|default:employee.full_name|urlencode }}">Manage verification methods</a>
+                {% endif %}
+            </div>
+            <div class="card__body stack">
+                <div>
+                    {% for label, blocked in verification_methods %}
+                        <span class="badge {% if blocked %}badge--danger{% else %}badge--success{% endif %}">{{ label }} {% if blocked %}blocked{% if label == 'Face' %} in HRM only{% endif %}{% else %}allowed{% endif %}</span>
+                    {% endfor %}
+                </div>
+                {% if manages_devices %}
+                    <p class="t-faint">Face blocking applies in HRM only. The reader can still accept face scans. HRM excludes them from attendance while Face is blocked.</p>
+                    <p class="t-faint">For Card and Fingerprint, check the terminal update status below.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card">
+            <div class="card__head">
                 <h2>Device permissions</h2>
             </div>
             {% if device_rows %}
@@ -935,6 +954,7 @@
                                 <tr>
                                     <td>
                                         {{ row.device.name }} <span class="t-faint">· {{ row.device.branch.name }}</span>
+                                        {% if row.fingerprint_pilot %}<div class="t-faint">Fingerprint pilot{% if row.fingerprint_pilot_status %} · {{ row.fingerprint_pilot_status }}{% endif %}</div>{% endif %}
                                         {% if row.removed_on_terminal %}
                                             <span class="badge badge--warning" title="Their user {{ row.device_user_id }} was deleted on the terminal, so they are not on this device now. Send them again from the Employees list or the device's Users page.">Removed on the terminal</span>
                                         {% endif %}
@@ -942,7 +962,11 @@
                                     <td>{{ row.device_user_id }}</td>
                                     <td>{% if row.attendance_enabled %}<span class="badge badge--success">Yes</span>{% else %}<span class="badge badge--danger">No</span>{% endif %}</td>
                                     <td>{% if row.assigned_device_authorized %}Yes{% else %}No{% endif %}</td>
-                                    <td>{{ row.card_number|default:"—" }}</td>
+                                    <td>
+                                        {{ row.card_number|default:"—" }}
+                                        {% if row.terminal_card_state %}<div class="t-faint">Last terminal report · {{ row.terminal_card_state }}</div>{% endif %}
+                                        {% if row.card_pilot %}<div class="t-faint">Card pilot{% if row.card_pilot_status %} · {{ row.card_pilot_status }}{% endif %}</div>{% endif %}
+                                    </td>
                                     <td>{{ row.get_device_privilege_display }}</td>
                                     {% if manages_devices %}
                                         <td><button class="btn btn--quiet btn--sm" type="button" data-open-dialog="device_{{ row.pk }}-dialog">Change</button></td>
@@ -1287,6 +1311,10 @@
         {% endfor %}
     {% endif %}
     {% if manages_devices %}
+        {% if open_dialog == 'verification-dialog' %}
+            {% url 'organization:employee_verification_methods' employee.public_id as verification_url %}
+            {% include "organization/profile/modal_form.html" with id="verification-dialog" title="Attendance verification methods" action=verification_url form=verification_form submit="Save" note="Face blocking applies in HRM only. The reader can still accept face scans. HRM excludes them from attendance while Face is blocked." %}
+        {% endif %}
         {% for row, form in device_rows %}
             {% with row_pk=row.pk|stringformat:"s" %}
                 {% with dialog_id="device_"|add:row_pk|add:"-dialog" %}

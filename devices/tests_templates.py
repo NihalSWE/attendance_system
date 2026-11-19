@@ -103,6 +103,18 @@ class SavingTests(TemplateCase):
         self.upload()
         self.assertEqual(templates.save_from_payload(self.device, BIODATA), (0, 0, 2))
 
+    def test_scoped_recapture_records_new_metadata_with_same_template(self):
+        self.upload()
+        face = DeviceUserTemplate.all_objects.get(device=self.device, vendor_type="9")
+        original_capture = face.captured_at
+        face_reply = BIODATA.splitlines()[1].replace("valid=1", "valid=0")
+
+        self.assertEqual(templates.save_from_payload(self.device, face_reply, refresh_capture=True), (0, 1, 0))
+        face.refresh_from_db()
+        self.assertGreater(face.captured_at, original_capture)
+        self.assertEqual(face.valid, "0")
+        self.assertEqual(templates.decrypt(face.template_encrypted), FACE_TMP)
+
     def test_newer_template_replaces_the_saved_one(self):
         self.upload()
         self.upload(BIODATA.replace(FACE_TMP, "apUBFjYCNEWFACE=="))

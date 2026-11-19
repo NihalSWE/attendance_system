@@ -10,6 +10,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import FileResponse, Http404, HttpResponseBase
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
 from attendance.models import AttendanceRecord
@@ -84,9 +85,11 @@ def _sections(request, company_id, page, bound):
     what waits for a decision (Ajay, 2026-09-27). ``bound``: a refused form,
     by its modal's name, drawn again instead of a fresh one."""
     from access_control.branch_access import can
-    from devices.models import BiometricDevice
+    from devices.models import BiometricDevice, DeviceUser
     from devices.services.mapping import employee_id_for
     from devices.services.panel_access import may_manage_devices
+    from devices.services import biometric_pilot, terminal_card
+    from devices.services.verification import METHODS, blocked_at, terminal_update_status
     from organization import employee_devices
     from organization import employee_records as records
 
@@ -96,14 +99,34 @@ def _sections(request, company_id, page, bound):
     education = [(row, bound.get(f"education_{row.pk}") or records.EducationForm(
         instance=row, auto_id=f"education_{row.pk}_%s")) for row in held["education"]]
     manages_devices = may_manage_devices(request.user, company_id)
+    blocked = blocked_at(company_id, employee.pk, timezone.now())
     enrolled = employee_devices.current(company_id, employee)
     # Someone deleted on the terminal keeps their link (their scans are still
     # theirs), but the table says they are no longer on that device.
     from devices.services.mapping import removed_on_terminal
 
     gone = {}
+    device_cards = {}
+    if enrolled:
+        device_cards = {(device, pin): card for device, pin, card in DeviceUser.all_objects.filter(
+            company_id=company_id, device_id__in={row.device_id for row in enrolled},
+            pin__in={row.device_user_id for row in enrolled}, reported=True,
+        ).values_list("device_id", "pin", "card_number")}
     for row in enrolled:
         row.removed_on_terminal = row.device_user_id in removed_on_terminal(row.device, gone)
+        key = (row.device_id, row.device_user_id)
+        if key in device_cards:
+            row.terminal_card_state = "Card present" if device_cards[key] not in ("", "0") else "No card"
+        if manages_devices and terminal_card.enabled(row.device, row.device_user_id):
+            row.card_pilot = True
+            command = terminal_card.latest_command(row)
+            if command:
+                row.card_pilot_status = terminal_update_status(command)[0]
+        if manages_devices and biometric_pilot.fingerprint_enabled(row.device, row.device_user_id):
+            row.fingerprint_pilot = True
+            command = biometric_pilot.latest_fingerprint_command(row)
+            if command:
+                row.fingerprint_pilot_status = terminal_update_status(command)[0]
     device_rows = [(row, bound.get(f"device_{row.pk}") or employee_devices.DevicePermissionForm(
         instance=row, auto_id=f"device_{row.pk}_%s") if manages_devices else None)
         for row in enrolled]
@@ -126,6 +149,8 @@ def _sections(request, company_id, page, bound):
         "document_form": bound.get("document") or records.DocumentForm(auto_id="document_%s"),
         "device_rows": device_rows,
         "manages_devices": manages_devices,
+        "verification_methods": [(method.label, method in blocked) for method in METHODS],
+        "verification_form": bound.get("verification"),
         "branch_devices": branch_devices,
         "device_pin": employee_id_for(employee),
         "roster": records.roster(company_id, employee, assignment, today),

@@ -34,7 +34,7 @@ LABELS = {
 # brings the fingerprint records with it, and attendance history can be asked
 # for; biodata and options have no 2.x form verified on hardware yet.
 SUPPORTED = {
-    PUSH3: {"query_users", "query_biodata", "query_options"},
+    PUSH3: {"query_users", "query_biodata", "query_options", "query_transactions"},
     ATT2: {"query_users", "query_attlog"},
 }
 

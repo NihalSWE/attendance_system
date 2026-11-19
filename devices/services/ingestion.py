@@ -245,6 +245,12 @@ def capture_message(*, device, parsed, raw_body, source_ip=None, headers=None,
     return message, True
 
 
+RESTRICTED_METHOD_STATUSES = (
+    PunchEvent.AuthorizationStatus.METHOD_BLOCKED,
+    PunchEvent.AuthorizationStatus.METHOD_UNVERIFIED,
+)
+
+
 def _natural_key_duplicate(*, device, punch, punched_at_utc):
     """An identical punch already recorded.
 
@@ -255,13 +261,14 @@ def _natural_key_duplicate(*, device, punch, punched_at_utc):
     are compared, because a device can repeat a record within one batch.
     """
     return (
-        PunchEvent.all_objects.filter(
+        PunchEvent.all_objects.only("pk").filter(
             company_id=device.company_id,
             device=device,
             device_user_id=punch.device_user_id,
             punched_at_utc=punched_at_utc,
             reported_status_code=punch.reported_status_code,
         )
+        .exclude(authorization_status__in=RESTRICTED_METHOD_STATUSES)
         .order_by("id")
         .first()
     )
@@ -284,13 +291,14 @@ def _repeat_scan(*, device, punch, punched_at_utc):
     REPEAT_SCAN_SECONDS earlier: this one is then a repeat press. Rows earlier in the same batch
     count, because a double press usually arrives inside one upload."""
     return (
-        PunchEvent.all_objects.filter(
+        PunchEvent.all_objects.only("pk").filter(
             company_id=device.company_id,
             device=device,
             device_user_id=punch.device_user_id,
             punched_at_utc__gt=punched_at_utc - timedelta(seconds=REPEAT_SCAN_SECONDS),
             punched_at_utc__lte=punched_at_utc,
         )
+        .exclude(authorization_status__in=RESTRICTED_METHOD_STATUSES)
         .order_by("-punched_at_utc", "-id")
         .first()
     )
@@ -308,7 +316,7 @@ def _nearby_punch(*, device, punch, punched_at_utc, window_seconds):
         return None
     delta = timedelta(seconds=window_seconds)
     return (
-        PunchEvent.all_objects.filter(
+        PunchEvent.all_objects.only("pk").filter(
             company_id=device.company_id,
             device=device,
             device_user_id=punch.device_user_id,
@@ -317,6 +325,7 @@ def _nearby_punch(*, device, punch, punched_at_utc, window_seconds):
             punched_at_utc__lt=punched_at_utc + delta,
         )
         .exclude(punched_at_utc=punched_at_utc)
+        .exclude(authorization_status__in=RESTRICTED_METHOD_STATUSES)
         .order_by("id")
         .first()
     )
