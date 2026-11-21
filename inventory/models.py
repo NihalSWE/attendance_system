@@ -286,6 +286,8 @@ class Item(TenantOwned, ActorTracked):
     # for a material (the supplier's). Only with the company's warranty on.
     warranty_months = models.PositiveSmallIntegerField("Warranty (months)", null=True, blank=True,
                                                        validators=[MaxValueValidator(240)])
+    # Null keeps existing calendar-month terms. Zero explicitly turns coverage off.
+    warranty_days = models.PositiveSmallIntegerField(null=True, blank=True, validators=[MaxValueValidator(7305)])
     # Within the warranty, the first months in which a faulty unit is replaced
     # (2026-10-31); after them, to the warranty's end, it is repaired.
     guarantee_months = models.PositiveSmallIntegerField("Guarantee (months)", null=True, blank=True,

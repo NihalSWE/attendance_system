@@ -42,7 +42,8 @@ def warranty_page(request):
             **common, "off": True, "can_switch": membership.role in ("owner", "company_admin")})
     can_record = access.may(request.user, company_id, warranty.CODE)
     with use_company(company_id):
-        items = list(Item.objects.filter(Q(warranty_months__isnull=False) | Q(serial_numbers=True))
+        items = list(Item.objects.filter(Q(warranty_days__gt=0)
+                    | Q(warranty_days__isnull=True, warranty_months__gt=0) | Q(serial_numbers=True))
                      .annotate(out=Count("serials", filter=Q(serials__status="delivered")),
                                kept=Count("serials", filter=Q(serials__status="in_stock")))
                      .select_related("base_uom").order_by("code"))

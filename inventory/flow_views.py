@@ -257,7 +257,7 @@ class StockInForm(_HeadForm):
     supplier = django_forms.ModelChoiceField(queryset=Item.all_objects.none(), required=False, label="Supplier")
     customer = django_forms.ModelChoiceField(queryset=Item.all_objects.none(), required=False, label="Customer")
     reason = django_forms.CharField(label="Why it came back", required=False, max_length=255)
-    below_cost = django_forms.BooleanField(label="Sell below cost", required=False,
+    below_cost = django_forms.BooleanField(label="Sell Under Rate", required=False,
                                            help_text="Only if a sale price below cost is meant.")
     below_cost_reason = django_forms.CharField(label="Why below cost", required=False, max_length=200)
     # VAT paid on the bill (2026-11-02): either box; the other is worked out.

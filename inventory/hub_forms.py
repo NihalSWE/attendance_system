@@ -27,18 +27,36 @@ class _HubItemForm(ItemForm):
     MAIN_BOXES = ()
     #: On/off settings, drawn as switches.
     SWITCHES = ("track_batch", "track_expiry", "shelf_life_days", "qc_required",
-                "warranty_months", "serial_numbers")
+                "has_warranty", "serial_numbers")
     #: ``{box: name of the box whose unit is shown beside it}``.
     UNIT_FROM = {"min_stock": "base_uom", "pack_factor": "base_uom", "sale_price": "base_uom",
                  "pack_price": "pack_uom"}
     #: ``{box: fixed words beside it}``.
-    UNIT_TEXT = {"shelf_life_days": "days", "keep_days": "days", "vat_rate": "%", "warranty_months": "months",
-                 "guarantee_months": "months"}
+    UNIT_TEXT = {"shelf_life_days": "days", "keep_days": "days", "vat_rate": "%"}
     BATCH_HINT = "Each delivery gets its own batch number."
     PACK_LABELS = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "warranty_months" in self.fields:
+            self.fields.pop("warranty_months")
+            self.fields.pop("guarantee_months")
+            days = self.instance.warranty_days
+            self.legacy_warranty = days is None and bool(self.instance.warranty_months)
+            self.fields["has_warranty"] = forms.BooleanField(
+                required=False, label="Has warranty", initial=bool(days or self.legacy_warranty),
+            )
+            self.fields["warranty_days"] = forms.IntegerField(
+                required=False, min_value=1, max_value=7305, initial=days or None, label="Warranty duration",
+                help_text=("Leave blank to keep the existing calendar-month terms."
+                           if self.legacy_warranty else "Count from delivery for sales or from receipt for purchases."),
+                widget=forms.NumberInput(attrs={"class": "input"}),
+            )
+            self.fields["warranty_days"].unit_text = "days"
+            for name in ("warranty_days", "serial_numbers"):
+                self.fields[name].widget.attrs["data-show-when"] = f"{self.add_prefix('has_warranty')}:on"
+            self.fields["warranty_days"].hide_without_warranty = True
+            self.fields["serial_numbers"].hide_without_warranty = True
         adding = not self.instance.pk
         if adding:
             self.fields["pack_uom"] = forms.ModelChoiceField(
@@ -92,8 +110,6 @@ class _HubItemForm(ItemForm):
         "track_expiry": ("Expiry tracking", "Expired stock can never be used or sold."),
         "shelf_life_days": ("Shelf life", ""),
         "qc_required": ("QC before use", "New stock waits until it passes a quality check."),
-        "warranty_months": ("Warranty (repair)", "From the delivery date (sold) or received date (bought)."),
-        "guarantee_months": ("Guarantee (replace)", "The first months of the warranty; not longer than it."),
         "serial_numbers": ("Serial number per unit", "Each unit is scanned out on delivery."),
         "keep_by": ("Minimum stock as", ""),
         "keep_days": ("Days of sales", "From the average sold per day over the last 30 days."),
@@ -124,6 +140,17 @@ class _HubItemForm(ItemForm):
 
     def clean(self):
         data = super().clean()
+        if "has_warranty" in self.fields:
+            if data.get("has_warranty"):
+                if not data.get("warranty_days") and not self.legacy_warranty and "warranty_days" not in self.errors:
+                    self.add_error("warranty_days", "Enter the number of warranty days.")
+            elif self.add_prefix("warranty_days") in self.data:
+                data["warranty_days"] = 0 if self.instance.pk else None
+                data["serial_numbers"] = self.instance.serial_numbers
+            else:
+                # Older callers may omit the warranty controls entirely.
+                data.pop("warranty_days", None)
+                data.pop("serial_numbers", None)
         pack, size = data.get("pack_uom"), data.get("pack_factor")
         if "pack_uom" in self.fields:
             if pack and not size:
@@ -142,7 +169,7 @@ class _HubItemForm(ItemForm):
 
     def item_values(self):
         """What the item itself saves (not the bigger unit)."""
-        return {name: value for name, value in self.cleaned_data.items() if name not in PACK_FIELDS}
+        return {name: value for name, value in self.cleaned_data.items() if name not in (*PACK_FIELDS, "has_warranty")}
 
     def pack_values(self):
         """The bigger unit, or None."""
@@ -166,7 +193,7 @@ class MaterialForm(_HubItemForm):
         ("Batches & expiry", "For food, chemicals and anything that expires.",
          ("track_batch", "track_expiry", "shelf_life_days", "qc_required")),
         ("Warranty", "The supplier's warranty on what you buy.",
-         ("warranty_months", "guarantee_months", "serial_numbers")),
+         ("has_warranty", "warranty_days", "serial_numbers")),
     )
     PACK_LABELS = {"pack_uom": "Purchase unit", "pack_factor_help": ""}
 
@@ -189,7 +216,7 @@ class MaterialForm(_HubItemForm):
         if "sourcing" in self.fields:
             self.fields["sourcing"].label = "How you get it"
             self.fields["sourcing"].widget = forms.RadioSelect(
-                choices=[("buy", "Bought"), ("make", "Made here"), ("both", "Both")],
+                choices=[("buy", "Buy Finish Goods"), ("make", "Made here"), ("both", "Both")],
                 attrs={"class": "check__input"})
             self.fields["sourcing"].help_text = "Made here: it gets its own recipe and is made with Make."
             if not self.instance.pk:
@@ -216,7 +243,7 @@ class ProductForm(_HubItemForm):
          ("keep_by", "min_stock", "keep_days", "reorder_qty", "default_warehouse")),
         ("Batches & expiry", "For food, medicine and anything that expires.",
          ("track_batch", "track_expiry", "shelf_life_days", "qc_required")),
-        ("Warranty", "Your warranty to the customer.", ("warranty_months", "guarantee_months", "serial_numbers")),
+        ("Warranty", "Your warranty to the customer.", ("has_warranty", "warranty_days", "serial_numbers")),
     )
     BATCH_HINT = "Each production or delivery gets its own batch number."
     PACK_LABELS = {"pack_uom": "Selling pack", "pack_factor_help": ""}
@@ -227,6 +254,8 @@ class ProductForm(_HubItemForm):
     def __init__(self, *args, **kwargs):
         kwargs.pop("kind", None)
         super().__init__(*args, kind=ItemKind.FINISHED, **kwargs)
+        if "sourcing" in self.fields:
+            self.fields["sourcing"].choices = [("buy", "Buy Finish Goods"), ("make", "Make it here"), ("both", "Both")]
         if not self.instance.pk:
             self.fields["pack_uom"].help_text = "Optional: a bigger unit you also sell, e.g. CARTON."
         self.fields["name"].label = "Product name"

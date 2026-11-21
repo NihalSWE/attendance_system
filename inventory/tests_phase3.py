@@ -5,6 +5,7 @@ price per pack, and stock to keep as a quantity or days of sales."""
 import datetime
 import importlib
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.test import TestCase
 from django.urls import reverse
@@ -161,7 +162,7 @@ class StockToKeepTests(InventoryFixture, TestCase):
         self.assertEqual(keep.sold_per_day(self.company.pk, [bearing.pk], today)[bearing.pk], Decimal("10"))
         self.assertEqual(keep.stock_to_keep(self.company.pk, [bearing], today)[bearing.pk], Decimal("150"))
         Item.all_objects.filter(pk=self.bearing.pk).update(keep_days=25)   # keep 250, have 200
-        with use_company(self.company):
+        with use_company(self.company), patch("inventory.keep.timezone.localdate", return_value=today):
             rows = reorder_rows(self.company.pk, [store.pk], [self.branch.pk])
         self.assertTrue(any(item.pk == bearing.pk and status == "Below minimum"
                             for item, _a, _c, _w, status in rows))

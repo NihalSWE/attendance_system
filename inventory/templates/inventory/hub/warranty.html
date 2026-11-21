@@ -18,7 +18,7 @@
 
     {% if off %}
         <div class="ui-card"><div class="ui-card__body">
-            <p><strong>Warranty is off.</strong> Switched on, any item can carry a warranty in months and serial numbers, and claims are recorded here. A company that sells food usually leaves it off.</p>
+            <p><strong>Warranty is off.</strong> Turn it on to set warranty days, track serial numbers and record claims.</p>
             {% if can_switch %}<p><a class="ui-btn ui-btn--main" href="{% url 'inventory:settings' %}">{% include "ui/icon.html" with name="settings" %} Inventory settings</a></p>{% endif %}
         </div></div>
     {% else %}
@@ -71,7 +71,7 @@
         </div>
 
         <div class="ui-card">
-            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Items with a warranty</h2><span class="ui-card__note">Set it on the item: Edit → Warranty (months), A serial number for each unit</span></div>
+            <div class="ui-card__head"><h2 class="ui-card__title">{% include "ui/icon.html" with name="box" %} Items with a warranty</h2><span class="ui-card__note">Edit the item to set its warranty and serial tracking.</span></div>
             <div class="table-wrap">
                 <table class="table" data-local-table>
                     <thead><tr><th>Item</th><th>Warranty</th><th>Serial numbers</th><th class="numeric">In stock</th><th class="numeric">With customers</th><th class="no-sort"><span class="sr-only">Labels</span></th></tr></thead>
@@ -79,7 +79,12 @@
                         {% for item in items %}
                             <tr>
                                 <td><a href="{% if item.kind == 'finished' %}{% url 'inventory:product' item.pk %}{% elif item.kind == 'raw' or item.kind == 'packaging' %}{% url 'inventory:material' item.pk %}{% else %}{% url 'inventory:item_detail' item.pk %}{% endif %}">{{ item.name }}</a></td>
-                                <td>{% if item.warranty_months %}{{ item.warranty_months }} month{{ item.warranty_months|pluralize }}{% if item.guarantee_months %} ({{ item.guarantee_months }} replace){% endif %} from {% if item.kind == 'finished' %}delivery{% else %}receipt{% endif %}{% else %}<span class="ui-muted">none</span>{% endif %}</td>
+                                <td>
+                                    {% if item.warranty_days %}{{ item.warranty_days }} day{{ item.warranty_days|pluralize }}
+                                    {% elif item.warranty_days == None and item.warranty_months %}{{ item.warranty_months }} month{{ item.warranty_months|pluralize }} (existing terms)
+                                    {% else %}<span class="ui-muted">None</span>{% endif %}
+                                    {% if item.warranty_days or item.warranty_days == None and item.warranty_months %} from {% if item.kind == 'finished' %}delivery{% else %}receipt{% endif %}{% endif %}
+                                </td>
                                 <td>{% if item.serial_numbers %}<span class="ui-chip ui-chip--info">Each unit</span>{% else %}<span class="ui-muted">—</span>{% endif %}</td>
                                 <td class="numeric">{{ item.kept }}</td>
                                 <td class="numeric">{{ item.out }}</td>

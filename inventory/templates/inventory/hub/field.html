@@ -4,11 +4,17 @@
     the unit chosen in that other box beside it (asked once), ``unit_text``
     fixed words beside it (days, %).
 {% endcomment %}
-<div class="field{% if box.field.widget.input_type == "checkbox" or box.field.widget.input_type == "radio" or box.field.wide %} field--wide{% endif %}{% if box.errors %} ui-field--error{% endif %}">
+<div class="field{% if box.field.widget.input_type == "checkbox" or box.field.widget.input_type == "radio" or box.field.wide %} field--wide{% endif %}{% if box.errors %} ui-field--error{% endif %}"{% if box.field.hide_without_warranty and not box.form.has_warranty.value %} hidden{% endif %}>
     {% if box.field.widget.input_type == "checkbox" %}
-        <label class="ui-switch" for="{{ box.id_for_label }}">
-            <span class="ui-switch__text"><span class="ui-switch__label">{{ box.label }}</span>{% if box.help_text %}<span class="ui-switch__hint">{{ box.help_text }}</span>{% endif %}</span>
-            {{ box }}
+        <label class="ui-switch{% if inline_switch %} ui-switch--inline{% endif %}" for="{{ box.id_for_label }}">
+            {% if inline_switch %}
+                <span class="ui-switch__label">{{ box.label }}</span>
+                {{ box }}
+                {% if box.help_text %}<span class="ui-switch__hint">{{ box.help_text }}</span>{% endif %}
+            {% else %}
+                <span class="ui-switch__text"><span class="ui-switch__label">{{ box.label }}</span>{% if box.help_text %}<span class="ui-switch__hint">{{ box.help_text }}</span>{% endif %}</span>
+                {{ box }}
+            {% endif %}
         </label>
     {% else %}
         <label class="field__label" for="{{ box.id_for_label }}">{{ box.label }}{% if box.field.required or box.field.show_required %} <span class="field__req">*</span>{% endif %}</label>

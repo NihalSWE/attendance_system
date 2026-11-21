@@ -57,7 +57,7 @@ Sidebar — the active item is a solid ink block. Never soften it to a tint.
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 9px 10px;
+    padding: 6px 10px;
     border-radius: var(--r);
     color: var(--chrome-text);
     opacity: .78;
@@ -93,7 +93,7 @@ Sidebar — the active item is a solid ink block. Never soften it to a tint.
 .sidebar__nav {
     display: flex;
     flex-direction: column;
-    gap: var(--s1);
+    gap: 2px;
 }
 .sidebar__heading {
     cursor: pointer;
@@ -119,7 +119,7 @@ Sidebar — the active item is a solid ink block. Never soften it to a tint.
 .sidebar__submenu {
     list-style: none;
     padding: 0 0 0 var(--s3);
-    margin: var(--s1) 0 var(--s2) var(--s4);
+    margin: 2px 0 3px var(--s4);
     border-left: 1px solid var(--chrome-line);
 }
 /* A dropdown inside a menu (Reports: "Attendance Report" opens to its reports). */
@@ -128,7 +128,7 @@ Sidebar — the active item is a solid ink block. Never soften it to a tint.
     list-style: none;
     font-size: 12px;
     line-height: 1.45;
-    margin-block: 2px;
+    margin-block: 0;
 }
 .sidebar__subgroup-toggle::-webkit-details-marker {
     display: none;
@@ -142,12 +142,12 @@ Sidebar — the active item is a solid ink block. Never soften it to a tint.
     transform: rotate(90deg);
 }
 .sidebar__submenu--nested {
-    margin: 0 0 var(--s1) var(--s2);
+    margin: 0 0 2px var(--s2);
 }
 .sidebar__child {
     font-size: 12px;
     line-height: 1.45;
-    margin-block: 2px;
+    margin-block: 0;
     opacity: 1;
 }
 .navigation-toggle,

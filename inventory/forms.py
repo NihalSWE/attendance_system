@@ -8,6 +8,7 @@ import re
 from decimal import Decimal
 
 from django import forms
+from django.db.models import Q
 
 from common.choices import ActiveStatus
 from common.forms import StyledFormMixin, date_widget
@@ -344,7 +345,7 @@ class WarehouseForm(CompanyForm):
     class Meta:
         model = Warehouse
         fields = ("branch", "code", "name", "kind", "notes")
-        labels = {"kind": "Store type"}
+        labels = {"kind": "Store/warehouse type", "name": "Store/warehouse name"}
 
     def __init__(self, *args, branch_ids=None, **kwargs):
         self.branch_ids = branch_ids
@@ -358,12 +359,12 @@ class WarehouseForm(CompanyForm):
 
 
 class LocationForm(CompanyForm):
-    warehouse = forms.ModelChoiceField(queryset=Warehouse.all_objects.none(), label="Store")
+    warehouse = forms.ModelChoiceField(queryset=Warehouse.all_objects.none(), label="Store/warehouse")
 
     class Meta:
         model = Location
         fields = ("warehouse", "code", "description")
-        labels = {"warehouse": "Store", "code": "Bin code"}
+        labels = {"code": "Bin/rack code"}
         help_texts = {"code": "Unique in the store, e.g. R1-S2-B3 (rack 1, shelf 2, bin 3)."}
 
     def __init__(self, *args, branch_ids=None, **kwargs):
@@ -652,7 +653,8 @@ class ClaimForm(StyledFormMixin, forms.Form):
     def __init__(self, *args, company_id, stores, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["item"].queryset = Item.all_objects.filter(
-            company_id=company_id, status="active", warranty_months__isnull=False).order_by("code")
+            Q(warranty_days__gt=0) | Q(warranty_days__isnull=True, warranty_months__gt=0),
+            company_id=company_id, status="active").order_by("code")
         self.fields["customer"].queryset = Customer.all_objects.filter(company_id=company_id).order_by("name")
         ids = [store.pk for store in stores]
         self.fields["back_to"].queryset = Warehouse.all_objects.filter(pk__in=ids).order_by("-kind", "name")

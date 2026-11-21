@@ -2,7 +2,8 @@
 
 - **One company switch** (Inventory settings), off by default. Off, nothing
   about warranty shows anywhere.
-- **Any item** can carry a warranty, in months: on what you sell it runs from
+- **Any item** can carry a warranty, in days (or existing calendar-month terms):
+  on what you sell it runs from
   the day it was delivered; on what you buy it is the supplier's, from the
   day it was received.
 - **Serial numbers** for items tracked one by one: made when a production
@@ -64,13 +65,17 @@ def add_months(day, months):
 
 
 def covered_until(item, start):
-    if not item.warranty_months or not start:
+    if not start:
+        return None
+    if item.warranty_days is not None:
+        return start + datetime.timedelta(days=item.warranty_days) if item.warranty_days else None
+    if not item.warranty_months:
         return None
     return add_months(start, item.warranty_months)
 
 
 def guaranteed_until(item, start):
-    if not item.guarantee_months or not start:
+    if item.warranty_days is not None or not item.guarantee_months or not start:
         return None
     return add_months(start, item.guarantee_months)
 

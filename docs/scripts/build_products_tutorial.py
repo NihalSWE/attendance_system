@@ -101,24 +101,13 @@ MUST = {"Yes": ("Required", BAD), "No": ("Optional", MUTED), "Some": ("Sometimes
 
 
 def fields(rows):
-    """Box (+ required) | What to write (+ example) | What the software does with it."""
-    data = [[Paragraph(h, S["head"]) for h in ("Box on screen", "What to write", "What it does")]]
-    for name, must, write, example, does in rows:
+    pairs = []
+    for name, must, write, example, effect in rows:
         label, tone = MUST[must]
-        data.append([
-            Paragraph(f"<b>{name}</b><br/><font size='7.4' color='{tone.hexval()}'>{label}</font>", S["cell"]),
-            Paragraph(write + (f"<br/><font color='{MUTED.hexval()}'>e.g. {example}</font>" if example else ""),
-                      S["cell"]),
-            Paragraph(does, S["cell"])])
-    table = Table(data, colWidths=[33 * mm, 64 * mm, 73 * mm], repeatRows=1)
-    style = [("BACKGROUND", (0, 0), (-1, 0), ACCENT), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-             ("LINEBELOW", (0, 0), (-1, -1), 0.4, LINE), ("BOX", (0, 0), (-1, -1), 0.6, LINE),
-             ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-             ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-             ("BACKGROUND", (2, 1), (2, -1), ACCENT_SOFT)]
-    style += [("BACKGROUND", (0, r), (1, r), PAPER) for r in range(2, len(data), 2)]
-    table.setStyle(TableStyle(style))
-    return table
+        field = f"{name}<br/><font size='7.4' color='{tone.hexval()}'>{label}</font>"
+        what = "<br/>".join(part for part in (write, f"Example: {example}" if example else "", effect) if part)
+        pairs.append((field, what))
+    return grid(("Field name", "What to enter and what happens"), pairs, (45, 125))
 
 
 def where(menu, note=""):
@@ -215,15 +204,14 @@ story += [
          "say), or for a made item, its recipe "
                         "and costs."),
         ("Margin", "Sale price - cost of one. Below cost = a loss on each one sold."),
-        ("Guarantee / Warranty", "Guarantee: the first months, a faulty unit is replaced. Warranty: after that, "
-                                 "to its end, it is repaired."),
+        ("Warranty", "The number of days a purchased or delivered item is covered. Older items can keep their previous terms."),
     ], (36, 134)),
     Spacer(1, 6 * mm),
     box("The one rule about prices", [
         "You do not type a buy price or a sale price when you add a material or a product. "
         "The <b>buy price</b> comes from <b>Stock in</b> (what you really paid). The <b>sale price</b> is set once "
         "the cost is known: on a Stock in line, or on the item's page, where the cost and the margin are shown. "
-        "A price below cost is refused unless you switch on <b>Sell below cost</b> and say why.",
+        "A price below cost needs a reason. On Stock in, the switch is called <b>Sell Under Rate</b>.",
     ], "ok"),
 ]
 
@@ -240,10 +228,10 @@ story += [
 
     P("Part A &middot; Once: set up", "h2"),
     walk([
-        ("A1", "Inventory &rarr; <b>Setup</b> &rarr; Units, Stores",
+        ("A1", "Inventory &rarr; Categories &amp; Units / Stores &amp; Bins",
          "Units: Add standard units. Stores: Raw store, Packing store, Main store, each in its branch.",
          "The units (KG, PCS, BAG, CARTON ...) and the rooms stock is kept in."),
-        ("A2", "Inventory &rarr; <b>Materials</b> &rarr; Materials &rarr; <b>Add material</b>",
+        ("A2", "Inventory &rarr; <b>Materials</b> &rarr; Materials &rarr; <b>Add Raw Goods</b>",
          "How you get it: Bought. Type: Raw material. Name: Flour. Base unit KG; Purchase unit BAG, Contains 50. "
          "Minimum stock 200. Batch tracking + Expiry tracking, shelf life 180 days. <b>No price.</b>",
          "\"RM-0001 Flour added\". Next step: <b>Put it in stock</b>."),
@@ -313,14 +301,14 @@ story += [grid(("Page", "What you add"), [
 ], (36, 134))]
 
 # ------------------------------------------------------------------ materials
-story += section(2, "Materials", "Inventory &rarr; Materials &rarr; Materials &rarr; Add material",
+story += section(2, "Materials", "Inventory &rarr; Materials &rarr; Materials &rarr; Add Raw Goods",
                  "What you use up making products: raw materials and packaging. The list shows each one with what "
                  "is in stock, minimum stock, value and a chip: <font color='#2f6b34'><b>OK</b></font>, "
                  "<font color='#7d5510'><b>Low</b></font>, <font color='#a32a1e'><b>Out</b></font>, and "
                  "<font color='#a32a1e'><b>Below cost</b></font> when it is sold for less than it costs.",
                  "units, categories and stores (Setup).", "Only with Production on.")
 story += [P("Item", "h2"), fields([
-    ("How you get it", "Yes", "Bought, Made here, or Both.", "Bought",
+    ("How you get it", "Yes", "Buy Finish Goods, Made here, or Both.", "Bought",
      "Made here or Both: it gets its own recipe and cost, and is made with Make (a cream made in-house)."),
     ("Type", "Yes", "Raw material or Packaging.", "Raw material", "Decides the categories offered."),
     ("Material name", "Yes", "What everyone calls it.", "Flour", "Shown on every list, document and label."),
@@ -342,11 +330,10 @@ story += [P("Item", "h2"), fields([
      "Expired stock is never used. Shelf life fills the expiry from the manufacture date."),
     ("QC before use", "No", "On when new stock must be checked.", "", "New stock waits until it passes."),
 ]), P("Warranty (only when Warranty is on)", "h2"), fields([
-    ("Warranty (repair)", "No", "The supplier's warranty, in months.", "12", "Runs from the day it was received."),
-    ("Guarantee (replace)", "No", "Its first months, when the supplier replaces.", "3",
-     "Never longer than the warranty."),
+    ("Has warranty", "No", "Turn on to enter days and see serial tracking.", "On", ""),
+    ("Warranty duration", "Some", "Number of covered days.", "90", "Counted from receipt."),
     ("Serial number per unit", "No", "On when each unit has its own number.", "", "Units are entered one by one."),
-]), Spacer(1, 4), box("After Add material", [
+]), Spacer(1, 4), box("After Add Raw Goods", [
     "The material's page opens with <b>Put it in stock</b>: Stock in, with this material already on line 1. "
     "<b>Edit</b> (on its page or its row in the list) opens the same form again.",
 ], "ok")]
@@ -357,7 +344,7 @@ story += section(3, "Products", "Inventory &rarr; Products &rarr; Products &rarr
                  "price, the cost of one, the margin and a chip - <font color='#a32a1e'><b>Below cost</b></font> "
                  "when its price is under its cost.")
 story += [P("Item", "h2"), fields([
-    ("How you get it", "Some", "Made here, Bought ready, or Both.", "Made here",
+    ("How you get it", "Some", "Make it here, Buy Finish Goods, or Both.", "Made here",
      "Only with Production. Made here and Both get a recipe, its cost and Make."),
     ("Product name, Item code, Category", "Yes", "As for materials (code empty: FG-0001 ...).", "Biscuit 100 g", ""),
 ]), P("Units", "h2"), fields([
@@ -376,9 +363,8 @@ story += [P("Item", "h2"), fields([
      "A made batch expires on the made date + shelf life (or earlier, never later)."),
     ("QC before use", "No", "New stock is checked first.", "", ""),
 ]), P("Warranty (only when Warranty is on)", "h2"), fields([
-    ("Warranty (repair)", "No", "Your warranty to the customer, in months.", "12", "Runs from the delivery date."),
-    ("Guarantee (replace)", "No", "Its first months, when a faulty unit is replaced.", "3",
-     "Never longer than the warranty. After it, to the warranty's end: repair."),
+    ("Has warranty", "No", "Turn on to enter days and see serial tracking.", "On", ""),
+    ("Warranty duration", "Some", "Number of covered days.", "90", "Counted from delivery."),
     ("Serial number per unit", "No", "On when each unit is scanned out.", "", "See step 10."),
 ]), Spacer(1, 4), P("<b>Product page</b>: tiles (cost of one, sale price, margin, in stock, sold per day); the "
                     "<b>Sale price</b> card; how much to make; the recipe; its cost; stock by "
@@ -439,14 +425,14 @@ story += [fields([
      "(with its share of the delivery and VAT). "
      "The line total shows under it: 5 DRUM x 2,500 = 12,500."),
     ("Sale price (optional)", "No", "A new sale price, now that the buy price is in. It shows the price now.",
-     "now 60", "Empty: the price stays. Below the new cost: refused unless Sell below cost."),
+     "now 60", "Empty: the price stays. Below the new cost: refused unless you enable the below-cost switch for that screen."),
     ("Batch number", "Some", "From the label (items with batches).", "FL-231026", "Empty: one is made."),
     ("Manufacture date", "Some", "From the label (items that expire).", "1 Oct 2026",
      "Not after the day it came in, and not a day still to come."),
     ("Expiry date", "Some", "From the label.", "1 Apr 2027",
      "Empty: manufacture date + shelf life. Never before the manufacture date."),
     ("Condition", "Some", "Return: good or damaged.", "Damaged", "Damaged goes to the rejected store."),
-    ("Sell below cost / Why below cost", "No", "Only if a sale price below cost is meant.", "on, clearing old stock",
+    ("Sell Under Rate / Why below cost", "No", "Only if a sale price below cost is meant.", "on, clearing old stock",
      "Kept with the price change in the audit log."),
     ("VAT % / VAT amount", "No", "A purchase only: the VAT on the bill, if you paid it. Write either one.",
      "15", "The other is worked out from the subtotal. Part of the goods' real cost, unless the company claims "
@@ -550,7 +536,7 @@ story += [fields([
     ("Make the invoice now", "No", "Tick to invoice at once.", "on", ""),
     ("Item, Quantity, Unit", "Yes", "Packet or carton.", "Biscuit, 10, CARTON", ""),
     ("Price", "No", "Empty: the customer's price list, else the pack's price, else the product's.", "",
-     "Below the cost of what goes out: refused unless Sell below cost."),
+     "Below the cost of what goes out: refused unless you enable the below-cost switch for that screen."),
     ("Why, if over the credit limit", "Some", "Only when the customer is over their limit.", "", ""),
     ("Sell below cost / Why below cost", "No", "Only when a loss is meant.", "on, damaged boxes",
      "The reason is written on the sale."),
@@ -559,14 +545,14 @@ story += [fields([
 
 # ------------------------------------------------------------------ warranty
 story += section(10, "Warranty", "Inventory &rarr; Tools &rarr; Warranty (only when switched on)",
-                 "Serial numbers and claims.", "Warranty on (Setup &rarr; Inventory settings), and months on the items.")
+                 "Serial numbers and claims.", "Warranty on (Setup &rarr; Inventory settings), and Has warranty turned on for the relevant items.")
 story += steps([
     "<b>Serial numbers</b>: made when a production finishes; <b>Serial numbers in</b> for units you received; "
     "<b>Serial numbers out</b>: scan each unit on its delivery - the dates run from that day.",
     "<b>New claim</b>: scan the serial (or choose the item and the delivery date). The form says which applies.",
 ])
 story += [grid(("The form says", "What you do"), [
-    ("In guarantee until ...: replace", "<b>Replace it</b>. Anything else (repair, refund) needs a reason."),
+    ("In guarantee until ...: replace", "Applies to older items with existing replacement terms."),
     ("In warranty until ...: repair", "<b>Repair it</b> (its cost). Replace or refund needs a reason."),
     ("Out of warranty since ...", "<b>Refuse</b> (say why), or cover it with a reason."),
 ], (60, 110)), Spacer(1, 4), P("The faulty unit can go into the rejected store; a new unit leaves a store."),

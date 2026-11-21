@@ -146,8 +146,8 @@ PAGES = {
          "Office, cleaning and other general store items."),
     )},
     "stores": MasterPage(
-        "stores", masters.WAREHOUSE, forms.WarehouseForm, "Stores", "store",
-        "inventory/rows/store.html", ("Code", "Store", "Type", "Branch", "Bins", "Items in it", "Status"),
+        "stores", masters.WAREHOUSE, forms.WarehouseForm, "Stores/Warehouses", "store",
+        "inventory/rows/store.html", ("Code", "Store/warehouse", "Type", "Branch", "Bins/racks", "Items in it", "Status"),
         ("code", "name", "branch__name"),
         ("code", "name", "kind", "branch__name", None, "item_count", "status", None),
         lambda request, cid: _stores(request, cid), branch_scoped=True,
@@ -155,8 +155,8 @@ PAGES = {
         import_kind="stores",
     ),
     "bins": MasterPage(
-        "bins", masters.LOCATION, forms.LocationForm, "Bins", "bin", "inventory/rows/bin.html",
-        ("Store", "Bin", "Description", "Status"),
+        "bins", masters.LOCATION, forms.LocationForm, "Bins/Racks", "bin", "inventory/rows/bin.html",
+        ("Store/warehouse", "Bin/rack", "Description", "Status"),
         ("code", "description", "warehouse__code", "warehouse__name"),
         ("warehouse__code", "code", "description", "status", None),
         lambda request, cid: access.scope_warehouses(

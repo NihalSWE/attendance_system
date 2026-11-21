@@ -58,11 +58,11 @@ class SwitchTests(SalesFixture, TestCase):
         page = self.client.get(reverse("inventory:warranty"))
         self.assertContains(page, "Warranty is off")
         products = self.client.get(reverse("inventory:products"))
-        self.assertNotContains(products, 'name="warranty_months"')
+        self.assertNotContains(products, 'name="warranty_days"')
         self.assertNotContains(products, f'href="{reverse("inventory:warranty")}"')
         switch_on(self)
         products = self.client.get(reverse("inventory:products"))
-        self.assertContains(products, 'name="warranty_months"')
+        self.assertContains(products, 'name="warranty_days"')
         self.assertContains(products, f'href="{reverse("inventory:warranty")}"')
 
     def test_months_are_calendar_months(self):

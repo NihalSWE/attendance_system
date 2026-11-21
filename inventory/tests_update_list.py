@@ -2,6 +2,8 @@
 worked from 2026-10-31: "Put it in stock", prices and costs, dates, warranty and
 guarantee, the menu."""
 
+import datetime
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -240,13 +242,37 @@ class GuaranteeTests(WarrantyFixture, TestCase):
         self.assertContains(page, "In guarantee to 1 Jan 2027")
         self.assertContains(page, "In warranty to 1 Oct 2027")
 
-    def test_the_product_form_asks_both(self):
+    def test_product_edit_offers_days_without_rewriting_legacy_terms(self):
+        from inventory import warranty
+        from sales.tests_flow import DAY
+
         page = self.client.get(reverse("inventory:product", args=[self.juice.pk]))
-        self.assertContains(page, 'name="guarantee_months"')
-        self.assertContains(page, "Guarantee (replace)")
+        self.assertContains(page, 'name="warranty_days"')
+        self.assertNotContains(page, 'name="guarantee_months"')
+        legacy = warranty.covered_until(self.juice, DAY)
+        self.assertEqual(legacy, datetime.date(2027, 10, 1))
+        self.juice.warranty_days = 30
+        self.assertEqual(warranty.covered_until(self.juice, DAY), DAY + datetime.timedelta(days=30))
+        self.assertIsNone(warranty.guaranteed_until(self.juice, DAY))
 
 
 class PutItInStockTests(HubFixture, TestCase):
+    def test_raw_goods_and_products_save_days_and_hide_inactive_serial_input(self):
+        from inventory.tests_phase8 import switch_on
+
+        switch_on(self)
+        for path, values in (("materials", self.material()), ("products", self.product())):
+            url = reverse("inventory:" + path)
+            page = self.client.get(url)
+            self.assertContains(page, 'data-show-when="has_warranty:on"')
+            self.assertNotContains(page, 'name="guarantee_months"')
+            response = self.client.post(url, {**values, "has_warranty": "on",
+                                              "warranty_days": 45, "serial_numbers": "on"}, **FETCH)
+            self.assertEqual(response.status_code, 200)
+            item = Item.all_objects.get(company=self.company, name=values["name"])
+            self.assertEqual(item.warranty_days, 45)
+            self.assertTrue(item.serial_numbers)
+
     def test_a_new_material_goes_on_to_stock_in_with_itself_on_line_one(self):
         body = self.client.post(reverse("inventory:materials"), self.material(), **FETCH).json()
         flour = Item.all_objects.get(company=self.company, name="Flour")

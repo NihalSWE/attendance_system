@@ -10,7 +10,7 @@
         {% if form %}
             <div class="ui-head__actions">
                 <a class="ui-btn" href="{% url 'inventory:import' 'items' %}">Import from Excel</a>
-                <button class="ui-btn ui-btn--main" type="button" data-open-dialog="material-dialog">{% include "ui/icon.html" with name="plus" %} Add material</button>
+                <button class="ui-btn ui-btn--main" type="button" data-open-dialog="material-dialog">{% include "ui/icon.html" with name="plus" %} Add Raw Goods</button>
             </div>
         {% endif %}
     </div>
@@ -57,6 +57,6 @@
 
     {% if form %}
         {% url 'inventory:materials' as add_url %}
-        {% include "inventory/hub/item_form.html" with id="material-dialog" title="Add material" sub="A raw material or packaging item. Quantity and price come in with Stock in." action=add_url form=form submit="Add material" %}
+        {% include "inventory/hub/item_form.html" with id="material-dialog" title="Add Raw Goods" sub="A raw material or packaging item. Quantity and price come in with Stock in." action=add_url form=form submit="Add Raw Goods" %}
     {% endif %}
 {% endblock %}

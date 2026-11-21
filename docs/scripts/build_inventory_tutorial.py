@@ -124,29 +124,15 @@ MUST = {"Yes": ("Required", BAD), "No": ("Optional", MUTED), "No (tick)": ("Opti
 
 
 def fields(key, rows):
-    """Field (+ required) | What to write (+ example) | What it does in the software."""
     effects = EFFECTS[key]
-    data = [[Paragraph(h, S["head"]) for h in
-             ("Field on screen", "What to write", "What it does in the software")]]
+    pairs = []
     for name, must, write, example in rows:
         label, tone = MUST[must]
-        data.append([
-            Paragraph(f"<b>{name}</b><br/><font size='7.4' color='{tone.hexval()}'>{label}</font>",
-                      S["cell"]),
-            Paragraph(write + (f"<br/><font color='{MUTED.hexval()}'>e.g. {example}</font>"
-                               if example else ""), S["cell"]),
-            Paragraph(effects[name], S["cell"]),
-        ])
-    table = Table(data, colWidths=[33 * mm, 66 * mm, 71 * mm], repeatRows=1)
-    style = [("BACKGROUND", (0, 0), (-1, 0), ACCENT), ("VALIGN", (0, 0), (-1, -1), "TOP"),
-             ("LINEBELOW", (0, 0), (-1, -1), 0.4, LINE), ("BOX", (0, 0), (-1, -1), 0.6, LINE),
-             ("LEFTPADDING", (0, 0), (-1, -1), 5), ("RIGHTPADDING", (0, 0), (-1, -1), 5),
-             ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-             ("BACKGROUND", (2, 1), (2, -1), ACCENT_SOFT)]
-    for r in range(2, len(data), 2):
-        style.append(("BACKGROUND", (0, r), (1, r), PAPER))
-    table.setStyle(TableStyle(style))
-    return table
+        field = f"{name}<br/><font size='7.4' color='{tone.hexval()}'>{label}</font>"
+        what = "<br/>".join(part for part in (write, f"Example: {example}" if example else "",
+                                             effects[name]) if part)
+        pairs.append((field, what))
+    return grid(("Field name", "What to enter and what happens"), pairs, (45, 125))
 
 
 def where(menu, note=""):
@@ -457,7 +443,7 @@ story += [P("Buttons you will see on every page", "h1"),
 story.append(PageBreak())
 
 # ---------------------------------------------------------------- step 1
-story += section(1, "Inventory settings", "Inventory &rarr; Inventory settings",
+story += section(1, "Inventory settings", "Inventory &rarr; Setup &rarr; Inventory settings",
                  "the general rules for the whole company. You set them once, before any "
                  "stock is entered.", "", "Only the owner or company administrator.")
 story += steps(["Open the page.", "Check each field below (most can stay as they are).",
@@ -482,7 +468,7 @@ story.append(box("Important", ["<b>Average cost cannot be changed once stock has
                                "moved, so the average cost choice is fixed now.\""], "bad"))
 
 # ---------------------------------------------------------------- step 2
-story += section(2, "Units", "Inventory &rarr; Units",
+story += section(2, "Units", "Inventory &rarr; Categories &amp; Units &rarr; Units",
                  "the units you measure and count in: kilogram, litre, piece, bag, carton...",
                  "nothing.")
 story += steps([
@@ -502,7 +488,7 @@ story.append(box("Pack sizes are not set here", [
     "Pack units), because a carton of one item is not a carton of another."]))
 
 # ---------------------------------------------------------------- step 3
-story += section(3, "Item categories", "Inventory &rarr; Item categories",
+story += section(3, "Item categories", "Inventory &rarr; Categories &amp; Units &rarr; Item categories",
                  "folders to group items, so lists and reports are easy to read. They do not "
                  "change stock or costs.", "nothing.")
 story += steps([
@@ -530,7 +516,7 @@ story.append(box("The list page", ["In the list, the column <b>Parent</b> shows 
                                    "category's parent folder."]))
 
 # ---------------------------------------------------------------- step 4
-story += section(4, "Stores", "Inventory &rarr; Stores",
+story += section(4, "Stores/Warehouses", "Inventory &rarr; Stores &amp; Bins &rarr; Stores/Warehouses",
                  "each room or warehouse where stock is kept. Every store belongs to one "
                  "branch.", "the branches (Organisation &rarr; Branches), which already exist.")
 story += steps(["Click <b>Add store</b>.", "Fill the form, click <b>Add</b>.",
@@ -551,7 +537,7 @@ story.append(box("Tip", ["Make a store for each real room. Typical factory: Raw 
                          "quality check."], "ok"))
 
 # ---------------------------------------------------------------- step 5
-story += section(5, "Bins", "Inventory &rarr; Bins",
+story += section(5, "Bins/Racks", "Inventory &rarr; Stores &amp; Bins &rarr; Bins/Racks",
                  "shelves, racks or bins inside a store, so the software can say exactly "
                  "where something is. <b>Optional</b>: skip this step if you do not track "
                  "shelves.", "the stores (Step 4).")

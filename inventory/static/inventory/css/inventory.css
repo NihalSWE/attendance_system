@@ -1,4 +1,22 @@
 /* Inventory pages: the few pieces the shared components do not cover. */
+.table thead th,
+.table tbody td,
+.table tfoot td {
+    padding-block: 6px;
+}
+
+.ui-switch.ui-switch--inline {
+    display: grid;
+    grid-template-columns: max-content max-content;
+    justify-content: start;
+    column-gap: 10px;
+    row-gap: 2px;
+}
+
+.ui-switch--inline .ui-switch__hint {
+    grid-column: 1 / -1;
+}
+
 .inv-facts {
     display:grid;
     grid-template-columns:160px minmax(0,1fr);
